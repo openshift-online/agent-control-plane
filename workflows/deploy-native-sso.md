@@ -112,8 +112,8 @@ Build the api-server with the `JWK_CERT_URL` env var support:
 
 ```bash
 cd components/ambient-api-server
-podman build -t $REGISTRY/vteam_api_server:latest -f Dockerfile .
-podman push $REGISTRY/vteam_api_server:latest
+podman build -t $REGISTRY/acp_api_server:latest -f Dockerfile .
+podman push $REGISTRY/acp_api_server:latest
 ```
 
 Build any other modified components (frontend, backend, etc.) similarly.

@@ -148,7 +148,7 @@ Production overlay files for oauth-proxy exist as reference but are disabled.
 
 ### 1. Quay.io repository
 
-`quay.io/ambient_code/acp_ambient_ui` with push access for `vteamrobbit`.
+`quay.io/ambient_code/acp_ambient_ui` with push access for `acprobbit`.
 
 ### 2. OIDC client (REQUIRED for production)
 

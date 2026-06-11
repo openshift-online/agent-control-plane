@@ -106,7 +106,7 @@ bash components/pr-test/provision.sh destroy "$ID"
 
 ### Images not found
 
-Check quay.io for the tag: `https://quay.io/repository/ambient_code/vteam_control_plane?tab=tags`
+Check quay.io for the tag: `https://quay.io/repository/ambient_code/acp_control_plane?tab=tags`
 
 ### CP can't reach api-server
 

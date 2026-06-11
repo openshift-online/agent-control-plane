@@ -25,7 +25,7 @@ You are an expert in deploying the Ambient Code Platform to OpenShift clusters. 
 | `minio` | (upstream) | S3 object storage |
 | `unleash` | (upstream) | Feature flag service |
 
-Runner pods (`vteam_claude_runner`, `vteam_state_sync`) are spawned dynamically by the operator — they are not standing deployments.
+Runner pods (`acp_claude_runner`, `acp_state_sync`) are spawned dynamically by the operator — they are not standing deployments.
 
 Credential sidecar containers are injected into session pods when the corresponding credential type is configured:
 

@@ -26,7 +26,7 @@ Changes to these components are independent of the api-server pipeline (no opena
 
 > **Build commands, known invariants, and pre-commit checklists** → see `.claude/context/control-plane-development.md`
 
-IMPORTANT!!! **ONLY PUSH TO quay.io/vteam-*:mgt-001**  ensure the tag is *only* mgt-001
+IMPORTANT!!! **ONLY PUSH TO quay.io/acp-*:mgt-001**  ensure the tag is *only* mgt-001
 This is important! we are bypassing the build process by pushing directly to quay.io.  this is risky
 so *only* push with tag mgt-001
 
@@ -503,8 +503,8 @@ CLUSTER_CTR=$(podman ps --format '{{.Names}}' | grep 'control-plane' | head -1)
 echo "Cluster container: $CLUSTER_CTR"
 
 # Build runner (always --no-cache to pick up Python source changes)
-cd components/runners && podman build --no-cache -t localhost/vteam_claude_runner:latest -f ambient-runner/Dockerfile . && cd ../..
-podman save localhost/vteam_claude_runner:latest | \
+cd components/runners && podman build --no-cache -t localhost/acp_claude_runner:latest -f ambient-runner/Dockerfile . && cd ../..
+podman save localhost/acp_claude_runner:latest | \
   podman exec -i ${CLUSTER_CTR} ctr --namespace=k8s.io images import -
 
 # Build CP (always --no-cache to pick up Go source changes)
@@ -525,8 +525,8 @@ Runner image changes take effect on the next new session pod — no restart need
 
 **Image names (actual deployment):**
 - CP deployment image: `localhost/ambient_control_plane:latest`
-- Runner pod image: `localhost/vteam_claude_runner:latest`
-- `make build-control-plane` builds `localhost/vteam_control_plane:latest` — **wrong name**, use the `podman build` command above instead
+- Runner pod image: `localhost/acp_claude_runner:latest`
+- `make build-control-plane` builds `localhost/acp_control_plane:latest` — **wrong name**, use the `podman build` command above instead
 
 ---
 

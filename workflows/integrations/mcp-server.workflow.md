@@ -66,7 +66,7 @@ components/ambient-mcp/
     └── watch.go          # watch_session_messages, unwatch_session_messages
 ```
 
-**Image:** `localhost/vteam_ambient_mcp:latest`
+**Image:** `localhost/acp_mcp:latest`
 
 **Naming rationale:** follows the `ambient-{role}` convention (`ambient-runner`, `ambient-cli`, `ambient-sdk`). Separate component with its own image — required because the operator injects it as a sidecar subprocess that Claude Code spawns via stdio. Cannot be embedded in `ambient-api-server`.
 
@@ -411,10 +411,10 @@ cd components/ambient-mcp && go vet ./... && golangci-lint run
 cd components/ambient-mcp && go test ./...
 
 # Build image
-podman build --platform linux/amd64 -t vteam_ambient_mcp:latest components/ambient-mcp/
+podman build --platform linux/amd64 -t acp_mcp:latest components/ambient-mcp/
 
 # Load into kind cluster
-podman save localhost/vteam_ambient_mcp:latest | \
+podman save localhost/acp_mcp:latest | \
   podman exec -i ambient-main-control-plane \
   ctr --namespace=k8s.io images import -
 
@@ -446,7 +446,7 @@ Gap table state at end of Run 1:
 
 **Component renamed:** `components/mcp-server/` → `components/ambient-mcp/` (follows `ambient-{role}` naming convention).
 
-**Image:** `localhost/vteam_ambient_mcp:latest` — built with `podman build`, loaded into `ambient-main-control-plane` via `ctr import`.
+**Image:** `localhost/acp_mcp:latest` — built with `podman build`, loaded into `ambient-main-control-plane` via `ctr import`.
 
 Lessons learned:
 - `mark3labs/mcp-go v0.45.0` — `Required()` is a `PropertyOption` (not `WithRequired`); tool registration is `s.AddTool(mcp.NewTool(...), handler)`

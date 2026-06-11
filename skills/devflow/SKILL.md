@@ -285,8 +285,8 @@ make test
 **Correct path:** Use `podman save | ctr import`:
 ```bash
 CLUSTER=$(podman ps --format '{{.Names}}' | grep 'kind' | grep 'control-plane' | sed 's/-control-plane//')
-podman build --no-cache -t localhost/vteam_api_server:latest components/ambient-api-server
-podman save localhost/vteam_api_server:latest | \
+podman build --no-cache -t localhost/acp_api_server:latest components/ambient-api-server
+podman save localhost/acp_api_server:latest | \
   podman exec -i ${CLUSTER}-control-plane ctr --namespace=k8s.io images import -
 kubectl rollout restart deployment/ambient-api-server -n ambient-code
 ```
