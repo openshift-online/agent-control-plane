@@ -235,7 +235,7 @@ If S3 is not configured or disabled:
 
 ### Session Fails to Start
 
-Check operator logs:
+Check control plane logs:
 ```bash
 oc logs -f deployment/ambient-control-plane -n ambient-code | grep S3
 ```
@@ -326,10 +326,10 @@ oc delete pvc ambient-workspace-{session-name} -n {namespace}
 
 ### Sync Interval
 
-Default: 60 seconds. Adjust via operator config:
+Default: 60 seconds. Adjust via control plane config:
 
 ```yaml
-# components/manifests/base/operator-deployment.yaml
+# In your overlay's control plane env patch:
 env:
   - name: SYNC_INTERVAL
     value: "30"  # Sync every 30 seconds (more frequent = safer but higher cost)
@@ -340,6 +340,7 @@ env:
 Default: 1GB. Prevent runaway storage costs:
 
 ```yaml
+# In your overlay's control plane env patch:
 env:
   - name: MAX_SYNC_SIZE
     value: "2147483648"  # 2GB limit
@@ -387,6 +388,5 @@ rclone sync s3-old:old-bucket/namespace/session s3-new:new-bucket/namespace/sess
 ## Support
 
 For issues or questions:
-- Check operator logs: `oc logs -f deployment/ambient-control-plane -n ambient-code`
+- Check control plane logs: `oc logs -f deployment/ambient-control-plane -n ambient-code`
 - Check pod logs: `oc logs {pod-name} -c state-sync -n {namespace}`
-- File an issue: [GitHub Issues](https://github.com/gkrumbac/vTeam/issues)

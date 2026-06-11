@@ -557,12 +557,12 @@ local-troubleshoot: check-kubectl ## Show troubleshooting information
 
 deploy: ## Deploy to production Kubernetes cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying to Kubernetes..."
-	@cd components/manifests && ./deploy.sh
+	@kubectl apply -k components/manifests/overlays/production -n $(NAMESPACE)
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Deployment complete"
 
 clean: ## Clean up Kubernetes resources
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Cleaning up..."
-	@cd components/manifests && ./deploy.sh clean
+	@kubectl delete -k components/manifests/overlays/production -n $(NAMESPACE) --ignore-not-found
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Cleanup complete"
 
 ##@ Kind Local Development

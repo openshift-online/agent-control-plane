@@ -25,36 +25,27 @@ oc create secret generic my-runner-secret \
   -n your-project-namespace
 ```
 
-**2. Reference the secret in your ProjectSettings:**
+**2. Reference the secret in your project settings:**
 
-(Most users will access this from the frontend)
+Configure via the UI (Settings > Runner Secrets) or via the CLI:
 
-```yaml
-# Configure via API server or acpctl:
-# acpctl project settings update \
-metadata:
-  name: my-project
-  namespace: your-project-namespace
-spec:
-  runnerSecret: my-runner-secret
+```bash
+acpctl project settings update --project my-project --runner-secret my-runner-secret
 ```
 
-**3. Use HTTPS URLs in your AgenticSession:**
+**3. Use HTTPS URLs when creating a session:**
 
-(Most users will access this from the frontend)
+Create sessions via the UI or CLI:
 
-```yaml
-spec:
-  repos:
-    - input:
-        url: "https://github.com/your-org/your-repo.git"
-        branch: "main"
-    output:
-      createPR: true
-      prTitle: "feat: AI-generated changes"
+```bash
+acpctl session create \
+  --project my-project \
+  --repo "https://github.com/your-org/your-repo.git" \
+  --branch main \
+  --prompt "Your task description"
 ```
 
-The runner automatically uses credentials from the secret for git operations.
+The runner automatically uses credentials from the project's runner secret for git operations.
 
 ### Setup: Using SSH Keys
 
@@ -71,11 +62,12 @@ oc create secret generic my-runner-secret \
   -n your-project-namespace
 ```
 
-Then use SSH URLs:
-```yaml
-repos:
-  - input:
-      url: "git@github.com:your-org/your-repo.git"
+Then use SSH URLs when creating sessions:
+```bash
+acpctl session create \
+  --project my-project \
+  --repo "git@github.com:your-org/your-repo.git" \
+  --prompt "Your task description"
 ```
 
 ## GitHub App (Optional)
@@ -106,12 +98,7 @@ oc create secret generic my-runner-secret \
   -n your-project-namespace
 ```
 
-**For self-hosted GitLab**, the URL format automatically detects the instance:
-```yaml
-repos:
-  - input:
-      url: "https://gitlab.company.com/org/repo.git"
-```
+**For self-hosted GitLab**, the URL format automatically detects the instance. Use the full HTTPS URL when creating a session.
 
 
 ## Security Best Practices
@@ -142,17 +129,7 @@ repos:
 
 ## Multiple Git Providers
 
-Projects can use different git providers simultaneously:
-
-```yaml
-repos:
-  - input:
-      url: "https://github.com/org/frontend.git"
-  - input:
-      url: "https://gitlab.com/org/backend.git"
-```
-
-The runner automatically detects the provider and uses appropriate authentication.
+Sessions can reference repositories from different git providers. The runner automatically detects the provider and uses appropriate authentication from the project's runner secret.
 
 ## Troubleshooting
 
@@ -176,11 +153,10 @@ The runner automatically detects the provider and uses appropriate authenticatio
 
 ### Runner can't find credentials
 
-- Verify `runnerSecret` is set in ProjectSettings
+- Verify `runnerSecret` is set in project settings (check via UI or `acpctl project settings get --project <name>`)
 - Check secret exists: `oc get secret <name> -n <namespace>`
 - Ensure secret has required keys (`GIT_TOKEN` or `GIT_SSH_KEY`)
 
 ## Related Documentation
 
 - [GitHub App Setup](../GITHUB_APP_SETUP.md) - OAuth and repository browser
-- [ProjectSettings Reference](../reference/project-settings.md) - Configuration schema (if exists)

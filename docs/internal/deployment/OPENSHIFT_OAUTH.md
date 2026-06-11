@@ -91,24 +91,12 @@ oc get oauthclient ambient-frontend -o jsonpath='{.secret}{"\n"}{.redirectURIs[0
 ```
 
 Notes:
-- The OAuthClient name (ambient-frontend) must match the proxy arg `--client-id=ambient-frontend` set in `frontend-deployment.yaml`.
+- The OAuthClient name (ambient-frontend) must match the proxy arg `--client-id=ambient-frontend` set in `components/manifests/components/oauth-proxy/frontend-oauth-deployment-patch.yaml`.
 - The redirect URI must exactly match the app Route + `/oauth/callback`.
 
 ### Step 2 — Provide the secret to the app (namespaced Secret)
 
-Option A) Using the deploy script with `.env`:
-```bash
-cd components/manifests
-cat >> ../.env <<EOF
-OCP_OAUTH_CLIENT_SECRET=$SECRET
-# Optional: provide your own cookie secret; otherwise the script will generate one
-# OCP_OAUTH_COOKIE_SECRET=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)
-EOF
-./deploy.sh secrets
-oc -n ambient-code rollout restart deployment/ambient-ui
-```
-
-Option B) Manually create/update the Secret:
+Create/update the Secret:
 ```bash
 oc -n ambient-code create secret generic frontend-oauth-config \
   --from-literal=client-secret="$SECRET" \

@@ -1,6 +1,6 @@
 # OpenShift Deployment Guide
 
-The Ambient Code Platform is an OpenShift-native platform that deploys a backend API, frontend, and operator into a managed namespace.
+The Ambient Code Platform is an OpenShift-native platform that deploys an API server, frontend, and control plane into a managed namespace.
 
 ## Prerequisites
 
@@ -12,10 +12,8 @@ The Ambient Code Platform is an OpenShift-native platform that deploys a backend
 
 1. **Deploy** (from project root):
    ```bash
-   # Prepare env once
-   cp components/manifests/env.example components/manifests/.env
-   # Edit .env and set ANTHROPIC_API_KEY
-   make deploy
+   # Choose an overlay (e.g., openshift-dev, production)
+   oc apply -k components/manifests/overlays/<your-overlay>
    ```
    This deploys to the `ambient-code` namespace using default images from quay.io/ambient_code.
 
@@ -37,9 +35,9 @@ The Ambient Code Platform is an OpenShift-native platform that deploys a backend
 ## Configuration
 
 ### Customizing Namespace
-To deploy to a different namespace:
-```bash
-make deploy NAMESPACE=my-namespace
+Set the namespace in your overlay's `kustomization.yaml`:
+```yaml
+namespace: my-namespace
 ```
 
 ### Building Custom Images
@@ -55,32 +53,24 @@ docker login $REGISTRY
 make build-all REGISTRY=$REGISTRY
 make push-all REGISTRY=$REGISTRY
 
-# Deploy with custom images
-make deploy CONTAINER_REGISTRY=$REGISTRY
+# Update your overlay's kustomization.yaml images section, then deploy
+oc apply -k components/manifests/overlays/<your-overlay>
 ```
 
 ### Advanced Configuration
-Create and edit environment file for detailed customization:
-```bash
-cd components/manifests
-cp env.example .env
-# Edit .env to set CONTAINER_REGISTRY, IMAGE_TAG, Git settings, etc.
-```
+Customize your deployment by editing overlay-specific patches and `kustomization.yaml` files under `components/manifests/overlays/<your-overlay>/`. See `components/manifests/env.example` for the list of configurable values.
 
 ### Setting up API Keys
 After deployment, configure runner secrets through Settings → Runner Secrets in the UI. At minimum, provide `ANTHROPIC_API_KEY`.
 
-### OpenShift OAuth (Recommended)
-For cluster login and authentication, see [OpenShift OAuth Setup](OPENSHIFT_OAUTH.md). The deploy script also supports a `secrets` subcommand if you only need to (re)configure OAuth secrets:
+### OpenShift OAuth (Legacy)
+For cluster login via OAuth proxy sidecar, see [OpenShift OAuth Setup](OPENSHIFT_OAUTH.md).
 
-```bash
-cd components/manifests
-./deploy.sh secrets
-```
+For new deployments, SSO/OIDC via Keycloak is recommended instead. See the [SSO Migration](../../workflows/security/sso-migration.workflow.md) workflow.
 
 ## Cleanup
 
 ```bash
 # Uninstall resources
-make clean  # alias to ./components/manifests/deploy.sh clean
+oc delete -k components/manifests/overlays/<your-overlay>
 ```
