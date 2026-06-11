@@ -146,7 +146,6 @@ kubectl scale -n ambient-code deployment/backend-api deployment/frontend deploym
 cd components/operator
 export KUBECONFIG=~/.kube/config
 export AMBIENT_CODE_RUNNER_IMAGE=quay.io/ambient_code/acp_claude_runner:latest
-export STATE_SYNC_IMAGE=quay.io/ambient_code/acp_state_sync:latest
 go run .
 ```
 
@@ -240,7 +239,6 @@ Access via `Cmd+Shift+P` → "Tasks: Run Task"
 **Operator:**
 - `KUBECONFIG=~/.kube/config` - Path to kubeconfig
 - `AMBIENT_CODE_RUNNER_IMAGE` - Runner image (e.g., `quay.io/ambient_code/acp_claude_runner:latest`)
-- `STATE_SYNC_IMAGE` - State-sync image (e.g., `quay.io/ambient_code/acp_state_sync:latest`)
 
 ### Debugging
 

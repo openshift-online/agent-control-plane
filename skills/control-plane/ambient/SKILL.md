@@ -19,12 +19,8 @@ You are an expert in deploying the Ambient Code Platform to OpenShift clusters. 
 
 | Deployment | Image | Purpose |
 |-----------|-------|---------|
-| `backend-api` | `quay.io/ambient_code/acp_backend` | Go REST API, manages K8s CRDs |
-| `frontend` | `quay.io/ambient_code/acp_frontend` | NextJS web UI |
-| `agentic-operator` | `quay.io/ambient_code/acp_operator` | Kubernetes operator |
 | `ambient-api-server` | `quay.io/ambient_code/acp_api_server` | Stateless API server |
 | `ambient-api-server-db` | (postgres sidecar) | API server database |
-| `public-api` | `quay.io/ambient_code/acp_public_api` | External API gateway |
 | `postgresql` | (upstream) | Unleash feature flag DB |
 | `minio` | (upstream) | S3 object storage |
 | `unleash` | (upstream) | Feature flag service |
@@ -171,13 +167,8 @@ pushd "$TMPDIR"
 kustomize edit set namespace $NAMESPACE
 
 kustomize edit set image \
-  quay.io/ambient_code/acp_frontend:latest=quay.io/ambient_code/acp_frontend:$IMAGE_TAG \
-  quay.io/ambient_code/acp_backend:latest=quay.io/ambient_code/acp_backend:$IMAGE_TAG \
-  quay.io/ambient_code/acp_operator:latest=quay.io/ambient_code/acp_operator:$IMAGE_TAG \
   quay.io/ambient_code/acp_claude_runner:latest=quay.io/ambient_code/acp_claude_runner:$IMAGE_TAG \
-  quay.io/ambient_code/acp_state_sync:latest=quay.io/ambient_code/acp_state_sync:$IMAGE_TAG \
   quay.io/ambient_code/acp_api_server:latest=quay.io/ambient_code/acp_api_server:$IMAGE_TAG \
-  quay.io/ambient_code/acp_public_api:latest=quay.io/ambient_code/acp_public_api:$IMAGE_TAG
 
 oc apply -k . -n $NAMESPACE
 
@@ -203,7 +194,6 @@ IMAGE_TAG=<tag>
 oc patch configmap operator-config -n $NAMESPACE --type=merge -p "{
   \"data\": {
     \"AMBIENT_CODE_RUNNER_IMAGE\": \"quay.io/ambient_code/acp_claude_runner:$IMAGE_TAG\",
-    \"STATE_SYNC_IMAGE\": \"quay.io/ambient_code/acp_state_sync:$IMAGE_TAG\",
     \"USE_VERTEX\": \"0\",
     \"CLOUD_ML_REGION\": \"\",
     \"ANTHROPIC_VERTEX_PROJECT_ID\": \"\",
@@ -221,7 +211,6 @@ REGISTRY=$(oc get configmap ambient-agent-registry -n $NAMESPACE \
 REGISTRY=$(echo "$REGISTRY" | sed \
   "s|quay.io/ambient_code/acp_claude_runner[@:][^\"]*|quay.io/ambient_code/acp_claude_runner:$IMAGE_TAG|g")
 REGISTRY=$(echo "$REGISTRY" | sed \
-  "s|quay.io/ambient_code/acp_state_sync[@:][^\"]*|quay.io/ambient_code/acp_state_sync:$IMAGE_TAG|g")
 
 oc patch configmap ambient-agent-registry -n $NAMESPACE --type=merge \
   -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"
@@ -337,7 +326,6 @@ oc policy add-role-to-group system:image-puller system:serviceaccounts --namespa
 oc describe pod <pod-name> -n $NAMESPACE | grep -A5 "Events:"
 ```
 
-- If pulling from quay.io: verify the tag exists (`skopeo inspect docker://quay.io/ambient_code/acp_backend:<tag>`)
 - If private: create an image pull secret and link it to the default service account
 
 ### API Server TLS Certificate Missing

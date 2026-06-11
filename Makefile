@@ -818,7 +818,6 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 		kubectl apply --validate=false -k components/manifests/overlays/kind-local/; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching agent registry for local images..."; \
 		REGISTRY=$$(kubectl get configmap ambient-agent-registry -n $(NAMESPACE) -o jsonpath='{.data.agent-registry\.json}'); \
-		UPDATED=$$(echo "$$REGISTRY" | sed 's|quay.io/ambient_code/acp_claude_runner:[^"]*|localhost/acp_claude_runner:latest|g; s|quay.io/ambient_code/acp_state_sync:[^"]*|localhost/acp_state_sync:latest|g'); \
 		kubectl patch configmap ambient-agent-registry -n $(NAMESPACE) --type=merge \
 			-p "{\"data\":{\"agent-registry.json\":$$(echo "$$UPDATED" | jq -Rs .)}}"; \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Agent registry patched for local images"; \
