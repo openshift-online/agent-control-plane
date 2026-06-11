@@ -39,13 +39,46 @@ jobs:
   build-matrix:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    permissions: {}
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       build-matrix: ${{ steps.matrix.outputs.build-matrix }}
       merge-matrix: ${{ steps.matrix.outputs.merge-matrix }}
+      built-images: ${{ steps.matrix.outputs.built-images }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Detect changed components
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v4
+        id: changes
+        with:
+          filters: |
+            ambient-runner:
+              - 'components/runners/ambient-runner/**'
+            ambient-api-server:
+              - 'components/ambient-api-server/**'
+            ambient-control-plane:
+              - 'components/ambient-control-plane/**'
+            ambient-mcp:
+              - 'components/ambient-mcp/**'
+            ambient-ui:
+              - 'components/ambient-ui/**'
+            credential-github:
+              - 'components/credential-sidecars/github/**'
+            credential-jira:
+              - 'components/credential-sidecars/jira/**'
+            credential-k8s:
+              - 'components/credential-sidecars/k8s/**'
+            credential-google:
+              - 'components/credential-sidecars/google/**'
+
       - name: Build component matrices
         id: matrix
+        env:
+          CHANGES_JSON: ${{ toJSON(steps.changes.outputs) }}
         run: |
           ALL_COMPONENTS='[
             {"name":"ambient-runner","context":"./components/runners/ambient-runner","image":"quay.io/ambient_code/acp_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
@@ -62,13 +95,23 @@ jobs:
           SELECTED="${{ github.event.inputs.components }}"
 
           if [ -n "$SELECTED" ]; then
+            # Manual dispatch: build only selected components
             FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --arg sel "$SELECTED" '[.[] | select(.name as $n | $sel | split(",") | map(gsub("^\\s+|\\s+$";"")) | index($n))]')
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            # PR: build only changed components
+            FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --argjson changes "$CHANGES_JSON"               '[.[] | select(.name as $n | $changes[$n] == "true")]')
+            if [ "$FILTERED" = "[]" ]; then
+              echo "No component changes detected, building all"
+              FILTERED="$ALL_COMPONENTS"
+            fi
           else
+            # Push to main/alpha: build all
             FILTERED="$ALL_COMPONENTS"
           fi
 
           echo "build-matrix=$(echo "$FILTERED" | jq -c '.')" >> $GITHUB_OUTPUT
           echo "merge-matrix=$(echo "$FILTERED" | jq -c '[.[] | {name, image}]')" >> $GITHUB_OUTPUT
+          echo "built-images=$(echo "$FILTERED" | jq -c '[.[].image]')" >> $GITHUB_OUTPUT
 
           echo "Components to build:"
           echo "$FILTERED" | jq -r '.[].name'
@@ -191,11 +234,12 @@ jobs:
             ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-arm64
 
   test-local-dev:
-    needs: [merge-manifests]
+    needs: [build-matrix, merge-manifests]
     if: github.event_name == 'pull_request'
     uses: ./.github/workflows/test-local-dev.yml
     with:
       image-tag: pr-${{ github.event.pull_request.number }}
+      built-images: ${{ needs.build-matrix.outputs.built-images }}
 
   deploy-rhoai-mlflow:
     runs-on: ubuntu-latest
