@@ -277,6 +277,38 @@ KC_TOKEN_URL="${KC_INTERNAL_URL}/realms/${KC_REALM}/protocol/openid-connect/toke
 OIDC_CLIENT_ID_CP="ambient-e2e"
 OIDC_CLIENT_SECRET_CP="e2e-secret-do-not-use-in-prod"
 
+# 0.5a. Align Keycloak KC_HOSTNAME with the external URL so signing keys
+#        match between internal and external access paths.
+KC_WANT_HOSTNAME="${KC_URL}"
+KC_CUR_HOSTNAME=$(kubectl get deployment keycloak -n "$NS" \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="KC_HOSTNAME")].value}' 2>/dev/null || true)
+if [[ "$KC_CUR_HOSTNAME" != "$KC_WANT_HOSTNAME" ]]; then
+  echo "  Patching Keycloak hostname: $KC_CUR_HOSTNAME → $KC_WANT_HOSTNAME"
+  kubectl set env deployment/keycloak -n "$NS" KC_HOSTNAME="$KC_WANT_HOSTNAME" >/dev/null 2>&1
+  kubectl rollout status deployment/keycloak -n "$NS" --timeout=120s >/dev/null 2>&1 || true
+  # Re-establish Keycloak port-forward after rollout
+  if [[ "$KC_URL" == *"localhost"* ]]; then
+    KC_PORT=$(echo "$KC_URL" | sed -n 's|.*localhost:\([0-9]*\).*|\1|p' | head -1)
+    if [[ -n "$KC_PORT" ]]; then
+      if command -v lsof &>/dev/null; then
+        lsof -ti :"$KC_PORT" 2>/dev/null | xargs -r kill 2>/dev/null || true
+      elif command -v fuser &>/dev/null; then
+        fuser -k "${KC_PORT}/tcp" 2>/dev/null || true
+      fi
+      sleep 1
+      kubectl port-forward -n "$NS" svc/keycloak-service "${KC_PORT}:8080" &>/dev/null &
+      for _i in $(seq 1 15); do
+        _s=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "${KC_URL}/realms/${KC_REALM}" 2>/dev/null || true)
+        [[ "$_s" != "000" && -n "$_s" ]] && break
+        sleep 1
+      done
+    fi
+  fi
+  echo "  Keycloak hostname aligned"
+else
+  echo "  Keycloak hostname already correct"
+fi
+
 # 1. Fetch Keycloak JWKS and update the API server auth ConfigMap so the
 #    API server can validate JWTs signed by this Keycloak instance.
 echo "  Fetching Keycloak JWKS..."

@@ -49,11 +49,6 @@ Component-specific conventions loaded by review agents on demand.
 
 | Standard | Domain | Scope |
 |----------|--------|-------|
-| [Backend Conventions](specs/standards/backend/conventions.spec.md) | backend | Go patterns, K8s integration, handler conventions, user-scoped clients |
-| [Backend Error Handling](specs/standards/backend/error-handling.spec.md) | backend | Consistent error patterns across backend and operator |
-| [Backend K8s Client](specs/standards/backend/k8s-client.spec.md) | backend | User token vs. service account — critical for RBAC compliance |
-| [Frontend Conventions](specs/standards/frontend/conventions.spec.md) | frontend | NextJS patterns, Shadcn, React Query, component guidelines |
-| [Frontend React Query](specs/standards/frontend/react-query.spec.md) | frontend | Data fetching hooks, mutations, cache invalidation |
 | [Operator Conventions](specs/standards/control-plane/conventions.spec.md) | control-plane | OwnerReferences, reconciliation patterns, SecurityContext, resource limits |
 | [Security Standards](specs/standards/security/security.spec.md) | security | Auth flows, RBAC, token handling, container security |
 | [Cross-Cutting Conventions](specs/standards/platform/cross-cutting.spec.md) | platform | Image consistency, reconciliation, error propagation, namespace-scoped keys |
@@ -84,11 +79,6 @@ Component-specific conventions loaded by review agents on demand.
 
 | Guide | Purpose |
 |-------|---------|
-| [Backend README](components/backend/README.md) | Go API development, testing, handler structure |
-| [Backend Test Guide](components/backend/TEST_GUIDE.md) | Testing strategies, test utilities, integration test setup |
-| [Frontend README](components/frontend/README.md) | NextJS development, local setup, environment config |
-| [Frontend Design Guidelines](components/frontend/DESIGN_GUIDELINES.md) | Component patterns, Shadcn usage, type conventions |
-| [Frontend Component Patterns](components/frontend/COMPONENT_PATTERNS.md) | Architecture patterns for React components |
 | [Operator README](components/operator/README.md) | Operator development, watch patterns, reconciliation loop |
 | [Runner README](components/runners/ambient-runner/README.md) | Python runner, Claude Code SDK integration |
 | [Public API README](components/public-api/README.md) | Stateless gateway, token forwarding, input validation |
@@ -111,7 +101,6 @@ Component-specific conventions loaded by review agents on demand.
 | Guide | Purpose |
 |-------|---------|
 | [E2E Testing Guide](docs/internal/testing/e2e-guide.md) | Writing and running Cypress E2E tests |
-| [E2E README](e2e/README.md) | Running E2E tests, environment setup, CI integration |
 
 ## Observability
 

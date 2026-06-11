@@ -62,15 +62,14 @@ _AI_PROMPT_RE = re.compile(
 # ---------------------------------------------------------------------------
 
 _COMPONENT_RULES: list[tuple[str, str]] = [
-    ("components/backend/", "backend"),
     ("components/operator/", "operator"),
-    ("components/frontend/", "frontend"),
     ("components/runners/", "runner"),
     ("components/ambient-cli/", "cli"),
     ("components/ambient-api-server/", "api-server"),
     ("components/ambient-sdk/", "sdk"),
     ("components/manifests/", "manifests"),
     ("components/public-api/", "public-api"),
+    ("components/ambient-ui/", "ambient-ui"),
     (".github/workflows/", "ci"),
     ("docs/", "docs"),
     ("scripts/", "scripts"),

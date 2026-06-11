@@ -45,11 +45,9 @@ esac
 
 # Images to load
 IMAGES=(
-  "vteam_backend:latest"
-  "vteam_frontend:latest"
-  "vteam_operator:latest"
   "vteam_claude_runner:latest"
-  "vteam_state_sync:latest"
+  "vteam_api_server:latest"
+  "vteam_ambient_ui:latest"
 )
 
 echo ""

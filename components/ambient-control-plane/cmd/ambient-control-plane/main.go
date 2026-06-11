@@ -131,7 +131,6 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	factory := reconciler.NewSDKClientFactory(cfg.APIServerURL, tokenProvider, log.Logger)
 	kubeReconcilerCfg := reconciler.KubeReconcilerConfig{
 		RunnerImage:           cfg.RunnerImage,
-		BackendURL:            cfg.BackendURL,
 		RunnerGRPCURL:         cfg.GRPCServerAddr,
 		RunnerGRPCUseTLS:      cfg.RunnerGRPCUseTLS,
 		AnthropicAPIKey:       cfg.AnthropicAPIKey,

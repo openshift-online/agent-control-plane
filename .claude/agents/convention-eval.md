@@ -18,43 +18,12 @@ Evaluate codebase adherence to documented conventions. Produce a scored report.
 
 Load these before running checks:
 
-1. `specs/standards/backend/conventions.spec.md`
-2. `specs/standards/backend/error-handling.spec.md`
-3. `specs/standards/backend/k8s-client.spec.md`
-4. `specs/standards/frontend/conventions.spec.md`
-5. `specs/standards/frontend/react-query.spec.md`
-6. `specs/standards/control-plane/conventions.spec.md`
-7. `specs/standards/security/security.spec.md`
+1. `specs/standards/control-plane/conventions.spec.md`
+2. `specs/standards/security/security.spec.md`
 
 ## Checks by Category
 
-### Backend (8 checks, weight: 25%)
-
-| # | Check | Severity |
-|---|-------|----------|
-| B1 | No `panic()` in production | Blocker |
-| B2 | User-scoped clients for user ops | Blocker |
-| B3 | No direct type assertions | Critical |
-| B4 | No silent error handling | Critical |
-| B5 | No internal error exposure | Major |
-| B6 | No tokens in logs | Blocker |
-| B7 | Error wrapping with %w | Major |
-| B8 | Files under 400 lines | Minor |
-
-### Frontend (8 checks, weight: 25%)
-
-| # | Check | Severity |
-|---|-------|----------|
-| F1 | No raw HTML elements | Critical |
-| F2 | No manual fetch() | Critical |
-| F3 | No `interface` declarations | Major |
-| F4 | No `any` types | Critical |
-| F5 | Components under 200 lines | Minor |
-| F6 | Loading/error states | Major |
-| F7 | Colocated single-use components | Minor |
-| F8 | Feature flag on new pages | Major |
-
-### Operator (7 checks, weight: 20%)
+### Operator (7 checks, weight: 30%)
 
 | # | Check | Severity |
 |---|-------|----------|
@@ -66,7 +35,7 @@ Load these before running checks:
 | O6 | Status condition updates | Critical |
 | O7 | No `context.TODO()` | Minor |
 
-### Runner (4 checks, weight: 10%)
+### Runner (4 checks, weight: 15%)
 
 | # | Check | Severity |
 |---|-------|----------|
@@ -75,7 +44,7 @@ Load these before running checks:
 | R3 | Error propagation | Critical |
 | R4 | No hardcoded secrets | Blocker |
 
-### Security (7 checks, weight: 20%)
+### Security (7 checks, weight: 25%)
 
 | # | Check | Severity |
 |---|-------|----------|
@@ -108,8 +77,6 @@ Load these before running checks:
 
 | Category | Score | Pass | Fail | Blockers |
 |----------|-------|------|------|----------|
-| Backend  | X/8   | X    | X    | X        |
-| Frontend | X/8   | X    | X    | X        |
 | Operator | X/7   | X    | X    | X        |
 | Runner   | X/4   | X    | X    | X        |
 | Security | X/7   | X    | X    | X        |

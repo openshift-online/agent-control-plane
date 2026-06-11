@@ -37,33 +37,8 @@ case "$FILE_PATH" in
     ;;
 esac
 
-# --- Frontend: raw HTML elements instead of Shadcn ---
-if [[ "$FILE_PATH" == */components/frontend/*.tsx ]]; then
-  if echo "$CONTENT" | grep -qE '<(button|input|select|dialog|textarea)\b'; then
-    warn "Use Shadcn UI components from @/components/ui/ instead of raw HTML elements."
-  fi
-fi
-
-# --- Frontend: manual fetch() in components ---
-if [[ "$FILE_PATH" == */components/frontend/src/app/*.tsx || "$FILE_PATH" == */components/frontend/src/components/*.tsx ]]; then
-  if [[ "$FILE_PATH" != */services/api/* ]]; then
-    if echo "$CONTENT" | grep -qE '\bfetch\('; then
-      warn "Use React Query hooks from @/services/queries/ instead of manual fetch() calls in components."
-    fi
-  fi
-fi
-
-# --- Backend: direct K8s client usage without user token ---
-if [[ "$FILE_PATH" == */components/backend/handlers/*.go ]]; then
-  if echo "$CONTENT" | grep -qE '(DynamicClient\.Resource|K8sClient\.)'; then
-    if ! echo "$CONTENT" | grep -q 'GetK8sClientsForRequest'; then
-      warn "User operations MUST use GetK8sClientsForRequest(c), not the backend service account."
-    fi
-  fi
-fi
-
 # --- Go: panic() in production code ---
-if [[ "$FILE_PATH" == */components/backend/*.go || "$FILE_PATH" == */components/operator/*.go ]]; then
+if [[ "$FILE_PATH" == */components/operator/*.go ]]; then
   if [[ "$FILE_PATH" != *_test.go ]]; then
     if echo "$CONTENT" | grep -q 'panic('; then
       warn "Do not use panic() in production code. Return fmt.Errorf with context instead."
@@ -78,7 +53,7 @@ fi
 
 # --- New feature files: suggest feature flag ---
 if [[ "$TOOL_NAME" == "Write" ]]; then
-  if [[ "$FILE_PATH" == */components/frontend/src/app/*/page.tsx || "$FILE_PATH" == */components/backend/handlers/*.go ]]; then
+  if [[ "$FILE_PATH" == */components/ambient-ui/src/app/*/page.tsx ]]; then
     warn "New feature code detected. Consider gating behind a feature flag. Use /unleash-flag to set one up."
   fi
 fi
@@ -91,14 +66,14 @@ if [[ "$FILE_PATH" == */components/manifests/*.yaml || "$FILE_PATH" == */.github
 fi
 
 # --- Go: create-and-ignore AlreadyExists anti-pattern ---
-if [[ "$FILE_PATH" == */components/operator/*.go || "$FILE_PATH" == */components/backend/*.go ]]; then
+if [[ "$FILE_PATH" == */components/operator/*.go ]]; then
   if echo "$CONTENT" | grep -qE '(errors\.IsAlreadyExists|apierrors\.IsAlreadyExists)'; then
     warn "Use reconcile (update-or-create) patterns, not create-and-ignore-AlreadyExists. Skipping AlreadyExists misses spec drift and ownership updates."
   fi
 fi
 
 # --- Go: swallowed errors ---
-if [[ "$FILE_PATH" == */components/operator/*.go || "$FILE_PATH" == */components/backend/*.go ]]; then
+if [[ "$FILE_PATH" == */components/operator/*.go ]]; then
   if echo "$CONTENT" | grep -qE '_ =.*\('; then
     warn "Never silently swallow errors. Every error must be propagated, logged, or collected."
   fi

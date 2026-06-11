@@ -7,10 +7,6 @@ on:
       - '.github/workflows/components-build-deploy.yml'
       - 'components/manifests/**'
       - 'components/runners/**'
-      - 'components/operator/**'
-      - 'components/backend/**'
-      - 'components/frontend/**'
-      - 'components/public-api/**'
       - 'components/ambient-api-server/**'
       - 'components/ambient-control-plane/**'
       - 'components/ambient-mcp/**'
@@ -22,10 +18,6 @@ on:
       - '.github/workflows/components-build-deploy.yml'
       - 'components/manifests/**'
       - 'components/runners/**'
-      - 'components/operator/**'
-      - 'components/backend/**'
-      - 'components/frontend/**'
-      - 'components/public-api/**'
       - 'components/ambient-api-server/**'
       - 'components/ambient-control-plane/**'
       - 'components/ambient-mcp/**'
@@ -34,7 +26,7 @@ on:
   workflow_dispatch:
     inputs:
       components:
-        description: 'Components to build (comma-separated: frontend,backend,operator,ambient-runner,state-sync,public-api,ambient-api-server,ambient-control-plane,ambient-mcp,ambient-ui,credential-github,credential-jira,credential-k8s,credential-google) - leave empty for all'
+        description: 'Components to build (comma-separated: ambient-runner,ambient-api-server,ambient-control-plane,ambient-mcp,ambient-ui,credential-github,credential-jira,credential-k8s,credential-google) - leave empty for all'
         required: false
         type: string
         default: ''
@@ -56,12 +48,7 @@ jobs:
         id: matrix
         run: |
           ALL_COMPONENTS='[
-            {"name":"frontend","context":"./components/frontend","image":"quay.io/ambient_code/vteam_frontend","dockerfile":"./components/frontend/Dockerfile"},
-            {"name":"backend","context":"./components/backend","image":"quay.io/ambient_code/vteam_backend","dockerfile":"./components/backend/Dockerfile"},
-            {"name":"operator","context":"./components/operator","image":"quay.io/ambient_code/vteam_operator","dockerfile":"./components/operator/Dockerfile"},
             {"name":"ambient-runner","context":"./components/runners/ambient-runner","image":"quay.io/ambient_code/vteam_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
-            {"name":"state-sync","context":"./components/runners/state-sync","image":"quay.io/ambient_code/vteam_state_sync","dockerfile":"./components/runners/state-sync/Dockerfile"},
-            {"name":"public-api","context":"./components/public-api","image":"quay.io/ambient_code/vteam_public_api","dockerfile":"./components/public-api/Dockerfile"},
             {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"},
             {"name":"ambient-control-plane","context":"./components","image":"quay.io/ambient_code/vteam_control_plane","dockerfile":"./components/ambient-control-plane/Dockerfile"},
             {"name":"ambient-mcp","context":"./components/ambient-mcp","image":"quay.io/ambient_code/vteam_mcp","dockerfile":"./components/ambient-mcp/Dockerfile"},
@@ -384,13 +371,8 @@ jobs:
       - name: Update kustomization with SHA image tags
         working-directory: components/manifests/overlays/production
         run: |
-          kustomize edit set image quay.io/ambient_code/vteam_frontend:latest=quay.io/ambient_code/vteam_frontend:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_backend:latest=quay.io/ambient_code/vteam_backend:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_control_plane:latest=quay.io/ambient_code/vteam_control_plane:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_mcp:latest=quay.io/ambient_code/vteam_mcp:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_ambient_ui:latest=quay.io/ambient_code/vteam_ambient_ui:${{ github.sha }}
@@ -405,45 +387,6 @@ jobs:
         working-directory: components/manifests/overlays/production
         run: |
           oc apply -k . -n ambient-code
-
-      - name: Update frontend environment variables
-        run: |
-          oc set env deployment/frontend -n ambient-code -c frontend \
-            GITHUB_APP_SLUG="ambient-code-stage" \
-            GITHUB_CALLBACK_URL="https://ambient-code.apps.rosa.vteam-stage.7fpc.p3.openshiftapps.com/api/auth/github/user/callback" \
-            FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
-
-      - name: Update operator environment variables
-        run: |
-          oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
-            AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}" \
-            STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ github.sha }}"
-
-      - name: Update credential sidecar image tags on control plane
-        run: |
-          oc set env deployment/ambient-control-plane -n ambient-code \
-            GITHUB_MCP_IMAGE="quay.io/ambient_code/vteam_credential_github:${{ github.sha }}" \
-            JIRA_MCP_IMAGE="quay.io/ambient_code/vteam_credential_jira:${{ github.sha }}" \
-            K8S_MCP_IMAGE="quay.io/ambient_code/vteam_credential_k8s:${{ github.sha }}" \
-            GOOGLE_MCP_IMAGE="quay.io/ambient_code/vteam_credential_google:${{ github.sha }}"
-
-      - name: Pin OPERATOR_IMAGE in operator-config ConfigMap
-        run: |
-          oc patch configmap operator-config -n ambient-code --type=merge \
-            -p "{\"data\":{\"OPERATOR_IMAGE\":\"quay.io/ambient_code/vteam_operator:${{ github.sha }}\"}}"
-
-      - name: Update agent registry ConfigMap with pinned image tags
-        run: |
-          REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
-            -o jsonpath='{.data.agent-registry\.json}')
-
-          REGISTRY=$(echo "$REGISTRY" | sed \
-            "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g")
-          REGISTRY=$(echo "$REGISTRY" | sed \
-            "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
-
-          oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
-            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"
 
   deploy-with-disptach:
     runs-on: ubuntu-latest
@@ -471,13 +414,8 @@ jobs:
       - name: Update kustomization with SHA image tags
         working-directory: components/manifests/overlays/production
         run: |
-          kustomize edit set image quay.io/ambient_code/vteam_frontend:latest=quay.io/ambient_code/vteam_frontend:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_backend:latest=quay.io/ambient_code/vteam_backend:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_control_plane:latest=quay.io/ambient_code/vteam_control_plane:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_mcp:latest=quay.io/ambient_code/vteam_mcp:${{ github.sha }}
           kustomize edit set image quay.io/ambient_code/vteam_ambient_ui:latest=quay.io/ambient_code/vteam_ambient_ui:${{ github.sha }}
@@ -492,42 +430,3 @@ jobs:
         working-directory: components/manifests/overlays/production
         run: |
           oc apply -k . -n ambient-code
-
-      - name: Update frontend environment variables
-        run: |
-          oc set env deployment/frontend -n ambient-code -c frontend \
-            GITHUB_APP_SLUG="ambient-code-stage" \
-            GITHUB_CALLBACK_URL="https://ambient-code.apps.rosa.vteam-stage.7fpc.p3.openshiftapps.com/api/auth/github/user/callback" \
-            FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
-
-      - name: Update operator environment variables
-        run: |
-          oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
-            AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}" \
-            STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ github.sha }}"
-
-      - name: Update credential sidecar image tags on control plane
-        run: |
-          oc set env deployment/ambient-control-plane -n ambient-code \
-            GITHUB_MCP_IMAGE="quay.io/ambient_code/vteam_credential_github:${{ github.sha }}" \
-            JIRA_MCP_IMAGE="quay.io/ambient_code/vteam_credential_jira:${{ github.sha }}" \
-            K8S_MCP_IMAGE="quay.io/ambient_code/vteam_credential_k8s:${{ github.sha }}" \
-            GOOGLE_MCP_IMAGE="quay.io/ambient_code/vteam_credential_google:${{ github.sha }}"
-
-      - name: Pin OPERATOR_IMAGE in operator-config ConfigMap
-        run: |
-          oc patch configmap operator-config -n ambient-code --type=merge \
-            -p "{\"data\":{\"OPERATOR_IMAGE\":\"quay.io/ambient_code/vteam_operator:${{ github.sha }}\"}}"
-
-      - name: Update agent registry ConfigMap with pinned image tags
-        run: |
-          REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
-            -o jsonpath='{.data.agent-registry\.json}')
-
-          REGISTRY=$(echo "$REGISTRY" | sed \
-            "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g")
-          REGISTRY=$(echo "$REGISTRY" | sed \
-            "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
-
-          oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
-            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"

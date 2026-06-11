@@ -7,12 +7,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'components/backend/**'
       - 'components/ambient-api-server/**'
       - 'components/runners/ambient-runner/**'
       - 'components/ambient-cli/**'
       - 'components/ambient-sdk/go-sdk/**'
-      - 'components/frontend/**'
       - 'components/ambient-ui/**'
       - '.github/scripts/**'
       - 'tests/**'
@@ -21,12 +19,10 @@ on:
 
   pull_request:
     paths:
-      - 'components/backend/**'
       - 'components/ambient-api-server/**'
       - 'components/runners/ambient-runner/**'
       - 'components/ambient-cli/**'
       - 'components/ambient-sdk/go-sdk/**'
-      - 'components/frontend/**'
       - 'components/ambient-ui/**'
       - '.github/scripts/**'
       - 'tests/**'
@@ -54,11 +50,9 @@ jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
       api-server: ${{ steps.filter.outputs.api-server }}
       runner: ${{ steps.filter.outputs.runner }}
       cli: ${{ steps.filter.outputs.cli }}
-      frontend: ${{ steps.filter.outputs.frontend }}
       ambient-ui: ${{ steps.filter.outputs.ambient-ui }}
       scripts: ${{ steps.filter.outputs.scripts }}
     steps:
@@ -70,8 +64,6 @@ jobs:
         id: filter
         with:
           filters: |
-            backend:
-              - 'components/backend/**'
             api-server:
               - 'components/ambient-api-server/**'
             runner:
@@ -79,114 +71,11 @@ jobs:
             cli:
               - 'components/ambient-cli/**'
               - 'components/ambient-sdk/go-sdk/**'
-            frontend:
-              - 'components/frontend/**'
             ambient-ui:
               - 'components/ambient-ui/**'
             scripts:
               - '.github/scripts/**'
               - 'tests/test_model_discovery.py'
-
-  backend:
-    runs-on: ubuntu-latest
-    needs: detect-changes
-    if: needs.detect-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
-    name: Backend Unit Tests
-    env:
-      TESTS_DIR: "./components/backend/handlers"
-      TESTS_LABEL: "unit"
-      JUNIT_FILENAME: "junit.xml"
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
-        with:
-          go-version-file: 'components/backend/go.mod'
-          cache-dependency-path: 'components/backend/go.sum'
-
-      - name: Create reports directory
-        shell: bash
-        working-directory: ${{ env.TESTS_DIR }}
-        run: mkdir -p reports
-
-      - name: Configure Input Variables
-        shell: bash
-        id: configure
-        run: |
-          TEST_LABEL=${{ env.TESTS_LABEL }}
-          DEFAULT_NAMESPACE="test-namespace"
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            TEST_LABEL=${{ inputs.test_label }}
-            DEFAULT_NAMESPACE=${{ inputs.default_namespace }}
-          fi
-
-          {
-            echo "TEST_LABEL=$TEST_LABEL"
-            echo "DEFAULT_NAMESPACE=$DEFAULT_NAMESPACE"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Run Tests
-        id: run-tests
-        shell: bash
-        working-directory: ${{ env.TESTS_DIR }}
-        run: |
-          go run github.com/onsi/ginkgo/v2/ginkgo -r -v --cover --keep-going --github-output=true --tags=test --label-filter=${{ steps.configure.outputs.TEST_LABEL }} --junit-report=${{ env.JUNIT_FILENAME }} --output-dir=reports -- -testNamespace=${{ steps.configure.outputs.DEFAULT_NAMESPACE }}
-        continue-on-error: true
-
-      - name: Generate HTML test report
-        if: (!cancelled())
-        shell: bash
-        run: |
-          pipx run junit2html ${{ env.TESTS_DIR }}/reports/${{ env.JUNIT_FILENAME }} ${{ env.TESTS_DIR }}/reports/test-report.html
-        continue-on-error: true
-
-      - name: Configure report name
-        id: name_gen
-        shell: bash
-        run: |
-          uuid=$(uuidgen)
-          REPORT_NAME="Backend Unit Tests HTML Report - ${{ github.run_id }}_${{ github.job }}_$uuid"
-          echo "REPORT_NAME=$REPORT_NAME" >> "$GITHUB_OUTPUT"
-
-      - name: Upload HTML Report
-        id: upload
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        if: (!cancelled())
-        with:
-          name: ${{ steps.name_gen.outputs.REPORT_NAME }}
-          path: ${{ env.TESTS_DIR }}/reports/test-report.html
-          retention-days: 7
-        continue-on-error: true
-
-      - name: Publish Test Summary With HTML Report
-        id: publish
-        uses: kubeflow/pipelines/.github/actions/junit-summary@ab1231a5c32c688bcb62314e467011b586aee796 # master
-        if: (!cancelled()) && steps.upload.outcome != 'failure'
-        with:
-          xml_files: '${{ env.TESTS_DIR }}/reports'
-          custom_data: '{\"HTML Report\": \"${{ steps.upload.outputs.artifact-url }}\"}'
-        continue-on-error: true
-
-      - name: Publish Test Summary
-        id: summary
-        uses: kubeflow/pipelines/.github/actions/junit-summary@ab1231a5c32c688bcb62314e467011b586aee796 # master
-        if: (!cancelled()) && steps.upload.outcome == 'failure'
-        with:
-          xml_files: '${{ env.TESTS_DIR }}/reports'
-        continue-on-error: true
-
-      - name: Mark Workflow failure if test step failed
-        if: steps.run-tests.outcome != 'success' && !cancelled()
-        shell: bash
-        run: exit 1
-
-      - name: Mark Workflow failure if test reporting failed
-        if: (steps.publish.outcome == 'failure' || steps.summary.outcome == 'failure' || steps.upload.outcome != 'success') && !cancelled()
-        shell: bash
-        run: exit 1
 
   api-server:
     runs-on: ubuntu-latest
@@ -289,32 +178,6 @@ jobs:
           path: components/ambient-cli/coverage.out
           retention-days: 7
 
-  frontend:
-    runs-on: ubuntu-latest
-    needs: detect-changes
-    if: needs.detect-changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch'
-    name: Frontend Unit Tests (Vitest)
-    defaults:
-      run:
-        working-directory: components/frontend
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
-        with:
-          node-version-file: 'components/frontend/package.json'
-          cache: 'npm'
-          cache-dependency-path: 'components/frontend/package-lock.json'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run unit tests with coverage
-        run: npx vitest run --coverage
-
   ambient-ui:
     runs-on: ubuntu-latest
     needs: detect-changes
@@ -364,18 +227,16 @@ jobs:
 
   summary:
     runs-on: ubuntu-latest
-    needs: [detect-changes, backend, api-server, runner, cli, frontend, ambient-ui, scripts]
+    needs: [detect-changes, api-server, runner, cli, ambient-ui, scripts]
     if: always()
     steps:
       - name: Check overall status
         run: |
           failed=false
           for result in \
-            "${{ needs.backend.result }}" \
             "${{ needs.api-server.result }}" \
             "${{ needs.runner.result }}" \
             "${{ needs.cli.result }}" \
-            "${{ needs.frontend.result }}" \
             "${{ needs.ambient-ui.result }}" \
             "${{ needs.scripts.result }}"; do
             if [ "$result" == "failure" ] || [ "$result" == "cancelled" ]; then
@@ -384,11 +245,9 @@ jobs:
           done
           if [ "$failed" == "true" ]; then
             echo "Unit tests failed"
-            echo "  backend: ${{ needs.backend.result }}"
             echo "  api-server: ${{ needs.api-server.result }}"
             echo "  runner: ${{ needs.runner.result }}"
             echo "  cli: ${{ needs.cli.result }}"
-            echo "  frontend: ${{ needs.frontend.result }}"
             echo "  ambient-ui: ${{ needs.ambient-ui.result }}"
             echo "  scripts: ${{ needs.scripts.result }}"
             exit 1

@@ -53,16 +53,6 @@ repos:
         pass_filenames: true
         require_serial: true
 
-  # ── Frontend (ESLint) ────────────────────────────────────────────────
-  - repo: local
-    hooks:
-      - id: eslint
-        name: eslint
-        entry: scripts/pre-commit/eslint.sh
-        language: script
-        files: ^components/frontend/.*\.(ts|tsx|js|jsx)$
-        pass_filenames: true
-
   # ── Branch protection ────────────────────────────────────────────────
   - repo: local
     hooks:

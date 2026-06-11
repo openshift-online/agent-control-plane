@@ -3,8 +3,6 @@
 # shellcheck shell=bash
 
 BENCH_COMPONENTS=(
-  frontend
-  backend
   operator
   public-api
   api-server
@@ -12,16 +10,6 @@ BENCH_COMPONENTS=(
   sdk
   runner
 )
-
-bench_env_frontend() {
-  local cache_root=$1
-  bench_setup_frontend_env "$cache_root"
-}
-
-bench_env_backend() {
-  local cache_root=$1
-  bench_setup_go_env "$cache_root"
-}
 
 bench_env_operator() {
   local cache_root=$1
@@ -53,37 +41,27 @@ bench_env_runner() {
   bench_setup_runner_env "$cache_root"
 }
 
-bench_preflight_frontend() {
-  bench_require_command npm
-  bench_require_command node
-  bench_require_node_version 20 0
-}
-
-bench_preflight_backend() {
+bench_preflight_operator() {
   bench_require_command go
   bench_require_go_version 1 21
 }
 
-bench_preflight_operator() {
-  bench_preflight_backend
-}
-
 bench_preflight_public_api() {
-  bench_preflight_backend
+  bench_preflight_operator
 }
 
 bench_preflight_api_server() {
-  bench_preflight_backend
+  bench_preflight_operator
   bench_require_command make
 }
 
 bench_preflight_cli() {
-  bench_preflight_backend
+  bench_preflight_operator
   bench_require_command make
 }
 
 bench_preflight_sdk() {
-  bench_preflight_backend
+  bench_preflight_operator
   bench_require_command make
 }
 
@@ -104,12 +82,6 @@ bench_setup_go_env() {
   mkdir -p "$GOMODCACHE" "$GOPATH" "$GOCACHE"
 }
 
-bench_setup_frontend_env() {
-  local cache_root=$1
-  export npm_config_cache="$cache_root/npm-cache"
-  mkdir -p "$npm_config_cache"
-}
-
 bench_setup_runner_env() {
   local cache_root=$1
   export UV_CACHE_DIR="$cache_root/uv-cache"
@@ -125,71 +97,6 @@ bench_create_runner_venv() {
   fi
   ./.venv/bin/python -m pip install --upgrade pip >/dev/null
   ./.venv/bin/python -m pip install -e '.[all]'
-}
-
-bench_cold_frontend() {
-  local worktree_dir=$1
-  local cache_root=$2
-  local run_id=$3
-  local ref_name=$4
-  local port
-
-  port=$(bench_pick_port frontend "$run_id" "$ref_name")
-
-  cd "$worktree_dir/components/frontend" || return 1
-  rm -rf node_modules .next
-  npm ci
-
-  local log_file="$cache_root/frontend-dev.log"
-  : >"$log_file"
-
-  PORT="$port" npm run dev >"$log_file" 2>&1 &
-  local dev_pid=$!
-
-  if ! bench_wait_for_pattern "$log_file" 'Ready in|ready in|Local:|localhost:' 120 "$dev_pid"; then
-    bench_kill_pid "$dev_pid"
-    return 1
-  fi
-
-  bench_kill_pid "$dev_pid"
-}
-
-bench_warm_frontend() {
-  local worktree_dir=$1
-
-  cd "$worktree_dir/components/frontend" || return 1
-  touch src/app/projects/page.tsx
-  npm run build
-}
-
-bench_cleanup_frontend() {
-  local worktree_dir=$1
-
-  cd "$worktree_dir/components/frontend" || return 0
-  rm -rf node_modules .next
-}
-
-bench_cold_backend() {
-  local worktree_dir=$1
-
-  cd "$worktree_dir/components/backend" || return 1
-  go mod download
-  go build .
-}
-
-bench_warm_backend() {
-  local worktree_dir=$1
-
-  cd "$worktree_dir/components/backend" || return 1
-  touch main.go
-  go build .
-}
-
-bench_cleanup_backend() {
-  local worktree_dir=$1
-
-  cd "$worktree_dir/components/backend" || return 0
-  rm -f backend
 }
 
 bench_cold_operator() {

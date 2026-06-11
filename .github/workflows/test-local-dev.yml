@@ -30,12 +30,13 @@ jobs:
             components:
               - 'components/*/Dockerfile'
               - 'components/manifests/**'
-              - 'components/backend/**'
-              - 'components/operator/**'
-              - 'components/frontend/**'
               - 'components/runners/**'
               - 'components/ambient-cli/**'
-              - 'components/public-api/**'
+              - 'components/ambient-api-server/**'
+              - 'components/ambient-control-plane/**'
+              - 'components/ambient-mcp/**'
+              - 'components/ambient-ui/**'
+              - 'components/credential-sidecars/**'
               - 'Makefile'
               - 'tests/**'
               - '.github/workflows/test-local-dev.yml'
@@ -87,12 +88,6 @@ jobs:
       uses: kubeflow/pipelines/.github/actions/github-disk-cleanup@master
       if: (!cancelled())
 
-    - name: Set up Go
-      uses: actions/setup-go@v6
-      with:
-        go-version-file: 'components/backend/go.mod'
-        cache-dependency-path: 'components/backend/go.sum'
-
     - name: Cache kubectl and kind
       uses: actions/cache@v5
       id: k8s-tools-cache
@@ -139,71 +134,13 @@ jobs:
 
     - name: Wait for deployments
       run: |
-        echo "Waiting for all deployments in parallel..."
-
-        # Wait for all deployments concurrently using background jobs
-        kubectl wait --for=condition=available --timeout=180s deployment/backend-api -n ambient-code &
-        PID_BACKEND=$!
-
-        kubectl wait --for=condition=available --timeout=180s deployment/frontend -n ambient-code &
-        PID_FRONTEND=$!
-
-        kubectl wait --for=condition=available --timeout=180s deployment/agentic-operator -n ambient-code &
-        PID_OPERATOR=$!
-
-        # Wait for all and collect exit codes
-        FAILED=0
-
-        wait $PID_BACKEND || {
-          echo "Backend deployment timeout - showing status"
+        echo "Waiting for deployments..."
+        kubectl wait --for=condition=available --timeout=180s -n ambient-code --all deployments || {
+          echo "Deployment timeout - showing status"
           kubectl get pods -n ambient-code -o wide
-          kubectl describe deployment backend-api -n ambient-code | tail -50
-          kubectl get events -n ambient-code --field-selector involvedObject.kind=Pod --sort-by='.lastTimestamp' | grep backend-api || true
-          FAILED=1
-        }
-
-        wait $PID_FRONTEND || {
-          echo "Frontend deployment timeout - showing status"
-          kubectl get pods -n ambient-code -o wide
-          kubectl describe deployment frontend -n ambient-code | tail -50
-          FAILED=1
-        }
-
-        wait $PID_OPERATOR || {
-          echo "Operator deployment timeout - showing status"
-          kubectl get pods -n ambient-code -o wide
-          kubectl describe deployment agentic-operator -n ambient-code | tail -50
-          FAILED=1
-        }
-
-        if [[ $FAILED -eq 1 ]]; then
           exit 1
-        fi
-
+        }
         echo "All deployments ready"
-
-    - name: Run backend integration tests (real k8s auth path)
-      run: |
-        set -euo pipefail
-
-        echo "Setting up ServiceAccount + RBAC for backend integration tests..."
-        kubectl -n ambient-code create serviceaccount backend-integration-test 2>/dev/null || true
-        kubectl -n ambient-code create role backend-integration-test \
-          --verb=get,list \
-          --resource=configmaps 2>/dev/null || true
-        kubectl -n ambient-code create rolebinding backend-integration-test \
-          --role=backend-integration-test \
-          --serviceaccount=ambient-code:backend-integration-test 2>/dev/null || true
-
-        TEST_TOKEN="$(kubectl -n ambient-code create token backend-integration-test)"
-        echo "::add-mask::$TEST_TOKEN"
-
-        echo "Running Go integration tests (skips any external-provider tests without env)..."
-        cd components/backend
-        INTEGRATION_TESTS=true \
-        K8S_TEST_TOKEN="$TEST_TOKEN" \
-        K8S_TEST_NAMESPACE="ambient-code" \
-        go test ./tests/integration/... -count=1 -timeout=10m
 
     - name: Run Makefile smoke tests
       run: |
@@ -262,11 +199,9 @@ jobs:
 
         echo ""
         echo "=== Deployment describe (if no pods) ==="
-        if ! kubectl get pods -n ambient-code 2>/dev/null | grep -q "backend-api\|frontend\|agentic-operator"; then
-          echo "No pods found - describing deployments for details:"
-          kubectl describe deployment backend-api -n ambient-code 2>&1 | tail -50 || echo "(backend-api deployment not found)"
-          kubectl describe deployment frontend -n ambient-code 2>&1 | tail -50 || echo "(frontend deployment not found)"
-          kubectl describe deployment agentic-operator -n ambient-code 2>&1 | tail -50 || echo "(agentic-operator deployment not found)"
+        if ! kubectl get pods -n ambient-code 2>/dev/null | grep -q Running; then
+          echo "No running pods found - describing deployments for details:"
+          kubectl describe deployments -n ambient-code 2>&1 | tail -100 || echo "(no deployments found)"
         fi
 
     - name: Cleanup
