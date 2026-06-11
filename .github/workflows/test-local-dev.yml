@@ -1,8 +1,19 @@
 name: Test Local Development Environment
 
 on:
-  pull_request:
+  workflow_call:
+    inputs:
+      image-tag:
+        description: 'Image tag to deploy (e.g. pr-42, latest)'
+        required: true
+        type: string
   workflow_dispatch:
+    inputs:
+      image-tag:
+        description: 'Image tag to deploy (default: latest)'
+        required: false
+        type: string
+        default: 'latest'
 
 permissions:
   contents: read
@@ -11,36 +22,9 @@ env:
   # Pin versions for reliable caching
   KUBECTL_VERSION: "v1.31.4"
   KIND_VERSION: "v0.31.0"
+  IMAGE_TAG: ${{ inputs.image-tag || 'latest' }}
 
 jobs:
-  detect-changes:
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    outputs:
-      components: ${{ steps.filter.outputs.components }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Check for component changes
-        uses: dorny/paths-filter@v4
-        id: filter
-        with:
-          filters: |
-            components:
-              - 'components/*/Dockerfile'
-              - 'components/manifests/**'
-              - 'components/runners/**'
-              - 'components/ambient-cli/**'
-              - 'components/ambient-api-server/**'
-              - 'components/ambient-control-plane/**'
-              - 'components/ambient-mcp/**'
-              - 'components/ambient-ui/**'
-              - 'components/credential-sidecars/**'
-              - 'Makefile'
-              - 'tests/**'
-              - '.github/workflows/test-local-dev.yml'
-
   # Fast job that doesn't need the cluster - runs in parallel
   validate-manifests:
     runs-on: ubuntu-latest
@@ -74,8 +58,6 @@ jobs:
         make validate-makefile
 
   test-local-dev-simulation:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.components == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -126,6 +108,21 @@ jobs:
         # Verify installations
         kubectl version --client
         kind version
+
+    - name: Override image tags
+      if: env.IMAGE_TAG != 'latest'
+      run: |
+        echo "Overriding image tags to $IMAGE_TAG..."
+        cd components/manifests/overlays/kind
+        for image in \
+          quay.io/ambient_code/acp_api_server \
+          quay.io/ambient_code/acp_control_plane \
+          quay.io/ambient_code/acp_ambient_ui \
+          quay.io/ambient_code/acp_claude_runner \
+          quay.io/ambient_code/acp_mcp; do
+          kustomize edit set image "${image}:latest=${image}:${IMAGE_TAG}"
+        done
+        echo "Images pinned to $IMAGE_TAG"
 
     - name: Deploy using Makefile
       run: |
@@ -184,14 +181,6 @@ jobs:
         echo ""
         echo "=== Services ==="
         kubectl get svc -n ambient-code 2>&1 || echo "(No services found or namespace does not exist)"
-
-        echo ""
-        echo "=== Ingress ==="
-        kubectl get ingress -n ambient-code 2>&1 || echo "(No ingress found or namespace does not exist)"
-
-        echo ""
-        echo "=== CRDs ==="
-        kubectl get crd 2>&1 | grep vteam || echo "(No vteam CRDs found)"
 
         echo ""
         echo "=== Events (last 30) ==="
