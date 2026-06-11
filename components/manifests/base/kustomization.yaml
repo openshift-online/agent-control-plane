@@ -14,21 +14,11 @@ resources:
 
 # Default images (can be overridden by overlays)
 images:
-- name: quay.io/ambient_code/vteam_backend
+- name: quay.io/ambient_code/acp_claude_runner
   newTag: latest
-- name: quay.io/ambient_code/vteam_frontend
+- name: quay.io/ambient_code/acp_api_server
   newTag: latest
-- name: quay.io/ambient_code/vteam_operator
+- name: quay.io/ambient_code/acp_control_plane
   newTag: latest
-- name: quay.io/ambient_code/vteam_claude_runner
-  newTag: latest
-- name: quay.io/ambient_code/vteam_state_sync
-  newTag: latest
-- name: quay.io/ambient_code/vteam_public_api
-  newTag: latest
-- name: quay.io/ambient_code/vteam_api_server
-  newTag: latest
-- name: quay.io/ambient_code/vteam_control_plane
-  newTag: latest
-- name: quay.io/ambient_code/vteam_mcp
+- name: quay.io/ambient_code/acp_mcp
   newTag: latest

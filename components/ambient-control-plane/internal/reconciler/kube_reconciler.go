@@ -61,7 +61,6 @@ var credentialSidecarRegistry = map[string]credentialSidecarSpec{
 
 type KubeReconcilerConfig struct {
 	RunnerImage           string
-	BackendURL            string
 	RunnerGRPCURL         string
 	RunnerGRPCUseTLS      bool
 	AnthropicAPIKey       string
@@ -750,7 +749,6 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 		envVar("USE_AGUI", "true"),
 		envVar("DEBUG", "true"),
 		envVar("LOG_LEVEL", r.cfg.RunnerLogLevel),
-		envVar("BACKEND_API_URL", r.cfg.BackendURL),
 		envVar("USE_VERTEX", useVertex),
 		envVar("CLAUDE_CODE_USE_VERTEX", useVertex),
 		envVar("AMBIENT_CP_TOKEN_URL", r.cfg.CPTokenURL),

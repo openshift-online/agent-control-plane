@@ -58,37 +58,37 @@ build_push() {
 build_push ambient-api-server \
   components/ambient-api-server \
   components/ambient-api-server/Dockerfile \
-  vteam_api_server
+  acp_api_server
 
 build_push ambient-control-plane \
   components \
   components/ambient-control-plane/Dockerfile \
-  vteam_control_plane
+  acp_control_plane
 
 build_push ambient-runner \
   components/runners \
   components/runners/ambient-runner/Dockerfile \
-  vteam_claude_runner
+  acp_claude_runner
 
 build_push credential-github \
   components \
   components/credential-sidecars/github/Dockerfile \
-  vteam_credential_github
+  acp_credential_github
 
 build_push credential-jira \
   components \
   components/credential-sidecars/jira/Dockerfile \
-  vteam_credential_jira
+  acp_credential_jira
 
 build_push credential-k8s \
   components \
   components/credential-sidecars/k8s/Dockerfile \
-  vteam_credential_k8s
+  acp_credential_k8s
 
 build_push credential-google \
   components \
   components/credential-sidecars/google/Dockerfile \
-  vteam_credential_google
+  acp_credential_google
 
 echo "==> All images pushed for PR #${PR_NUMBER}"
 echo "    Image tag: ${IMAGE_TAG}"

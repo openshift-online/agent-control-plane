@@ -7,10 +7,6 @@ on:
       - '.github/workflows/components-build-deploy.yml'
       - 'components/manifests/**'
       - 'components/runners/**'
-      - 'components/operator/**'
-      - 'components/backend/**'
-      - 'components/frontend/**'
-      - 'components/public-api/**'
       - 'components/ambient-api-server/**'
       - 'components/ambient-control-plane/**'
       - 'components/ambient-mcp/**'
@@ -22,10 +18,6 @@ on:
       - '.github/workflows/components-build-deploy.yml'
       - 'components/manifests/**'
       - 'components/runners/**'
-      - 'components/operator/**'
-      - 'components/backend/**'
-      - 'components/frontend/**'
-      - 'components/public-api/**'
       - 'components/ambient-api-server/**'
       - 'components/ambient-control-plane/**'
       - 'components/ambient-mcp/**'
@@ -34,7 +26,7 @@ on:
   workflow_dispatch:
     inputs:
       components:
-        description: 'Components to build (comma-separated: frontend,backend,operator,ambient-runner,state-sync,public-api,ambient-api-server,ambient-control-plane,ambient-mcp,ambient-ui,credential-github,credential-jira,credential-k8s,credential-google) - leave empty for all'
+        description: 'Components to build (comma-separated: ambient-runner,ambient-api-server,ambient-control-plane,ambient-mcp,ambient-ui,credential-github,credential-jira,credential-k8s,credential-google) - leave empty for all'
         required: false
         type: string
         default: ''
@@ -47,46 +39,84 @@ jobs:
   build-matrix:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    permissions: {}
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       build-matrix: ${{ steps.matrix.outputs.build-matrix }}
       merge-matrix: ${{ steps.matrix.outputs.merge-matrix }}
+      built-images: ${{ steps.matrix.outputs.built-images }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Detect changed components
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v4
+        id: changes
+        with:
+          filters: |
+            ambient-runner:
+              - 'components/runners/ambient-runner/**'
+            ambient-api-server:
+              - 'components/ambient-api-server/**'
+            ambient-control-plane:
+              - 'components/ambient-control-plane/**'
+            ambient-mcp:
+              - 'components/ambient-mcp/**'
+            ambient-ui:
+              - 'components/ambient-ui/**'
+            credential-github:
+              - 'components/credential-sidecars/github/**'
+            credential-jira:
+              - 'components/credential-sidecars/jira/**'
+            credential-k8s:
+              - 'components/credential-sidecars/k8s/**'
+            credential-google:
+              - 'components/credential-sidecars/google/**'
+
       - name: Build component matrices
         id: matrix
+        env:
+          CHANGES_JSON: ${{ toJSON(steps.changes.outputs) }}
         run: |
           ALL_COMPONENTS='[
-            {"name":"frontend","context":"./components/frontend","image":"quay.io/ambient_code/vteam_frontend","dockerfile":"./components/frontend/Dockerfile"},
-            {"name":"backend","context":"./components/backend","image":"quay.io/ambient_code/vteam_backend","dockerfile":"./components/backend/Dockerfile"},
-            {"name":"operator","context":"./components/operator","image":"quay.io/ambient_code/vteam_operator","dockerfile":"./components/operator/Dockerfile"},
-            {"name":"ambient-runner","context":"./components/runners/ambient-runner","image":"quay.io/ambient_code/vteam_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
-            {"name":"state-sync","context":"./components/runners/state-sync","image":"quay.io/ambient_code/vteam_state_sync","dockerfile":"./components/runners/state-sync/Dockerfile"},
-            {"name":"public-api","context":"./components/public-api","image":"quay.io/ambient_code/vteam_public_api","dockerfile":"./components/public-api/Dockerfile"},
-            {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"},
-            {"name":"ambient-control-plane","context":"./components","image":"quay.io/ambient_code/vteam_control_plane","dockerfile":"./components/ambient-control-plane/Dockerfile"},
-            {"name":"ambient-mcp","context":"./components/ambient-mcp","image":"quay.io/ambient_code/vteam_mcp","dockerfile":"./components/ambient-mcp/Dockerfile"},
-            {"name":"ambient-ui","context":"./components","image":"quay.io/ambient_code/vteam_ambient_ui","dockerfile":"./components/ambient-ui/Dockerfile"},
-            {"name":"credential-github","context":"./components","image":"quay.io/ambient_code/vteam_credential_github","dockerfile":"./components/credential-sidecars/github/Dockerfile"},
-            {"name":"credential-jira","context":"./components","image":"quay.io/ambient_code/vteam_credential_jira","dockerfile":"./components/credential-sidecars/jira/Dockerfile"},
-            {"name":"credential-k8s","context":"./components","image":"quay.io/ambient_code/vteam_credential_k8s","dockerfile":"./components/credential-sidecars/k8s/Dockerfile"},
-            {"name":"credential-google","context":"./components","image":"quay.io/ambient_code/vteam_credential_google","dockerfile":"./components/credential-sidecars/google/Dockerfile"}
+            {"name":"ambient-runner","context":"./components/runners/ambient-runner","image":"quay.io/ambient_code/acp_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
+            {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/acp_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"},
+            {"name":"ambient-control-plane","context":"./components","image":"quay.io/ambient_code/acp_control_plane","dockerfile":"./components/ambient-control-plane/Dockerfile"},
+            {"name":"ambient-mcp","context":"./components/ambient-mcp","image":"quay.io/ambient_code/acp_mcp","dockerfile":"./components/ambient-mcp/Dockerfile"},
+            {"name":"ambient-ui","context":"./components","image":"quay.io/ambient_code/acp_ambient_ui","dockerfile":"./components/ambient-ui/Dockerfile"},
+            {"name":"credential-github","context":"./components","image":"quay.io/ambient_code/acp_credential_github","dockerfile":"./components/credential-sidecars/github/Dockerfile"},
+            {"name":"credential-jira","context":"./components","image":"quay.io/ambient_code/acp_credential_jira","dockerfile":"./components/credential-sidecars/jira/Dockerfile"},
+            {"name":"credential-k8s","context":"./components","image":"quay.io/ambient_code/acp_credential_k8s","dockerfile":"./components/credential-sidecars/k8s/Dockerfile"},
+            {"name":"credential-google","context":"./components","image":"quay.io/ambient_code/acp_credential_google","dockerfile":"./components/credential-sidecars/google/Dockerfile"}
           ]'
 
           SELECTED="${{ github.event.inputs.components }}"
 
           if [ -n "$SELECTED" ]; then
+            # Manual dispatch: build only selected components
             FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --arg sel "$SELECTED" '[.[] | select(.name as $n | $sel | split(",") | map(gsub("^\\s+|\\s+$";"")) | index($n))]')
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            # PR: build only changed components
+            FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --argjson changes "$CHANGES_JSON"               '[.[] | select(.name as $n | $changes[$n] == "true")]')
+            if [ "$FILTERED" = "[]" ]; then
+              echo "No component changes detected, building all"
+              FILTERED="$ALL_COMPONENTS"
+            fi
           else
+            # Push to main/alpha: build all
             FILTERED="$ALL_COMPONENTS"
           fi
 
           echo "build-matrix=$(echo "$FILTERED" | jq -c '.')" >> $GITHUB_OUTPUT
           echo "merge-matrix=$(echo "$FILTERED" | jq -c '[.[] | {name, image}]')" >> $GITHUB_OUTPUT
+          echo "built-images=$(echo "$FILTERED" | jq -c '[.[].image]')" >> $GITHUB_OUTPUT
 
           echo "Components to build:"
           echo "$FILTERED" | jq -r '.[].name'
 
-  build:
+  build-amd64:
     needs: build-matrix
     permissions:
       contents: read
@@ -96,17 +126,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # IMPORTANT: suffix values must match the hardcoded suffixes in
-        # merge-manifests. Update both together if arches change.
-        arch:
-          - runner: ubuntu-latest
-            platform: linux/amd64
-            suffix: amd64
-          - runner: ubuntu-24.04-arm
-            platform: linux/arm64
-            suffix: arm64
         component: ${{ fromJSON(needs.build-matrix.outputs.build-matrix) }}
-    runs-on: ${{ matrix.arch.runner }}
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -123,45 +144,96 @@ jobs:
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
 
-      - name: Log in to Red Hat Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: registry.redhat.io
-          username: ${{ secrets.REDHAT_USERNAME }}
-          password: ${{ secrets.REDHAT_PASSWORD }}
-
-      - name: Build and push ${{ matrix.component.name }} (${{ matrix.arch.suffix }})
+      - name: Build and push ${{ matrix.component.name }} (amd64)
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
-          platforms: ${{ matrix.arch.platform }}
+          platforms: linux/amd64
           push: true
-          tags: ${{ matrix.component.image }}:${{ github.sha }}-${{ matrix.arch.suffix }}
+          tags: ${{ matrix.component.image }}:${{ github.sha }}-amd64
           build-args: |
             AMBIENT_VERSION=${{ github.sha }}
             GIT_COMMIT=${{ github.sha }}
-          cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
+          cache-from: type=gha,scope=${{ matrix.component.name }}-amd64
+          cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-amd64
 
-      - name: Build and push ${{ matrix.component.name }} (${{ matrix.arch.suffix }}) for pull request
+      - name: Build and push ${{ matrix.component.name }} (amd64) for pull request
         if: github.event_name == 'pull_request'
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
-          platforms: ${{ matrix.arch.platform }}
+          platforms: linux/amd64
           push: true
-          tags: ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-${{ matrix.arch.suffix }}
+          tags: ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-amd64
           build-args: |
             AMBIENT_VERSION=${{ github.sha }}
             GIT_COMMIT=${{ github.sha }}
-          cache-from: type=gha,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-${{ matrix.arch.suffix }}
+          cache-from: type=gha,scope=${{ matrix.component.name }}-amd64
+          cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-amd64
+
+  build-arm64:
+    needs: build-matrix
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.build-matrix.outputs.build-matrix) }}
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Build and push ${{ matrix.component.name }} (arm64)
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.component.context }}
+          file: ${{ matrix.component.dockerfile }}
+          platforms: linux/arm64
+          push: true
+          tags: ${{ matrix.component.image }}:${{ github.sha }}-arm64
+          build-args: |
+            AMBIENT_VERSION=${{ github.sha }}
+            GIT_COMMIT=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.component.name }}-arm64
+          cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-arm64
+
+      - name: Build and push ${{ matrix.component.name }} (arm64) for pull request
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.component.context }}
+          file: ${{ matrix.component.dockerfile }}
+          platforms: linux/arm64
+          push: true
+          tags: ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-arm64
+          build-args: |
+            AMBIENT_VERSION=${{ github.sha }}
+            GIT_COMMIT=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.component.name }}-arm64
+          cache-to: type=gha,mode=max,scope=${{ matrix.component.name }}-arm64
 
   merge-manifests:
-    needs: [build-matrix, build]
+    needs: [build-matrix, build-amd64, build-arm64]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -209,6 +281,14 @@ jobs:
             -t ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }} \
             ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-amd64 \
             ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-arm64
+
+  test-local-dev:
+    needs: [build-matrix, build-amd64]
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/test-local-dev.yml
+    with:
+      image-tag: pr-${{ github.event.pull_request.number }}
+      built-images: ${{ needs.build-matrix.outputs.built-images }}
 
   deploy-rhoai-mlflow:
     runs-on: ubuntu-latest
@@ -384,16 +464,11 @@ jobs:
       - name: Update kustomization with SHA image tags
         working-directory: components/manifests/overlays/production
         run: |
-          kustomize edit set image quay.io/ambient_code/vteam_frontend:latest=quay.io/ambient_code/vteam_frontend:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_backend:latest=quay.io/ambient_code/vteam_backend:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_control_plane:latest=quay.io/ambient_code/vteam_control_plane:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_mcp:latest=quay.io/ambient_code/vteam_mcp:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_ambient_ui:latest=quay.io/ambient_code/vteam_ambient_ui:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/acp_claude_runner:latest=quay.io/ambient_code/acp_claude_runner:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/acp_api_server:latest=quay.io/ambient_code/acp_api_server:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/acp_control_plane:latest=quay.io/ambient_code/acp_control_plane:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/acp_mcp:latest=quay.io/ambient_code/acp_mcp:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/acp_ambient_ui:latest=quay.io/ambient_code/acp_ambient_ui:${{ github.sha }}
 
       - name: Validate kustomization
         working-directory: components/manifests/overlays/production
@@ -405,45 +480,6 @@ jobs:
         working-directory: components/manifests/overlays/production
         run: |
           oc apply -k . -n ambient-code
-
-      - name: Update frontend environment variables
-        run: |
-          oc set env deployment/frontend -n ambient-code -c frontend \
-            GITHUB_APP_SLUG="ambient-code-stage" \
-            GITHUB_CALLBACK_URL="https://ambient-code.apps.rosa.vteam-stage.7fpc.p3.openshiftapps.com/api/auth/github/user/callback" \
-            FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
-
-      - name: Update operator environment variables
-        run: |
-          oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
-            AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}" \
-            STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ github.sha }}"
-
-      - name: Update credential sidecar image tags on control plane
-        run: |
-          oc set env deployment/ambient-control-plane -n ambient-code \
-            GITHUB_MCP_IMAGE="quay.io/ambient_code/vteam_credential_github:${{ github.sha }}" \
-            JIRA_MCP_IMAGE="quay.io/ambient_code/vteam_credential_jira:${{ github.sha }}" \
-            K8S_MCP_IMAGE="quay.io/ambient_code/vteam_credential_k8s:${{ github.sha }}" \
-            GOOGLE_MCP_IMAGE="quay.io/ambient_code/vteam_credential_google:${{ github.sha }}"
-
-      - name: Pin OPERATOR_IMAGE in operator-config ConfigMap
-        run: |
-          oc patch configmap operator-config -n ambient-code --type=merge \
-            -p "{\"data\":{\"OPERATOR_IMAGE\":\"quay.io/ambient_code/vteam_operator:${{ github.sha }}\"}}"
-
-      - name: Update agent registry ConfigMap with pinned image tags
-        run: |
-          REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
-            -o jsonpath='{.data.agent-registry\.json}')
-
-          REGISTRY=$(echo "$REGISTRY" | sed \
-            "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g")
-          REGISTRY=$(echo "$REGISTRY" | sed \
-            "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
-
-          oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
-            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"
 
   deploy-with-disptach:
     runs-on: ubuntu-latest
@@ -471,16 +507,11 @@ jobs:
       - name: Update kustomization with SHA image tags
         working-directory: components/manifests/overlays/production
         run: |
-          kustomize edit set image quay.io/ambient_code/vteam_frontend:latest=quay.io/ambient_code/vteam_frontend:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_backend:latest=quay.io/ambient_code/vteam_backend:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_control_plane:latest=quay.io/ambient_code/vteam_control_plane:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_mcp:latest=quay.io/ambient_code/vteam_mcp:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/vteam_ambient_ui:latest=quay.io/ambient_code/vteam_ambient_ui:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/acp_claude_runner:latest=quay.io/ambient_code/acp_claude_runner:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/acp_api_server:latest=quay.io/ambient_code/acp_api_server:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/acp_control_plane:latest=quay.io/ambient_code/acp_control_plane:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/acp_mcp:latest=quay.io/ambient_code/acp_mcp:${{ github.sha }}
+          kustomize edit set image quay.io/ambient_code/acp_ambient_ui:latest=quay.io/ambient_code/acp_ambient_ui:${{ github.sha }}
 
       - name: Validate kustomization
         working-directory: components/manifests/overlays/production
@@ -492,42 +523,3 @@ jobs:
         working-directory: components/manifests/overlays/production
         run: |
           oc apply -k . -n ambient-code
-
-      - name: Update frontend environment variables
-        run: |
-          oc set env deployment/frontend -n ambient-code -c frontend \
-            GITHUB_APP_SLUG="ambient-code-stage" \
-            GITHUB_CALLBACK_URL="https://ambient-code.apps.rosa.vteam-stage.7fpc.p3.openshiftapps.com/api/auth/github/user/callback" \
-            FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
-
-      - name: Update operator environment variables
-        run: |
-          oc set env deployment/agentic-operator -n ambient-code -c agentic-operator \
-            AMBIENT_CODE_RUNNER_IMAGE="quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}" \
-            STATE_SYNC_IMAGE="quay.io/ambient_code/vteam_state_sync:${{ github.sha }}"
-
-      - name: Update credential sidecar image tags on control plane
-        run: |
-          oc set env deployment/ambient-control-plane -n ambient-code \
-            GITHUB_MCP_IMAGE="quay.io/ambient_code/vteam_credential_github:${{ github.sha }}" \
-            JIRA_MCP_IMAGE="quay.io/ambient_code/vteam_credential_jira:${{ github.sha }}" \
-            K8S_MCP_IMAGE="quay.io/ambient_code/vteam_credential_k8s:${{ github.sha }}" \
-            GOOGLE_MCP_IMAGE="quay.io/ambient_code/vteam_credential_google:${{ github.sha }}"
-
-      - name: Pin OPERATOR_IMAGE in operator-config ConfigMap
-        run: |
-          oc patch configmap operator-config -n ambient-code --type=merge \
-            -p "{\"data\":{\"OPERATOR_IMAGE\":\"quay.io/ambient_code/vteam_operator:${{ github.sha }}\"}}"
-
-      - name: Update agent registry ConfigMap with pinned image tags
-        run: |
-          REGISTRY=$(oc get configmap ambient-agent-registry -n ambient-code \
-            -o jsonpath='{.data.agent-registry\.json}')
-
-          REGISTRY=$(echo "$REGISTRY" | sed \
-            "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${{ github.sha }}|g")
-          REGISTRY=$(echo "$REGISTRY" | sed \
-            "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${{ github.sha }}|g")
-
-          oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
-            -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"

@@ -10,9 +10,6 @@ on:
     branches: [main]
     paths:
       - '.coderabbit.yaml'
-      - 'components/backend/handlers/coderabbit_auth.go'
-      - 'components/backend/handlers/integration_validation.go'
-      - 'components/frontend/src/components/coderabbit-connection-card.tsx'
       - 'components/runners/ambient-runner/ambient_runner/platform/auth.py'
       - 'scripts/hooks/coderabbit-review-gate.sh'
       - '.github/workflows/coderabbit-smoke-test.yml'

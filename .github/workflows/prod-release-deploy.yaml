@@ -18,7 +18,7 @@ on:
         type: boolean
         default: true
       components:
-        description: 'Components to build (comma-separated: frontend,backend,operator,ambient-runner,state-sync,public-api,ambient-api-server,ambient-control-plane,ambient-mcp,ambient-ui,credential-github,credential-jira,credential-k8s,credential-google) - leave empty for all'
+        description: 'Components to build (comma-separated: ambient-runner,ambient-api-server,ambient-control-plane,ambient-mcp,ambient-ui,credential-github,credential-jira,credential-k8s,credential-google) - leave empty for all'
         required: false
         type: string
         default: ''
@@ -170,27 +170,6 @@ jobs:
 
           cat RELEASE_CHANGELOG.md
 
-      - name: Generate Loading Tips
-        run: |
-          LATEST_TAG="${{ steps.get_latest_tag.outputs.latest_tag }}"
-          NEW_TAG="${{ steps.next_version.outputs.new_tag }}"
-          REPO="${{ github.repository }}"
-          OUTPUT="components/frontend/src/lib/loading-tips.ts"
-
-          python3 scripts/generate-loading-tips.py "$NEW_TAG" "$LATEST_TAG" "$REPO" "$OUTPUT"
-
-          # Commit the updated loading tips so the frontend build includes them
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "$OUTPUT"
-          if git diff --cached --quiet; then
-            echo "No loading tips changes to commit"
-          else
-            git commit -m "chore(frontend): update loading tips for ${NEW_TAG}
-
-          Auto-generated release tips highlighting contributors and changes."
-          fi
-
       - name: Create Tag
         id: create_tag
         uses: rickstaa/action-create-tag@v1
@@ -230,20 +209,15 @@ jobs:
         id: matrix
         run: |
           ALL_COMPONENTS='[
-            {"name":"frontend","context":"./components/frontend","image":"quay.io/ambient_code/vteam_frontend","dockerfile":"./components/frontend/Dockerfile"},
-            {"name":"backend","context":"./components/backend","image":"quay.io/ambient_code/vteam_backend","dockerfile":"./components/backend/Dockerfile"},
-            {"name":"operator","context":"./components/operator","image":"quay.io/ambient_code/vteam_operator","dockerfile":"./components/operator/Dockerfile"},
-            {"name":"ambient-runner","context":"./components/runners/ambient-runner","image":"quay.io/ambient_code/vteam_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
-            {"name":"state-sync","context":"./components/runners/state-sync","image":"quay.io/ambient_code/vteam_state_sync","dockerfile":"./components/runners/state-sync/Dockerfile"},
-            {"name":"public-api","context":"./components/public-api","image":"quay.io/ambient_code/vteam_public_api","dockerfile":"./components/public-api/Dockerfile"},
-            {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/vteam_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"},
-            {"name":"ambient-control-plane","context":"./components","image":"quay.io/ambient_code/vteam_control_plane","dockerfile":"./components/ambient-control-plane/Dockerfile"},
-            {"name":"ambient-mcp","context":"./components/ambient-mcp","image":"quay.io/ambient_code/vteam_mcp","dockerfile":"./components/ambient-mcp/Dockerfile"},
-            {"name":"ambient-ui","context":"./components","image":"quay.io/ambient_code/vteam_ambient_ui","dockerfile":"./components/ambient-ui/Dockerfile"},
-            {"name":"credential-github","context":"./components","image":"quay.io/ambient_code/vteam_credential_github","dockerfile":"./components/credential-sidecars/github/Dockerfile"},
-            {"name":"credential-jira","context":"./components","image":"quay.io/ambient_code/vteam_credential_jira","dockerfile":"./components/credential-sidecars/jira/Dockerfile"},
-            {"name":"credential-k8s","context":"./components","image":"quay.io/ambient_code/vteam_credential_k8s","dockerfile":"./components/credential-sidecars/k8s/Dockerfile"},
-            {"name":"credential-google","context":"./components","image":"quay.io/ambient_code/vteam_credential_google","dockerfile":"./components/credential-sidecars/google/Dockerfile"}
+            {"name":"ambient-runner","context":"./components/runners/ambient-runner","image":"quay.io/ambient_code/acp_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"},
+            {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/acp_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"},
+            {"name":"ambient-control-plane","context":"./components","image":"quay.io/ambient_code/acp_control_plane","dockerfile":"./components/ambient-control-plane/Dockerfile"},
+            {"name":"ambient-mcp","context":"./components/ambient-mcp","image":"quay.io/ambient_code/acp_mcp","dockerfile":"./components/ambient-mcp/Dockerfile"},
+            {"name":"ambient-ui","context":"./components","image":"quay.io/ambient_code/acp_ambient_ui","dockerfile":"./components/ambient-ui/Dockerfile"},
+            {"name":"credential-github","context":"./components","image":"quay.io/ambient_code/acp_credential_github","dockerfile":"./components/credential-sidecars/github/Dockerfile"},
+            {"name":"credential-jira","context":"./components","image":"quay.io/ambient_code/acp_credential_jira","dockerfile":"./components/credential-sidecars/jira/Dockerfile"},
+            {"name":"credential-k8s","context":"./components","image":"quay.io/ambient_code/acp_credential_k8s","dockerfile":"./components/credential-sidecars/k8s/Dockerfile"},
+            {"name":"credential-google","context":"./components","image":"quay.io/ambient_code/acp_credential_google","dockerfile":"./components/credential-sidecars/google/Dockerfile"}
           ]'
 
           FORCE_ALL="${{ github.event.inputs.force_build_all }}"
@@ -306,13 +280,6 @@ jobs:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
-
-      - name: Log in to Red Hat Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: registry.redhat.io
-          username: ${{ secrets.REDHAT_USERNAME }}
-          password: ${{ secrets.REDHAT_PASSWORD }}
 
       - name: Build and push ${{ matrix.component.name }} (${{ matrix.arch.suffix }})
         uses: docker/build-push-action@v7
@@ -621,12 +588,8 @@ jobs:
           BUILT="${{ steps.built.outputs.names }}"
 
           # Map component names to their deployment names and container names
-          # runner and state-sync are Jobs (no deployment); their tags come from the operator env
+          # runner is a Job (no deployment); its tag comes from the operator env
           declare -A DEPLOY_MAP=(
-            ["frontend"]="frontend:frontend"
-            ["backend"]="backend-api:backend-api"
-            ["operator"]="agentic-operator:agentic-operator"
-            ["public-api"]="public-api:public-api"
             ["ambient-api-server"]="ambient-api-server:ambient-api-server"
             ["ambient-control-plane"]="ambient-control-plane:ambient-control-plane"
             ["ambient-ui"]="ambient-ui:ambient-ui"
@@ -634,16 +597,11 @@ jobs:
 
 
           for comp_image in \
-            "frontend:quay.io/ambient_code/vteam_frontend" \
-            "backend:quay.io/ambient_code/vteam_backend" \
-            "operator:quay.io/ambient_code/vteam_operator" \
-            "ambient-runner:quay.io/ambient_code/vteam_claude_runner" \
-            "state-sync:quay.io/ambient_code/vteam_state_sync" \
-            "public-api:quay.io/ambient_code/vteam_public_api" \
-            "ambient-api-server:quay.io/ambient_code/vteam_api_server" \
-            "ambient-control-plane:quay.io/ambient_code/vteam_control_plane" \
-            "ambient-mcp:quay.io/ambient_code/vteam_mcp" \
-            "ambient-ui:quay.io/ambient_code/vteam_ambient_ui"; do
+            "ambient-runner:quay.io/ambient_code/acp_claude_runner" \
+            "ambient-api-server:quay.io/ambient_code/acp_api_server" \
+            "ambient-control-plane:quay.io/ambient_code/acp_control_plane" \
+            "ambient-mcp:quay.io/ambient_code/acp_mcp" \
+            "ambient-ui:quay.io/ambient_code/acp_ambient_ui"; do
             COMP="${comp_image%%:*}"
             IMAGE="${comp_image#*:}"
 
@@ -662,13 +620,6 @@ jobs:
             elif [ "$COMP" = "ambient-runner" ]; then
               CURRENT_TAG=$(oc get deployment agentic-operator -n ambient-code \
                 -o jsonpath='{.spec.template.spec.containers[?(@.name=="agentic-operator")].env[?(@.name=="AMBIENT_CODE_RUNNER_IMAGE")].value}' 2>/dev/null \
-                | grep -oP ':\K[^"]+$' || true)
-              if [ -n "$CURRENT_TAG" ]; then
-                kustomize edit set image ${IMAGE}:latest=${IMAGE}:${CURRENT_TAG}
-              fi
-            elif [ "$COMP" = "state-sync" ]; then
-              CURRENT_TAG=$(oc get deployment agentic-operator -n ambient-code \
-                -o jsonpath='{.spec.template.spec.containers[?(@.name=="agentic-operator")].env[?(@.name=="STATE_SYNC_IMAGE")].value}' 2>/dev/null \
                 | grep -oP ':\K[^"]+$' || true)
               if [ -n "$CURRENT_TAG" ]; then
                 kustomize edit set image ${IMAGE}:latest=${IMAGE}:${CURRENT_TAG}
@@ -692,23 +643,13 @@ jobs:
         run: |
           oc apply -k . -n ambient-code
 
-      - name: Update frontend environment variables
-        run: |
-          oc set env deployment/frontend -n ambient-code -c frontend \
-            GITHUB_APP_SLUG="ambient-code" \
-            GITHUB_CALLBACK_URL="https://ambient-code.apps.rosa.vteam-uat.0ksl.p3.openshiftapps.com/api/auth/github/user/callback" \
-            FEEDBACK_URL="https://forms.gle/7XiWrvo6No922DUz6"
-
       - name: Update operator environment variables
         run: |
           RELEASE_TAG="${{ needs.release.outputs.new_tag }}"
           BUILT="${{ steps.built.outputs.names }}"
           ARGS=""
           if echo ",$BUILT," | grep -q ",ambient-runner,"; then
-            ARGS="$ARGS AMBIENT_CODE_RUNNER_IMAGE=quay.io/ambient_code/vteam_claude_runner:${RELEASE_TAG}"
-          fi
-          if echo ",$BUILT," | grep -q ",state-sync,"; then
-            ARGS="$ARGS STATE_SYNC_IMAGE=quay.io/ambient_code/vteam_state_sync:${RELEASE_TAG}"
+            ARGS="$ARGS AMBIENT_CODE_RUNNER_IMAGE=quay.io/ambient_code/acp_claude_runner:${RELEASE_TAG}"
           fi
           if [ -n "$ARGS" ]; then
             oc set env deployment/agentic-operator -n ambient-code -c agentic-operator $ARGS
@@ -721,28 +662,19 @@ jobs:
           BUILT="${{ steps.built.outputs.names }}"
           ARGS=""
           if echo ",$BUILT," | grep -q ",credential-github,"; then
-            ARGS="$ARGS GITHUB_MCP_IMAGE=quay.io/ambient_code/vteam_credential_github:${RELEASE_TAG}"
+            ARGS="$ARGS GITHUB_MCP_IMAGE=quay.io/ambient_code/acp_credential_github:${RELEASE_TAG}"
           fi
           if echo ",$BUILT," | grep -q ",credential-jira,"; then
-            ARGS="$ARGS JIRA_MCP_IMAGE=quay.io/ambient_code/vteam_credential_jira:${RELEASE_TAG}"
+            ARGS="$ARGS JIRA_MCP_IMAGE=quay.io/ambient_code/acp_credential_jira:${RELEASE_TAG}"
           fi
           if echo ",$BUILT," | grep -q ",credential-k8s,"; then
-            ARGS="$ARGS K8S_MCP_IMAGE=quay.io/ambient_code/vteam_credential_k8s:${RELEASE_TAG}"
+            ARGS="$ARGS K8S_MCP_IMAGE=quay.io/ambient_code/acp_credential_k8s:${RELEASE_TAG}"
           fi
           if echo ",$BUILT," | grep -q ",credential-google,"; then
-            ARGS="$ARGS GOOGLE_MCP_IMAGE=quay.io/ambient_code/vteam_credential_google:${RELEASE_TAG}"
+            ARGS="$ARGS GOOGLE_MCP_IMAGE=quay.io/ambient_code/acp_credential_google:${RELEASE_TAG}"
           fi
           if [ -n "$ARGS" ]; then
             oc set env deployment/ambient-control-plane -n ambient-code $ARGS
-          fi
-
-      - name: Pin OPERATOR_IMAGE in operator-config ConfigMap
-        run: |
-          RELEASE_TAG="${{ needs.release.outputs.new_tag }}"
-          BUILT="${{ steps.built.outputs.names }}"
-          if echo ",$BUILT," | grep -q ",operator,"; then
-            oc patch configmap operator-config -n ambient-code --type=merge \
-              -p "{\"data\":{\"OPERATOR_IMAGE\":\"quay.io/ambient_code/vteam_operator:${RELEASE_TAG}\"}}"
           fi
 
       - name: Update agent registry ConfigMap with release image tags
@@ -753,11 +685,7 @@ jobs:
             -o jsonpath='{.data.agent-registry\.json}')
           if echo ",$BUILT," | grep -q ",ambient-runner,"; then
             REGISTRY=$(echo "$REGISTRY" | sed \
-              "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:${RELEASE_TAG}|g")
-          fi
-          if echo ",$BUILT," | grep -q ",state-sync,"; then
-            REGISTRY=$(echo "$REGISTRY" | sed \
-              "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:${RELEASE_TAG}|g")
+              "s|quay.io/ambient_code/acp_claude_runner[@:][^\"]*|quay.io/ambient_code/acp_claude_runner:${RELEASE_TAG}|g")
           fi
           oc patch configmap ambient-agent-registry -n ambient-code --type=merge \
             -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"

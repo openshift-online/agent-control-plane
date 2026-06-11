@@ -189,7 +189,7 @@ def main():
     output_path = (
         sys.argv[4]
         if len(sys.argv) > 4
-        else "components/frontend/src/lib/loading-tips.ts"
+        else "components/ambient-ui/src/lib/loading-tips.ts"
     )
 
     all_tips = generate_tips(new_tag, latest_tag)

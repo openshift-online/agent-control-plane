@@ -28,12 +28,12 @@ The Ambient Code Platform consists of these containerized components:
 
 | Component | Location | Image Name | Purpose |
 |-----------|----------|------------|---------|
-| **Backend** | `components/backend` | `vteam_backend:latest` | Go API for K8s CRD management |
-| **Frontend** | `components/frontend` | `vteam_frontend:latest` | NextJS web interface |
-| **Operator** | `components/operator` | `vteam_operator:latest` | Kubernetes operator (Go) |
-| **Runner** | `components/runners/ambient-runner` | `vteam_claude_runner:latest` | Python Claude Code runner |
-| **State Sync** | `components/runners/state-sync` | `vteam_state_sync:latest` | S3 persistence service |
-| **Public API** | `components/public-api` | `vteam_public_api:latest` | External API gateway |
+| **Backend** | `components/backend` | `acp_backend:latest` | Go API for K8s CRD management |
+| **Frontend** | `components/frontend` | `acp_frontend:latest` | NextJS web interface |
+| **Operator** | `components/operator` | `acp_operator:latest` | Kubernetes operator (Go) |
+| **Runner** | `components/runners/ambient-runner` | `acp_claude_runner:latest` | Python Claude Code runner |
+| **State Sync** | `components/runners/state-sync` | `acp_state_sync:latest` | S3 persistence service |
+| **Public API** | `components/public-api` | `acp_public_api:latest` | External API gateway |
 
 ## Development Cluster: Kind
 
@@ -233,9 +233,9 @@ make kind-rebuild
 
 **Or load individual images:**
 ```bash
-kind load docker-image localhost/vteam_backend:latest --name $KIND_CLUSTER_NAME
-kind load docker-image localhost/vteam_frontend:latest --name $KIND_CLUSTER_NAME
-kind load docker-image localhost/vteam_operator:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/acp_backend:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/acp_frontend:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/acp_operator:latest --name $KIND_CLUSTER_NAME
 ```
 
 ### Step 5: Verify Deployment
@@ -335,8 +335,8 @@ make kind-rebuild
 ### "Just rebuild the backend"
 ```bash
 make build-backend CONTAINER_ENGINE=$CONTAINER_ENGINE
-kind load docker-image localhost/vteam_backend:latest --name $KIND_CLUSTER_NAME
-kubectl set image deployment/backend backend=localhost/vteam_backend:latest -n ambient-code
+kind load docker-image localhost/acp_backend:latest --name $KIND_CLUSTER_NAME
+kubectl set image deployment/backend backend=localhost/acp_backend:latest -n ambient-code
 kubectl rollout restart deployment/backend -n ambient-code
 kubectl rollout status deployment/backend -n ambient-code
 ```
@@ -371,9 +371,9 @@ kubectl get deployments -n ambient-code
 make build-all CONTAINER_ENGINE=$CONTAINER_ENGINE
 
 # Load images into kind
-kind load docker-image localhost/vteam_backend:latest --name $KIND_CLUSTER_NAME
-kind load docker-image localhost/vteam_frontend:latest --name $KIND_CLUSTER_NAME
-kind load docker-image localhost/vteam_operator:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/acp_backend:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/acp_frontend:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/acp_operator:latest --name $KIND_CLUSTER_NAME
 
 # Update image pull policy
 kubectl patch deployment backend -n ambient-code -p '{"spec":{"template":{"spec":{"containers":[{"name":"backend","imagePullPolicy":"Never"}]}}}}'
@@ -422,7 +422,7 @@ make kind-port-forward
 make build-backend  # (or whatever component)
 
 # Reload into cluster
-kind load docker-image localhost/vteam_backend:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/acp_backend:latest --name $KIND_CLUSTER_NAME
 
 # Force restart
 kubectl rollout restart deployment/backend -n ambient-code
@@ -591,7 +591,7 @@ Assistant (using dev-cluster skill):
 2. Explains: "I see changes in components/backend. I'll build the backend image, create a kind cluster, and deploy your changes."
 3. Runs: `make build-backend`
 4. Runs: `make kind-up`
-5. Loads image: `kind load docker-image localhost/vteam_backend:latest --name $KIND_CLUSTER_NAME`
+5. Loads image: `kind load docker-image localhost/acp_backend:latest --name $KIND_CLUSTER_NAME`
 6. Updates deployment with local image and ImagePullPolicy: Never
 7. Verifies: `kubectl rollout status deployment/backend -n ambient-code`
 8. Provides access URL and log commands

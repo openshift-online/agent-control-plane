@@ -22,7 +22,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ambient-control-plane
-          image: quay.io/ambient_code/vteam_control_plane:latest
+          image: quay.io/ambient_code/acp_control_plane:latest
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false
@@ -51,7 +51,7 @@ spec:
             - name: LOG_LEVEL
               value: "info"
             - name: RUNNER_IMAGE
-              value: "quay.io/ambient_code/vteam_claude_runner:latest"
+              value: "quay.io/ambient_code/acp_claude_runner:latest"
             - name: OIDC_CLIENT_ID
               valueFrom:
                 secretKeyRef:
@@ -83,15 +83,15 @@ spec:
             - name: CP_TOKEN_URL
               value: "http://ambient-control-plane.ambient-code--ambient-s0.svc:8080/token"
             - name: MCP_IMAGE
-              value: "quay.io/ambient_code/vteam_mcp:latest"
+              value: "quay.io/ambient_code/acp_mcp:latest"
             - name: GITHUB_MCP_IMAGE
-              value: "quay.io/ambient_code/vteam_credential_github:latest"
+              value: "quay.io/ambient_code/acp_credential_github:latest"
             - name: JIRA_MCP_IMAGE
-              value: "quay.io/ambient_code/vteam_credential_jira:latest"
+              value: "quay.io/ambient_code/acp_credential_jira:latest"
             - name: K8S_MCP_IMAGE
-              value: "quay.io/ambient_code/vteam_credential_k8s:latest"
+              value: "quay.io/ambient_code/acp_credential_k8s:latest"
             - name: GOOGLE_MCP_IMAGE
-              value: "quay.io/ambient_code/vteam_credential_google:latest"
+              value: "quay.io/ambient_code/acp_credential_google:latest"
           volumeMounts:
             - name: project-kube-token
               mountPath: /var/run/secrets/project-kube

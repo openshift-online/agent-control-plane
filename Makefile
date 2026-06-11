@@ -1,9 +1,9 @@
-.PHONY: help setup build-all build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-cli build-ambient-ui deploy clean check-architecture
-.PHONY: local-down local-status local-reload-api-server local-up local-clean local-rebuild local-reload-backend local-reload-frontend local-reload-operator
+.PHONY: help setup build-all build-runner build-cli build-ambient-ui deploy clean check-architecture
+.PHONY: local-down local-status local-reload-api-server local-up local-clean local-rebuild
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-backend local-logs-frontend local-logs-operator local-shell local-shell-frontend
 .PHONY: local-test local-test-dev local-test-quick test-all local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-backend kind-reload-frontend kind-reload-operator kind-reload-ambient-ui kind-status kind-login kind-sso-toggle
+.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-status kind-login kind-sso-toggle
 .PHONY: preflight-cluster preflight dev-env dev
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: unleash-port-forward unleash-status
@@ -60,21 +60,15 @@ endif
 IMAGE_TAG ?= latest
 
 # Image names
-FRONTEND_IMAGE ?= vteam_frontend:$(IMAGE_TAG)
-BACKEND_IMAGE ?= vteam_backend:$(IMAGE_TAG)
-OPERATOR_IMAGE ?= vteam_operator:$(IMAGE_TAG)
-RUNNER_IMAGE ?= vteam_claude_runner:$(IMAGE_TAG)
-STATE_SYNC_IMAGE ?= vteam_state_sync:$(IMAGE_TAG)
-PUBLIC_API_IMAGE ?= vteam_public_api:$(IMAGE_TAG)
-API_SERVER_IMAGE ?= vteam_api_server:$(IMAGE_TAG)
-OBSERVABILITY_DASHBOARD_IMAGE ?= vteam_observability_dashboard:$(IMAGE_TAG)
-GITHUB_MCP_IMAGE ?= vteam_credential_github:$(IMAGE_TAG)
-JIRA_MCP_IMAGE ?= vteam_credential_jira:$(IMAGE_TAG)
-K8S_MCP_IMAGE ?= vteam_credential_k8s:$(IMAGE_TAG)
-GOOGLE_MCP_IMAGE ?= vteam_credential_google:$(IMAGE_TAG)
-AMBIENT_UI_IMAGE ?= vteam_ambient_ui:$(IMAGE_TAG)
+RUNNER_IMAGE ?= acp_claude_runner:$(IMAGE_TAG)
+API_SERVER_IMAGE ?= acp_api_server:$(IMAGE_TAG)
+GITHUB_MCP_IMAGE ?= acp_credential_github:$(IMAGE_TAG)
+JIRA_MCP_IMAGE ?= acp_credential_jira:$(IMAGE_TAG)
+K8S_MCP_IMAGE ?= acp_credential_k8s:$(IMAGE_TAG)
+GOOGLE_MCP_IMAGE ?= acp_credential_google:$(IMAGE_TAG)
+AMBIENT_UI_IMAGE ?= acp_ambient_ui:$(IMAGE_TAG)
 
-# kind-local overlay always references localhost/vteam_* images.
+# kind-local overlay always references localhost/acp_* images.
 # Podman produces this prefix natively; for Docker we tag before loading.
 KIND_IMAGE_PREFIX := localhost/
 
@@ -142,7 +136,7 @@ help: ## Display this help message
 	@echo ''
 	@echo '$(COLOR_BOLD)Quick Start:$(COLOR_RESET)'
 	@echo '  $(COLOR_GREEN)make dev$(COLOR_RESET)                  Start local dev environment (interactive)'
-	@echo '  $(COLOR_GREEN)make dev COMPONENT=frontend$(COLOR_RESET)   Hot-reload frontend against kind cluster'
+	@echo '  $(COLOR_GREEN)make dev COMPONENT=ambient-ui$(COLOR_RESET)  Hot-reload ambient-ui against kind cluster'
 	@echo '  $(COLOR_GREEN)make kind-up$(COLOR_RESET)             Full cluster deploy (no hot-reload)'
 	@echo '  $(COLOR_GREEN)make kind-status$(COLOR_RESET)         Check kind cluster status'
 	@echo '  $(COLOR_GREEN)make kind-down$(COLOR_RESET)           Stop and delete the kind cluster'
@@ -173,14 +167,7 @@ help: ## Display this help message
 
 ##@ Building
 
-build-all: build-frontend build-backend build-operator build-runner build-state-sync build-public-api build-api-server build-observability-dashboard build-ambient-ui ## Build all container images
-
-build-frontend: ## Build frontend image
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building frontend with $(CONTAINER_ENGINE)..."
-	@cd components/frontend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
-		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
-		-t $(FRONTEND_IMAGE) .
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend built: $(FRONTEND_IMAGE)"
+build-all: build-runner build-api-server build-ambient-ui ## Build all container images
 
 build-ambient-ui: ## Build ambient-ui image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building ambient-ui with $(CONTAINER_ENGINE)..."
@@ -190,21 +177,6 @@ build-ambient-ui: ## Build ambient-ui image
 		-t $(AMBIENT_UI_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Ambient UI built: $(AMBIENT_UI_IMAGE)"
 
-build-backend: ## Build backend image
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building backend with $(CONTAINER_ENGINE)..."
-	@cd components/backend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
-		--build-arg AMBIENT_VERSION=$(shell git describe --tags --always --dirty) \
-		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
-		-t $(BACKEND_IMAGE) .
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend built: $(BACKEND_IMAGE)"
-
-build-operator: ## Build operator image
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building operator with $(CONTAINER_ENGINE)..."
-	@cd components/operator && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
-		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
-		-t $(OPERATOR_IMAGE) .
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Operator built: $(OPERATOR_IMAGE)"
-
 build-runner: ## Build Claude Code runner image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building runner with $(CONTAINER_ENGINE)..."
 	@cd components/runners/ambient-runner && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
@@ -212,32 +184,12 @@ build-runner: ## Build Claude Code runner image
 		-t $(RUNNER_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner built: $(RUNNER_IMAGE)"
 
-build-state-sync: ## Build state-sync image for S3 persistence
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building state-sync with $(CONTAINER_ENGINE)..."
-	@cd components/runners/state-sync && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
-		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
-		-t $(STATE_SYNC_IMAGE) .
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) State-sync built: $(STATE_SYNC_IMAGE)"
-
-build-public-api: ## Build public API gateway image
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building public-api with $(CONTAINER_ENGINE)..."
-	@cd components/public-api && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
-		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
-		-t $(PUBLIC_API_IMAGE) .
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Public API built: $(PUBLIC_API_IMAGE)"
-
 build-api-server: ## Build ambient API server image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building ambient-api-server with $(CONTAINER_ENGINE)..."
 	@cd components/ambient-api-server && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(API_SERVER_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server built: $(API_SERVER_IMAGE)"
-
-build-observability-dashboard: ## Build observability dashboard image
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building observability-dashboard with $(CONTAINER_ENGINE)..."
-	@cd ../observability/dashboard && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
-		-t $(OBSERVABILITY_DASHBOARD_IMAGE) .
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Observability dashboard built: $(OBSERVABILITY_DASHBOARD_IMAGE)"
 
 build-credential-sidecars: build-credential-github build-credential-jira build-credential-k8s build-credential-google ## Build all credential sidecar images
 
@@ -313,7 +265,6 @@ registry-login: ## Login to container registry
 
 push-all: registry-login ## Push all images to registry
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Pushing images to $(REGISTRY)..."
-	@for image in $(FRONTEND_IMAGE) $(BACKEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE) $(OBSERVABILITY_DASHBOARD_IMAGE); do \
 		echo "  Tagging and pushing $$image..."; \
 		$(CONTAINER_ENGINE) tag $$image $(REGISTRY)/$$image && \
 		$(CONTAINER_ENGINE) push $(REGISTRY)/$$image; \
@@ -602,7 +553,7 @@ clean: ## Clean up Kubernetes resources
 
 ##@ Kind Local Development
 
-# COMPONENT for dev/preflight: comma-separated frontend, backend (e.g. frontend,backend). Empty = port-forward only.
+# COMPONENT for dev/preflight: backend, ambient-ui, or comma-separated. Empty = port-forward only.
 COMPONENT ?=
 # When true, `make dev` runs `kind-up` without prompting if the cluster is missing.
 AUTO_CLUSTER ?= false
@@ -679,9 +630,9 @@ preflight: preflight-cluster ## Validate dev environment (cluster tools + option
 			p=$$(echo "$$piece" | sed 's/^[[:space:]]*//;s/[[:space:]]*$$//'); \
 			[ -z "$$p" ] && continue; \
 			case "$$p" in \
-				frontend|ambient-ui) NEED_NODE=1 ;; \
+				ambient-ui) NEED_NODE=1 ;; \
 				backend) NEED_GO=1 ;; \
-				*) echo "$(COLOR_RED)✗$(COLOR_RESET) Unknown COMPONENT: $$p (use frontend, backend, ambient-ui, or comma-separated)"; FAILED=1 ;; \
+				*) echo "$(COLOR_RED)✗$(COLOR_RESET) Unknown COMPONENT: $$p (use backend, ambient-ui, or comma-separated)"; FAILED=1 ;; \
 			esac; \
 		done; \
 	fi; \
@@ -732,30 +683,6 @@ preflight: preflight-cluster ## Validate dev environment (cluster tools + option
 	fi; \
 	echo "$(COLOR_GREEN)✓$(COLOR_RESET) Language tool checks passed."
 
-dev-env: check-kubectl check-local-context ## Generate components/frontend/.env.local from cluster state (DEV_BACKEND_LOCAL=true for local backend on :8080)
-	@set -e; \
-	BACKEND_URL="http://localhost:$(KIND_FWD_BACKEND_PORT)/api"; \
-	if [ "$(DEV_BACKEND_LOCAL)" = "true" ]; then BACKEND_URL="http://localhost:8080/api"; fi; \
-	TOKEN=$$(kubectl get secret test-user-token -n $(NAMESPACE) -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null || true); \
-	if [ -z "$$TOKEN" ]; then \
-		echo "$(COLOR_YELLOW)⚠$(COLOR_RESET) test-user-token not found — OC_TOKEN left empty (run kind-up if cluster is new)"; \
-	fi; \
-	ENV_FILE="components/frontend/.env.local"; \
-	{ \
-		echo "# Generated by make dev-env — do not commit"; \
-		echo "BACKEND_URL=$$BACKEND_URL"; \
-		echo "ENABLE_OC_WHOAMI=0"; \
-		if [ -n "$$TOKEN" ]; then echo "OC_TOKEN=$$TOKEN"; else echo "OC_TOKEN="; fi; \
-		echo "OC_USER=system:serviceaccount:$(NAMESPACE):test-user"; \
-		echo "OC_EMAIL=test-user@vteam.local"; \
-	} > "$$ENV_FILE.tmp"; \
-	if [ -f "$$ENV_FILE" ] && cmp -s "$$ENV_FILE.tmp" "$$ENV_FILE"; then \
-		rm -f "$$ENV_FILE.tmp"; \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) $$ENV_FILE unchanged"; \
-	else \
-		mv "$$ENV_FILE.tmp" "$$ENV_FILE"; \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Wrote $$ENV_FILE"; \
-	fi
 
 dev-env-ambient-ui: check-kubectl ## Generate components/ambient-ui/.env.local from cluster state
 	@kubectl config use-context kind-$(KIND_CLUSTER_NAME) >/dev/null 2>&1 || true
@@ -780,7 +707,7 @@ dev-env-ambient-ui: check-kubectl ## Generate components/ambient-ui/.env.local f
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Wrote $$ENV_FILE"; \
 	fi
 
-dev: ## Local dev: preflight, cluster, dev-env, port-forwards; COMPONENT=frontend|backend|ambient-ui for hot-reload
+dev: ## Local dev: preflight, cluster, dev-env, port-forwards; COMPONENT=backend|ambient-ui for hot-reload
 	@if [ -z "$(COMPONENT)" ]; then $(MAKE) --no-print-directory preflight-cluster; else $(MAKE) --no-print-directory preflight; fi
 	@set -e; \
 	if [ "$(CONTAINER_ENGINE)" = "podman" ]; then export KIND_EXPERIMENTAL_PROVIDER=podman; fi; \
@@ -807,83 +734,38 @@ dev: ## Local dev: preflight, cluster, dev-env, port-forwards; COMPONENT=fronten
 	else \
 		kubectl config use-context kind-$(KIND_CLUSTER_NAME); \
 	fi; \
-	COMP="$(COMPONENT)"; \
-	HAS_FRONT=0; HAS_BACK=0; HAS_AUI=0; \
-	for piece in $$(echo "$$COMP" | tr ',' ' '); do \
-		p=$$(echo "$$piece" | sed 's/^[[:space:]]*//;s/[[:space:]]*$$//'); \
-		case "$$p" in frontend) HAS_FRONT=1 ;; backend) HAS_BACK=1 ;; ambient-ui) HAS_AUI=1 ;; esac; \
-	done; \
-	DEV_LOCAL=0; \
-	if [ "$$HAS_FRONT" -eq 1 ] && [ "$$HAS_BACK" -eq 1 ]; then DEV_LOCAL=1; \
-	elif [ "$$HAS_BACK" -eq 1 ] && [ "$$HAS_FRONT" -eq 0 ]; then DEV_LOCAL=1; \
-	fi; \
-	if [ -z "$$COMP" ]; then \
-		$(MAKE) dev-env DEV_BACKEND_LOCAL=false; \
-	else \
-		$(MAKE) dev-env DEV_BACKEND_LOCAL=$$( [ "$$DEV_LOCAL" -eq 1 ] && echo true || echo false ); \
-	fi; \
-	echo ""; \
-	echo "$(COLOR_BOLD)Access:$(COLOR_RESET)"; \
-	echo "  Frontend: http://localhost:$(KIND_FWD_FRONTEND_PORT)"; \
-	echo "  Backend:  http://localhost:$(KIND_FWD_BACKEND_PORT)"; \
-	echo ""; \
+	echo "$(COLOR_BLUE)▶$(COLOR_RESET) ambient-ui dev: setting up API server + Keycloak..."; \
 	PF_PIDS=""; \
 	cleanup() { \
 		for pid in $$PF_PIDS; do kill "$$pid" 2>/dev/null || true; done; \
 		echo ""; echo "$(COLOR_GREEN)✓$(COLOR_RESET) Stopped port-forward(s)."; \
 	}; \
 	trap cleanup INT TERM; \
-	if [ -z "$$COMP" ]; then \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Port-forwarding frontend + backend (Ctrl+C to stop)..."; \
-		kubectl port-forward -n $(NAMESPACE) svc/frontend-service $(KIND_FWD_FRONTEND_PORT):3000 >/tmp/acp-dev-pf-frontend.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
-		kubectl port-forward -n $(NAMESPACE) svc/backend-service $(KIND_FWD_BACKEND_PORT):8080 >/tmp/acp-dev-pf-backend.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port-forwards running."; \
-		echo "$(COLOR_YELLOW)Press Ctrl+C to stop.$(COLOR_RESET)"; \
-		wait; \
-	elif [ "$$HAS_FRONT" -eq 1 ] && [ "$$HAS_BACK" -eq 0 ]; then \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Port-forward backend only; starting frontend dev..."; \
-		kubectl port-forward -n $(NAMESPACE) svc/backend-service $(KIND_FWD_BACKEND_PORT):8080 >/tmp/acp-dev-pf-backend.log 2>&1 & PF_PIDS=$$!; \
-		sleep 1; \
-		cd components/frontend && npm run dev; \
-	elif [ "$$HAS_BACK" -eq 1 ] && [ "$$HAS_FRONT" -eq 0 ]; then \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Port-forward frontend only; starting backend dev..."; \
-		kubectl port-forward -n $(NAMESPACE) svc/frontend-service $(KIND_FWD_FRONTEND_PORT):3000 >/tmp/acp-dev-pf-frontend.log 2>&1 & PF_PIDS=$$!; \
-		sleep 1; \
-		cd components/backend && go run .; \
-	elif [ "$$HAS_FRONT" -eq 1 ] && [ "$$HAS_BACK" -eq 1 ]; then \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Hot-reload: backend + frontend (local)..."; \
-		(cd components/backend && go run .) & GO_PID=$$!; \
-		(cd components/frontend && npm run dev) & NPM_PID=$$!; \
-		trap 'kill $$GO_PID $$NPM_PID 2>/dev/null; cleanup' INT TERM; \
-		wait $$GO_PID $$NPM_PID; \
-	elif [ "$$HAS_AUI" -eq 1 ]; then \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) ambient-ui dev: setting up API server + Keycloak..."; \
-		pkill -f "port-forward.*ambient-api-server-service" 2>/dev/null || true; \
-		pkill -f "port-forward.*keycloak-service" 2>/dev/null || true; \
-		WANT_KC="http://localhost:$(KIND_FWD_KEYCLOAK_PORT)"; \
-		CUR_KC=$$(kubectl get deployment keycloak -n $(NAMESPACE) -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="KC_HOSTNAME")].value}' 2>/dev/null); \
-		if [ "$$CUR_KC" != "$$WANT_KC" ]; then \
-			echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching Keycloak hostname: $$CUR_KC → $$WANT_KC"; \
-			kubectl set env deployment/keycloak -n $(NAMESPACE) KC_HOSTNAME="$$WANT_KC" >/dev/null 2>&1; \
-			kubectl rollout status deployment/keycloak -n $(NAMESPACE) --timeout=120s >/dev/null 2>&1 || true; \
-			echo "$(COLOR_GREEN)✓$(COLOR_RESET) Keycloak hostname patched"; \
-		else \
-			echo "$(COLOR_GREEN)✓$(COLOR_RESET) Keycloak hostname already correct"; \
-		fi; \
-		kubectl port-forward -n $(NAMESPACE) svc/ambient-api-server-service $(KIND_FWD_API_SERVER_PORT):8000 >/tmp/acp-dev-pf-api.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
-		kubectl port-forward -n $(NAMESPACE) svc/keycloak-service $(KIND_FWD_KEYCLOAK_PORT):8080 >/tmp/acp-dev-pf-keycloak.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
-		sleep 2; \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server  → http://localhost:$(KIND_FWD_API_SERVER_PORT)"; \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Keycloak    → http://localhost:$(KIND_FWD_KEYCLOAK_PORT)"; \
-		$(MAKE) --no-print-directory dev-env-ambient-ui; \
-		echo ""; \
-		echo "$(COLOR_BOLD)Access:$(COLOR_RESET)"; \
-		echo "  Ambient UI: $(COLOR_BLUE)http://localhost:3001$(COLOR_RESET)"; \
-		echo "  API server: http://localhost:$(KIND_FWD_API_SERVER_PORT)"; \
-		echo "  Keycloak:   http://localhost:$(KIND_FWD_KEYCLOAK_PORT)"; \
-		echo ""; \
-		cd components/ambient-ui && npm run dev; \
-	fi
+	pkill -f "port-forward.*ambient-api-server-service" 2>/dev/null || true; \
+	pkill -f "port-forward.*keycloak-service" 2>/dev/null || true; \
+	WANT_KC="http://localhost:$(KIND_FWD_KEYCLOAK_PORT)"; \
+	CUR_KC=$$(kubectl get deployment keycloak -n $(NAMESPACE) -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="KC_HOSTNAME")].value}' 2>/dev/null); \
+	if [ "$$CUR_KC" != "$$WANT_KC" ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching Keycloak hostname: $$CUR_KC → $$WANT_KC"; \
+		kubectl set env deployment/keycloak -n $(NAMESPACE) KC_HOSTNAME="$$WANT_KC" >/dev/null 2>&1; \
+		kubectl rollout status deployment/keycloak -n $(NAMESPACE) --timeout=120s >/dev/null 2>&1 || true; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Keycloak hostname patched"; \
+	else \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Keycloak hostname already correct"; \
+	fi; \
+	kubectl port-forward -n $(NAMESPACE) svc/ambient-api-server-service $(KIND_FWD_API_SERVER_PORT):8000 >/tmp/acp-dev-pf-api.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
+	kubectl port-forward -n $(NAMESPACE) svc/keycloak-service $(KIND_FWD_KEYCLOAK_PORT):8080 >/tmp/acp-dev-pf-keycloak.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
+	sleep 2; \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server  → http://localhost:$(KIND_FWD_API_SERVER_PORT)"; \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) Keycloak    → http://localhost:$(KIND_FWD_KEYCLOAK_PORT)"; \
+	$(MAKE) --no-print-directory dev-env-ambient-ui; \
+	echo ""; \
+	echo "$(COLOR_BOLD)Access:$(COLOR_RESET)"; \
+	echo "  Ambient UI: $(COLOR_BLUE)http://localhost:3001$(COLOR_RESET)"; \
+	echo "  API server: http://localhost:$(KIND_FWD_API_SERVER_PORT)"; \
+	echo "  Keycloak:   http://localhost:$(KIND_FWD_KEYCLOAK_PORT)"; \
+	echo ""; \
+	cd components/ambient-ui && npm run dev
 
 ##@ Benchmarking
 
@@ -936,7 +818,6 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 		kubectl apply --validate=false -k components/manifests/overlays/kind-local/; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching agent registry for local images..."; \
 		REGISTRY=$$(kubectl get configmap ambient-agent-registry -n $(NAMESPACE) -o jsonpath='{.data.agent-registry\.json}'); \
-		UPDATED=$$(echo "$$REGISTRY" | sed 's|quay.io/ambient_code/vteam_claude_runner:[^"]*|localhost/vteam_claude_runner:latest|g; s|quay.io/ambient_code/vteam_state_sync:[^"]*|localhost/vteam_state_sync:latest|g'); \
 		kubectl patch configmap ambient-agent-registry -n $(NAMESPACE) --type=merge \
 			-p "{\"data\":{\"agent-registry.json\":$$(echo "$$UPDATED" | jq -Rs .)}}"; \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Agent registry patched for local images"; \
@@ -1121,37 +1002,6 @@ kind-rebuild: check-kind check-kubectl check-local-context build-all ## Rebuild,
 	@kubectl rollout status deployment -n $(NAMESPACE) --timeout=120s $(QUIET_REDIRECT)
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All components rebuilt and restarted"
 
-kind-reload-backend: check-kind check-kubectl check-local-context ## Rebuild and reload backend only (kind)
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding backend..."
-	@cd components/backend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) \
-		--build-arg AMBIENT_VERSION=$(shell git describe --tags --always --dirty) \
-		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
-		-t $(BACKEND_IMAGE) . $(QUIET_REDIRECT)
-	@$(CONTAINER_ENGINE) tag $(BACKEND_IMAGE) localhost/$(BACKEND_IMAGE) 2>/dev/null || true
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading image into kind cluster ($(KIND_CLUSTER_NAME))..."
-	@$(CONTAINER_ENGINE) save localhost/$(BACKEND_IMAGE) | \
-		$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
-		ctr --namespace=k8s.io images import -
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting backend..."
-	@kubectl rollout restart deployment/backend-api -n $(NAMESPACE) $(QUIET_REDIRECT)
-	@kubectl rollout status deployment/backend-api -n $(NAMESPACE) --timeout=60s
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Backend reloaded"
-
-kind-reload-frontend: check-kind check-kubectl check-local-context ## Rebuild and reload frontend only (kind)
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding frontend..."
-	@cd components/frontend && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) \
-		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
-		-t $(FRONTEND_IMAGE) . $(QUIET_REDIRECT)
-	@$(CONTAINER_ENGINE) tag $(FRONTEND_IMAGE) localhost/$(FRONTEND_IMAGE) 2>/dev/null || true
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading image into kind cluster ($(KIND_CLUSTER_NAME))..."
-	@$(CONTAINER_ENGINE) save localhost/$(FRONTEND_IMAGE) | \
-		$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
-		ctr --namespace=k8s.io images import -
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting frontend..."
-	@kubectl rollout restart deployment/frontend -n $(NAMESPACE) $(QUIET_REDIRECT)
-	@kubectl rollout status deployment/frontend -n $(NAMESPACE) --timeout=60s
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Frontend reloaded"
-
 kind-reload-ambient-ui: check-kind check-kubectl check-local-context ## Rebuild and reload ambient-ui only (kind)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding ambient-ui..."
 	@cd components && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) \
@@ -1167,21 +1017,6 @@ kind-reload-ambient-ui: check-kind check-kubectl check-local-context ## Rebuild 
 	@kubectl rollout restart deployment/ambient-ui -n $(NAMESPACE) $(QUIET_REDIRECT)
 	@kubectl rollout status deployment/ambient-ui -n $(NAMESPACE) --timeout=60s
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Ambient UI reloaded"
-
-kind-reload-operator: check-kind check-kubectl check-local-context ## Rebuild and reload operator only (kind)
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding operator..."
-	@cd components/operator && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) \
-		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
-		-t $(OPERATOR_IMAGE) . $(QUIET_REDIRECT)
-	@$(CONTAINER_ENGINE) tag $(OPERATOR_IMAGE) localhost/$(OPERATOR_IMAGE) 2>/dev/null || true
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading image into kind cluster ($(KIND_CLUSTER_NAME))..."
-	@$(CONTAINER_ENGINE) save localhost/$(OPERATOR_IMAGE) | \
-		$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
-		ctr --namespace=k8s.io images import -
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting operator..."
-	@kubectl rollout restart deployment/agentic-operator -n $(NAMESPACE) $(QUIET_REDIRECT)
-	@kubectl rollout status deployment/agentic-operator -n $(NAMESPACE) --timeout=60s
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Operator reloaded"
 
 kind-sso-toggle: check-kubectl ## Toggle SSO auth on/off in Kind (affects both frontend and backend)
 	@UNLEASH_ADMIN_TOKEN=$$(kubectl get secret unleash-credentials -n $(NAMESPACE) -o jsonpath='{.data.admin-api-token}' | base64 -d); \
@@ -1290,18 +1125,6 @@ local-rebuild: ## Deprecated: use kind-rebuild
 	@echo "$(COLOR_YELLOW)Warning:$(COLOR_RESET) '$@' is deprecated. Use 'make kind-rebuild' instead."
 	@$(MAKE) --no-print-directory kind-rebuild
 
-local-reload-backend: ## Deprecated: use kind-reload-backend
-	@echo "$(COLOR_YELLOW)Warning:$(COLOR_RESET) '$@' is deprecated. Use 'make kind-reload-backend' instead."
-	@$(MAKE) --no-print-directory kind-reload-backend
-
-local-reload-frontend: ## Deprecated: use kind-reload-frontend
-	@echo "$(COLOR_YELLOW)Warning:$(COLOR_RESET) '$@' is deprecated. Use 'make kind-reload-frontend' instead."
-	@$(MAKE) --no-print-directory kind-reload-frontend
-
-local-reload-operator: ## Deprecated: use kind-reload-operator
-	@echo "$(COLOR_YELLOW)Warning:$(COLOR_RESET) '$@' is deprecated. Use 'make kind-reload-operator' instead."
-	@$(MAKE) --no-print-directory kind-reload-operator
-
 ##@ Internal Helpers (do not call directly)
 
 check-minikube: ## Check if minikube is installed
@@ -1383,7 +1206,6 @@ check-architecture: ## Validate build architecture matches host
 
 _kind-load-images: ## Internal: Load images into kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind ($(KIND_CLUSTER_NAME))..."
-	@for img in $(BACKEND_IMAGE) $(FRONTEND_IMAGE) $(OPERATOR_IMAGE) $(RUNNER_IMAGE) $(STATE_SYNC_IMAGE) $(PUBLIC_API_IMAGE) $(API_SERVER_IMAGE) $(OBSERVABILITY_DASHBOARD_IMAGE) $(AMBIENT_UI_IMAGE); do \
 		echo "  Loading $(KIND_IMAGE_PREFIX)$$img..."; \
 		if [ -n "$(KIND_HOST)" ] || [ "$(CONTAINER_ENGINE)" = "podman" ]; then \
 			$(CONTAINER_ENGINE) save $(KIND_IMAGE_PREFIX)$$img | \

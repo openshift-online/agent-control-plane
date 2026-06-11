@@ -148,7 +148,7 @@ Production overlay files for oauth-proxy exist as reference but are disabled.
 
 ### 1. Quay.io repository
 
-`quay.io/ambient_code/vteam_ambient_ui` with push access for `vteamrobbit`.
+`quay.io/ambient_code/acp_ambient_ui` with push access for `acprobbit`.
 
 ### 2. OIDC client (REQUIRED for production)
 
@@ -173,7 +173,7 @@ OpenShift Route with TLS edge termination, targeting the ambient-ui Service on p
 ## Adding ambient-ui to a New Overlay
 
 1. Include base: `resources: [../../base]` (ambient-ui-deployment.yaml is in base/core)
-2. Add image entries for `quay.io/ambient_code/vteam_ambient_ui`
+2. Add image entries for `quay.io/ambient_code/acp_ambient_ui`
 3. Apply environment patches (auth mode, API URL, SSO config)
 4. If auth: create OIDC client and secrets per Prerequisites
 5. If OpenShift with HTTPS to ambient-api-server: trust the service-ca bundle.

@@ -19,26 +19,22 @@ You are an expert in deploying the Ambient Code Platform to OpenShift clusters. 
 
 | Deployment | Image | Purpose |
 |-----------|-------|---------|
-| `backend-api` | `quay.io/ambient_code/vteam_backend` | Go REST API, manages K8s CRDs |
-| `frontend` | `quay.io/ambient_code/vteam_frontend` | NextJS web UI |
-| `agentic-operator` | `quay.io/ambient_code/vteam_operator` | Kubernetes operator |
-| `ambient-api-server` | `quay.io/ambient_code/vteam_api_server` | Stateless API server |
+| `ambient-api-server` | `quay.io/ambient_code/acp_api_server` | Stateless API server |
 | `ambient-api-server-db` | (postgres sidecar) | API server database |
-| `public-api` | `quay.io/ambient_code/vteam_public_api` | External API gateway |
 | `postgresql` | (upstream) | Unleash feature flag DB |
 | `minio` | (upstream) | S3 object storage |
 | `unleash` | (upstream) | Feature flag service |
 
-Runner pods (`vteam_claude_runner`, `vteam_state_sync`) are spawned dynamically by the operator — they are not standing deployments.
+Runner pods (`acp_claude_runner`, `acp_state_sync`) are spawned dynamically by the operator — they are not standing deployments.
 
 Credential sidecar containers are injected into session pods when the corresponding credential type is configured:
 
  < /dev/null |  Sidecar Container | Image | Port | Provider |
 |-------------------|-------|------|----------|
-| `credential-github` | `quay.io/ambient_code/vteam_credential_github` | 8091 | GitHub PAT / App |
-| `credential-jira` | `quay.io/ambient_code/vteam_credential_jira` | 8092 | Jira / Atlassian |
-| `credential-k8s` | `quay.io/ambient_code/vteam_credential_k8s` | 8093 | Kubeconfig |
-| `credential-google` | `quay.io/ambient_code/vteam_credential_google` | 8094 | Google Workspace |
+| `credential-github` | `quay.io/ambient_code/acp_credential_github` | 8091 | GitHub PAT / App |
+| `credential-jira` | `quay.io/ambient_code/acp_credential_jira` | 8092 | Jira / Atlassian |
+| `credential-k8s` | `quay.io/ambient_code/acp_credential_k8s` | 8093 | Kubeconfig |
+| `credential-google` | `quay.io/ambient_code/acp_credential_google` | 8094 | Google Workspace |
 
 ---
 
@@ -171,21 +167,16 @@ pushd "$TMPDIR"
 kustomize edit set namespace $NAMESPACE
 
 kustomize edit set image \
-  quay.io/ambient_code/vteam_frontend:latest=quay.io/ambient_code/vteam_frontend:$IMAGE_TAG \
-  quay.io/ambient_code/vteam_backend:latest=quay.io/ambient_code/vteam_backend:$IMAGE_TAG \
-  quay.io/ambient_code/vteam_operator:latest=quay.io/ambient_code/vteam_operator:$IMAGE_TAG \
-  quay.io/ambient_code/vteam_claude_runner:latest=quay.io/ambient_code/vteam_claude_runner:$IMAGE_TAG \
-  quay.io/ambient_code/vteam_state_sync:latest=quay.io/ambient_code/vteam_state_sync:$IMAGE_TAG \
-  quay.io/ambient_code/vteam_api_server:latest=quay.io/ambient_code/vteam_api_server:$IMAGE_TAG \
-  quay.io/ambient_code/vteam_public_api:latest=quay.io/ambient_code/vteam_public_api:$IMAGE_TAG
+  quay.io/ambient_code/acp_claude_runner:latest=quay.io/ambient_code/acp_claude_runner:$IMAGE_TAG \
+  quay.io/ambient_code/acp_api_server:latest=quay.io/ambient_code/acp_api_server:$IMAGE_TAG \
 
 oc apply -k . -n $NAMESPACE
 
 oc set env deployment/ambient-control-plane -n $NAMESPACE \
-  GITHUB_MCP_IMAGE=quay.io/ambient_code/vteam_credential_github:$IMAGE_TAG \
-  JIRA_MCP_IMAGE=quay.io/ambient_code/vteam_credential_jira:$IMAGE_TAG \
-  K8S_MCP_IMAGE=quay.io/ambient_code/vteam_credential_k8s:$IMAGE_TAG \
-  GOOGLE_MCP_IMAGE=quay.io/ambient_code/vteam_credential_google:$IMAGE_TAG
+  GITHUB_MCP_IMAGE=quay.io/ambient_code/acp_credential_github:$IMAGE_TAG \
+  JIRA_MCP_IMAGE=quay.io/ambient_code/acp_credential_jira:$IMAGE_TAG \
+  K8S_MCP_IMAGE=quay.io/ambient_code/acp_credential_k8s:$IMAGE_TAG \
+  GOOGLE_MCP_IMAGE=quay.io/ambient_code/acp_credential_google:$IMAGE_TAG
 popd
 rm -rf "$TMPDIR"
 ```
@@ -202,8 +193,7 @@ IMAGE_TAG=<tag>
 
 oc patch configmap operator-config -n $NAMESPACE --type=merge -p "{
   \"data\": {
-    \"AMBIENT_CODE_RUNNER_IMAGE\": \"quay.io/ambient_code/vteam_claude_runner:$IMAGE_TAG\",
-    \"STATE_SYNC_IMAGE\": \"quay.io/ambient_code/vteam_state_sync:$IMAGE_TAG\",
+    \"AMBIENT_CODE_RUNNER_IMAGE\": \"quay.io/ambient_code/acp_claude_runner:$IMAGE_TAG\",
     \"USE_VERTEX\": \"0\",
     \"CLOUD_ML_REGION\": \"\",
     \"ANTHROPIC_VERTEX_PROJECT_ID\": \"\",
@@ -219,9 +209,8 @@ REGISTRY=$(oc get configmap ambient-agent-registry -n $NAMESPACE \
   -o jsonpath='{.data.agent-registry\.json}')
 
 REGISTRY=$(echo "$REGISTRY" | sed \
-  "s|quay.io/ambient_code/vteam_claude_runner[@:][^\"]*|quay.io/ambient_code/vteam_claude_runner:$IMAGE_TAG|g")
+  "s|quay.io/ambient_code/acp_claude_runner[@:][^\"]*|quay.io/ambient_code/acp_claude_runner:$IMAGE_TAG|g")
 REGISTRY=$(echo "$REGISTRY" | sed \
-  "s|quay.io/ambient_code/vteam_state_sync[@:][^\"]*|quay.io/ambient_code/vteam_state_sync:$IMAGE_TAG|g")
 
 oc patch configmap ambient-agent-registry -n $NAMESPACE --type=merge \
   -p "{\"data\":{\"agent-registry.json\":$(echo "$REGISTRY" | jq -Rs .)}}"
@@ -337,7 +326,6 @@ oc policy add-role-to-group system:image-puller system:serviceaccounts --namespa
 oc describe pod <pod-name> -n $NAMESPACE | grep -A5 "Events:"
 ```
 
-- If pulling from quay.io: verify the tag exists (`skopeo inspect docker://quay.io/ambient_code/vteam_backend:<tag>`)
 - If private: create an image pull secret and link it to the default service account
 
 ### API Server TLS Certificate Missing

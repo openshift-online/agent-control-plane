@@ -83,24 +83,6 @@ if [ -n "$GO_FILES" ]; then
     fi
 fi
 
-# ── Frontend checks ──────────────────────────────────────────────────
-TS_FILES=$(echo "$CHANGED_FILES" | grep -E '^components/frontend/.*\.(ts|tsx|js|jsx)$' || true)
-if [ -n "$TS_FILES" ]; then
-    FRONTEND_DIR="$REPO_ROOT/components/frontend"
-
-    if command -v npx &>/dev/null && [ -d "$FRONTEND_DIR/node_modules" ]; then
-        RELATIVE_FILES=$(echo "$TS_FILES" | sed 's|^components/frontend/||')
-        ESLINT_OUTPUT=$(cd "$FRONTEND_DIR" && echo "$RELATIVE_FILES" | xargs npx eslint 2>&1) || \
-            ERRORS+=("eslint failed on frontend files:" "$ESLINT_OUTPUT")
-    fi
-
-    ANY_HITS=$(cd "$REPO_ROOT" && echo "$TS_FILES" | xargs grep -Hn ': any\b\|<any>\|as any\b' 2>/dev/null \
-        | grep -v '//.*any\|nolint\|eslint-disable' || true)
-    if [ -n "$ANY_HITS" ]; then
-        ERRORS+=("'any' type usage in frontend (use proper types, unknown, or generics):" "$ANY_HITS")
-    fi
-fi
-
 # ── Python checks ────────────────────────────────────────────────────
 PY_FILES=$(echo "$CHANGED_FILES" | grep -E '^(components/runners/|scripts/).*\.py$' || true)
 if [ -n "$PY_FILES" ]; then

@@ -403,10 +403,10 @@ CLUSTER=$(podman ps --format '{{.Names}}' | grep 'kind' | grep 'control-plane' |
 echo "Cluster: $CLUSTER"
 
 # 1. Build without cache (cache misses source changes when go.mod/go.sum unchanged)
-podman build --no-cache -t localhost/vteam_api_server:latest components/ambient-api-server
+podman build --no-cache -t localhost/acp_api_server:latest components/ambient-api-server
 
 # 2. Load into kind via ctr import (kind load docker-image fails with podman localhost/ prefix)
-podman save localhost/vteam_api_server:latest | \
+podman save localhost/acp_api_server:latest | \
   podman exec -i ${CLUSTER}-control-plane ctr --namespace=k8s.io images import -
 
 # 3. Restart and verify

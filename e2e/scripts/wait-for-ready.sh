@@ -4,29 +4,23 @@ set -euo pipefail
 echo "Waiting for all deployments to be ready..."
 echo ""
 
-# Wait for backend
-echo "⏳ Waiting for backend-api..."
+# Wait for ambient-api-server
+echo "⏳ Waiting for ambient-api-server..."
 kubectl wait --for=condition=available --timeout=300s \
-  deployment/backend-api \
+  deployment/ambient-api-server \
   -n ambient-code
 
-# Wait for operator
-echo "⏳ Waiting for agentic-operator..."
+# Wait for ambient-control-plane
+echo "⏳ Waiting for ambient-control-plane..."
 kubectl wait --for=condition=available --timeout=300s \
-  deployment/agentic-operator \
+  deployment/ambient-control-plane \
   -n ambient-code
 
-# Wait for frontend
-echo "⏳ Waiting for frontend..."
+# Wait for ambient-ui
+echo "⏳ Waiting for ambient-ui..."
 kubectl wait --for=condition=available --timeout=300s \
-  deployment/frontend \
+  deployment/ambient-ui \
   -n ambient-code
-
-# Wait for Unleash (feature flags - frontend retries on connect failure cause re-render loops)
-echo "⏳ Waiting for unleash..."
-kubectl wait --for=condition=available --timeout=300s \
-  deployment/unleash \
-  -n ambient-code 2>/dev/null || echo "⚠️  Unleash not deployed (feature flags disabled)"
 
 # Wait for MinIO (required for session state persistence)
 echo "⏳ Waiting for minio..."
@@ -34,7 +28,7 @@ kubectl wait --for=condition=available --timeout=300s \
   deployment/minio \
   -n ambient-code 2>/dev/null || echo "⚠️  MinIO not deployed (S3 persistence disabled)"
 
-# Wait for Keycloak (SSO/OIDC provider - frontend needs it for SSO mode)
+# Wait for Keycloak (SSO/OIDC provider)
 echo "⏳ Waiting for keycloak..."
 kubectl wait --for=condition=available --timeout=300s \
   deployment/keycloak \

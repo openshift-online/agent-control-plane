@@ -5,7 +5,7 @@ kind: Kustomization
 resources:
 - ../kind
 
-# Override operator env to use locally-built runner/state-sync images
+# Override patches for kind-local
 patches:
 - path: ambient-api-server-local-image-patch.yaml
   target:
@@ -13,10 +13,6 @@ patches:
     version: v1
     kind: Deployment
     name: ambient-api-server
-- path: operator-env-patch.yaml
-  target:
-    kind: Deployment
-    name: agentic-operator
 
 # Override imagePullPolicy to IfNotPresent for all deployments
 - path: image-pull-policy-patch.yaml
@@ -24,37 +20,7 @@ patches:
     group: apps
     version: v1
     kind: Deployment
-    name: backend-api
-- path: image-pull-policy-patch.yaml
-  target:
-    group: apps
-    version: v1
-    kind: Deployment
-    name: frontend
-- path: image-pull-policy-patch.yaml
-  target:
-    group: apps
-    version: v1
-    kind: Deployment
-    name: agentic-operator
-- path: image-pull-policy-patch.yaml
-  target:
-    group: apps
-    version: v1
-    kind: Deployment
-    name: public-api
-- path: image-pull-policy-patch.yaml
-  target:
-    group: apps
-    version: v1
-    kind: Deployment
     name: ambient-api-server
-- path: image-pull-policy-patch.yaml
-  target:
-    group: apps
-    version: v1
-    kind: Deployment
-    name: observability-dashboard
 - path: image-pull-policy-patch.yaml
   target:
     group: apps
@@ -65,24 +31,9 @@ patches:
 # Remap images from Quay.io to locally-built names
 # Podman tags images with localhost/ prefix, which kind preserves when loading
 images:
-- name: quay.io/ambient_code/vteam_backend
-  newName: localhost/vteam_backend
+- name: quay.io/ambient_code/acp_api_server
+  newName: localhost/acp_api_server
   newTag: latest
-- name: quay.io/ambient_code/vteam_frontend
-  newName: localhost/vteam_frontend
-  newTag: latest
-- name: quay.io/ambient_code/vteam_operator
-  newName: localhost/vteam_operator
-  newTag: latest
-- name: quay.io/ambient_code/vteam_public_api
-  newName: localhost/vteam_public_api
-  newTag: latest
-- name: quay.io/ambient_code/vteam_api_server
-  newName: localhost/vteam_api_server
-  newTag: latest
-- name: ghcr.io/ambient-code/observability
-  newName: localhost/observability
-  newTag: latest
-- name: quay.io/ambient_code/vteam_ambient_ui
-  newName: localhost/vteam_ambient_ui
+- name: quay.io/ambient_code/acp_ambient_ui
+  newName: localhost/acp_ambient_ui
   newTag: latest

@@ -7,28 +7,14 @@ namespace: vteam-dev
 resources:
 - ../../base
 - ambient-api-server-route.yaml
-- build-configs.yaml
 - dev-users.yaml
-- frontend-auth.yaml
-- backend-route.yaml
-- frontend-route.yaml
-- operator-config-crc.yaml
 - ldap-config.yaml
 - ldap-credentials.yaml
-- unleash-credentials.yaml
 # mlflow-db-credentials is applied separately (lives in redhat-ods-applications,
 # incompatible with namePrefix and namespace directives in this overlay)
-- unleash-route.yaml
 
 # Patches for local dev environment
 patches:
-# Strategic merge patches
-- path: backend-deployment-patch.yaml
-- path: frontend-deployment-patch.yaml
-- path: operator-patch.yaml
-- path: pvc-patch.yaml
-- path: backend-clusterrole-patch.yaml
-- path: operator-clusterrole-patch.yaml
 # Ambient API Server: enable end-to-end TLS (OpenShift service-ca provides certs)
 - path: ambient-api-server-tls-patch.yaml
   target:
@@ -50,8 +36,6 @@ patches:
     version: v1
     kind: Deployment
     name: ambient-api-server
-# Unleash: init container to create database (RHEL doesn't support init scripts)
-- path: unleash-init-db-patch.yaml
 # PostgreSQL: use RHEL image with proper env vars and mount paths (JSON patch)
 - path: postgresql-json-patch.yaml
   target:
@@ -71,19 +55,10 @@ namePrefix: vteam-
 
 # Images for local dev (internal registry)
 images:
-- name: quay.io/ambient_code/vteam_backend
-  newName: image-registry.openshift-image-registry.svc:5000/vteam-dev/vteam-backend
+- name: quay.io/ambient_code/acp_claude_runner
+  newName: quay.io/ambient_code/acp_claude_runner
   newTag: latest
-- name: quay.io/ambient_code/vteam_frontend
-  newName: image-registry.openshift-image-registry.svc:5000/vteam-dev/vteam-frontend
-  newTag: latest
-- name: quay.io/ambient_code/vteam_operator
-  newName: image-registry.openshift-image-registry.svc:5000/vteam-dev/vteam-operator
-  newTag: latest
-- name: quay.io/ambient_code/vteam_claude_runner
-  newName: quay.io/ambient_code/vteam_claude_runner
-  newTag: latest
-- name: quay.io/ambient_code/vteam_api_server
-  newName: quay.io/ambient_code/vteam_api_server
+- name: quay.io/ambient_code/acp_api_server
+  newName: quay.io/ambient_code/acp_api_server
   newTag: latest
 # PostgreSQL: RHEL image handled via JSON patch (postgresql-json-patch.yaml)

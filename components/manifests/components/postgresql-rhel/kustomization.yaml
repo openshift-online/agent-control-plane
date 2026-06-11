@@ -10,9 +10,3 @@ patches:
     kind: Deployment
     name: postgresql
     version: v1
-- path: unleash-init-db-patch.yaml
-  target:
-    group: apps
-    kind: Deployment
-    name: unleash
-    version: v1

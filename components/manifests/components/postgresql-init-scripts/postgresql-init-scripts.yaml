@@ -38,7 +38,6 @@ data:
 
     # Create databases for each service
     # Unleash feature flags
-    create_db_if_not_exists "unleash"
 
     # MLflow experiment tracking
     create_db_if_not_exists "mlflow"

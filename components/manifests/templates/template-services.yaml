@@ -636,31 +636,31 @@ parameters:
     required: true
   - name: IMAGE_AMBIENT_API_SERVER
     description: API server image
-    value: quay.io/ambient_code/vteam_api_server
+    value: quay.io/ambient_code/acp_api_server
   - name: IMAGE_AMBIENT_CONTROL_PLANE
     description: Control plane image
-    value: quay.io/ambient_code/vteam_control_plane
+    value: quay.io/ambient_code/acp_control_plane
   - name: IMAGE_AMBIENT_UI
     description: UI image
-    value: quay.io/ambient_code/vteam_ambient_ui
+    value: quay.io/ambient_code/acp_ambient_ui
   - name: IMAGE_AMBIENT_RUNNER
     description: Runner image (spawned by control plane)
-    value: quay.io/ambient_code/vteam_claude_runner
+    value: quay.io/ambient_code/acp_claude_runner
   - name: IMAGE_AMBIENT_MCP
     description: MCP proxy image
-    value: quay.io/ambient_code/vteam_mcp
+    value: quay.io/ambient_code/acp_mcp
   - name: IMAGE_CREDENTIAL_GITHUB
     description: GitHub credential sidecar image
-    value: quay.io/ambient_code/vteam_credential_github
+    value: quay.io/ambient_code/acp_credential_github
   - name: IMAGE_CREDENTIAL_JIRA
     description: Jira credential sidecar image
-    value: quay.io/ambient_code/vteam_credential_jira
+    value: quay.io/ambient_code/acp_credential_jira
   - name: IMAGE_CREDENTIAL_K8S
     description: Kubernetes credential sidecar image
-    value: quay.io/ambient_code/vteam_credential_k8s
+    value: quay.io/ambient_code/acp_credential_k8s
   - name: IMAGE_CREDENTIAL_GOOGLE
     description: Google credential sidecar image
-    value: quay.io/ambient_code/vteam_credential_google
+    value: quay.io/ambient_code/acp_credential_google
   - name: NAMESPACE
     description: Target namespace
     value: ambient-api

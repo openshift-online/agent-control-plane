@@ -13,13 +13,8 @@ namespace: ambient-code
 resources:
 - ../../base
 - ambient-api-server-route.yaml
-- route.yaml
-- backend-route.yaml
-- public-api-route.yaml
-- unleash-route.yaml
-- operator-config-openshift.yaml
+- ambient-ui-route.yaml
 - ldap-config.yaml
-- frontend-hpa.yaml
 
 components:
 - ../../components/oauth-proxy
@@ -56,33 +51,13 @@ patches:
     kind: PersistentVolumeClaim
     name: minio-data
     version: v1
-- patch: |
-    $patch: delete
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: ambient-ui
+- path: ambient-ui-oauth-patch.yaml
   target:
     group: apps
     version: v1
     kind: Deployment
     name: ambient-ui
-- patch: |
-    $patch: delete
-    apiVersion: v1
-    kind: ServiceAccount
-    metadata:
-      name: ambient-ui
-  target:
-    version: v1
-    kind: ServiceAccount
-    name: ambient-ui
-- patch: |
-    $patch: delete
-    apiVersion: v1
-    kind: Service
-    metadata:
-      name: ambient-ui-service
+- path: ambient-ui-service-patch.yaml
   target:
     version: v1
     kind: Service
@@ -90,48 +65,15 @@ patches:
 
 # Production images
 images:
-- name: quay.io/ambient_code/vteam_api_server:latest
-  newName: quay.io/ambient_code/vteam_api_server
+- name: quay.io/ambient_code/acp_api_server:latest
+  newName: quay.io/ambient_code/acp_api_server
   newTag: latest
-- name: quay.io/ambient_code/vteam_backend
-  newName: quay.io/ambient_code/vteam_backend
+- name: quay.io/ambient_code/acp_claude_runner
+  newName: quay.io/ambient_code/acp_claude_runner
   newTag: latest
-- name: quay.io/ambient_code/vteam_backend:latest
-  newName: quay.io/ambient_code/vteam_backend
+- name: quay.io/ambient_code/acp_claude_runner:latest
+  newName: quay.io/ambient_code/acp_claude_runner
   newTag: latest
-- name: quay.io/ambient_code/vteam_claude_runner
-  newName: quay.io/ambient_code/vteam_claude_runner
-  newTag: latest
-- name: quay.io/ambient_code/vteam_claude_runner:latest
-  newName: quay.io/ambient_code/vteam_claude_runner
-  newTag: latest
-- name: quay.io/ambient_code/vteam_frontend
-  newName: quay.io/ambient_code/vteam_frontend
-  newTag: latest
-- name: quay.io/ambient_code/vteam_frontend:latest
-  newName: quay.io/ambient_code/vteam_frontend
-  newTag: latest
-- name: quay.io/ambient_code/vteam_operator
-  newName: quay.io/ambient_code/vteam_operator
-  newTag: latest
-- name: quay.io/ambient_code/vteam_operator:latest
-  newName: quay.io/ambient_code/vteam_operator
-  newTag: latest
-- name: quay.io/ambient_code/vteam_public_api
-  newName: quay.io/ambient_code/vteam_public_api
-  newTag: latest
-- name: quay.io/ambient_code/vteam_public_api:latest
-  newName: quay.io/ambient_code/vteam_public_api
-  newTag: latest
-- name: quay.io/ambient_code/vteam_state_sync:latest
-  newName: quay.io/ambient_code/vteam_state_sync
-  newTag: latest
-- name: quay.io/ambient_code/vteam_control_plane:latest
-  newName: quay.io/ambient_code/vteam_control_plane
-  newTag: latest
-- name: ghcr.io/ambient-code/observability
-  newName: ghcr.io/ambient-code/observability
-  newTag: latest
-- name: ghcr.io/ambient-code/observability:latest
-  newName: ghcr.io/ambient-code/observability
+- name: quay.io/ambient_code/acp_control_plane:latest
+  newName: quay.io/ambient_code/acp_control_plane
   newTag: latest

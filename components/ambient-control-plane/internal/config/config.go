@@ -23,7 +23,6 @@ type ControlPlaneConfig struct {
 	Reconcilers           []string
 	RunnerImage           string
 	RunnerGRPCUseTLS      bool
-	BackendURL            string
 	Namespace             string
 	AnthropicAPIKey       string
 	VertexEnabled         bool
@@ -66,9 +65,8 @@ func Load() (*ControlPlaneConfig, error) {
 		OIDCClientID:          os.Getenv("OIDC_CLIENT_ID"),
 		OIDCClientSecret:      os.Getenv("OIDC_CLIENT_SECRET"),
 		Reconcilers:           parseReconcilers(envOrDefault("RECONCILERS", "tally,kube")),
-		RunnerImage:           envOrDefault("RUNNER_IMAGE", "quay.io/ambient_code/vteam_claude_runner:latest"),
+		RunnerImage:           envOrDefault("RUNNER_IMAGE", "quay.io/ambient_code/acp_claude_runner:latest"),
 		RunnerGRPCUseTLS:      os.Getenv("AMBIENT_GRPC_USE_TLS") == "true",
-		BackendURL:            envOrDefault("BACKEND_API_URL", envOrDefault("AMBIENT_API_SERVER_URL", "http://localhost:8000")),
 		Namespace:             envOrDefault("NAMESPACE", "ambient-code"),
 		AnthropicAPIKey:       os.Getenv("ANTHROPIC_API_KEY"),
 		VertexEnabled:         os.Getenv("USE_VERTEX") == "1" || os.Getenv("USE_VERTEX") == "true",

@@ -50,7 +50,9 @@ For any cluster where you have `oc` access and an existing namespace.
 
 - `oc` logged in with create permissions for deployments, services, routes, secrets, ClusterRoles
 - Existing namespace (e.g. `mturansk`)
-- PR images at `quay.io/ambient_code/vteam_*:pr-<NUMBER>`
+- PR images at `quay.io/ambient_code/acp_*:pr-<NUMBER>-amd64`
+
+> **Selective builds:** CI only builds images for components with source changes in the PR. Unchanged components are not built — the cluster uses `:latest` for those. Check which components were built in the "Build and Push" workflow run.
 
 ### Deploy
 
@@ -106,7 +108,7 @@ bash components/pr-test/provision.sh destroy "$ID"
 
 ### Images not found
 
-Check quay.io for the tag: `https://quay.io/repository/ambient_code/vteam_control_plane?tab=tags`
+Check quay.io for the tag: `https://quay.io/repository/ambient_code/acp_control_plane?tab=tags`
 
 ### CP can't reach api-server
 

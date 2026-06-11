@@ -6,8 +6,6 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 
 ## Structure
 
-- `components/backend/` - Go REST API (Gin), manages K8s Custom Resources with multi-tenant project isolation
-- `components/frontend/` - NextJS web UI for session management and monitoring
 - `components/operator/` - Go Kubernetes controller, watches CRDs and creates Jobs
 - `components/runners/ambient-runner/` - Python runner executing Claude Code CLI in Job pods
 - `components/ambient-cli/` - Go CLI (`acpctl`), manages agentic sessions from the command line
@@ -16,7 +14,6 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 - `components/ambient-sdk/` - Go + Python client SDK for the platform's public REST API
 - `components/open-webui-llm/` - Open WebUI LLM integration
 - `components/manifests/` - Kustomize-based deployment manifests and overlays
-- `e2e/` - Cypress end-to-end tests
 - `docs/` - Astro Starlight documentation site
 - `specs/` - Desired state of the system ([sessions](specs/sessions/), [agents](specs/agents/), [control-plane](specs/control-plane/), [integrations](specs/integrations/), [standards](specs/standards/))
 - `workflows/` - Agent-consumable procedures ([sessions](workflows/sessions/), [control-plane](workflows/control-plane/), [integrations](workflows/integrations/))
@@ -25,12 +22,9 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 ## Key Files
 
 - CRD definitions: `components/manifests/base/crds/agenticsessions-crd.yaml`, `projectsettings-crd.yaml`
-- Session lifecycle: `components/backend/handlers/sessions.go`, `components/operator/internal/handlers/sessions.go`
-- Auth & RBAC middleware: `components/backend/handlers/middleware.go`
+- Session lifecycle: `components/operator/internal/handlers/sessions.go`
 - K8s client init: `components/operator/internal/config/config.go`
 - Runner entry point: `components/runners/ambient-runner/main.py`
-- Route registration: `components/backend/routes.go`
-- Frontend API layer: `components/frontend/src/services/api/`, `src/services/queries/`
 
 ## Session Flow
 
@@ -50,19 +44,14 @@ make kind-up                  # Start local Kind cluster
 make kind-rebuild              # Rebuild images + redeploy to running cluster
 make kind-login                # Set kubectl context + configure acpctl
 make dev-bootstrap             # Bootstrap developer workspace
-make test-e2e-local           # Run E2E tests against Kind
 make benchmark                # Run component benchmark harness
 ```
 
 ### Per-Component
 
 ```shell
-# Backend / Operator (Go)
-cd components/backend && gofmt -l . && go vet ./... && golangci-lint run
+# Operator (Go)
 cd components/operator && gofmt -l . && go vet ./... && golangci-lint run
-
-# Frontend
-cd components/frontend && npm run build  # Must pass with 0 errors, 0 warnings
 
 # Runner (Python)
 cd components/runners/ambient-runner && uv venv && uv pip install -e .
@@ -81,12 +70,11 @@ make benchmark
 make benchmark FORMAT=tsv
 
 # Single component
-make benchmark COMPONENT=frontend MODE=cold
+make benchmark COMPONENT=operator MODE=cold
 ```
 
 Benchmark notes:
 
-- `frontend` requires **Node.js 20+**
 - `FORMAT=tsv` is preferred for agents to minimize token usage
 - `warm` measures rebuild proxies, not browser-observed hot reload latency
 - See `scripts/benchmarks/README.md` for semantics and caveats
@@ -126,8 +114,6 @@ Cross-cutting rules that apply across ALL components. Component-specific convent
 - **Restricted SecurityContext on all containers**: `runAsNonRoot`, drop `ALL` capabilities, `readOnlyRootFilesystem`
 
 Component-specific conventions:
-- Backend: [conventions](specs/standards/backend/conventions.spec.md), [error handling](specs/standards/backend/error-handling.spec.md), [K8s client](specs/standards/backend/k8s-client.spec.md)
-- Frontend: [conventions](specs/standards/frontend/conventions.spec.md), [React Query](specs/standards/frontend/react-query.spec.md)
 - Operator: [conventions](specs/standards/control-plane/conventions.spec.md)
 - Security: [security standards](specs/standards/security/security.spec.md)
 
@@ -135,7 +121,7 @@ Component-specific conventions:
 
 Configured in `.pre-commit-config.yaml`. Install: `make setup-hooks`. Run all: `make lint`.
 
-- Go and ESLint wrappers (`scripts/pre-commit/`) skip gracefully if the toolchain is not installed
+- Go lint wrappers (`scripts/pre-commit/`) skip gracefully if the toolchain is not installed
 - `tsc --noEmit` and `npm run build` are **not** in pre-commit (slow; CI gates on them)
 - Branch/push protection blocks commits and pushes to main/master/production
 
@@ -156,10 +142,7 @@ When both the self-review and the hook pass, apply the `ambient-code:self-review
 
 ## Testing
 
-- **Frontend unit tests**: `cd components/frontend && npx vitest run --coverage`. See `components/frontend/README.md`.
-- **E2E tests**: `cd e2e && npx cypress run --browser chrome`. See `e2e/README.md`.
 - **Runner tests**: `cd components/runners/ambient-runner && python -m pytest tests/`
-- **Backend tests**: `cd components/backend && make test`. See `components/backend/TEST_GUIDE.md`.
 
 ## Convention Authority
 

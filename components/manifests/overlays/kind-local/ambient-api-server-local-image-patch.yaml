@@ -7,9 +7,9 @@ spec:
     spec:
       initContainers:
         - name: migration
-          image: localhost/vteam_api_server:latest
+          image: localhost/acp_api_server:latest
           imagePullPolicy: IfNotPresent
       containers:
         - name: api-server
-          image: localhost/vteam_api_server:latest
+          image: localhost/acp_api_server:latest
           imagePullPolicy: IfNotPresent

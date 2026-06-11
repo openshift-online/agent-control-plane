@@ -210,7 +210,6 @@ oc logs <pod-name> -n ambient-code
 oc get deployment backend-api -n ambient-code -o jsonpath='{.spec.template.spec.imagePullSecrets}'
 
 # Verify image exists
-podman pull quay.io/ambient_code/vteam_backend:latest
 ```
 
 ### Route Not Accessible

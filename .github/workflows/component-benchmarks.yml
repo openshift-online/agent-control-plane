@@ -39,7 +39,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: components/backend/go.mod
+          go-version-file: components/ambient-api-server/go.mod
           cache: false
 
       - name: Set up Node.js
