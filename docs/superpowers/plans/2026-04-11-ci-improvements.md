@@ -42,7 +42,7 @@ With these 4 steps:
         context: components/frontend
         file: components/frontend/Dockerfile
         load: true
-        tags: quay.io/ambient_code/vteam_frontend:e2e-test
+        tags: quay.io/ambient_code/acp_frontend:e2e-test
         cache-from: |
           type=gha,scope=frontend-amd64
           type=gha,scope=e2e-frontend
@@ -51,8 +51,8 @@ With these 4 steps:
     - name: Pull frontend latest (unchanged)
       if: needs.detect-changes.outputs.frontend != 'true'
       run: |
-        docker pull quay.io/ambient_code/vteam_frontend:latest
-        docker tag quay.io/ambient_code/vteam_frontend:latest quay.io/ambient_code/vteam_frontend:e2e-test
+        docker pull quay.io/ambient_code/acp_frontend:latest
+        docker tag quay.io/ambient_code/acp_frontend:latest quay.io/ambient_code/acp_frontend:e2e-test
 
     - name: Build or pull backend image
       if: needs.detect-changes.outputs.backend == 'true'
@@ -61,7 +61,7 @@ With these 4 steps:
         context: components/backend
         file: components/backend/Dockerfile
         load: true
-        tags: quay.io/ambient_code/vteam_backend:e2e-test
+        tags: quay.io/ambient_code/acp_backend:e2e-test
         cache-from: |
           type=gha,scope=backend-amd64
           type=gha,scope=e2e-backend
@@ -70,8 +70,8 @@ With these 4 steps:
     - name: Pull backend latest (unchanged)
       if: needs.detect-changes.outputs.backend != 'true'
       run: |
-        docker pull quay.io/ambient_code/vteam_backend:latest
-        docker tag quay.io/ambient_code/vteam_backend:latest quay.io/ambient_code/vteam_backend:e2e-test
+        docker pull quay.io/ambient_code/acp_backend:latest
+        docker tag quay.io/ambient_code/acp_backend:latest quay.io/ambient_code/acp_backend:e2e-test
 
     - name: Build or pull operator image
       if: needs.detect-changes.outputs.operator == 'true'
@@ -80,7 +80,7 @@ With these 4 steps:
         context: components/operator
         file: components/operator/Dockerfile
         load: true
-        tags: quay.io/ambient_code/vteam_operator:e2e-test
+        tags: quay.io/ambient_code/acp_operator:e2e-test
         cache-from: |
           type=gha,scope=operator-amd64
           type=gha,scope=e2e-operator
@@ -89,8 +89,8 @@ With these 4 steps:
     - name: Pull operator latest (unchanged)
       if: needs.detect-changes.outputs.operator != 'true'
       run: |
-        docker pull quay.io/ambient_code/vteam_operator:latest
-        docker tag quay.io/ambient_code/vteam_operator:latest quay.io/ambient_code/vteam_operator:e2e-test
+        docker pull quay.io/ambient_code/acp_operator:latest
+        docker tag quay.io/ambient_code/acp_operator:latest quay.io/ambient_code/acp_operator:e2e-test
 
     - name: Build or pull ambient-runner image
       if: needs.detect-changes.outputs.claude-runner == 'true'
@@ -99,7 +99,7 @@ With these 4 steps:
         context: components/runners
         file: components/runners/ambient-runner/Dockerfile
         load: true
-        tags: quay.io/ambient_code/vteam_claude_runner:e2e-test
+        tags: quay.io/ambient_code/acp_claude_runner:e2e-test
         cache-from: |
           type=gha,scope=ambient-runner-amd64
           type=gha,scope=e2e-ambient-runner
@@ -108,8 +108,8 @@ With these 4 steps:
     - name: Pull ambient-runner latest (unchanged)
       if: needs.detect-changes.outputs.claude-runner != 'true'
       run: |
-        docker pull quay.io/ambient_code/vteam_claude_runner:latest
-        docker tag quay.io/ambient_code/vteam_claude_runner:latest quay.io/ambient_code/vteam_claude_runner:e2e-test
+        docker pull quay.io/ambient_code/acp_claude_runner:latest
+        docker tag quay.io/ambient_code/acp_claude_runner:latest quay.io/ambient_code/acp_claude_runner:e2e-test
 
     - name: Show built images
       run: docker images | grep e2e-test

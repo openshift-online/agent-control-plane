@@ -50,7 +50,7 @@ For any cluster where you have `oc` access and an existing namespace.
 
 - `oc` logged in with create permissions for deployments, services, routes, secrets, ClusterRoles
 - Existing namespace (e.g. `mturansk`)
-- PR images at `quay.io/ambient_code/vteam_*:pr-<NUMBER>`
+- PR images at `quay.io/ambient_code/acp_*:pr-<NUMBER>`
 
 ### Deploy
 

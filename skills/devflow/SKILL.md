@@ -181,7 +181,7 @@ After merge to `main`, images are built and pushed to `quay.io/ambient_code/`. W
 
 ```bash
 # Check if image exists for a given SHA
-skopeo inspect docker://quay.io/ambient_code/vteam_api_server:<sha-or-tag>
+skopeo inspect docker://quay.io/ambient_code/acp_api_server:<sha-or-tag>
 ```
 
 ### 5b. Update GitOps Repository

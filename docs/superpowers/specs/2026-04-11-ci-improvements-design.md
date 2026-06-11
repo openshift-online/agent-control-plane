@@ -40,7 +40,7 @@ Replace plain `docker build` commands with `docker buildx build` using GHA cache
     context: components/frontend
     file: components/frontend/Dockerfile
     load: true
-    tags: quay.io/ambient_code/vteam_frontend:e2e-test
+    tags: quay.io/ambient_code/acp_frontend:e2e-test
     cache-from: type=gha,scope=e2e-frontend
     cache-to: type=gha,mode=max,scope=e2e-frontend
 ```
