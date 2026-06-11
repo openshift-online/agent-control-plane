@@ -66,7 +66,7 @@ make local-up    # Note: CRC dev-* targets have been replaced with local-* equiv
 
 **Best for:** Rapid iteration on specific components
 
-**What it is:** Run components (frontend, backend, operator) locally on your machine while using Kind for dependencies (CRDs, MinIO).
+**What it is:** Run components locally on your machine while using Kind for dependencies (MinIO, Keycloak).
 
 **Pros:**
 - 🚀 Instant code reloads (no container rebuilds)

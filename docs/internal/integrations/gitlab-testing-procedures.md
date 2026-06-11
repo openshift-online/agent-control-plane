@@ -62,7 +62,7 @@ This guide provides step-by-step instructions for manually testing the GitLab in
 
 ### 3. Ambient Code Platform Environment Setup
 
-1. **Verify Backend Running**:
+1. **Verify API Server Running**:
    ```bash
    kubectl get pods -n vteam-backend
    ```

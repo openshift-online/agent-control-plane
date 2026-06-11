@@ -1,19 +1,19 @@
 # Reference Documentation
 
-This section provides comprehensive reference material for the Ambient Code Platform, including API documentation, Custom Resource specifications, and configuration details.
+This section provides comprehensive reference material for the Ambient Code Platform, including API documentation, API specifications, and configuration details.
 
 ## Quick Reference
 
 ### **[Glossary](glossary.md)** 📖
 Definitions of terms, concepts, and acronyms used throughout the Ambient Code Platform system and documentation.
 
-## Custom Resources
+## Data Model
 
-The platform uses Kubernetes Custom Resource Definitions (CRDs) for declarative automation management.
+The platform uses a PostgreSQL-backed REST API as its data model. The following resource types are managed by the API server.
 
 ### AgenticSession
 
-The primary Custom Resource for AI-powered automation tasks.
+The primary resource for AI-powered automation tasks.
 
 **API Version**: `vteam.ambient-code/v1alpha1`
 **Kind**: `AgenticSession`
@@ -101,7 +101,7 @@ spec:
 
 ### RFEWorkflow
 
-Specialized Custom Resource for Request for Enhancement workflows using a 7-agent council process. This is an advanced feature for structured engineering refinement.
+Specialized resource for Request for Enhancement workflows using a 7-agent council process. This is an advanced feature for structured engineering refinement.
 
 **API Version**: `vteam.ambient-code/v1alpha1`
 **Kind**: `RFEWorkflow`
@@ -155,7 +155,7 @@ Content-Type: application/json
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| GET | `/health` | Backend health check |
+| GET | `/health` | API server health check |
 
 ### Example: Creating an AgenticSession via API
 
@@ -251,7 +251,7 @@ Default limits (configurable via ProjectSettings):
 
 **Major Features:**
 
-- Kubernetes operator-based orchestration with Custom Resources
+- API server with gRPC-driven control plane for Kubernetes orchestration
 - Next.js frontend with Shadcn UI and React Query
 - Multi-repository support for cross-repo analysis
 - Interactive and headless execution modes
@@ -263,7 +263,7 @@ Default limits (configurable via ProjectSettings):
 - API endpoints now use project-scoped pattern: `/api/projects/:project/*`
 - Frontend migrated from @llamaindex/server to Next.js with Shadcn UI
 - Authentication now uses OpenShift OAuth with user bearer tokens
-- Configuration moved from files to Kubernetes Custom Resources (ProjectSettings)
+- Configuration managed via API server (ProjectSettings stored in PostgreSQL)
 
 ## Support
 

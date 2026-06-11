@@ -31,10 +31,10 @@ The entry point where users interact with the platform through a web browser.
 ### Kubernetes Control Plane
 The orchestration layer consisting of:
 
-**Kubernetes API**: Manages Custom Resources, Jobs, and RBAC enforcement
+**Kubernetes API**: Manages Jobs, Namespaces, and RBAC enforcement
 
-**Agentic Operator**: A Go-based Kubernetes controller that:
-- Watches for new `AgenticSession` Custom Resources
+**Control Plane**: A Go service that watches the API server via gRPC and:
+- Receives session events via gRPC watch streams
 - Creates corresponding Kubernetes Jobs
 - Monitors execution status
 - Handles timeout enforcement
@@ -55,7 +55,7 @@ Where AI tasks actually run:
 - Streams results back to Kubernetes
 
 ### Storage & Configuration
-**ProjectSettings**: Custom Resource storing project-specific configuration like API keys, model preferences, and timeout settings
+**ProjectSettings**: API server resource storing project-specific configuration like API keys, model preferences, and timeout settings
 
 **Results Storage**: Persistent storage for:
 - Execution artifacts
@@ -66,22 +66,22 @@ Where AI tasks actually run:
 
 1. **User Request**: User submits session via frontend
 2. **API Processing**: Frontend sends REST request to backend API
-3. **CR Creation**: Backend validates and creates `AgenticSession` CR in Kubernetes
-4. **Job Creation**: Operator detects CR and creates Kubernetes Job
+3. **CR Creation**: API server validates and persists session to PostgreSQL
+4. **Job Creation**: Control plane receives gRPC event and creates Kubernetes Job
 5. **Execution**: Pod spawns with Claude Code Runner
 6. **Task Execution**: Runner executes prompt using Claude Code CLI and MCP
-7. **Results**: Output stored and CR status updated
-8. **Cleanup**: Operator cleans up Job and Pod
-9. **Frontend Update**: Backend notifies frontend of completion
+7. **Results**: Output streamed back to API server
+8. **Cleanup**: Control plane cleans up Job and Pod
+9. **Frontend Update**: UI polls API server for completion
 10. **User Display**: Frontend displays results to user
 
 ## Key Design Principles
 
-- **Kubernetes-Native**: Leverages Kubernetes Custom Resources and operators for orchestration
+- **Kubernetes-Native**: API server is source of truth; control plane reconciles via gRPC streams
 - **Multi-Tenancy**: Each project maps to a Kubernetes namespace with RBAC isolation
 - **Async Processing**: Sessions execute asynchronously via Jobs, avoiding HTTP timeout issues
 - **Real-Time Updates**: WebSocket support provides live status updates without polling
-- **Declarative**: Custom Resources define desired state; operators ensure actual state matches
+- **Declarative**: PostgreSQL stores desired state; control plane ensures K8s matches
 
 ## When to Reference This Diagram
 

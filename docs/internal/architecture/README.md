@@ -2,21 +2,15 @@
 
 Technical architecture documentation for the Ambient Code Platform.
 
-## 📐 Overview
+## Overview
 
-The Ambient Code Platform follows a Kubernetes-native microservices architecture with Custom Resources, Operators, and Job-based execution.
+The platform uses a PostgreSQL-backed API server as the source of truth, with a Kubernetes control plane that watches via gRPC streams and reconciles sessions into Jobs.
 
 ```
-User → Frontend → Backend API → K8s Operator → Runner Jobs → Claude Code CLI
+User → UI → API Server (PostgreSQL) → Control Plane (gRPC watch) → Kubernetes Jobs → Runner Pods
 ```
 
-## 🗂️ Architecture Documentation
-
-### System Design
-- **System Context** - High-level system boundaries and external integrations
-- **Component Architecture** - Individual component designs
-- **Data Flow** - How data moves through the system
-- **Security Architecture** - Authentication, authorization, and security patterns
+## Architecture Documentation
 
 ### Diagrams
 **[Architecture Diagrams](diagrams/)** - Visual system representations
@@ -28,12 +22,38 @@ User → Frontend → Backend API → K8s Operator → Runner Jobs → Claude Co
 
 ### Key Components
 
-#### Frontend (Next.js + Shadcn UI)
+#### API Server (Go + rh-trex-ai)
+**Purpose:** REST + gRPC microservice, source of truth for all platform data
+
+**Key Features:**
+- PostgreSQL-backed session, project, and settings storage
+- gRPC watch streams consumed by the control plane
+- User token-based authentication via OIDC/Keycloak
+- OpenAPI-generated SDK clients (Go, Python, TypeScript)
+
+**Documentation:** [components/ambient-api-server/README.md](../../components/ambient-api-server/README.md)
+
+---
+
+#### Control Plane (Go)
+**Purpose:** Watches the API server via gRPC and reconciles sessions into Kubernetes resources
+
+**Key Features:**
+- gRPC stream-based watch (not CRD-based — no controller-runtime)
+- Creates Jobs, Secrets, and namespaces for sessions
+- Pod status syncing back to the API server
+- Namespace provisioning (standard K8s and MPP modes)
+
+**Documentation:** [components/ambient-control-plane/](../../components/ambient-control-plane/)
+
+---
+
+#### UI (NextJS + Shadcn)
 **Purpose:** Web interface for session management and monitoring
 
 **Key Features:**
 - Project and session CRUD operations
-- Real-time WebSocket updates
+- Real-time status updates
 - Repository browsing
 - Multi-agent chat interface
 
@@ -41,161 +61,102 @@ User → Frontend → Backend API → K8s Operator → Runner Jobs → Claude Co
 
 ---
 
-#### Backend API (Go + Gin)
-**Purpose:** REST API managing Kubernetes Custom Resources
+#### Runner (Python)
+**Purpose:** Job pod executing AI agents
 
 **Key Features:**
-- Project-scoped endpoints with multi-tenant isolation
-- User token-based authentication
-- Git operations (clone, fork, PR creation)
-- WebSocket support for real-time updates
-
-**Documentation:** [components/ambient-api-server/README.md](../../components/ambient-api-server/README.md)
-
----
-
-#### Agentic Operator (Go)
-**Purpose:** Kubernetes controller watching Custom Resources
-
-**Key Features:**
-- Watches AgenticSession CRs and creates Jobs
-- Monitors Job execution and updates CR status
-- Handles timeouts and cleanup
-- Manages runner pod lifecycle
-
-**Documentation:** [components/ambient-control-plane/](../../components/ambient-control-plane/)
-
----
-
-#### Claude Code Runner (Python)
-**Purpose:** Job pod executing Claude Code CLI
-
-**Key Features:**
-- Claude Code SDK integration
-- Multi-agent collaboration
+- Polymorphic bridge architecture (Claude Agent SDK, Gemini CLI, LangGraph)
+- AG-UI event protocol streaming
 - Workspace synchronization via PVC
-- Anthropic API streaming
+- MCP tool integration via credential sidecars
 
-**Documentation:** [components/runners/claude-code-runner/README.md](../../components/runners/claude-code-runner/README.md)
+**Documentation:** [components/runners/ambient-runner/README.md](../../components/runners/ambient-runner/README.md)
 
 ---
 
-## 🎯 Core Concepts
+#### MCP Server (Go)
+**Purpose:** MCP tool definitions for AI agent integration
 
-### Custom Resource Definitions (CRDs)
+**Documentation:** [components/ambient-mcp/](../../components/ambient-mcp/)
 
-**AgenticSession** - Represents an AI execution session
-- Spec: prompt, repos, interactive mode, timeout, model
-- Status: phase, startTime, completionTime, results
+---
 
-**ProjectSettings** - Project-scoped configuration
-- API keys, default models, timeout settings
-- Namespace-isolated for multi-tenancy
-
-**RFEWorkflow** - Request For Enhancement workflows
-- 7-step agent council process
-- Multi-agent collaboration
-
-### Multi-Tenancy
+## Multi-Tenancy
 
 - Each **project** maps to a Kubernetes **namespace**
 - RBAC enforces namespace-scoped access
-- User tokens determine permissions
+- User tokens determine permissions via OIDC/Keycloak
 - No cross-project data access
 
-### Authentication & Authorization
+## Authentication & Authorization
 
-- **Authentication:** OpenShift OAuth (production) or test tokens (dev)
-- **Authorization:** User tokens with namespace-scoped RBAC
-- **Backend Pattern:** Always use user-scoped K8s clients for operations
-- **Security:** Token redaction, no service account fallback
+- **Authentication:** OIDC via Keycloak (production) or test tokens (dev)
+- **Authorization:** Namespace-scoped RBAC
+- **Security:** Token redaction, credential sidecars for provider secrets
 
 See [ADR-0002: User Token Authentication](../adr/0002-user-token-authentication.md)
 
-## 📋 Architectural Decision Records
+## Architectural Decision Records
 
 **[ADR Directory](../adr/)** - Why we made key technical decisions
 
 | ADR | Title | Status |
 |-----|-------|--------|
-| [0001](../adr/0001-kubernetes-native-architecture.md) | Kubernetes-Native Architecture | Accepted |
+| [0001](../adr/0001-kubernetes-native-architecture.md) | Kubernetes-Native Architecture | Accepted (v2 supersedes CRD data model) |
 | [0002](../adr/0002-user-token-authentication.md) | User Token Authentication | Accepted |
 | [0003](../adr/0003-multi-repo-support.md) | Multi-Repo Support | Accepted |
 | [0004](../adr/0004-go-backend-python-runner.md) | Go Backend + Python Runner | Accepted |
 | [0005](../adr/0005-nextjs-shadcn-react-query.md) | Next.js + Shadcn + React Query | Accepted |
+| [0009](../adr/0009-rest-api-postgresql-trex-foundation.md) | REST API + PostgreSQL (rh-trex-ai) | Accepted |
 
-**Format:** We follow the [ADR template](../adr/template.md) for all architectural decisions.
+## Request Flow
 
-## 🔄 Request Flow
+### Creating a Session
 
-### Creating an Agentic Session
-
-1. **User** submits session via web UI
-2. **Frontend** sends POST to `/api/projects/:project/agentic-sessions`
-3. **Backend** validates user token and creates `AgenticSession` CR
-4. **Operator** watches CR, creates Kubernetes Job
-5. **Job** runs Claude Code runner pod
-6. **Runner** executes Claude Code CLI, streams results
-7. **Operator** monitors Job, updates CR status
-8. **Frontend** displays real-time updates via WebSocket
+1. **User** submits session via UI or CLI
+2. **UI/CLI** sends POST to `/api/ambient/v1/sessions`
+3. **API Server** validates auth, persists session to PostgreSQL
+4. **Control Plane** receives session event via gRPC watch stream
+5. **Control Plane** creates Kubernetes Job with runner pod
+6. **Runner** executes AI agent, streams results back via gRPC
+7. **API Server** persists status updates
+8. **UI** displays real-time updates
 
 ### Data Flow
 
 ```
-User Input → Frontend (Next.js)
+User Input → UI (Next.js) or CLI (acpctl)
     ↓
-Backend API (Go) → User Token Validation → RBAC Check
+API Server (Go + rh-trex-ai) → Auth validation → PostgreSQL
     ↓
-Kubernetes API → AgenticSession CR created
+Control Plane (Go) ← gRPC watch stream ← API Server
     ↓
-Operator (Go) → Watches CR → Creates Job
+Kubernetes → Job created → Runner Pod scheduled
     ↓
-Runner Pod (Python) → Executes Claude Code → Streams events
+Runner Pod (Python) → Executes AI agent → Streams events via gRPC
     ↓
-Operator → Updates CR Status
-    ↓
-Backend → WebSocket → Frontend → User sees results
+API Server → Persists results → UI/CLI polls updates
 ```
 
-## 🔐 Security Architecture
+## Security Architecture
 
 ### Authentication Layers
-1. **OpenShift OAuth** (production) - Cluster-based identity
+1. **OIDC/Keycloak** (production) - Identity provider
 2. **User Tokens** - Bearer tokens for API authentication
-3. **Service Accounts** - Limited to CR writes and token minting
+3. **Service Accounts** - Control plane service identity for K8s operations
 
 ### Authorization Model
 - **Namespace-scoped RBAC** - Users only see their authorized projects
-- **User-scoped K8s clients** - All API operations use user credentials
-- **No privilege escalation** - Backend never falls back to service account
+- **API Server auth** - All operations validated against OIDC tokens
+- **Credential sidecars** - Provider secrets injected per-session, not stored in pods
 
-See [Security Standards](../../CLAUDE.md#security-patterns)
+## Testing Architecture
 
-## 🧪 Testing Architecture
+- **Unit Tests** - Component logic testing (Go, Python, TypeScript)
+- **E2E Tests** - Full stack testing with Kind cluster
+- **Runner Tests** - Python pytest suite with coverage
 
-- **Unit Tests** - Component logic testing (Go, TypeScript)
-- **Contract Tests** - API contract validation (Go)
-- **Integration Tests** - End-to-end with real K8s (Go)
-- **E2E Tests** - User journey testing with Cypress (Kind cluster)
-
-See [Testing Documentation](testing/)
-
-## 📚 Additional Resources
+## Additional Resources
 
 - **[Design Documents](../design/)** - Feature design proposals
 - **[Proposals](../proposals/)** - Technical proposals
-
-## 🤝 Contributing to Architecture
-
-When proposing architectural changes:
-
-1. **Check existing ADRs** - Understand current decisions
-2. **Draft ADR** - Use [template](adr/template.md)
-3. **Discuss** - GitHub Discussions or issue
-4. **Review** - Get feedback from maintainers
-5. **Implement** - Code + tests + documentation
-6. **Update** - Mark ADR as accepted, update relevant docs
-
----
-
-**Questions?** Open a [GitHub Discussion](https://github.com/ambient-code/vTeam/discussions)

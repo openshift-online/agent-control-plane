@@ -21,29 +21,23 @@ The process starts when a user submits a session request:
    - Model choice
    - Timeout configuration
 
-2. **API Validation**: Backend validates:
+2. **API Validation**: API server validates:
    - User authentication token is valid
    - Request format is correct
    - User has access to specified namespace (RBAC)
    - Required resources are available
 
-3. **Custom Resource Creation**: Backend creates an `AgenticSession` CR with:
-   ```yaml
-   spec:
-     prompt: "user's task description"
-     repos: ["repo-url-1", "repo-url-2"]
-     model: "claude-3-5-sonnet-20241022"
-     timeout: 3600
-   ```
+3. **Session Creation**: API server persists session to PostgreSQL with:
+   - prompt, repos, model, timeout, and other configuration
 
 ### Phase 2: Kubernetes Reaction (Steps 4-7)
 **Duration**: 5-30 seconds
 
-Kubernetes orchestrates job creation:
+Control plane orchestrates job creation:
 
-4. **CR Storage**: Kubernetes API stores the Custom Resource
-5. **Operator Detection**: Agentic Operator watches for new CRs
-6. **Job Creation**: Operator creates a Kubernetes Job resource with container image, environment variables, volume mounts, and resource requests
+4. **Event Received**: Control plane receives session event via gRPC watch stream
+5. **Namespace Ready**: Control plane provisions namespace if needed
+6. **Job Creation**: Control plane creates a Kubernetes Job with container image, environment variables, volume mounts, and resource requests
 7. **Job Scheduling**: Kubernetes scheduler assigns the job to an available node
 
 ### Phase 3: Pod Initialization (Steps 8-9)
@@ -77,15 +71,15 @@ User sees results via WebSocket or polling.
 ### Execution Error Path
 If the Claude Code CLI encounters an error:
 1. Error is captured by the runner
-2. CR is updated with error message and stack trace
+2. Session is updated with error message and stack trace
 3. Session phase set to `Failed`
 4. Cleanup proceeds normally
 
 ### Timeout Handling
 If execution exceeds the configured timeout:
-1. Operator monitors elapsed time
-2. When threshold reached, operator forces pod termination
-3. Updates CR with `phase: Timeout`
+1. Control plane monitors elapsed time
+2. When threshold reached, control plane forces pod termination
+3. Updates session status to Timeout`
 4. Resources are freed immediately
 
 ## Typical Execution Times

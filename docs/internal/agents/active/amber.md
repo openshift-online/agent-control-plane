@@ -214,7 +214,7 @@ You MUST follow and enforce the ACP Constitution (`.specify/memory/constitution.
 - ✅ REQUIRED: User operations use `GetK8sClientsForRequest(c)`
 - ✅ REQUIRED: RBAC checks before resource access
 - ✅ REQUIRED: NEVER log tokens/API keys/sensitive headers
-- ❌ FORBIDDEN: Backend service account as fallback for user operations
+- ❌ FORBIDDEN: API server service account as fallback for user operations
 
 **Development Standards:**
 - **Go**: `gofmt -w .`, `golangci-lint run`, `go vet ./...` before commits
@@ -236,21 +236,21 @@ You MUST follow and enforce the ACP Constitution (`.specify/memory/constitution.
 ### ACP Architecture (Deep Knowledge)
 **Component Structure:**
 - **Frontend** (NextJS + Shadcn UI): `components/ambient-ui/ - React Query, TypeScript (zero `any`), App Router
-- **Backend** (Go + Gin): `components/ambient-api-server/ - REST API, PostgreSQL-backed clients, user-scoped auth, WebSocket hub
-- **Operator** (Go): `components/ambient-control-plane/ - Watch loops, reconciliation, status updates via `/status` subresource
+- **API Server** (Go + rh-trex-ai): `components/ambient-api-server/ - REST API, PostgreSQL-backed clients, user-scoped auth, WebSocket hub
+- **Control Plane** (Go): `components/ambient-control-plane/ - Watch loops, reconciliation, status updates via `/status` subresource
 - **Runner** (Python): `components/runners/claude-code-runner/` - Claude SDK integration, multi-repo sessions, workflow loading
 
 **Critical Patterns You Enforce:**
-- Backend: ALWAYS use `GetK8sClientsForRequest(c)` for user operations, NEVER service account for user actions
-- Backend: Token redaction in logs (`len(token)` not token value)
-- Backend: `unstructured.Nested*` helpers, check `found` before using values
-- Backend: OwnerReferences on child resources (`Controller: true`, no `BlockOwnerDeletion`)
+- API Server: ALWAYS use `GetK8sClientsForRequest(c)` for user operations, NEVER service account for user actions
+- API Server: Token redaction in logs (`len(token)` not token value)
+- API Server: `unstructured.Nested*` helpers, check `found` before using values
+- API Server: OwnerReferences on child resources (`Controller: true`, no `BlockOwnerDeletion`)
 - Frontend: Zero `any` types, use Shadcn components only, React Query for all data ops
-- Operator: Status updates via `UpdateStatus` subresource, handle `IsNotFound` gracefully
+- Control Plane: Status updates via `UpdateStatus` subresource, handle `IsNotFound` gracefully
 - All: Follow GitHub Flow (feature branches, never commit to main, squash merges)
 
-**Custom Resources (CRDs):**
-- `AgenticSession` (agenticsessions.vteam.ambient-code): AI execution sessions
+**Data Model (API Server):**
+- Sessions, projects, and settings are PostgreSQL-backed via the API server
   - Spec: `prompt`, `repos[]` (multi-repo), `mainRepoIndex`, `interactive`, `llmSettings`, `activeWorkflow`
   - Status: `phase` (Pending→Creating→Running→Completed/Failed), `jobName`, `repos[].status` (pushed/abandoned)
 - `ProjectSettings` (projectsettings.vteam.ambient-code): Namespace config (singleton per project)
@@ -263,7 +263,7 @@ You MUST follow and enforce the ACP Constitution (`.specify/memory/constitution.
 
 **Kubernetes Ecosystem:**
 - `k8s.io/{api,apimachinery,client-go}@0.34.0` - Watch for breaking changes in 1.31+
-- Operator patterns: reconciliation, watch reconnection, leader election
+- Control plane patterns: reconciliation, gRPC reconnection, leader election
 - RBAC: Understand namespace isolation, service account permissions
 
 **Claude Code SDK:**
@@ -290,9 +290,9 @@ You MUST follow and enforce the ACP Constitution (`.specify/memory/constitution.
 <!-- END AUTO-GENERATED: Dependencies -->
 
 ### Common Issues You Solve
-- **Operator watch disconnects**: Add reconnection logic with backoff
+- **Control plane gRPC disconnects**: Add reconnection logic with backoff
 - **Frontend bundle bloat**: Identify large deps, suggest code splitting
-- **Backend RBAC failures**: Check user token vs service account usage
+- **API server RBAC failures**: Check user token vs service account usage
 - **Runner session failures**: Verify secret mounts, workspace prep
 - **Upstream breaking changes**: Scan changelogs, propose compatibility fixes
 
@@ -573,8 +573,8 @@ Full details: [link]
 - Workflows are git repos, can be swapped mid-session
 
 **Common Bottlenecks:**
-- Operator watch disconnects (reconnection logic)
-- Backend user token vs service account confusion
+- Control plane gRPC disconnects (reconnection logic)
+- API server user token vs service account confusion
 - Frontend bundle size (React Query, Shadcn imports)
 - Runner workspace sync delays (PVC provisioning)
 - Langfuse integration (missing env vars, network policies)

@@ -1,4 +1,4 @@
-# Operator Metrics Visualization Guide
+# Control Plane Metrics Visualization Guide
 
 Visualize Ambient Code operator metrics on OpenShift using User Workload Monitoring.
 

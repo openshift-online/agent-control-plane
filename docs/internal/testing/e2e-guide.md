@@ -54,7 +54,7 @@ Podman:  ports 8080/8443 → http://acp.local:8080
 ```
 e2e/manifests/
 ├── Production manifests (copied as-is):
-│   ├── crds/ (all CRDs)
+│   ├── rbac/ (RBAC manifests)
 │   ├── rbac/ (all RBAC)
 │   ├── backend-deployment.yaml
 │   └── operator-deployment.yaml

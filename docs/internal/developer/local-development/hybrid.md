@@ -8,9 +8,9 @@ Choose which components to run locally based on what you're developing:
 
 | Scenario | Local | In Cluster | Port-Forward | Best For |
 |----------|-------|------------|--------------|----------|
-| **Frontend Only** | Frontend | Backend, Operator, MinIO | Backend → 8090 | UI/UX work |
-| **Frontend + Backend** | Frontend, Backend | Operator, MinIO | None | API development |
-| **Full Stack** | Frontend, Backend, Operator | MinIO only | None | Operator work |
+| **UI Only** | Frontend | API Server, Control Plane, MinIO | Backend → 8090 | UI/UX work |
+| **UI + API Server** | UI, API Server | Control Plane, MinIO | None | API development |
+| **Full Stack** | UI, API Server, Control Plane | MinIO only | None | Control plane work |
 
 **Benefits:**
 - ⚡ Instant reloads (no image build/push)
@@ -19,7 +19,7 @@ Choose which components to run locally based on what you're developing:
 
 ---
 
-## Scenario 1: Frontend Only
+## Scenario 1: UI Only
 
 **Best for:** UI/UX work, React components, styling
 
@@ -54,7 +54,7 @@ npm run dev
 
 - Frontend talks to backend via port-forward tunnel
 - Backend runs in cluster, has full K8s access
-- Operator in cluster handles sessions
+- Control Plane in cluster handles sessions
 
 ### Fast Iteration
 
@@ -64,16 +64,16 @@ npm run dev
 
 ---
 
-## Scenario 2: Frontend + Backend
+## Scenario 2: UI + API Server
 
 **Best for:** Backend API work, handler logic, new endpoints
 
-Run frontend and backend locally, operator stays in cluster.
+Run frontend and backend locally, control plane stays in cluster.
 
 ```
 Frontend (localhost:3000) → Backend (localhost:8090) → K8s API (via KUBECONFIG)
                                                        ↓
-                                          Operator (cluster) watches CRs
+                                          Control plane watches API server via gRPC
 ```
 
 ### Setup
@@ -106,7 +106,7 @@ npm run dev
 
 - **No port-forwarding needed!**
 - Backend uses `KUBECONFIG` to talk directly to K8s API
-- Backend creates/reads CRs, operator in cluster reacts to them
+- API server persists sessions, control plane in cluster reconciles them
 - Frontend talks to local backend
 
 ### Fast Iteration
@@ -120,14 +120,14 @@ npm run dev
 
 ## Scenario 3: Full Local Stack
 
-**Best for:** Operator development, reconciliation logic, full integration testing
+**Best for:** Control Plane development, reconciliation logic, full integration testing
 
 Run everything locally except MinIO and runner jobs.
 
 ```
 Frontend (localhost:3000) → Backend (localhost:8090) → K8s API (via KUBECONFIG)
                                                        ↓
-                                          Operator (localhost) → K8s API (via KUBECONFIG)
+                                          Control Plane (localhost) → K8s API (via KUBECONFIG)
                                                                 ↓
                                                    Creates runner jobs in cluster
 ```
@@ -138,10 +138,10 @@ Frontend (localhost:3000) → Backend (localhost:8090) → K8s API (via KUBECONF
 ```bash
 # Start kind, scale down all components we'll run locally
 make kind-up
-kubectl scale -n ambient-code deployment/backend-api deployment/frontend deployment/agentic-operator --replicas=0
+kubectl scale -n ambient-code deployment/backend-api deployment/frontend deployment/agentic-control plane --replicas=0
 ```
 
-**Terminal 1 - Operator:**
+**Terminal 1 - Control Plane:**
 ```bash
 cd components/ambient-control-plane
 export KUBECONFIG=~/.kube/config
@@ -170,13 +170,13 @@ npm run dev
 
 - **No port-forwarding needed!**
 - All components use `KUBECONFIG` for direct K8s API access
-- Operator watches for CR changes, creates runner jobs in cluster
+- Control plane watches API server, creates runner jobs in cluster
 - MinIO stays in cluster (for session state storage)
 - Runner jobs still run as pods (containerized execution)
 
 ### Fast Iteration
 
-- Edit operator code → restart (~10 seconds)
+- Edit control plane code → restart (~10 seconds)
 - Edit backend code → restart (~5 seconds)
 - Edit frontend code → instant hot reload
 - See all logs in separate terminals
@@ -195,8 +195,8 @@ We've created VS Code tasks for quick access:
 - `Kind: Port-Forward Frontend` - Forward frontend to localhost:3000
 
 **Hybrid Development:**
-- `Hybrid: Frontend Only` - Run frontend + port-forward backend
-- `Hybrid: Frontend + Backend` - Run frontend + backend locally
+- `Hybrid: UI Only` - Run frontend + port-forward backend
+- `Hybrid: UI + API Server` - Run frontend + backend locally
 - `Hybrid: Full Local Stack` - Run all three locally
 
 Access via `Cmd+Shift+P` → "Tasks: Run Task"
@@ -210,7 +210,7 @@ Access via `Cmd+Shift+P` → "Tasks: Run Task"
 **`KUBECONFIG`:**
 - Gives your local Go processes direct access to the Kubernetes API
 - They can create/read CRs, pods, secrets, deployments, etc.
-- This is why backend and operator don't need port-forwarding
+- This is why backend and control plane don't need port-forwarding
 
 **Port-forwarding (`kubectl port-forward`):**
 - Tunnels traffic to a **service** running inside the cluster
@@ -218,8 +218,8 @@ Access via `Cmd+Shift+P` → "Tasks: Run Task"
 - Example: Frontend needs to call backend API running in cluster
 
 **When you need port-forwarding:**
-- ✅ Scenario 1 (Frontend Only) - frontend needs to reach backend service in cluster
-- ❌ Scenario 2 (Frontend + Backend) - backend runs locally, frontend talks to localhost
+- ✅ Scenario 1 (UI Only) - frontend needs to reach backend service in cluster
+- ❌ Scenario 2 (UI + API Server) - backend runs locally, frontend talks to localhost
 - ❌ Scenario 3 (Full Stack) - everything local, no services in cluster to reach
 
 ---
@@ -236,14 +236,14 @@ Access via `Cmd+Shift+P` → "Tasks: Run Task"
 - `KUBECONFIG=~/.kube/config` - Path to kubeconfig (for K8s API access)
 - `PORT=8090` - Server port (avoid 8080 conflict with ingress)
 
-**Operator:**
+**Control Plane:**
 - `KUBECONFIG=~/.kube/config` - Path to kubeconfig
 - `AMBIENT_CODE_RUNNER_IMAGE` - Runner image (e.g., `quay.io/ambient_code/acp_claude_runner:latest`)
 
 ### Debugging
 
 Local processes are much easier to debug:
-- **VS Code Go Debugger**: Set breakpoints in backend/operator code
+- **VS Code Go Debugger**: Set breakpoints in backend/control plane code
 - **Browser DevTools**: Full React component inspection, network tab
 - **Direct logs**: See logs in terminal, no `kubectl logs` needed
 - **Fast iteration**: Change code → see results in seconds
@@ -266,12 +266,12 @@ lsof -i:8090
 curl http://localhost:8090/health
 ```
 
-**Operator not creating jobs:**
+**Control Plane not creating jobs:**
 ```bash
-# Check operator is running and watching
+# Check control plane is running and watching
 # Should see logs about watching AgenticSessions
 
-# Check CRDs exist
+# Check API server is running
 kubectl get crd agenticsessions.vteam.ambient-code
 ```
 
@@ -281,10 +281,10 @@ kubectl get crd agenticsessions.vteam.ambient-code
 
 | Task | Recommended Scenario | Why |
 |------|---------------------|-----|
-| **UI/UX changes** | Frontend Only | Fastest - only need frontend hot reload |
-| **New API endpoint** | Frontend + Backend | Test backend logic with fast restarts |
-| **Handler debugging** | Frontend + Backend | Set breakpoints in backend code |
-| **Operator reconciliation** | Full Stack | See operator logs directly |
+| **UI/UX changes** | UI Only | Fastest - only need frontend hot reload |
+| **New API endpoint** | UI + API Server | Test backend logic with fast restarts |
+| **Handler debugging** | UI + API Server | Set breakpoints in backend code |
+| **Control Plane reconciliation** | Full Stack | See control plane logs directly |
 | **Integration testing** | Full Kind Cluster | Test real container behavior |
 | **E2E testing** | Full Kind Cluster | Run Cypress tests |
 

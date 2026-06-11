@@ -15,7 +15,7 @@ Guides for deploying the Ambient Code Platform to various environments.
 
 ### Observability
 - **[Langfuse Deployment](langfuse.md)** - LLM observability and tracing
-- **[Operator Metrics](../operator-metrics-visualization.md)** - Operator monitoring (if exists)
+- **[Control Plane Metrics](../operator-metrics-visualization.md)** - Control plane monitoring (if exists)
 
 ### Storage
 - **[S3 Storage Configuration](../s3-storage-configuration.md)** - S3-compatible storage setup (if exists)
@@ -111,7 +111,7 @@ make deploy NAMESPACE=my-namespace
 The platform uses namespace-scoped RBAC:
 - Each project maps to a Kubernetes namespace
 - Users need appropriate permissions in namespace
-- Backend uses user tokens (not service account)
+- API server uses user tokens (not service account)
 
 See [ADR-0002: User Token Authentication](../adr/0002-user-token-authentication.md)
 
@@ -126,26 +126,26 @@ See [ADR-0002: User Token Authentication](../adr/0002-user-token-authentication.
 ### Health Checks
 
 ```bash
-# Backend health
+# API server health
 curl https://backend-route/health
 
 # Frontend accessibility
 curl https://frontend-route/
 
-# Operator status
+# Control plane status
 oc get pods -n ambient-code -l app=ambient-control-plane
 ```
 
 ### Logs
 
 ```bash
-# Backend logs
+# API server logs
 oc logs -n ambient-code deployment/backend-api -f
 
 # Frontend logs
 oc logs -n ambient-code deployment/frontend -f
 
-# Operator logs
+# Control plane logs
 oc logs -n ambient-code deployment/agentic-operator -f
 
 # Runner job logs (in project namespaces)
@@ -178,7 +178,7 @@ oc delete namespace ambient-code
 # Uninstall platform
 make clean
 
-# Remove CRDs
+# Remove platform resources
 oc delete crd agenticsessions.vteam.ambient-code
 oc delete crd projectsettings.vteam.ambient-code
 oc delete crd rfeworkflows.vteam.ambient-code
@@ -225,13 +225,13 @@ oc get svc ambient-ui-service -n ambient-code
 oc port-forward svc/ambient-ui-service 3000:3000 -n ambient-code
 ```
 
-### Operator Not Creating Jobs
+### Control Plane Not Creating Jobs
 
 ```bash
 # Check operator logs
 oc logs -n ambient-code deployment/agentic-operator -f
 
-# Check CRDs are installed
+# Check platform is deployed
 oc get crd agenticsessions.vteam.ambient-code
 
 # Verify operator has permissions

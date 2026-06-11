@@ -158,7 +158,7 @@ make build-backend && \
 |-----------|-------------|----------------------|
 | Backend | `make build-backend` | `backend-api` |
 | Frontend | `make build-frontend` | `frontend` |
-| Operator | `make build-operator` | `agentic-operator` |
+| Control Plane | `make build-control-plane` | `acp_control_plane` |
 | Public API | `make build-public-api` | `public-api` |
 | Runner | `make build-runner` | *(none -- picked up by next session)* |
 | State Sync | `make build-state-sync` | *(none -- picked up by next session)* |

@@ -33,7 +33,7 @@ make local-up
 
 ### 3. Access Your Environment
 - **Frontend**: https://vteam-frontend-vteam-dev.apps-crc.testing
-- **Backend**: https://vteam-backend-vteam-dev.apps-crc.testing/health
+- **API Server**: https://ambient-api-server.apps-crc.testing/health
 - **Console**: https://console-openshift-console.apps-crc.testing
 
 ### 4. Verify Everything Works
@@ -62,9 +62,9 @@ make local-clean           # Full cleanup
 
 # Logs
 make local-logs            # All logs
-make local-logs-backend    # Backend only
+make local-logs-api-server    # API server only
 make local-logs-frontend   # Frontend only
-make local-logs-operator   # Operator only
+make local-logs-control-plane   # Control plane only
 
 # Status and troubleshooting
 make local-status          # Show status of local deployment
@@ -134,7 +134,7 @@ The `make local-up` script will automatically use this pull secret.
 
 ### ✅ Testing
 - Automated test suite
-- Operator integration tests
+- Control plane integration tests
 - Full platform validation
 
 ## When to Use CRC

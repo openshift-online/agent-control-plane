@@ -2,7 +2,7 @@
 
 The Ambient Code Platform supports **two independent git authentication methods** that serve different purposes:
 
-1. **GitHub App**: Backend OAuth login + Repository browser in UI
+1. **GitHub App**: API server OAuth login + Repository browser in UI
 2. **Project-level Git Secrets**: Runner git operations (clone, commit, push)
 
 You can use **either one or both** - the system gracefully handles all scenarios.
@@ -30,8 +30,8 @@ oc create secret generic my-runner-secret \
 (Most users will access this from the frontend)
 
 ```yaml
-apiVersion: vteam.ambient-code/v1
-kind: ProjectSettings
+# Configure via API server or acpctl:
+# acpctl project settings update \
 metadata:
   name: my-project
   namespace: your-project-namespace

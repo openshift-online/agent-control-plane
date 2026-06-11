@@ -47,7 +47,7 @@ Welcome to the Ambient Code Platform developer guide! This section covers everyt
 
 ### Code Standards
 - **[Code Standards](../../CLAUDE.md)** - Comprehensive development standards
-  - Backend & Operator standards (Go)
+  - API Server & Control Plane standards (Go)
   - Frontend standards (TypeScript/React)
   - Security patterns
   - Error handling
@@ -56,7 +56,7 @@ Welcome to the Ambient Code Platform developer guide! This section covers everyt
 Each component has detailed development documentation:
 - [Frontend README](../../components/ambient-ui/README.md) - Next.js development
 - [Backend README](../../components/ambient-api-server/README.md) - Go API server development
-- [Operator README](../../components/ambient-control-plane/) - Controller development
+- [Control Plane](../../components/ambient-control-plane/) - Controller development
 - [Runner README](../../components/runners/claude-code-runner/README.md) - Python runner
 
 ### Testing
@@ -73,8 +73,8 @@ Each component has detailed development documentation:
 - [System diagrams](../architecture/diagrams/)
 
 **Key Concepts:**
-- Custom Resource Definitions (AgenticSession, ProjectSettings, RFEWorkflow)
-- Operator reconciliation patterns
+- API resources (sessions, projects, settings) backed by PostgreSQL
+- Control plane reconciliation patterns
 - Multi-tenant namespace isolation
 - User token authentication
 

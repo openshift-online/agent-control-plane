@@ -18,8 +18,8 @@ Track Claude API usage, costs, and performance:
 
 ---
 
-### Operator Metrics - Platform Monitoring
-**[Operator Metrics Guide](operator-metrics-visualization.md)**
+### Control Plane Metrics - Platform Monitoring
+**[Control Plane Metrics Guide](operator-metrics-visualization.md)**
 
 Visualize operator metrics using OpenShift User Workload Monitoring:
 - Session startup duration
@@ -48,7 +48,7 @@ Visualize operator metrics using OpenShift User Workload Monitoring:
 ./e2e/scripts/deploy-langfuse.sh --openshift
 ```
 
-### Deploy Operator Metrics
+### Deploy Control Plane Metrics
 
 ```bash
 make deploy-observability
@@ -108,7 +108,7 @@ kubectl get secret ambient-admin-langfuse-secret -n ambient-code
 kubectl logs <session-pod> -n <namespace> | grep -i langfuse
 ```
 
-### Operator Metrics Not Showing
+### Control Plane Metrics Not Showing
 
 ```bash
 # Check User Workload Monitoring enabled

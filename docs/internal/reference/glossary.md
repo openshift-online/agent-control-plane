@@ -13,8 +13,8 @@ A specialized AI character with defined role, expertise, seniority level, and an
 ### **Conversational RFE Creation**
 The process of creating Requirements for Enhancement using natural language chat with AI, as opposed to filling out traditional forms.
 
-### **Kubernetes Operator**
-Custom controller that extends Kubernetes functionality by watching Custom Resources and reconciling them to desired state. The Ambient Code Platform uses an operator to manage agentic sessions.
+### **Control Plane**
+Go service that watches the API server via gRPC streams and reconciles sessions into Kubernetes Jobs. Unlike a traditional Kubernetes operator, it does not use controller-runtime or watch CRDs.
 
 ### **Multi-Agent Workflow**
 The coordinated process where multiple AI agents sequentially analyze an RFE, each contributing specialized expertise to create comprehensive requirements.

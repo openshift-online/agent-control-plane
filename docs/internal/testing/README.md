@@ -70,12 +70,12 @@ npm run build  # Must pass with 0 errors, 0 warnings
 
 ---
 
-### Operator Tests (Go)
+### Control Plane Tests (Go)
 **Location:** `components/ambient-control-plane/`
 
 **Test Types:**
 - Controller reconciliation tests
-- CRD validation tests
+- API schema validation tests
 - Watch loop tests
 
 **Quick Start:**
@@ -84,7 +84,7 @@ cd components/ambient-control-plane
 go test ./... -v
 ```
 
-**Documentation:** [Operator README](../../components/ambient-control-plane/README.md)
+**Documentation:** [Control Plane](../../components/ambient-control-plane/README.md)
 
 ---
 
@@ -138,7 +138,7 @@ cd components/ambient-api-server && make test
 # Frontend tests
 cd components/ambient-ui && npm test
 
-# Operator tests
+# Control plane tests
 cd components/ambient-control-plane && go test ./...
 
 # Run linters
