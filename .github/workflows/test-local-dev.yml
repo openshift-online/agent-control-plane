@@ -35,7 +35,7 @@ jobs:
     timeout-minutes: 5
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
     - name: Validate production manifest safety
       run: |
@@ -66,15 +66,15 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
     - name: Cleanup Diskspace
       id: cleanup
-      uses: kubeflow/pipelines/.github/actions/github-disk-cleanup@master
+      uses: kubeflow/pipelines/.github/actions/github-disk-cleanup@67a73cf809f7c76fee33c749f302f2bceedd8fab # 2.16.1
       if: (!cancelled())
 
     - name: Cache kubectl and kind
-      uses: actions/cache@v5
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       id: k8s-tools-cache
       with:
         path: |
