@@ -160,6 +160,16 @@ jobs:
           exit 1
         }
 
+    - name: Run RBAC enforcement E2E tests
+      run: |
+        kubectl port-forward -n ambient-code svc/ambient-api-server 13592:8000 &
+        kubectl port-forward -n ambient-code svc/keycloak-service 18592:8080 &
+        sleep 3
+
+        API_URL=http://localhost:13592/api/ambient/v1 \
+        KC_URL=http://localhost:18592 \
+        bash components/ambient-api-server/test/e2e/rbac_e2e_test.sh
+
     - name: Show deployment status
       if: always()
       run: |
