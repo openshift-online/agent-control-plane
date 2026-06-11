@@ -35,10 +35,11 @@ Each component has its own README with build instructions, test commands, and de
 | Component | Technology | README |
 |-----------|------------|--------|
 | Backend | Go + Gin | [components/ambient-api-server/](https://github.com/ambient-code/platform/tree/main/components/ambient-api-server) |
-| Frontend | NextJS + Shadcn | [components/ambient-ui/](https://github.com/ambient-code/platform/tree/main/components/ambient-ui) |
-| Operator | Go + controller-runtime | [components/ambient-control-plane/](https://github.com/ambient-code/platform/tree/main/components/ambient-control-plane) |
+| API Server | Go + rh-trex-ai | [components/ambient-api-server/](https://github.com/ambient-code/platform/tree/main/components/ambient-api-server) |
+| Control Plane | Go | [components/ambient-control-plane/](https://github.com/ambient-code/platform/tree/main/components/ambient-control-plane) |
+| UI | NextJS + Shadcn | [components/ambient-ui/](https://github.com/ambient-code/platform/tree/main/components/ambient-ui) |
 | Runner | Python | [components/runners/ambient-runner/](https://github.com/ambient-code/platform/tree/main/components/runners/ambient-runner) |
-| Public API | Go + Gin | [components/public-api/](https://github.com/ambient-code/platform/tree/main/components/public-api) |
+| MCP Server | Go | [components/ambient-mcp/](https://github.com/ambient-code/platform/tree/main/components/ambient-mcp) |
 
 ---
 

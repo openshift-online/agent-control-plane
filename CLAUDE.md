@@ -38,7 +38,7 @@ Pod Runs Claude CLI → Results Stored in CR → UI Displays Progress
 ```shell
 make build-all                # Build all container images
 make deploy                   # Deploy to cluster
-make test                     # Run tests
+make test-all                 # Run all tests
 make lint                     # Lint code
 make kind-up                  # Start local Kind cluster
 make kind-rebuild              # Rebuild images + redeploy to running cluster

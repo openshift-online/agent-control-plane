@@ -68,4 +68,4 @@ If applicable, add screenshots to help explain your problem.
 <!-- Maintainers will add appropriate labels -->
 - **Priority:** [low/medium/high/critical]
 - **Complexity:** [trivial/easy/medium/hard]
-- **Component:** [frontend/backend/operator/tools/docs]
+- **Component:** [ambient-api-server/ambient-control-plane/ambient-ui/ambient-runner/ambient-mcp/tools/docs]

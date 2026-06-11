@@ -84,12 +84,12 @@ Before contributing, ensure you have:
 1. Fork the repository on GitHub
 2. Clone your fork locally:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/vTeam.git
-   cd vTeam
+   git clone https://github.com/YOUR_USERNAME/agent-control-plane.git
+   cd agent-control-plane
    ```
 3. Add the upstream repository:
    ```bash
-   git remote add upstream https://github.com/ambient-code/vTeam.git
+   git remote add upstream https://github.com/ambient-code/agent-control-plane.git
    ```
 
 ### Install Git Hooks (Recommended)

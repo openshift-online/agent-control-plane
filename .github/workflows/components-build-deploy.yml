@@ -2,7 +2,7 @@ name: Build and Push Component Docker Images
 
 on:
   push:
-    branches: [main, alpha]
+    branches: [main]
     paths:
       - '.github/workflows/components-build-deploy.yml'
       - 'components/manifests/**'
@@ -13,7 +13,7 @@ on:
       - 'components/ambient-ui/**'
       - 'components/credential-sidecars/**'
   pull_request:
-    branches: [main, alpha]
+    branches: [main]
     paths:
       - '.github/workflows/components-build-deploy.yml'
       - 'components/manifests/**'
@@ -105,7 +105,7 @@ jobs:
               FILTERED="$ALL_COMPONENTS"
             fi
           else
-            # Push to main/alpha: build all
+            # Push to main: build all
             FILTERED="$ALL_COMPONENTS"
           fi
 
@@ -265,115 +265,3 @@ jobs:
             ${{ matrix.component.image }}:${{ github.sha }}-amd64 \
             ${{ matrix.component.image }}:${{ github.sha }}-arm64
 
-      - name: Create multi-arch manifest for ${{ matrix.component.name }} (alpha)
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/alpha'
-        run: |
-          docker buildx imagetools create \
-            -t ${{ matrix.component.image }}:alpha \
-            -t ${{ matrix.component.image }}:${{ github.sha }} \
-            ${{ matrix.component.image }}:${{ github.sha }}-amd64 \
-            ${{ matrix.component.image }}:${{ github.sha }}-arm64
-
-      - name: Create multi-arch manifest for ${{ matrix.component.name }} (pull request)
-        if: github.event_name == 'pull_request'
-        run: |
-          docker buildx imagetools create \
-            -t ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }} \
-            ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-amd64 \
-            ${{ matrix.component.image }}:pr-${{ github.event.pull_request.number }}-arm64
-
-  test-local-dev:
-    needs: [build-matrix, build-amd64]
-    if: github.event_name == 'pull_request'
-    uses: ./.github/workflows/test-local-dev.yml
-    with:
-      image-tag: pr-${{ github.event.pull_request.number }}
-      built-images: ${{ needs.build-matrix.outputs.built-images }}
-
-
-
-  deploy-to-openshift:
-    runs-on: ubuntu-latest
-    needs: [merge-manifests]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - name: Install oc
-        uses: redhat-actions/openshift-tools-installer@144527c7d98999f2652264c048c7a9bd103f8a82 # v1.13.1
-        with:
-          oc: latest
-
-      - name: Install kustomize
-        run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-          sudo mv kustomize /usr/local/bin/
-          kustomize version
-
-      - name: Log in to OpenShift Cluster
-        run: |
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }}
-
-      - name: Update kustomization with SHA image tags
-        working-directory: components/manifests/overlays/production
-        run: |
-          kustomize edit set image quay.io/ambient_code/acp_claude_runner:latest=quay.io/ambient_code/acp_claude_runner:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/acp_api_server:latest=quay.io/ambient_code/acp_api_server:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/acp_control_plane:latest=quay.io/ambient_code/acp_control_plane:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/acp_mcp:latest=quay.io/ambient_code/acp_mcp:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/acp_ambient_ui:latest=quay.io/ambient_code/acp_ambient_ui:${{ github.sha }}
-
-      - name: Validate kustomization
-        working-directory: components/manifests/overlays/production
-        run: |
-          kustomize build . > /dev/null
-          echo "✅ Kustomization validation passed"
-
-      - name: Apply production overlay with kustomize
-        working-directory: components/manifests/overlays/production
-        run: |
-          oc apply -k . -n ambient-code
-
-  deploy-with-disptach:
-    runs-on: ubuntu-latest
-    needs: [merge-manifests]
-    if: github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - name: Install oc
-        uses: redhat-actions/openshift-tools-installer@144527c7d98999f2652264c048c7a9bd103f8a82 # v1.13.1
-        with:
-          oc: latest
-
-      - name: Install kustomize
-        run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-          sudo mv kustomize /usr/local/bin/
-          kustomize version
-
-      - name: Log in to OpenShift Cluster
-        run: |
-          oc login ${{ secrets.OPENSHIFT_SERVER }} --token=${{ secrets.OPENSHIFT_TOKEN }}
-
-      - name: Update kustomization with SHA image tags
-        working-directory: components/manifests/overlays/production
-        run: |
-          kustomize edit set image quay.io/ambient_code/acp_claude_runner:latest=quay.io/ambient_code/acp_claude_runner:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/acp_api_server:latest=quay.io/ambient_code/acp_api_server:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/acp_control_plane:latest=quay.io/ambient_code/acp_control_plane:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/acp_mcp:latest=quay.io/ambient_code/acp_mcp:${{ github.sha }}
-          kustomize edit set image quay.io/ambient_code/acp_ambient_ui:latest=quay.io/ambient_code/acp_ambient_ui:${{ github.sha }}
-
-      - name: Validate kustomization
-        working-directory: components/manifests/overlays/production
-        run: |
-          kustomize build . > /dev/null
-          echo "✅ Kustomization validation passed"
-
-      - name: Apply production overlay with kustomize
-        working-directory: components/manifests/overlays/production
-        run: |
-          oc apply -k . -n ambient-code

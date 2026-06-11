@@ -4,13 +4,13 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: frontend
+  name: ambient-ui
 spec:
   template:
     spec:
       containers:
       # Frontend container - increased limits to prevent OOMKills
-      - name: frontend
+      - name: ambient-ui
         resources:
           requests:
             memory: 512Mi

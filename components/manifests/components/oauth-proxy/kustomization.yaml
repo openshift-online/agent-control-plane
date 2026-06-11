@@ -5,7 +5,7 @@ patches:
 - path: frontend-oauth-deployment-patch.yaml
   target:
     kind: Deployment
-    name: frontend
+    name: ambient-ui
 - path: frontend-oauth-service-patch.yaml
   target:
     kind: Service

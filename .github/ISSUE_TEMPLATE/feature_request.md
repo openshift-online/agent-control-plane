@@ -78,5 +78,5 @@ How will we measure the success of this feature?
 <!-- Maintainers will add appropriate labels -->
 - **Priority:** [low/medium/high]
 - **Effort:** [S/M/L/XL]
-- **Component:** [frontend/backend/operator/tools/docs]
+- **Component:** [ambient-api-server/ambient-control-plane/ambient-ui/ambient-runner/ambient-mcp/tools/docs]
 - **Type:** [new-feature/enhancement/improvement]

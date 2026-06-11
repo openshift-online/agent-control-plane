@@ -114,10 +114,10 @@ type Repo struct {
 
 ## Component Changes
 
-### New: `components/public-api/`
+### New: `components/ambient-api-server/`
 
 ```
-components/public-api/
+components/ambient-api-server/
 ├── main.go              # Entry point, server setup
 ├── handlers/
 │   ├── sessions.go      # /v1/sessions handlers
@@ -149,7 +149,7 @@ components/public-api/
 
 ### Phase 1: Public API Service
 
-1. Create `components/public-api/` structure
+1. Create `components/ambient-api-server/` structure
 2. Implement `/v1/sessions` endpoints with backend proxy
 3. Add auth middleware (token validation, project extraction)
 4. Add Dockerfile and deployment manifests

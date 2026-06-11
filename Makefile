@@ -741,7 +741,7 @@ dev: ## Local dev: preflight, cluster, dev-env, port-forwards; COMPONENT=ambient
 		echo ""; echo "$(COLOR_GREEN)✓$(COLOR_RESET) Stopped port-forward(s)."; \
 	}; \
 	trap cleanup INT TERM; \
-	pkill -f "port-forward.*ambient-api-server-service" 2>/dev/null || true; \
+	pkill -f "port-forward.*ambient-api-server" 2>/dev/null || true; \
 	pkill -f "port-forward.*keycloak-service" 2>/dev/null || true; \
 	WANT_KC="http://localhost:$(KIND_FWD_KEYCLOAK_PORT)"; \
 	CUR_KC=$$(kubectl get deployment keycloak -n $(NAMESPACE) -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="KC_HOSTNAME")].value}' 2>/dev/null); \
@@ -753,7 +753,7 @@ dev: ## Local dev: preflight, cluster, dev-env, port-forwards; COMPONENT=ambient
 	else \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Keycloak hostname already correct"; \
 	fi; \
-	kubectl port-forward -n $(NAMESPACE) svc/ambient-api-server-service $(KIND_FWD_API_SERVER_PORT):8000 >/tmp/acp-dev-pf-api.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
+	kubectl port-forward.*ambient-api-server $(KIND_FWD_API_SERVER_PORT):8000 >/tmp/acp-dev-pf-api.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
 	kubectl port-forward -n $(NAMESPACE) svc/keycloak-service $(KIND_FWD_KEYCLOAK_PORT):8080 >/tmp/acp-dev-pf-keycloak.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
 	sleep 2; \
 	echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server  → http://localhost:$(KIND_FWD_API_SERVER_PORT)"; \
@@ -878,9 +878,9 @@ kind-login: check-kubectl check-local-context ## Set kubectl context, port-forwa
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) kubeconfig set to kind-$(KIND_CLUSTER_NAME)"
 	@echo ""
 	@echo "Starting port-forwards..."
-	@pkill -f "port-forward.*ambient-api-server-service" 2>/dev/null || true
+	@pkill -f "port-forward.*ambient-api-server" 2>/dev/null || true
 	@pkill -f "port-forward.*ambient-ui-service" 2>/dev/null || true
-	@kubectl port-forward -n $(NAMESPACE) svc/ambient-api-server-service $(KIND_FWD_API_SERVER_PORT):8000 >/tmp/pf-api-server.log 2>&1 & \
+	@kubectl port-forward.*ambient-api-server $(KIND_FWD_API_SERVER_PORT):8000 >/tmp/pf-api-server.log 2>&1 & \
 		sleep 1; \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) ambient-api-server → http://localhost:$(KIND_FWD_API_SERVER_PORT)"
 	@kubectl port-forward -n $(NAMESPACE) svc/ambient-ui-service $(KIND_FWD_FRONTEND_PORT):3000 >/tmp/pf-ui.log 2>&1 & \
@@ -1027,7 +1027,7 @@ kind-sso-toggle: check-kubectl ## Toggle SSO auth on/off in Kind (affects both f
 	CURRENT=$$(kubectl get deployment frontend -n $(NAMESPACE) -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="SSO_ENABLED")].value}' 2>/dev/null); \
 	if [ "$$CURRENT" = "true" ]; then \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Disabling SSO auth (switching to legacy mode)..."; \
-		kubectl set env deployment/frontend -n $(NAMESPACE) SSO_ENABLED=false NEXT_PUBLIC_SSO_ENABLED=false; \
+		kubectl set env deployment/ambient-ui -n $(NAMESPACE) SSO_ENABLED=false NEXT_PUBLIC_SSO_ENABLED=false; \
 		kubectl port-forward -n $(NAMESPACE) svc/unleash 4242:4242 >/dev/null 2>&1 & PF=$$!; sleep 2; \
 		curl -sf -X POST "http://localhost:4242/api/admin/projects/default/features/sso-authentication/environments/development/off" \
 			-H "Authorization: $$UNLEASH_ADMIN_TOKEN" >/dev/null 2>&1 || true; \
@@ -1036,7 +1036,7 @@ kind-sso-toggle: check-kubectl ## Toggle SSO auth on/off in Kind (affects both f
 	else \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Enabling SSO auth (switching to Keycloak OIDC)..."; \
 		SSO_HOST="http://localhost:$(KIND_FWD_FRONTEND_PORT)"; \
-		kubectl set env deployment/frontend -n $(NAMESPACE) \
+		kubectl set env deployment/ambient-ui -n $(NAMESPACE) \
 			SSO_ENABLED=true NEXT_PUBLIC_SSO_ENABLED=true \
 			SSO_REDIRECT_URI="$$SSO_HOST/api/auth/sso/callback" \
 			SSO_PUBLIC_ISSUER_URL="$$SSO_HOST/sso/realms/ambient-code"; \
@@ -1052,7 +1052,7 @@ kind-sso-toggle: check-kubectl ## Toggle SSO auth on/off in Kind (affects both f
 	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for rollouts..."
 	@kubectl rollout status deployment/keycloak -n $(NAMESPACE) --timeout=120s >/dev/null 2>&1 || true
-	@kubectl rollout status deployment/frontend -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1
+	@kubectl rollout status deployment/ambient-ui -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1
 	@# Restart backend after Keycloak is ready (OIDC discovery needs Keycloak)
 	@kubectl rollout restart deployment/ambient-api-server -n $(NAMESPACE) >/dev/null 2>&1 || true
 	@kubectl rollout status deployment/ambient-api-server -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1 || true
