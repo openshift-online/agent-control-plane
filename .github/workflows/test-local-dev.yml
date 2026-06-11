@@ -127,7 +127,7 @@ jobs:
         for image in "${ALL_IMAGES[@]}"; do
           if echo "$BUILT" | jq -e --arg img "$image" 'index($img)' > /dev/null 2>&1; then
             echo "  ${image} → ${IMAGE_TAG} (built in this PR)"
-            kustomize edit set image "${image}:latest=${image}:${IMAGE_TAG}"
+            kustomize edit set image "${image}:latest=${image}:${IMAGE_TAG}-amd64"
           else
             echo "  ${image} → latest (unchanged)"
           fi
