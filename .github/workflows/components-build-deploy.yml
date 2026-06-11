@@ -110,13 +110,6 @@ jobs:
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
 
-      - name: Log in to Red Hat Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: registry.redhat.io
-          username: ${{ secrets.REDHAT_USERNAME }}
-          password: ${{ secrets.REDHAT_PASSWORD }}
-
       - name: Build and push ${{ matrix.component.name }} (${{ matrix.arch.suffix }})
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v7
