@@ -20,28 +20,28 @@ Add Gerrit as a native integration following the established Jira/CodeRabbit pat
 ### Files to Create
 
 ```text
-components/backend/handlers/gerrit_auth.go              # Handlers: Connect, Status, Disconnect, List
-components/backend/handlers/gerrit_auth_test.go          # Ginkgo v2 test suite
-components/frontend/src/components/gerrit-connection-card.tsx
-components/frontend/src/services/api/gerrit-auth.ts
-components/frontend/src/services/queries/use-gerrit.ts
-components/frontend/src/app/api/auth/gerrit/connect/route.ts
-components/frontend/src/app/api/auth/gerrit/test/route.ts
-components/frontend/src/app/api/auth/gerrit/instances/route.ts
-components/frontend/src/app/api/auth/gerrit/[instanceName]/status/route.ts
-components/frontend/src/app/api/auth/gerrit/[instanceName]/disconnect/route.ts
+components/ambient-api-server/pkg/gerrit_auth.go              # Handlers: Connect, Status, Disconnect, List
+components/ambient-api-server/pkg/gerrit_auth_test.go          # Ginkgo v2 test suite
+components/ambient-ui/src/components/gerrit-connection-card.tsx
+components/ambient-ui/src/services/api/gerrit-auth.ts
+components/ambient-ui/src/services/queries/use-gerrit.ts
+components/ambient-ui/src/app/api/auth/gerrit/connect/route.ts
+components/ambient-ui/src/app/api/auth/gerrit/test/route.ts
+components/ambient-ui/src/app/api/auth/gerrit/instances/route.ts
+components/ambient-ui/src/app/api/auth/gerrit/[instanceName]/status/route.ts
+components/ambient-ui/src/app/api/auth/gerrit/[instanceName]/disconnect/route.ts
 docs/gerrit-integration.md
 ```
 
 ### Files to Modify
 
 ```text
-components/backend/handlers/integration_validation.go    # Add ValidateGerritToken, parseGitcookies, TestGerritConnection
-components/backend/handlers/integrations_status.go       # Add getGerritStatusForUser to GetIntegrationsStatus
-components/backend/handlers/runtime_credentials.go       # Add GetGerritCredentialsForSession
-components/backend/routes.go                             # Register Gerrit routes
-components/frontend/src/app/integrations/IntegrationsClient.tsx  # Add GerritConnectionCard
-components/frontend/src/services/api/integrations.ts     # Add gerrit to IntegrationsStatus type
+components/ambient-api-server/pkg/integration_validation.go    # Add ValidateGerritToken, parseGitcookies, TestGerritConnection
+components/ambient-api-server/pkg/integrations_status.go       # Add getGerritStatusForUser to GetIntegrationsStatus
+components/ambient-api-server/pkg/runtime_credentials.go       # Add GetGerritCredentialsForSession
+components/ambient-api-server/pkg/api/                             # Register Gerrit routes
+components/ambient-ui/src/app/integrations/IntegrationsClient.tsx  # Add GerritConnectionCard
+components/ambient-ui/src/services/api/integrations.ts     # Add gerrit to IntegrationsStatus type
 components/runners/ambient-runner/ambient_runner/platform/auth.py        # Add fetch_gerrit_credentials
 components/runners/ambient-runner/ambient_runner/platform/__init__.py    # Export fetch_gerrit_credentials
 components/runners/ambient-runner/ambient_runner/bridges/claude/mcp.py   # Add generate_gerrit_config
@@ -138,8 +138,8 @@ components/manifests/base/core/flags.json                # Add gerrit.enabled fe
 ## Verification
 
 ```bash
-cd components/backend && make test                    # Backend tests pass
-cd components/frontend && npm run build               # Zero errors, zero warnings
+cd components/ambient-api-server && make test                    # Backend tests pass
+cd components/ambient-ui && npm run build               # Zero errors, zero warnings
 cd components/runners/ambient-runner && python -m pytest tests/  # Runner tests pass
 make lint                                             # Pre-commit hooks pass
 ```

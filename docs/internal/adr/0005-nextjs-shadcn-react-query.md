@@ -112,10 +112,10 @@ Chosen option: "Next.js 14 + Shadcn UI + React Query", because:
 - TypeScript: 5.x
 
 **Key Files:**
-- `components/frontend/DESIGN_GUIDELINES.md` - Comprehensive patterns
-- `components/frontend/src/components/ui/` - Shadcn components
-- `components/frontend/src/services/queries/` - React Query hooks
-- `components/frontend/src/app/` - Next.js pages
+- `components/ambient-ui/ - UI component patterns
+- `components/ambient-ui/src/components/ui/ - Shadcn components
+- `components/ambient-ui/src/services/queries/ - React Query hooks
+- `components/ambient-ui/src/app/ - Next.js pages
 
 ## Validation
 
@@ -145,4 +145,4 @@ Chosen option: "Next.js 14 + Shadcn UI + React Query", because:
 - [Next.js 14 Documentation](https://nextjs.org/docs)
 - [Shadcn UI](https://ui.shadcn.com/)
 - [TanStack React Query](https://tanstack.com/query/latest)
-- Frontend Guidelines: `components/frontend/DESIGN_GUIDELINES.md`
+- UI source: `components/ambient-ui/`

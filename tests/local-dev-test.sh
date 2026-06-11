@@ -292,9 +292,9 @@ test_crds_installed() {
 test_pods_running() {
     log_section "Test 7: Pod Status"
 
-    assert_pod_running "app=backend-api" "Backend pod is running"
+    assert_pod_running "app=ambient-api-server" "Backend pod is running"
     assert_pod_running "app=frontend" "Frontend pod is running"
-    assert_pod_running "app=agentic-operator" "Operator pod is running"
+    assert_pod_running "app=ambient-control-plane" "Operator pod is running"
 
     # Check pod readiness
     local not_ready
@@ -312,7 +312,7 @@ test_pods_running() {
 test_services_exist() {
     log_section "Test 8: Services"
 
-    local services=("backend-service" "frontend-service")
+    local services=("ambient-api-server" "ambient-ui-service")
 
     for svc in "${services[@]}"; do
         if kubectl get svc "$svc" -n "$NAMESPACE" >/dev/null 2>&1; then
@@ -352,7 +352,7 @@ test_backend_health() {
 
     # Check backend health via pod readiness (kubectl wait already validates the
     # readiness probe which hits /health). Verify pod is ready as a proxy.
-    if kubectl get pods -n "$NAMESPACE" -l app=backend-api -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q "True"; then
+    if kubectl get pods -n "$NAMESPACE" -l app=ambient-api-server -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q "True"; then
         log_success "Backend health endpoint responds (pod readiness probe passes)"
         ((PASSED_TESTS++))
     else
@@ -601,7 +601,7 @@ test_security_prod_namespace_rejection() {
 
     # Test 1: Check backend middleware has protection
     local backend_pod
-    backend_pod=$(kubectl get pods -n "$NAMESPACE" -l app=backend-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    backend_pod=$(kubectl get pods -n "$NAMESPACE" -l app=ambient-api-server -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 
     if [ -z "$backend_pod" ]; then
         log_warning "Backend pod not found, skipping namespace rejection test"
@@ -632,7 +632,7 @@ test_security_mock_token_logging() {
     log_info "Verifying backend logs show dev mode activation..."
 
     local backend_pod
-    backend_pod=$(kubectl get pods -n "$NAMESPACE" -l app=backend-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    backend_pod=$(kubectl get pods -n "$NAMESPACE" -l app=ambient-api-server -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 
     if [ -z "$backend_pod" ]; then
         log_warning "Backend pod not found, skipping log test"
@@ -689,7 +689,7 @@ test_security_token_redaction() {
     log_info "Verifying tokens are properly redacted in logs..."
 
     local backend_pod
-    backend_pod=$(kubectl get pods -n "$NAMESPACE" -l app=backend-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    backend_pod=$(kubectl get pods -n "$NAMESPACE" -l app=ambient-api-server -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 
     if [ -z "$backend_pod" ]; then
         log_warning "Backend pod not found, skipping token redaction test"
@@ -862,7 +862,7 @@ test_critical_backend_sa_usage() {
 
     # Get backend pod
     local backend_pod
-    backend_pod=$(kubectl get pods -n "$NAMESPACE" -l app=backend-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    backend_pod=$(kubectl get pods -n "$NAMESPACE" -l app=ambient-api-server -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 
     if [ -z "$backend_pod" ]; then
         log_warning "Backend pod not found, skipping SA usage test"
@@ -899,9 +899,9 @@ test_critical_backend_sa_usage() {
 
     # Validate current security posture: no env-var auth bypass code should exist in backend middleware.
     log_info "Checking backend middleware has no local-dev auth bypass implementation..."
-    if [ -f "components/backend/handlers/middleware.go" ]; then
+    if [ -f "components/ambient-api-server/handlers/middleware.go" ]; then
         # Ensure no local-dev auth bypass helpers exist in backend code (including legacy names).
-        if grep -qE "getLocalDevK8sClients\\(|isLocalDevEnvironment\\(" components/backend/handlers/middleware.go; then
+        if grep -qE "getLocalDevK8sClients\\(|isLocalDevEnvironment\\(" components/ambient-api-server/handlers/middleware.go; then
             log_error "Found local-dev auth bypass code in middleware.go (should be removed)"
             ((FAILED_TESTS++))
         else

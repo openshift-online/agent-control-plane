@@ -517,7 +517,7 @@ Limits configured by GitLab administrator (may differ from GitLab.com).
 ### Unit Tests
 
 ```bash
-cd components/backend
+cd components/ambient-api-server
 go test ./handlers/... -run TestGitLab -v
 ```
 

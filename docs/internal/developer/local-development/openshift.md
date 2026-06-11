@@ -49,7 +49,7 @@ REGISTRY_HOST=$(oc get route default-route -n openshift-image-registry \
   --template='{{ .spec.host }}')
 INTERNAL_REG="image-registry.openshift-image-registry.svc:5000/ambient-code"
 
-for img in vteam_frontend vteam_backend vteam_operator vteam_public_api vteam_claude_runner vteam_state_sync vteam_api_server vteam_mcp vteam_control_plane; do
+for img in acp_ambient_ui acp_api_server acp_control_plane acp_api_server acp_claude_runner acp_control_plane acp_api_server acp_mcp acp_control_plane; do
   podman tag localhost/${img}:latest ${REGISTRY_HOST}/ambient-code/${img}:latest
   podman push ${REGISTRY_HOST}/ambient-code/${img}:latest
 done

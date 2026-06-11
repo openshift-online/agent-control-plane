@@ -197,7 +197,7 @@ Update `SSO_REDIRECT_URI`:
 Update:
 ```yaml
 - name: BACKEND_URL
-  value: "http://backend-service.$NAMESPACE.svc:8080"
+  value: "http://ambient-api-server.$NAMESPACE.svc:8000"
 - name: JWK_CERT_URL
   value: "$KEYCLOAK_URL/realms/$KEYCLOAK_REALM/protocol/openid-connect/certs"
 ```

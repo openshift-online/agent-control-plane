@@ -202,7 +202,7 @@ announce "0 · Starting port-forwards"
 
 start_port_forward "REST API"  ambient-api-server "${API_PORT}"      8000
 start_port_forward "gRPC"      ambient-api-server "${GRPC_PORT}"     9000
-start_port_forward "Frontend"  frontend-service   "${FRONTEND_PORT}" 3000
+start_port_forward "Frontend"  ambient-ui-service   "${FRONTEND_PORT}" 3000
 
 sleep 1
 

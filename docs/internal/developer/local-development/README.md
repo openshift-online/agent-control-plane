@@ -173,7 +173,7 @@ make local-up  # Local CRC dev
 Use **Hybrid** to run components locally:
 ```bash
 make kind-up
-cd components/backend && go run .
+cd components/ambient-api-server && go run .
 ```
 
 ## Additional Resources

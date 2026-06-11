@@ -34,12 +34,12 @@ Frontend (localhost:3000) → Backend (cluster:8090) → K8s API
 **Terminal 1 - Port-forward backend:**
 ```bash
 # Forward backend service to localhost:8090
-kubectl port-forward -n ambient-code svc/backend-service 8090:8080
+kubectl port-forward -n ambient-code svc/ambient-api-server 8090:8080
 ```
 
 **Terminal 2 - Run frontend:**
 ```bash
-cd components/frontend
+cd components/ambient-ui
 
 # Set backend URL to port-forwarded backend
 export BACKEND_URL=http://localhost:8090/api
@@ -87,7 +87,7 @@ kubectl scale -n ambient-code deployment/backend-api deployment/frontend --repli
 
 **Terminal 1 - Backend:**
 ```bash
-cd components/backend
+cd components/ambient-api-server
 export KUBECONFIG=~/.kube/config  # Direct K8s API access
 export PORT=8090
 go run .
@@ -95,7 +95,7 @@ go run .
 
 **Terminal 2 - Frontend:**
 ```bash
-cd components/frontend
+cd components/ambient-ui
 export BACKEND_URL=http://localhost:8090/api
 npm run dev
 
@@ -143,7 +143,7 @@ kubectl scale -n ambient-code deployment/backend-api deployment/frontend deploym
 
 **Terminal 1 - Operator:**
 ```bash
-cd components/operator
+cd components/ambient-control-plane
 export KUBECONFIG=~/.kube/config
 export AMBIENT_CODE_RUNNER_IMAGE=quay.io/ambient_code/acp_claude_runner:latest
 go run .
@@ -151,7 +151,7 @@ go run .
 
 **Terminal 2 - Backend:**
 ```bash
-cd components/backend
+cd components/ambient-api-server
 export KUBECONFIG=~/.kube/config
 export PORT=8090
 go run .
@@ -159,7 +159,7 @@ go run .
 
 **Terminal 3 - Frontend:**
 ```bash
-cd components/frontend
+cd components/ambient-ui
 export BACKEND_URL=http://localhost:8090/api
 npm run dev
 

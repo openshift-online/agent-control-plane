@@ -28,9 +28,9 @@ The Ambient Code Platform consists of these containerized components:
 
 | Component | Location | Image Name | Purpose |
 |-----------|----------|------------|---------|
-| **Backend** | `components/backend` | `acp_backend:latest` | Go API for K8s CRD management |
-| **Frontend** | `components/frontend` | `acp_frontend:latest` | NextJS web interface |
-| **Operator** | `components/operator` | `acp_operator:latest` | Kubernetes operator (Go) |
+| **Backend** | `components/ambient-api-server` | `acp_api_server:latest` | Go API for K8s CRD management |
+| **Frontend** | `components/ambient-ui` | `acp_ambient_ui:latest` | NextJS web interface |
+| **Operator** | `components/ambient-control-plane` | `acp_control_plane:latest` | Kubernetes operator (Go) |
 | **Runner** | `components/runners/ambient-runner` | `acp_claude_runner:latest` | Python Claude Code runner |
 | **State Sync** | `components/runners/state-sync` | `acp_state_sync:latest` | S3 persistence service |
 | **Public API** | `components/public-api` | `acp_public_api:latest` | External API gateway |
@@ -176,9 +176,9 @@ git diff --name-only main...HEAD
 ```
 
 Determine which components are affected:
-- Changes in `components/backend/` → backend
-- Changes in `components/frontend/` → frontend
-- Changes in `components/operator/` → operator
+- Changes in `components/ambient-api-server/` → backend
+- Changes in `components/ambient-ui/` → frontend
+- Changes in `components/ambient-control-plane/` → operator
 - Changes in `components/runners/ambient-runner/` → runner
 - Changes in `components/runners/state-sync/` → state-sync
 - Changes in `components/public-api/` → public-api
@@ -233,9 +233,9 @@ make kind-rebuild
 
 **Or load individual images:**
 ```bash
-kind load docker-image localhost/acp_backend:latest --name $KIND_CLUSTER_NAME
-kind load docker-image localhost/acp_frontend:latest --name $KIND_CLUSTER_NAME
-kind load docker-image localhost/acp_operator:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/acp_api_server:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/acp_ambient_ui:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/acp_control_plane:latest --name $KIND_CLUSTER_NAME
 ```
 
 ### Step 5: Verify Deployment
@@ -335,8 +335,8 @@ make kind-rebuild
 ### "Just rebuild the backend"
 ```bash
 make build-backend CONTAINER_ENGINE=$CONTAINER_ENGINE
-kind load docker-image localhost/acp_backend:latest --name $KIND_CLUSTER_NAME
-kubectl set image deployment/backend backend=localhost/acp_backend:latest -n ambient-code
+kind load docker-image localhost/acp_api_server:latest --name $KIND_CLUSTER_NAME
+kubectl set image deployment/backend backend=localhost/acp_api_server:latest -n ambient-code
 kubectl rollout restart deployment/backend -n ambient-code
 kubectl rollout status deployment/backend -n ambient-code
 ```
@@ -371,9 +371,9 @@ kubectl get deployments -n ambient-code
 make build-all CONTAINER_ENGINE=$CONTAINER_ENGINE
 
 # Load images into kind
-kind load docker-image localhost/acp_backend:latest --name $KIND_CLUSTER_NAME
-kind load docker-image localhost/acp_frontend:latest --name $KIND_CLUSTER_NAME
-kind load docker-image localhost/acp_operator:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/acp_api_server:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/acp_ambient_ui:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/acp_control_plane:latest --name $KIND_CLUSTER_NAME
 
 # Update image pull policy
 kubectl patch deployment backend -n ambient-code -p '{"spec":{"template":{"spec":{"containers":[{"name":"backend","imagePullPolicy":"Never"}]}}}}'
@@ -422,7 +422,7 @@ make kind-port-forward
 make build-backend  # (or whatever component)
 
 # Reload into cluster
-kind load docker-image localhost/acp_backend:latest --name $KIND_CLUSTER_NAME
+kind load docker-image localhost/acp_api_server:latest --name $KIND_CLUSTER_NAME
 
 # Force restart
 kubectl rollout restart deployment/backend -n ambient-code
@@ -457,10 +457,10 @@ For **frontend-only changes**, skip image rebuilds entirely. Run NextJS locally 
 
 ```bash
 # Terminal 1: port-forward backend from kind cluster
-kubectl port-forward svc/backend-service $KIND_FWD_BACKEND_PORT:8080 -n ambient-code
+kubectl port-forward svc/ambient-api-server $KIND_FWD_BACKEND_PORT:8080 -n ambient-code
 
 # Terminal 2: set up frontend with auth token
-cd components/frontend
+cd components/ambient-ui
 npm install  # first time only
 
 # Create .env.local (gitignored — do NOT commit, contains a live cluster token)
@@ -588,10 +588,10 @@ User: "Test this changeset in kind"
 
 Assistant (using dev-cluster skill):
 1. Checks git status → finds backend changes
-2. Explains: "I see changes in components/backend. I'll build the backend image, create a kind cluster, and deploy your changes."
+2. Explains: "I see changes in components/ambient-api-server. I'll build the backend image, create a kind cluster, and deploy your changes."
 3. Runs: `make build-backend`
 4. Runs: `make kind-up`
-5. Loads image: `kind load docker-image localhost/acp_backend:latest --name $KIND_CLUSTER_NAME`
+5. Loads image: `kind load docker-image localhost/acp_api_server:latest --name $KIND_CLUSTER_NAME`
 6. Updates deployment with local image and ImagePullPolicy: Never
 7. Verifies: `kubectl rollout status deployment/backend -n ambient-code`
 8. Provides access URL and log commands

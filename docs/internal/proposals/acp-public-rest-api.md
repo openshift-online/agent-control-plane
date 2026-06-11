@@ -129,7 +129,7 @@ components/public-api/
 └── README.md
 ```
 
-### Modified: `components/frontend/`
+### Modified: `components/ambient-ui/`
 
 - Remove `src/app/api/**` routes (proxy handlers)
 - Keep simple middleware for OAuth token forwarding
@@ -210,5 +210,5 @@ curl -X POST \
 
 - [Issue #557 - Feature: ACP Rest API](https://github.com/ambient-code/platform/issues/557)
 - [MCP Server Issue #4](https://github.com/ambient-code/mcp/issues/4)
-- [Backend Routes](../../components/backend/routes.go)
-- [Access Keys Handler](../../components/backend/handlers/permissions.go)
+- [Backend Routes](../../components/ambient-api-server/routes.go)
+- [Access Keys Handler](../../components/ambient-api-server/handlers/permissions.go)

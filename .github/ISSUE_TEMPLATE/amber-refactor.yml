@@ -22,7 +22,7 @@ body:
       label: Current State
       description: Describe the code that needs refactoring
       placeholder: |
-        File: components/backend/handlers/sessions.go
+        File: components/ambient-api-server/pkg/api/sessions.go
         Issue: 3,495 lines, violates Constitution Principle V (max 400 lines)
     validations:
       required: true

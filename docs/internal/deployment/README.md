@@ -133,7 +133,7 @@ curl https://backend-route/health
 curl https://frontend-route/
 
 # Operator status
-oc get pods -n ambient-code -l app=agentic-operator
+oc get pods -n ambient-code -l app=ambient-control-plane
 ```
 
 ### Logs
@@ -219,10 +219,10 @@ oc get deployment backend-api -n ambient-code -o jsonpath='{.spec.template.spec.
 oc get route frontend-route -n ambient-code
 
 # Check service
-oc get svc frontend-service -n ambient-code
+oc get svc ambient-ui-service -n ambient-code
 
 # Test service directly
-oc port-forward svc/frontend-service 3000:3000 -n ambient-code
+oc port-forward svc/ambient-ui-service 3000:3000 -n ambient-code
 ```
 
 ### Operator Not Creating Jobs

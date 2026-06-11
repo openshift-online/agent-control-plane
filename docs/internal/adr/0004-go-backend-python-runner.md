@@ -120,9 +120,9 @@ result = session.run()
 
 **Key Files:**
 
-* `components/backend/` - Go backend
+* `components/ambient-api-server/ - Go API server
 * `components/runners/claude-code-runner/` - Python runner
-* `components/backend/go.mod` - Go dependencies
+* `components/ambient-api-server/go.mod - Go dependencies
 * `components/runners/claude-code-runner/requirements.txt` - Python dependencies
 
 **Build Optimization:**

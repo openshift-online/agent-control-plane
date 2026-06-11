@@ -29,14 +29,15 @@ The platform consists of containerized microservices orchestrated via Kubernetes
 
 | Component | Technology | Description |
 |-----------|------------|-------------|
-| **Frontend** | NextJS + Shadcn | User interface for managing agentic sessions |
-| **Backend API** | Go + Gin | REST API for managing Kubernetes Custom Resources |
-| **Operator** | Go | Kubernetes controller that watches CRs and creates Jobs |
-| **Runner** | Python + Claude Code CLI | Pod that executes AI with multi-agent collaboration |
+| **API Server** (`ambient-api-server`) | Go + rh-trex-ai | REST API microservice, PostgreSQL-backed |
+| **Control Plane** (`ambient-control-plane`) | Go | Kubernetes controller that reconciles sessions and spawns Jobs |
+| **UI** (`ambient-ui`) | NextJS + Shadcn | Web interface for managing agentic sessions |
+| **Runner** (`ambient-runner`) | Python + Claude Code CLI | Pod that executes AI with multi-agent collaboration |
+| **MCP Server** (`ambient-mcp`) | Go | MCP tool definitions and sidecar/public endpoint modes |
 
 ```
-User Creates Session -> Backend Creates CR -> Operator Spawns Job ->
-Pod Runs Claude CLI -> Results Stored in CR -> UI Displays Progress
+User Creates Session → API Server Creates CR → Control Plane Spawns Job →
+Pod Runs Claude CLI → Results Stored in CR → UI Displays Progress
 ```
 
 See [docs/internal/architecture/](docs/internal/architecture/) for detailed architecture documentation.
@@ -62,11 +63,13 @@ See [docs/internal/architecture/](docs/internal/architecture/) for detailed arch
 
 Each component has its own detailed README:
 
-- [Frontend](components/frontend/) -- Next.js web application
-- [Backend](components/backend/) -- Go REST API
-- [Operator](components/operator/) -- Kubernetes controller
+- [API Server](components/ambient-api-server/) -- Go REST API microservice (rh-trex-ai)
+- [Control Plane](components/ambient-control-plane/) -- Kubernetes controller
+- [UI](components/ambient-ui/) -- NextJS web application
 - [Runner](components/runners/ambient-runner/) -- AI execution pods
-- [Public API](components/public-api/) -- Stateless HTTP gateway
+- [MCP Server](components/ambient-mcp/) -- MCP integration
+- [CLI](components/ambient-cli/) -- `acpctl` command-line tool
+- [SDK](components/ambient-sdk/) -- Go, Python, and TypeScript clients generated from the OpenAPI spec
 - [Manifests](components/manifests/) -- Kubernetes deployment resources
 
 ## Contributing

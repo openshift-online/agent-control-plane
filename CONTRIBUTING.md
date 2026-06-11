@@ -110,8 +110,8 @@ Or run the installation script directly:
 
 - **File hygiene** - trailing whitespace, EOF fixer, YAML validation, large file check, merge conflict markers, private key detection
 - **Python** - `ruff format` + `ruff check --fix` (runners and scripts)
-- **Go** - `gofmt`, `go vet`, `golangci-lint` (backend, operator, public-api)
-- **Frontend** - ESLint (TypeScript/JavaScript)
+- **Go** - `gofmt`, `go vet`, `golangci-lint` (API server, control plane, CLI)
+- **UI** - ESLint (TypeScript/JavaScript)
 - **Branch protection** - blocks commits to `main`/`master`/`production`
 
 **What runs on push:**
@@ -201,24 +201,24 @@ Then create a Pull Request on GitHub.
 
 ## Code Standards
 
-### Go Code (Backend & Operator)
+### Go Code (API Server & Control Plane)
 
 **Formatting:**
 ```bash
 # Auto-format your code
-gofmt -w components/backend components/operator
+gofmt -w components/ambient-api-server components/ambient-control-plane
 ```
 
 **Quality Checks:**
 ```bash
-# Backend
-cd components/backend
+# API Server
+cd components/ambient-api-server
 gofmt -l .                    # Check formatting (should output nothing)
 go vet ./...                  # Detect suspicious constructs
 golangci-lint run            # Run comprehensive linting
 
-# Operator
-cd components/operator
+# Control Plane
+cd components/ambient-control-plane
 gofmt -l .
 go vet ./...
 golangci-lint run
@@ -243,7 +243,7 @@ See [CLAUDE.md](CLAUDE.md) for comprehensive backend/operator development standa
 ### Frontend Code (NextJS)
 
 ```bash
-cd components/frontend
+cd components/ambient-ui
 npm run lint                  # ESLint checks
 npm run build                 # Ensure builds without errors/warnings
 ```
@@ -258,8 +258,6 @@ npm run build                 # Ensure builds without errors/warnings
 - All buttons must show loading states
 - All lists must have empty states
 - All nested pages must have breadcrumbs
-
-See [components/frontend/DESIGN_GUIDELINES.md](components/frontend/DESIGN_GUIDELINES.md) for complete frontend standards.
 
 ### Python Code (Runners)
 
@@ -282,29 +280,25 @@ ruff check --fix .
 
 ## Testing Requirements
 
-### Backend Tests
+### API Server Tests
 
 ```bash
-cd components/backend
-make test              # All tests
-make test-unit         # Unit tests only
-make test-contract     # Contract tests only
-make test-integration  # Integration tests (requires k8s cluster)
-make test-coverage     # Generate coverage report
+cd components/ambient-api-server
+make test
 ```
 
-### Operator Tests
+### Control Plane Tests
 
 ```bash
-cd components/operator
+cd components/ambient-control-plane
 go test ./... -v
 ```
 
-### Frontend Tests
+### UI Tests
 
 ```bash
-cd components/frontend
-npm test
+cd components/ambient-ui
+npx vitest run
 ```
 
 **Testing Guidelines:**
@@ -394,7 +388,7 @@ make kind-up
 
 This command will:
 - Create Kind cluster (~30 seconds)
-- Deploy all components (backend, frontend, operator)
+- Deploy all components (API server, control plane, UI)
 - Deploy Keycloak with a pre-configured dev realm
 - Set up port forwarding
 - Load container images
@@ -434,9 +428,9 @@ kubectl get svc -n ambient-code
 
 **View logs:**
 ```bash
-kubectl logs -n ambient-code deployment/backend-api -f
-kubectl logs -n ambient-code deployment/frontend -f
-kubectl logs -n ambient-code deployment/agentic-operator -f
+kubectl logs -n ambient-code deployment/ambient-api-server -f
+kubectl logs -n ambient-code deployment/ambient-ui -f
+kubectl logs -n ambient-code deployment/ambient-control-plane -f
 ```
 
 **Cleanup:**
@@ -446,7 +440,7 @@ make kind-down         # Delete Kind cluster
 
 **Run tests:**
 ```bash
-make test-e2e          # Run E2E tests
+make test-e2e-local    # Run E2E tests with Kind
 ```
 
 ## Troubleshooting
@@ -527,7 +521,7 @@ kubectl get services -n ambient-code
 kubectl get ingress -n ambient-code
 
 # Test directly
-kubectl port-forward -n ambient-code svc/frontend-service 3000:3000
+kubectl port-forward -n ambient-code svc/ambient-ui-service 3000:3000
 ```
 
 **Networking issues:**

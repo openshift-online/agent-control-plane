@@ -9,7 +9,7 @@ on:
       - 'components/ambient-sdk/python-sdk/**'
       - 'components/ambient-sdk/ts-sdk/**'
       - 'components/ambient-api-server/openapi/**'
-      - '.github/workflows/sdk-drift-check.yml'
+      - '.github/workflows/ambient-sdk-drift-check.yml'
 
   push:
     branches: [main]
@@ -19,7 +19,7 @@ on:
       - 'components/ambient-sdk/python-sdk/**'
       - 'components/ambient-sdk/ts-sdk/**'
       - 'components/ambient-api-server/openapi/**'
-      - '.github/workflows/sdk-drift-check.yml'
+      - '.github/workflows/ambient-sdk-drift-check.yml'
 
   workflow_dispatch:
 

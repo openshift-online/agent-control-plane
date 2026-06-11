@@ -183,7 +183,7 @@ Configure the gateway with environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BACKEND_URL` | `http://backend-service:8080` | Internal backend service URL |
+| `BACKEND_URL` | `http://ambient-api-server:8000` | Internal backend service URL |
 | `BACKEND_TIMEOUT` | `30s` | Timeout for backend requests (Go duration format) |
 | `PORT` | `8081` | Port the gateway listens on |
 | `RATE_LIMIT_RPS` | `100` | Maximum requests per second per IP |

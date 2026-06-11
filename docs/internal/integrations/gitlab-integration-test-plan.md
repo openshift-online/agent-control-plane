@@ -729,10 +729,10 @@ kubectl logs <session-pod> -n <project> | grep -i "token" | grep -v "***"  # Sho
 - **Specification**: `specs/001-gitlab-support/spec.md`
 - **Task List**: `specs/001-gitlab-support/tasks.md`
 - **Implementation Files**:
-  - `components/backend/gitlab/`
-  - `components/backend/handlers/gitlab_auth.go`
-  - `components/backend/handlers/repository.go`
-  - `components/backend/git/operations.go`
+  - `components/ambient-api-server/gitlab/`
+  - `components/ambient-api-server/handlers/gitlab_auth.go`
+  - `components/ambient-api-server/handlers/repository.go`
+  - `components/ambient-api-server/git/operations.go`
 
 ---
 

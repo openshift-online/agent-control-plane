@@ -102,7 +102,7 @@ bench_create_runner_venv() {
 bench_cold_operator() {
   local worktree_dir=$1
 
-  cd "$worktree_dir/components/operator" || return 1
+  cd "$worktree_dir/components/ambient-control-plane" || return 1
   go mod download
   go build ./...
 }
@@ -110,7 +110,7 @@ bench_cold_operator() {
 bench_warm_operator() {
   local worktree_dir=$1
 
-  cd "$worktree_dir/components/operator" || return 1
+  cd "$worktree_dir/components/ambient-control-plane" || return 1
   touch main.go
   go build ./...
 }

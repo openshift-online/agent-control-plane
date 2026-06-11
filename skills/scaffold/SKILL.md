@@ -38,24 +38,24 @@ Based on the established integration pattern (Jira, CodeRabbit, Google Drive), g
 
 | File | Purpose | Template |
 |------|---------|----------|
-| `components/backend/handlers/{provider}_auth.go` | Auth handlers + K8s Secret CRUD | Follow `jira_auth.go` pattern |
-| `components/backend/handlers/integration_validation.go` | Add validation + test endpoint | Add `Validate{Provider}` function |
-| `components/backend/handlers/integrations_status.go` | Add to unified status | Add provider to status aggregation |
-| `components/backend/handlers/runtime_credentials.go` | Session credential fetch with RBAC | Add `fetch{Provider}Credentials` |
-| `components/backend/routes.go` | Register endpoints | Add route group with auth middleware |
+| `components/ambient-api-server/pkg/{provider}_auth.go` | Auth handlers + K8s Secret CRUD | Follow `jira_auth.go` pattern |
+| `components/ambient-api-server/pkg/integration_validation.go` | Add validation + test endpoint | Add `Validate{Provider}` function |
+| `components/ambient-api-server/pkg/integrations_status.go` | Add to unified status | Add provider to status aggregation |
+| `components/ambient-api-server/pkg/runtime_credentials.go` | Session credential fetch with RBAC | Add `fetch{Provider}Credentials` |
+| `components/ambient-api-server/pkg/api/` | Register endpoints | Add route group with auth middleware |
 
 ### Frontend Files
 
 | File | Purpose | Template |
 |------|---------|----------|
-| `components/frontend/src/components/integrations/{provider}-connection-card.tsx` | Integration card UI | Follow existing integration card (e.g., Jira) |
-| `components/frontend/src/services/api/{provider}-auth.ts` | API client | Follow existing auth service pattern |
-| `components/frontend/src/services/queries/use-{provider}.ts` | React Query hooks | Follow existing query hook pattern |
-| `components/frontend/src/app/api/auth/{provider}/route.ts` | Next.js proxy route | Follow existing auth proxy |
-| `components/frontend/src/components/integrations/IntegrationsClient.tsx` | Add card import | Update imports + render |
-| `components/frontend/src/components/integrations/integrations-panel.tsx` | Add to panel | Update panel |
+| `components/ambient-ui/src/components/integrations/{provider}-connection-card.tsx` | Integration card UI | Follow existing integration card (e.g., Jira) |
+| `components/ambient-ui/src/services/api/{provider}-auth.ts` | API client | Follow existing auth service pattern |
+| `components/ambient-ui/src/services/queries/use-{provider}.ts` | React Query hooks | Follow existing query hook pattern |
+| `components/ambient-ui/src/app/api/auth/{provider}/route.ts` | Next.js proxy route | Follow existing auth proxy |
+| `components/ambient-ui/src/components/integrations/IntegrationsClient.tsx` | Add card import | Update imports + render |
+| `components/ambient-ui/src/components/integrations/integrations-panel.tsx` | Add to panel | Update panel |
 
-> **Note:** Before scaffolding, verify the reference files exist by checking `components/frontend/src/components/integrations/` and `components/frontend/src/services/`. File names may differ from examples above.
+> **Note:** Before scaffolding, verify the reference files exist by checking `components/ambient-ui/src/components/integrations/` and `components/ambient-ui/src/services/`. File names may differ from examples above.
 
 ### Runner Files
 
@@ -89,12 +89,12 @@ For adding a new API endpoint with full-stack support.
 
 | Layer | File | Action |
 |-------|------|--------|
-| Backend handler | `components/backend/handlers/{resource}.go` | Create |
-| Backend routes | `components/backend/routes.go` | Add routes |
-| Backend types | `components/backend/types/{resource}.go` | Create if needed |
-| Frontend API | `components/frontend/src/services/api/{resource}.ts` | Create |
-| Frontend queries | `components/frontend/src/services/queries/{resource}.ts` | Create |
-| Frontend proxy | `components/frontend/src/app/api/{resource}/route.ts` | Create |
+| Backend handler | `components/ambient-api-server/pkg/{resource}.go` | Create |
+| Backend routes | `components/ambient-api-server/pkg/api/` | Add routes |
+| Backend types | `components/ambient-api-server/types/{resource}.go` | Create if needed |
+| Frontend API | `components/ambient-ui/src/services/api/{resource}.ts` | Create |
+| Frontend queries | `components/ambient-ui/src/services/queries/{resource}.ts` | Create |
+| Frontend proxy | `components/ambient-ui/src/app/api/{resource}/route.ts` | Create |
 
 ### Backend Handler Template
 

@@ -4,7 +4,7 @@ description: >
   Required context for all frontend work. Loads frontend standards
   (conventions, React Query patterns, adapter testing requirements)
   before any code changes. Use when modifying anything under
-  components/frontend/. Triggers on: any frontend code change,
+  components/ambient-ui/. Triggers on: any frontend code change,
   UI component work, React Query hooks, API adapter work, frontend
   bug fix, frontend refactor.
 ---
@@ -21,16 +21,16 @@ $ARGUMENTS
 
 ## Required Reading
 
-Read all files in `specs/standards/frontend/` before proceeding:
+Read all files in `specs/standards/control-plane/` before proceeding:
 
 ```bash
-ls specs/standards/frontend/
+ls specs/standards/control-plane/
 ```
 
 At minimum, this includes:
 
-1. `specs/standards/frontend/conventions.spec.md` — zero-tolerance rules (no `any`, Shadcn only, React Query for all data, `type` over `interface`, colocated components, feature flags)
-2. `specs/standards/frontend/react-query.spec.md` — file structure (ports/adapters/queries), data fetching patterns, testing requirements, validation checklist
+1. `specs/standards/control-plane/conventions.spec.md` — zero-tolerance rules (no `any`, Shadcn only, React Query for all data, `type` over `interface`, colocated components, feature flags)
+2. `` — file structure (ports/adapters/queries), data fetching patterns, testing requirements, validation checklist
 
 Also read the API adapter spec if working on the services layer:
 

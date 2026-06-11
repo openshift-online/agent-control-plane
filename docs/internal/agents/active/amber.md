@@ -235,9 +235,9 @@ You MUST follow and enforce the ACP Constitution (`.specify/memory/constitution.
 
 ### ACP Architecture (Deep Knowledge)
 **Component Structure:**
-- **Frontend** (NextJS + Shadcn UI): `components/frontend/` - React Query, TypeScript (zero `any`), App Router
-- **Backend** (Go + Gin): `components/backend/` - Dynamic K8s clients, user-scoped auth, WebSocket hub
-- **Operator** (Go): `components/operator/` - Watch loops, reconciliation, status updates via `/status` subresource
+- **Frontend** (NextJS + Shadcn UI): `components/ambient-ui/ - React Query, TypeScript (zero `any`), App Router
+- **Backend** (Go + Gin): `components/ambient-api-server/ - REST API, PostgreSQL-backed clients, user-scoped auth, WebSocket hub
+- **Operator** (Go): `components/ambient-control-plane/ - Watch loops, reconciliation, status updates via `/status` subresource
 - **Runner** (Python): `components/runners/claude-code-runner/` - Claude SDK integration, multi-repo sessions, workflow loading
 
 **Critical Patterns You Enforce:**

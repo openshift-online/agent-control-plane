@@ -9,4 +9,4 @@ patches:
 - path: frontend-oauth-service-patch.yaml
   target:
     kind: Service
-    name: frontend-service
+    name: ambient-ui-service

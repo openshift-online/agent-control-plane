@@ -31,7 +31,7 @@ Handlers must use `GetK8sClientsForRequest(c)` for user-initiated operations. Se
 # Find handler functions using service account clients without RBAC validation
 rg -n "GetK8sClientsForRequest|serviceAccountClient|saClient" components/ --glob="*.go" | grep -v "_test.go"
 # Flag handlers that don't call GetK8sClientsForRequest (manual review for user-flow endpoints)
-rg -n "func.*Handler\|func.*Handle" components/backend/ --glob="*.go" -A 5 | grep -v "GetK8sClientsForRequest" | grep "func.*Handler"
+rg -n "func.*Handler\|func.*Handle" components/ambient-api-server/ --glob="*.go" -A 5 | grep -v "GetK8sClientsForRequest" | grep "func.*Handler"
 ```
 
 ### S2: RBAC before resource access (Critical)
@@ -42,7 +42,7 @@ rg -n "func.*Handler\|func.*Handle" components/backend/ --glob="*.go" -A 5 | gr
 # Find SelfSubjectAccessReview usage — flag user-resource endpoints that lack it
 rg -n "SelfSubjectAccessReview|SubjectAccessReview" components/ --glob="*.go" | grep -v "_test.go"
 # Find resource access patterns without preceding RBAC check (flag for manual review)
-rg -n "client\.Get\|client\.List\|client\.Create" components/backend/ --glob="*.go" -B 10 | grep -v "SelfSubjectAccessReview"
+rg -n "client\.Get\|client\.List\|client\.Create" components/ambient-api-server/ --glob="*.go" -B 10 | grep -v "SelfSubjectAccessReview"
 ```
 
 ### S3: Token redaction in all outputs (Blocker)

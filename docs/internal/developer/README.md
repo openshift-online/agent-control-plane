@@ -54,9 +54,9 @@ Welcome to the Ambient Code Platform developer guide! This section covers everyt
 
 ### Component Development
 Each component has detailed development documentation:
-- [Frontend README](../../components/frontend/README.md) - Next.js development
-- [Backend README](../../components/backend/README.md) - Go API development
-- [Operator README](../../components/operator/README.md) - Controller development
+- [Frontend README](../../components/ambient-ui/README.md) - Next.js development
+- [Backend README](../../components/ambient-api-server/README.md) - Go API server development
+- [Operator README](../../components/ambient-control-plane/) - Controller development
 - [Runner README](../../components/runners/claude-code-runner/README.md) - Python runner
 
 ### Testing
@@ -135,13 +135,13 @@ make lint                   # Run linters
 ### Code Quality
 ```bash
 # Go code
-cd components/backend
+cd components/ambient-api-server
 gofmt -w .
 go vet ./...
 golangci-lint run
 
 # Frontend code
-cd components/frontend
+cd components/ambient-ui
 npm run lint
 npm run build
 ```

@@ -38,7 +38,7 @@ case "$FILE_PATH" in
 esac
 
 # --- Go: panic() in production code ---
-if [[ "$FILE_PATH" == */components/operator/*.go ]]; then
+if [[ "$FILE_PATH" == */components/ambient-control-plane/*.go ]]; then
   if [[ "$FILE_PATH" != *_test.go ]]; then
     if echo "$CONTENT" | grep -q 'panic('; then
       warn "Do not use panic() in production code. Return fmt.Errorf with context instead."
@@ -66,14 +66,14 @@ if [[ "$FILE_PATH" == */components/manifests/*.yaml || "$FILE_PATH" == */.github
 fi
 
 # --- Go: create-and-ignore AlreadyExists anti-pattern ---
-if [[ "$FILE_PATH" == */components/operator/*.go ]]; then
+if [[ "$FILE_PATH" == */components/ambient-control-plane/*.go ]]; then
   if echo "$CONTENT" | grep -qE '(errors\.IsAlreadyExists|apierrors\.IsAlreadyExists)'; then
     warn "Use reconcile (update-or-create) patterns, not create-and-ignore-AlreadyExists. Skipping AlreadyExists misses spec drift and ownership updates."
   fi
 fi
 
 # --- Go: swallowed errors ---
-if [[ "$FILE_PATH" == */components/operator/*.go ]]; then
+if [[ "$FILE_PATH" == */components/ambient-control-plane/*.go ]]; then
   if echo "$CONTENT" | grep -qE '_ =.*\('; then
     warn "Never silently swallow errors. Every error must be propagated, logged, or collected."
   fi

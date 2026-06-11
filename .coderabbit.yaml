@@ -79,7 +79,7 @@ reviews:
         - No panic() -- return fmt.Errorf with context.
         - Reconcile loops (operator) must be idempotent.
 
-    - path: "components/frontend/src/**/*.{ts,tsx}"
+    - path: "components/ambient-ui/src/**/*.{ts,tsx}"
       instructions: |
         - No 'any' types -- use proper types, 'unknown', or generic constraints.
         - Verify loading/error states and error handling in React Query hooks.

@@ -131,10 +131,10 @@ For specialized needs, you can generate custom views on-demand:
 
 ```bash
 # Backend-only view (if you need it)
-repomix --include "components/backend/**" --output backend-custom.xml --style xml
+repomix --include "components/ambient-api-server/**" --output api-server-custom.xml --style xml
 
 # Frontend-only view
-repomix --include "components/frontend/**" --output frontend-custom.xml --style xml
+repomix --include "components/ambient-ui/**" --output ui-custom.xml --style xml
 
 # Security-focused view
 repomix --include "**/handlers/**,**/middleware/**,CLAUDE.md" --output security-custom.xml --style xml

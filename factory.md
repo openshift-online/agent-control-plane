@@ -6,7 +6,7 @@
 ## Goal
 <!-- A single sentence describing what this project should achieve. -->
 
-Kubernetes-native AI automation platform that orchestrates agentic sessions through containerized microservices (Go backend/operator, NextJS frontend, Python runner).
+Kubernetes-native AI automation platform that orchestrates agentic sessions through containerized microservices (Go API server/control plane, NextJS UI, Python runner).
 
 ## Scope
 
@@ -14,16 +14,16 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 <!-- Files and directories the factory is allowed to create or edit. -->
 <!-- One path per line. Glob patterns are supported. -->
 
-- components/backend/**/*.go
-- components/operator/**/*.go
-- components/frontend/src/**/*.ts
-- components/frontend/src/**/*.tsx
+- components/ambient-api-server/**/*.go
+- components/ambient-control-plane/**/*.go
+- components/ambient-ui/src/**/*.ts
+- components/ambient-ui/src/**/*.tsx
 - components/runners/ambient-runner/**/*.py
 - components/ambient-cli/**/*.go
-- components/public-api/**/*.go
-- components/ambient-api-server/**/*.go
+- components/ambient-mcp/**/*.go
 - components/ambient-sdk/**/*.go
 - components/ambient-sdk/**/*.py
+- components/ambient-sdk/**/*.ts
 
 ### Read-only
 <!-- Files the factory may read but must never modify. -->

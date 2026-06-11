@@ -27,7 +27,7 @@ The MCP server has no direct Kubernetes access. All operations proxy through `am
 
 **Constraint:** No direct Kubernetes API access. Reads and writes go through the platform REST API only.
 
-**Image:** `localhost/vteam_ambient_mcp:latest`
+**Image:** `localhost/acp_mcp:latest`
 
 ### Directory Structure
 
@@ -1030,7 +1030,7 @@ Job Pod (session-{id}-runner)
 │     Connects to sidecars via SSE MCP on localhost ports
 │
 ├── container: ambient-mcp
-│     image: localhost/vteam_ambient_mcp:latest
+│     image: localhost/acp_mcp:latest
 │     MCP_TRANSPORT=sse, MCP_BIND_ADDR=:8090
 │     AMBIENT_API_URL, AMBIENT_CP_TOKEN_URL, AMBIENT_CP_TOKEN_PUBLIC_KEY
 │     SESSION_ID (for RSA-OAEP token exchange)

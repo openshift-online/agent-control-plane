@@ -15,7 +15,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 GO_MODULES=(
     "components/ambient-api-server"
     "components/ambient-sdk/generator"
-    "components/operator"
+    "components/ambient-control-plane"
     "components/public-api"
     "components/ambient-cli"
 )

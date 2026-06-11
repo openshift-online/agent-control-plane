@@ -79,9 +79,8 @@ Component-specific conventions loaded by review agents on demand.
 
 | Guide | Purpose |
 |-------|---------|
-| [Operator README](components/operator/README.md) | Operator development, watch patterns, reconciliation loop |
+| [Control Plane](components/ambient-control-plane/) | Kubernetes controller, reconciliation loop |
 | [Runner README](components/runners/ambient-runner/README.md) | Python runner, Claude Code SDK integration |
-| [Public API README](components/public-api/README.md) | Stateless gateway, token forwarding, input validation |
 | [API Server Guide](components/ambient-api-server/CLAUDE.md) | rh-trex-ai REST API, plugin system, code generation |
 | [SDK Guide](components/ambient-sdk/CLAUDE.md) | Go + Python client libraries for the public API |
 | [CLI README](components/ambient-cli/README.md) | acpctl CLI for managing agentic sessions |

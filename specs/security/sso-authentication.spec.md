@@ -523,7 +523,7 @@ toward a single IAM plane.
 ## References
 
 - [Security Specification](security.spec.md) — identity boundaries, token propagation
-- [K8s Client Usage Patterns](../standards/backend/k8s-client.spec.md) — user-scoped vs. SA client patterns
+- [K8s Client Usage Patterns](../standards/control-plane/conventions.spec.md) — user-scoped vs. SA client patterns
 - [Security Standards](../standards/security/security.spec.md) — token handling, RBAC enforcement
 - [ADR-0002](../../docs/internal/adr/0002-user-token-authentication.md) — superseded by this spec
 - [OAuth 2.0 for Browser-Based Applications](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-browser-based-apps) — BFF recommendation

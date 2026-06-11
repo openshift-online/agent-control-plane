@@ -43,7 +43,7 @@ components/runners/ambient-runner/
 ### Supporting Frontend Paths
 
 ```text
-components/frontend/src/components/claude-agent-options/
+components/ambient-ui/src/components/claude-agent-options/
 ├── schema.ts                     # Zod schema (mirrors SDK types)
 ├── options-form.tsx              # Main form component
 ├── index.ts                      # Barrel exports

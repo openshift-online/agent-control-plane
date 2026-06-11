@@ -31,7 +31,7 @@ make kind-down
 ---
 
 ### Backend Tests (Go)
-**Location:** `components/backend/tests/`
+**Location:** `components/ambient-api-server/tests/`
 
 **Test Types:**
 - **Unit Tests** - Component logic in isolation
@@ -40,19 +40,19 @@ make kind-down
 
 **Quick Start:**
 ```bash
-cd components/backend
+cd components/ambient-api-server
 make test              # All tests
 make test-unit         # Unit only
 make test-contract     # Contract only
 make test-integration  # Integration (requires cluster)
 ```
 
-**Documentation:** [Backend Test Guide](../../components/backend/TEST_GUIDE.md)
+**Documentation:** [Backend Test Guide](../../components/ambient-api-server/TEST_GUIDE.md)
 
 ---
 
 ### Frontend Tests (Next.js)
-**Location:** `components/frontend/`
+**Location:** `components/ambient-ui/`
 
 **Test Types:**
 - **Component Tests** - React component testing (Jest)
@@ -60,18 +60,18 @@ make test-integration  # Integration (requires cluster)
 
 **Quick Start:**
 ```bash
-cd components/frontend
+cd components/ambient-ui
 npm test
 npm run lint
 npm run build  # Must pass with 0 errors, 0 warnings
 ```
 
-**Documentation:** [Frontend README](../../components/frontend/README.md)
+**Documentation:** [Frontend README](../../components/ambient-ui/README.md)
 
 ---
 
 ### Operator Tests (Go)
-**Location:** `components/operator/`
+**Location:** `components/ambient-control-plane/`
 
 **Test Types:**
 - Controller reconciliation tests
@@ -80,11 +80,11 @@ npm run build  # Must pass with 0 errors, 0 warnings
 
 **Quick Start:**
 ```bash
-cd components/operator
+cd components/ambient-control-plane
 go test ./... -v
 ```
 
-**Documentation:** [Operator README](../../components/operator/README.md)
+**Documentation:** [Operator README](../../components/ambient-control-plane/README.md)
 
 ---
 
@@ -133,13 +133,13 @@ go test ./... -v
 make test-e2e-local
 
 # Backend tests
-cd components/backend && make test
+cd components/ambient-api-server && make test
 
 # Frontend tests
-cd components/frontend && npm test
+cd components/ambient-ui && npm test
 
 # Operator tests
-cd components/operator && go test ./...
+cd components/ambient-control-plane && go test ./...
 
 # Run linters
 make lint
@@ -182,7 +182,7 @@ npm run test:headed  # Opens Cypress UI
 
 ### Backend Test Debugging
 ```bash
-cd components/backend
+cd components/ambient-api-server
 go test ./... -v -run TestSpecificTest
 ```
 
@@ -193,7 +193,7 @@ cat e2e/cypress/videos/*.mp4  # Test recordings
 cat e2e/cypress/screenshots/*.png  # Failure screenshots
 
 # Backend test logs
-cd components/backend && go test ./... -v 2>&1 | tee test.log
+cd components/ambient-api-server && go test ./... -v 2>&1 | tee test.log
 ```
 
 ## 📝 Writing Tests
@@ -222,7 +222,7 @@ cd components/backend && go test ./... -v 2>&1 | tee test.log
 
 See existing tests for patterns:
 - `e2e/cypress/e2e/vteam.cy.ts` - E2E test patterns
-- `components/backend/handlers/*_test.go` - Backend test patterns
+- `components/ambient-api-server/handlers/*_test.go` - Backend test patterns
 
 ## 🆘 Troubleshooting
 

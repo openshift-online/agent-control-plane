@@ -144,10 +144,10 @@ def clone_repositories(repos, main_repo_index, workspace):
 ```
 
 **Key Files:**
-- `components/backend/types/session.go:RepoConfig` - Repo configuration types
-- `components/backend/handlers/sessions.go:227` - Multi-repo validation
+- `components/ambient-api-server/ - Repo configuration types` - Repo configuration types
+- `components/ambient-api-server/ - Multi-repo validation
 - `components/runners/claude-code-runner/wrapper.py:clone_repositories` - Clone logic
-- `components/operator/internal/handlers/sessions.go:150` - Status tracking
+- `components/ambient-control-plane/internal/reconciler/ - Status tracking
 
 **Patterns Established:**
 

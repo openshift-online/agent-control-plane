@@ -33,7 +33,7 @@ This project uses the [pre-commit](https://pre-commit.com/) framework to manage 
 Go and ESLint hooks use wrapper scripts in `scripts/pre-commit/` because:
 
 - **Go** has 3 separate modules (`backend`, `operator`, `public-api`) — tools must `cd` into each module directory
-- **ESLint** config and `node_modules` live in `components/frontend/`
+- **ESLint** config and `node_modules` live in `components/ambient-ui/`
 - All wrappers skip gracefully if the toolchain is not installed
 
 ## Installation

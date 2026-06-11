@@ -47,8 +47,8 @@ oc -n ambient-code rollout restart deployment/frontend
 
 ### What the manifests already do
 - Deploy the frontend with an `oauth-proxy` sidecar (HTTPS on port 8443)
-- Expose `frontend-service` with ports `http:3000` and `dashboard-ui:8443`
-- Create a Route to `frontend-service:dashboard-ui` with edge TLS termination
+- Expose `ambient-ui-service` with ports `http:3000` and `dashboard-ui:8443`
+- Create a Route to `ambient-ui-service:dashboard-ui` with edge TLS termination
 
 ### What you must still do
 0) Set the Route host to your real cluster apps domain (if not already)

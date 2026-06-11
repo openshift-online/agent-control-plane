@@ -200,7 +200,7 @@ open e2e/cypress/videos/acp.cy.ts.mp4
 
 ```bash
 kubectl logs -n ambient-code -l app=frontend
-kubectl logs -n ambient-code -l app=backend-api
+kubectl logs -n ambient-code -l app=ambient-api-server
 ```
 
 ### Check Ingress

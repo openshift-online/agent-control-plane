@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-FRONTEND_DIR="$REPO_ROOT/components/frontend"
+FRONTEND_DIR="$REPO_ROOT/components/ambient-ui"
 
 echo "▶ Running unit tests with coverage..."
 cd "$FRONTEND_DIR"

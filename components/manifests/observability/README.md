@@ -158,7 +158,7 @@ EOF
 
 4. **Check operator is sending metrics**:
    ```bash
-   kubectl logs -n ambient-code -l app=agentic-operator | grep -i "otel\|metric"
+   kubectl logs -n ambient-code -l app=ambient-control-plane | grep -i "otel\|metric"
    ```
 
 5. **Test direct query to OTel Collector**:

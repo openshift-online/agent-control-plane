@@ -89,8 +89,8 @@ if handlers.FeatureEnabled("my-feature") {
 
 ## Related Documentation
 
-- [Frontend README](../../components/frontend/README.md) – Development and env overview
-- [Backend README](../../components/backend/README.md) – Development and env overview
+- [Frontend README](../../components/ambient-ui/README.md) – Development and env overview
+- [Backend README](../../components/ambient-api-server/README.md) – Development and env overview
 - [Architecture](../architecture/) – System design
 
 ## References

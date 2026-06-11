@@ -48,7 +48,7 @@
 #
 # VERIFICATION:
 #   After running, check operator logs:
-#   kubectl logs -l app=agentic-operator -n ambient-code | grep -i vertex
+#   kubectl logs -l app=ambient-control-plane -n ambient-code | grep -i vertex
 #
 
 set -e
@@ -172,11 +172,11 @@ echo ""
 # Verify Vertex mode is active in operator logs
 echo "Verifying Vertex AI configuration..."
 sleep 3
-if kubectl logs -l app=agentic-operator -n "$NAMESPACE" --tail=100 2>/dev/null | grep -qi "vertex ai mode enabled"; then
+if kubectl logs -l app=ambient-control-plane -n "$NAMESPACE" --tail=100 2>/dev/null | grep -qi "vertex ai mode enabled"; then
     echo "  ✓ Vertex AI mode is active"
 else
     echo "  ⚠ Could not verify Vertex mode in logs yet"
-    echo "    Check manually: kubectl logs -l app=agentic-operator -n $NAMESPACE | grep -i vertex"
+    echo "    Check manually: kubectl logs -l app=ambient-control-plane -n $NAMESPACE | grep -i vertex"
 fi
 echo ""
 

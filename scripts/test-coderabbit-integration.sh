@@ -50,7 +50,7 @@ for port in $BACKEND_PORT 12400 12401 12402; do
     break
   fi
 done
-$KUBECTL port-forward svc/backend-service "$BACKEND_PORT":8080 -n "$NAMESPACE" &>/dev/null &
+$KUBECTL port-forward svc/ambient-api-server "$BACKEND_PORT":8080 -n "$NAMESPACE" &>/dev/null &
 PF_PID=$!
 BACKEND="http://localhost:$BACKEND_PORT"
 

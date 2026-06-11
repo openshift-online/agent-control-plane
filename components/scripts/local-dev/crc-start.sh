@@ -26,9 +26,9 @@ PROJECT_NAME="${PROJECT_NAME:-vteam-dev}"
 DEV_MODE="${DEV_MODE:-false}"
 
 # Component directories
-BACKEND_DIR="${REPO_ROOT}/components/backend"
-FRONTEND_DIR="${REPO_ROOT}/components/frontend"
-OPERATOR_DIR="${REPO_ROOT}/components/operator"
+BACKEND_DIR="${REPO_ROOT}/components/ambient-api-server"
+FRONTEND_DIR="${REPO_ROOT}/components/ambient-ui"
+OPERATOR_DIR="${REPO_ROOT}/components/ambient-control-plane"
 CRDS_DIR="${REPO_ROOT}/components/manifests/crds"
 
 ###############
@@ -313,7 +313,7 @@ build_and_deploy() {
   oc apply -f "${MANIFESTS_DIR}/frontend-deployment.yaml" -n "$PROJECT_NAME"
 
   log "Creating backend service alias for operator..."
-  oc apply -f "${MANIFESTS_DIR}/backend-service-alias.yaml" -n "$PROJECT_NAME"
+  oc apply -f "${MANIFESTS_DIR}/ambient-api-server-alias.yaml" -n "$PROJECT_NAME"
 
   log "Applying operator configuration (CRC - Vertex disabled)..."
   oc apply -f "${REPO_ROOT}/components/manifests/operator-config-crc.yaml" -n "$PROJECT_NAME"

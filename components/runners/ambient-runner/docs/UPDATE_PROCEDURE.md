@@ -74,8 +74,8 @@ Verify it resolves cleanly. Packages may resolve newer than your `>=` pins — t
 When `claude-agent-sdk` is bumped, update the frontend Zod schema and form to match.
 
 **Files:**
-- `components/frontend/src/components/claude-agent-options/schema.ts`
-- `components/frontend/src/components/claude-agent-options/options-form.tsx`
+- `components/ambient-ui/src/components/claude-agent-options/schema.ts`
+- `components/ambient-ui/src/components/claude-agent-options/options-form.tsx`
 
 **Steps:**
 1. Inspect the new SDK types:

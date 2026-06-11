@@ -243,8 +243,8 @@ Test both states: confirm the gated element renders when enabled, and is absent 
 ## 4. Verify
 
 ```bash
-cd components/frontend && npx tsc --noEmit    # Type-check
-cd components/frontend && npx vitest run       # Unit tests
+cd components/ambient-ui && npx tsc --noEmit    # Type-check
+cd components/ambient-ui && npx vitest run       # Unit tests
 ```
 
 Both must pass with zero errors.

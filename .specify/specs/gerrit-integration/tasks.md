@@ -11,11 +11,11 @@
 
 ## Phase 2: Backend Core (Blocking)
 
-- [ ] T002 [US1] Create `components/backend/handlers/gerrit_auth.go` — GerritCredentials struct, SSRF URL validation (validateGerritURL, isPrivateOrBlocked, ssrfSafeTransport), K8s Secret CRUD (store/get/list/delete with 3x conflict retry), ConnectGerrit handler, GetGerritStatus handler, DisconnectGerrit handler, ListGerritInstances handler. Follow jira_auth.go pattern. Use K8sClient for Secret ops, GetK8sClientsForRequest for auth.
-- [ ] T003 [US1] Add Gerrit validation to `components/backend/handlers/integration_validation.go` — ValidateGerritToken (GET /a/accounts/self, 15s timeout, SSRF-safe transport, HTTP Basic and gitcookies support), parseGitcookies (tab-delimited format, subdomain flag logic), TestGerritConnection handler. Add `var validateGerritTokenFn = ValidateGerritToken` for test mockability.
-- [ ] T004 [US6] Add `getGerritStatusForUser` to `components/backend/handlers/integrations_status.go` — return instances array, add to GetIntegrationsStatus response under "gerrit" key
-- [ ] T005 [US5] Add `GetGerritCredentialsForSession` to `components/backend/handlers/runtime_credentials.go` — RBAC via enforceCredentialRBAC, returns all instances with auth details
-- [ ] T006 Register Gerrit routes in `components/backend/routes.go` — POST connect, POST test, GET instances, GET :instanceName/status, DELETE :instanceName/disconnect, GET session credentials
+- [ ] T002 [US1] Create `components/ambient-api-server/pkg/gerrit_auth.go` — GerritCredentials struct, SSRF URL validation (validateGerritURL, isPrivateOrBlocked, ssrfSafeTransport), K8s Secret CRUD (store/get/list/delete with 3x conflict retry), ConnectGerrit handler, GetGerritStatus handler, DisconnectGerrit handler, ListGerritInstances handler. Follow jira_auth.go pattern. Use K8sClient for Secret ops, GetK8sClientsForRequest for auth.
+- [ ] T003 [US1] Add Gerrit validation to `components/ambient-api-server/pkg/integration_validation.go` — ValidateGerritToken (GET /a/accounts/self, 15s timeout, SSRF-safe transport, HTTP Basic and gitcookies support), parseGitcookies (tab-delimited format, subdomain flag logic), TestGerritConnection handler. Add `var validateGerritTokenFn = ValidateGerritToken` for test mockability.
+- [ ] T004 [US6] Add `getGerritStatusForUser` to `components/ambient-api-server/pkg/integrations_status.go` — return instances array, add to GetIntegrationsStatus response under "gerrit" key
+- [ ] T005 [US5] Add `GetGerritCredentialsForSession` to `components/ambient-api-server/pkg/runtime_credentials.go` — RBAC via enforceCredentialRBAC, returns all instances with auth details
+- [ ] T006 Register Gerrit routes in `components/ambient-api-server/pkg/api/` — POST connect, POST test, GET instances, GET :instanceName/status, DELETE :instanceName/disconnect, GET session credentials
 
 **Checkpoint**: Backend API functional
 
@@ -23,21 +23,21 @@
 
 ## Phase 3: Backend Tests
 
-- [ ] T007 [US1] Create `components/backend/handlers/gerrit_auth_test.go` — Ginkgo v2 suite with test_constants labels. Cover: auth token required, user context validation, instance name validation (valid/invalid), HTTPS enforcement, private IP rejection (loopback, metadata, CGNAT, RFC ranges), mixed credential rejection, valid HTTP Basic flow, valid gitcookies flow, per-user Secret isolation, disconnect, list sorted, DNS rebinding edge cases. Use HTTPTestUtils and K8sTestUtils, mock validateGerritTokenFn.
+- [ ] T007 [US1] Create `components/ambient-api-server/pkg/gerrit_auth_test.go` — Ginkgo v2 suite with test_constants labels. Cover: auth token required, user context validation, instance name validation (valid/invalid), HTTPS enforcement, private IP rejection (loopback, metadata, CGNAT, RFC ranges), mixed credential rejection, valid HTTP Basic flow, valid gitcookies flow, per-user Secret isolation, disconnect, list sorted, DNS rebinding edge cases. Use HTTPTestUtils and K8sTestUtils, mock validateGerritTokenFn.
 
-**Checkpoint**: `cd components/backend && make test` passes
+**Checkpoint**: `cd components/ambient-api-server && make test` passes
 
 ---
 
 ## Phase 4: Frontend
 
-- [ ] T008 [P] [US1] Create `components/frontend/src/services/api/gerrit-auth.ts` — GerritAuthMethod type, GerritConnectRequest (discriminated union), GerritTestRequest, GerritTestResponse, GerritInstanceStatus, GerritInstancesResponse types. API functions: connectGerrit, testGerritConnection, getGerritInstances, getGerritInstanceStatus, disconnectGerrit
-- [ ] T009 [P] [US1] Create `components/frontend/src/services/queries/use-gerrit.ts` — useGerritInstances (queryKey ['gerrit','instances']), useConnectGerrit (invalidates ['integrations','status'] + ['gerrit','instances']), useDisconnectGerrit (same invalidation), useTestGerritConnection (no invalidation)
-- [ ] T010 [P] [US1] Create Next.js proxy routes: `components/frontend/src/app/api/auth/gerrit/connect/route.ts`, `test/route.ts` (15s AbortSignal.timeout), `instances/route.ts`, `[instanceName]/status/route.ts`, `[instanceName]/disconnect/route.ts`. Follow jira route pattern with buildForwardHeadersAsync.
-- [ ] T011 [US1] Create `components/frontend/src/components/gerrit-connection-card.tsx` — multi-instance card. Instance list with green status indicators. Add form: instance name input (auto-lowercase), URL input, auth method radio (http_basic/git_cookies), conditional fields (username+token with show/hide toggle OR gitcookies textarea). Clear other auth fields on radio switch. Test button, Save button. Client-side validation (name min 2 chars, required fields). Gate with useWorkspaceFlag(projectName, 'gerrit.enabled').
-- [ ] T012 [US6] Add GerritConnectionCard to `components/frontend/src/app/integrations/IntegrationsClient.tsx` and add gerrit to IntegrationsStatus type in `components/frontend/src/services/api/integrations.ts`
+- [ ] T008 [P] [US1] Create `components/ambient-ui/src/services/api/gerrit-auth.ts` — GerritAuthMethod type, GerritConnectRequest (discriminated union), GerritTestRequest, GerritTestResponse, GerritInstanceStatus, GerritInstancesResponse types. API functions: connectGerrit, testGerritConnection, getGerritInstances, getGerritInstanceStatus, disconnectGerrit
+- [ ] T009 [P] [US1] Create `components/ambient-ui/src/services/queries/use-gerrit.ts` — useGerritInstances (queryKey ['gerrit','instances']), useConnectGerrit (invalidates ['integrations','status'] + ['gerrit','instances']), useDisconnectGerrit (same invalidation), useTestGerritConnection (no invalidation)
+- [ ] T010 [P] [US1] Create Next.js proxy routes: `components/ambient-ui/src/app/api/auth/gerrit/connect/route.ts`, `test/route.ts` (15s AbortSignal.timeout), `instances/route.ts`, `[instanceName]/status/route.ts`, `[instanceName]/disconnect/route.ts`. Follow jira route pattern with buildForwardHeadersAsync.
+- [ ] T011 [US1] Create `components/ambient-ui/src/components/gerrit-connection-card.tsx` — multi-instance card. Instance list with green status indicators. Add form: instance name input (auto-lowercase), URL input, auth method radio (http_basic/git_cookies), conditional fields (username+token with show/hide toggle OR gitcookies textarea). Clear other auth fields on radio switch. Test button, Save button. Client-side validation (name min 2 chars, required fields). Gate with useWorkspaceFlag(projectName, 'gerrit.enabled').
+- [ ] T012 [US6] Add GerritConnectionCard to `components/ambient-ui/src/app/integrations/IntegrationsClient.tsx` and add gerrit to IntegrationsStatus type in `components/ambient-ui/src/services/api/integrations.ts`
 
-**Checkpoint**: `cd components/frontend && npm run build` passes with 0 errors, 0 warnings
+**Checkpoint**: `cd components/ambient-ui && npm run build` passes with 0 errors, 0 warnings
 
 ---
 

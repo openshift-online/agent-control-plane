@@ -87,7 +87,7 @@ else
   echo "  - Check pod logs: kubectl logs -n ambient-code -l app=frontend"
   echo "  - Check services: kubectl get svc -n ambient-code"
   echo "  - Test NodePort: curl http://localhost:8080 (podman) or http://localhost (docker)"
-  echo "  - Port-forward: kubectl port-forward -n ambient-code svc/frontend-service 8080:3000"
+  echo "  - Port-forward: kubectl port-forward -n ambient-code svc/ambient-ui-service 8080:3000"
 fi
 
 exit $exit_code

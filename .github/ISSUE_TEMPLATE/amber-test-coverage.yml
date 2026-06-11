@@ -22,7 +22,7 @@ body:
       label: Untested Code
       description: What code needs test coverage?
       placeholder: |
-        File: components/backend/handlers/sessions.go
+        File: components/ambient-api-server/pkg/api/sessions.go
         Functions:
         - CreateSession (line 123)
         - UpdateSessionStatus (line 456)

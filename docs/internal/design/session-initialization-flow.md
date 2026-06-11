@@ -506,8 +506,8 @@ BOT_TOKEN="<k8s-sa-token>"  # For backend API calls
 ANTHROPIC_API_KEY="<key>"  # Or Vertex creds
 
 # Backend URLs
-BACKEND_API_URL="http://backend-service.ambient-code.svc:8080/api"
-WEBSOCKET_URL="ws://backend-service.ambient-code.svc:8080/api/projects/myproject/sessions/session-123/ws"
+BACKEND_API_URL="http://ambient-api-server.ambient-code.svc:8000/api"
+WEBSOCKET_URL="ws://ambient-api-server.ambient-code.svc:8000/api/projects/myproject/sessions/session-123/ws"
 ```
 
 ---

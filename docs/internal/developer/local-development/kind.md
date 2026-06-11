@@ -150,7 +150,7 @@ To rebuild a single component (faster):
 ```bash
 # Example: backend change
 make build-backend && \
-  kind load docker-image vteam_backend:latest --name ambient-local && \
+  kind load docker-image acp_api_server:latest --name ambient-local && \
   kubectl rollout restart deployment/backend-api -n ambient-code
 ```
 
@@ -175,7 +175,7 @@ kubectl get configmap operator-config -n ambient-code \
   -o jsonpath='{.data.AMBIENT_CODE_RUNNER_IMAGE}'
 ```
 
-With `LOCAL_IMAGES=true`, images show as `localhost/vteam_*:latest` (Podman prefix, no `quay.io`).
+With `LOCAL_IMAGES=true`, images show as `localhost/acp_*:latest` (Podman prefix, no `quay.io`).
 
 ### With Quay Images (Default)
 
@@ -248,11 +248,11 @@ cp e2e/env.example e2e/.env
 ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
 
 # Override specific images (for testing custom builds)
-IMAGE_BACKEND=quay.io/your-org/vteam_backend:custom-tag
-IMAGE_FRONTEND=quay.io/your-org/vteam_frontend:custom-tag
-IMAGE_OPERATOR=quay.io/your-org/vteam_operator:custom-tag
-IMAGE_RUNNER=quay.io/your-org/vteam_claude_runner:custom-tag
-IMAGE_STATE_SYNC=quay.io/your-org/vteam_state_sync:custom-tag
+IMAGE_BACKEND=quay.io/your-org/acp_api_server:custom-tag
+IMAGE_FRONTEND=quay.io/your-org/acp_ambient_ui:custom-tag
+IMAGE_OPERATOR=quay.io/your-org/acp_control_plane:custom-tag
+IMAGE_RUNNER=quay.io/your-org/acp_claude_runner:custom-tag
+IMAGE_STATE_SYNC=quay.io/your-org/acp_control_plane:custom-tag
 
 # Or override registry for all images
 CONTAINER_REGISTRY=quay.io/your-org
@@ -289,10 +289,10 @@ hot-reload against the kind cluster backend:
 
 ```bash
 # Terminal 1: port-forward the backend
-kubectl port-forward svc/backend-service 8081:8080 -n ambient-code
+kubectl port-forward svc/ambient-api-server 8081:8080 -n ambient-code
 
 # Terminal 2: start the frontend dev server
-cd components/frontend
+cd components/ambient-ui
 npm install  # first time only
 
 # Create .env.local with the test user token
@@ -358,7 +358,7 @@ kubectl logs -n ambient-code deployment/backend-api
 **Workaround - Use port-forward:**
 ```bash
 # Stop using ingress on 8080, use direct port-forward instead
-kubectl port-forward -n ambient-code svc/frontend-service 18080:3000
+kubectl port-forward -n ambient-code svc/ambient-ui-service 18080:3000
 
 # Update test config
 cd e2e
@@ -407,7 +407,7 @@ cd e2e && ./scripts/init-minio.sh
 
 ```bash
 # View logs
-kubectl logs -n ambient-code -l app=backend-api -f
+kubectl logs -n ambient-code -l app=ambient-api-server -f
 
 # Restart component
 kubectl rollout restart -n ambient-code deployment/backend-api

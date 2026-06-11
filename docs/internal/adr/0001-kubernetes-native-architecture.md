@@ -95,8 +95,8 @@ Chosen option: "Kubernetes-native with CRDs and Operators", because:
 
 **Key Files:**
 - `components/manifests/base/*-crd.yaml` - CRD definitions
-- `components/operator/internal/handlers/sessions.go` - Operator reconciliation
-- `components/backend/handlers/sessions.go` - API to CR translation
+- `components/ambient-control-plane/internal/reconciler/kube_reconciler.go - Control plane reconciliation
+- `components/ambient-api-server/ - API to CR translation
 
 ## Validation
 

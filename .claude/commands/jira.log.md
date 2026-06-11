@@ -42,7 +42,7 @@ If the user provides a simple sentence, use it as the summary. If they provide m
 - Environment/browser info if relevant
 
 **Helpful for all types:**
-- Relevant file paths or components (e.g., `components/frontend/src/...`)
+- Relevant file paths or components (e.g., `components/ambient-ui/src/...`)
 - Related issues/PRs/design docs
 - Screenshots or mockups (as links)
 - Constraints or out-of-scope items
@@ -189,7 +189,7 @@ Acceptance:
 - Smooth transition animation
 
 Repo: vTeam
-Files: components/frontend/src/components/session-viewer/
+Files: components/ambient-ui/src/components/session-viewer/
 Related: RHOAIENG-38000 (design system tokens)
 
 Constraints:
@@ -215,7 +215,7 @@ Expected: Session disappears from list
 Actual: Session remains until page refresh
 
 Repo: vTeam
-Files: components/frontend/src/components/session-list/
+Files: components/ambient-ui/src/components/session-list/
 Browser: Chrome 120, Firefox 121
 
 Fix should invalidate the React Query cache after mutation.
@@ -231,8 +231,8 @@ Need to migrate to the new `select` and mutation patterns.
 
 Repo: vTeam
 Files:
-- components/frontend/src/services/queries/sessions.ts
-- components/frontend/src/hooks/
+- components/ambient-ui/src/services/queries/sessions.ts
+- components/ambient-ui/src/hooks/
 
 Constraints:
 - Don't change API contracts
@@ -283,7 +283,7 @@ For a Jira to be immediately actionable by an agent, ensure:
 > **Expected**: Redirect to dashboard
 > **Actual**: Loops back to login
 > **Repo**: vTeam
-> **Files**: `components/frontend/src/app/auth/callback/`
+> **Files**: `components/ambient-ui/src/app/auth/callback/`
 > **Constraint**: Don't break Chrome/Firefox flows
 > **Test**: Add E2E test for Safari user-agent
 

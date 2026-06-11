@@ -109,8 +109,8 @@ Backend uses `github.com/Unleash/unleash-go-sdk/v5`. Ensure it is in `go.mod` an
 
 ### Reference
 
-- `components/backend/featureflags/featureflags.go` – Unleash client init, `IsEnabled`, `IsEnabledWithContext`
-- `components/backend/handlers/featureflags.go` – `FeatureEnabled`, `FeatureEnabledForRequest`
+- `components/ambient-api-server/featureflags/featureflags.go` – Unleash client init, `IsEnabled`, `IsEnabledWithContext`
+- `components/ambient-api-server/handlers/featureflags.go` – `FeatureEnabled`, `FeatureEnabledForRequest`
 
 ---
 
@@ -229,8 +229,8 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 ### Reference
 
-- `components/backend/featureflags/featureflags.go` – Unleash SDK init, fail-open/closed defaults
-- `components/backend/handlers/featureflags_admin.go` – Admin API handlers, workspace override logic
-- `components/backend/cmd/sync_flags.go` – Flag sync to Unleash at startup
-- `components/frontend/src/components/workspace-sections/feature-flags-section.tsx` – Admin UI component
-- `components/frontend/src/services/queries/use-feature-flags-admin.ts` – React Query hooks
+- `components/ambient-api-server/featureflags/featureflags.go` – Unleash SDK init, fail-open/closed defaults
+- `components/ambient-api-server/handlers/featureflags_admin.go` – Admin API handlers, workspace override logic
+- `components/ambient-api-server/cmd/sync_flags.go` – Flag sync to Unleash at startup
+- `components/ambient-ui/src/components/workspace-sections/feature-flags-section.tsx` – Admin UI component
+- `components/ambient-ui/src/services/queries/use-feature-flags-admin.ts` – React Query hooks

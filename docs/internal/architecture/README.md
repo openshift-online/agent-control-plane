@@ -37,7 +37,7 @@ User → Frontend → Backend API → K8s Operator → Runner Jobs → Claude Co
 - Repository browsing
 - Multi-agent chat interface
 
-**Documentation:** [components/frontend/README.md](../../components/frontend/README.md)
+**Documentation:** [components/ambient-ui/README.md](../../components/ambient-ui/README.md)
 
 ---
 
@@ -50,7 +50,7 @@ User → Frontend → Backend API → K8s Operator → Runner Jobs → Claude Co
 - Git operations (clone, fork, PR creation)
 - WebSocket support for real-time updates
 
-**Documentation:** [components/backend/README.md](../../components/backend/README.md)
+**Documentation:** [components/ambient-api-server/README.md](../../components/ambient-api-server/README.md)
 
 ---
 
@@ -63,7 +63,7 @@ User → Frontend → Backend API → K8s Operator → Runner Jobs → Claude Co
 - Handles timeouts and cleanup
 - Manages runner pod lifecycle
 
-**Documentation:** [components/operator/README.md](../../components/operator/README.md)
+**Documentation:** [components/ambient-control-plane/](../../components/ambient-control-plane/)
 
 ---
 

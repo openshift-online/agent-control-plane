@@ -231,7 +231,7 @@ http://session-{KubeCrName}.{KubeNamespace}.svc.cluster.local:8001
 
 The `Session` model stores `KubeCrName` and `KubeNamespace` — both are available from the DB. The runner listens on port `8001` (set via `AGUI_PORT` env var by the operator; default in runner code is `8000` but the operator overrides it).
 
-This pattern is used by `components/backend/websocket/agui_proxy.go` (the V1 backend) and by `plugins/sessions/handler.go` in the ambient-api-server. The sessions plugin implements `proxyToRunner(w, r, url)` which copies method, headers, body, and response verbatim. All workspace, files, git, repos/status, and AGUI sub-resource endpoints use this pattern. When the runner is unavailable, handlers return a stub (empty body) or `503 Service Unavailable`.
+This pattern is used by `components/ambient-api-server/` (the V1 backend) and by `plugins/sessions/handler.go` in the ambient-api-server. The sessions plugin implements `proxyToRunner(w, r, url)` which copies method, headers, body, and response verbatim. All workspace, files, git, repos/status, and AGUI sub-resource endpoints use this pattern. When the runner is unavailable, handlers return a stub (empty body) or `503 Service Unavailable`.
 
 ### Implementing `GET /sessions/{id}/events` (Runner SSE Proxy)
 
@@ -450,7 +450,7 @@ Each wave maps to one or more component development guides. Read the guide for t
 | Wave 5 | Runner | `.claude/context/control-plane-development.md` (Runner ↔ CP contract section) |
 | Wave 6 | Frontend | `.claude/context/frontend-development.md` |
 
-The old Gin/K8s backend (`components/backend/`) is covered by `.claude/context/backend-development.md` — only relevant if you are modifying the V1 backend.
+The V1 Gin/K8s backend has been removed. The current API server is `components/ambient-api-server/`.
 
 ---
 

@@ -111,13 +111,13 @@ After spec acceptance (or in parallel for human workflow), load the implementati
 
 | Component | Guide | Context |
 |-----------|-------|---------|
-| Data Model / API | `workflows/sessions/ambient-model.workflow.md` | `specs/standards/backend/conventions.spec.md` |
-| SDK | (workflow section in ambient-model.workflow.md Wave 3) | `specs/standards/backend/conventions.spec.md` |
-| CLI | (guide section Wave 5) | `specs/standards/backend/conventions.spec.md` |
+| Data Model / API | `workflows/sessions/ambient-model.workflow.md` | `specs/standards/control-plane/conventions.spec.md` |
+| SDK | (workflow section in ambient-model.workflow.md Wave 3) | `specs/standards/control-plane/conventions.spec.md` |
+| CLI | (guide section Wave 5) | `specs/standards/control-plane/conventions.spec.md` |
 | Control Plane | (guide section Wave 4) | `specs/standards/control-plane/conventions.spec.md` |
-| Operator | (guide section Wave 5) | `specs/standards/control-plane/conventions.spec.md` |
-| Frontend | (guide section Wave 6) | `specs/standards/frontend/conventions.spec.md` |
-| Backend (V1) | — | `specs/standards/backend/conventions.spec.md` |
+| Control Plane | (guide section Wave 5) | `specs/standards/control-plane/conventions.spec.md` |
+| UI | (guide section Wave 6) | `specs/standards/control-plane/conventions.spec.md` |
+| API Server | — | `specs/standards/control-plane/conventions.spec.md` |
 
 ### 3b. Create Implementation Branch
 
@@ -235,10 +235,10 @@ make generate    # regenerate from openapi
 cd go-sdk && go build ./...
 ```
 
-### Frontend (`components/frontend/`)
+### UI (`components/ambient-ui/`)
 
 ```bash
-cd components/frontend
+cd components/ambient-ui
 npm run build    # must pass with 0 errors, 0 warnings
 npx vitest run --coverage
 ```
@@ -349,11 +349,11 @@ But prefer fixing the lint/format issue instead.
 | `skills/control-plane/dev-cluster/SKILL.md` | Managing kind clusters for testing |
 | `skills/integrations/grpc-dev/SKILL.md` | gRPC streaming, AG-UI events |
 | `skills/control-plane/ambient-pr-test/SKILL.md` | PR validation on MPP dev cluster |
-| `specs/standards/backend/conventions.spec.md` | API server plugin architecture, OpenAPI, testing |
-| `specs/standards/backend/conventions.spec.md` | CLI command patterns |
-| `specs/standards/backend/conventions.spec.md` | SDK generation |
+| `specs/standards/control-plane/conventions.spec.md` | API server plugin architecture, OpenAPI, testing |
+| `specs/standards/control-plane/conventions.spec.md` | CLI command patterns |
+| `specs/standards/control-plane/conventions.spec.md` | SDK generation |
 | `specs/standards/control-plane/conventions.spec.md` | CP fan-out, runner contract |
-| `specs/standards/frontend/conventions.spec.md` | Frontend build, React Query |
+| `specs/standards/control-plane/conventions.spec.md` | Frontend build, React Query |
 | `specs/api/ambient-model.spec.md` | Data model spec (source of truth) |
 | `workflows/sessions/ambient-model.workflow.md` | Implementation workflow (wave-based) |
 

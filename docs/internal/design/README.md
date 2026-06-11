@@ -85,8 +85,8 @@ When a bug is found in a component, the corresponding context file is updated so
 | `cli-development.md` | `components/ambient-cli/` |
 | `operator-development.md` | `components/ambient-control-plane/` |
 | `control-plane-development.md` | Runner + CP protocol |
-| `frontend-development.md` | `components/frontend/` |
-| `backend-development.md` | `components/backend/` (V1) |
+| `frontend-development.md` | `components/ambient-ui/` |
+| `backend-development.md` | `components/ambient-api-server/` |
 | `ambient-spec-development.md` | Spec/guide authoring |
 
 ---

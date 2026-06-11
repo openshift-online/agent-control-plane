@@ -39,7 +39,7 @@ managed-components:
   # backend:
   #   description: Go REST API (Gin), manages K8s Custom Resources
   #   paths:
-  #     - components/backend/**
+  #     - components/ambient-api-server/**
   #   constitution: .specify/constitutions/backend.md
   #   spec: .specify/specs/backend.md
   #   mode: warn

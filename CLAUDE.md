@@ -6,13 +6,14 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 
 ## Structure
 
-- `components/operator/` - Go Kubernetes controller, watches CRDs and creates Jobs
+- `components/ambient-api-server/` - Go REST API microservice (rh-trex-ai framework), PostgreSQL-backed
+- `components/ambient-control-plane/` - Go Kubernetes controller, watches CRDs and reconciles sessions
+- `components/ambient-ui/` - NextJS + Shadcn web UI for session management and monitoring
+- `components/ambient-mcp/` - MCP server integration
 - `components/runners/ambient-runner/` - Python runner executing Claude Code CLI in Job pods
 - `components/ambient-cli/` - Go CLI (`acpctl`), manages agentic sessions from the command line
-- `components/public-api/` - Stateless HTTP gateway, proxies to backend (no direct K8s access)
-- `components/ambient-api-server/` - Go REST API microservice (rh-trex-ai framework), PostgreSQL-backed
-- `components/ambient-sdk/` - Go + Python client SDK for the platform's public REST API
-- `components/open-webui-llm/` - Open WebUI LLM integration
+- `components/ambient-sdk/` - Go, Python, and TypeScript client SDKs generated from the OpenAPI spec
+- `components/credential-sidecars/` - Per-provider credential sidecar containers (GitHub, Jira, K8s, Google)
 - `components/manifests/` - Kustomize-based deployment manifests and overlays
 - `docs/` - Astro Starlight documentation site
 - `specs/` - Desired state of the system ([sessions](specs/sessions/), [agents](specs/agents/), [control-plane](specs/control-plane/), [integrations](specs/integrations/), [standards](specs/standards/))
@@ -21,9 +22,8 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 
 ## Key Files
 
-- CRD definitions: `components/manifests/base/crds/agenticsessions-crd.yaml`, `projectsettings-crd.yaml`
-- Session lifecycle: `components/operator/internal/handlers/sessions.go`
-- K8s client init: `components/operator/internal/config/config.go`
+- Control plane reconciler: `components/ambient-control-plane/internal/reconciler/kube_reconciler.go`
+- K8s client init: `components/ambient-control-plane/internal/config/config.go`
 - Runner entry point: `components/runners/ambient-runner/main.py`
 
 ## Session Flow
@@ -50,8 +50,11 @@ make benchmark                # Run component benchmark harness
 ### Per-Component
 
 ```shell
-# Operator (Go)
-cd components/operator && gofmt -l . && go vet ./... && golangci-lint run
+# Control Plane (Go)
+cd components/ambient-control-plane && gofmt -l . && go vet ./... && golangci-lint run
+
+# API Server (Go)
+cd components/ambient-api-server && gofmt -l . && go vet ./... && golangci-lint run
 
 # Runner (Python)
 cd components/runners/ambient-runner && uv venv && uv pip install -e .
@@ -70,7 +73,7 @@ make benchmark
 make benchmark FORMAT=tsv
 
 # Single component
-make benchmark COMPONENT=operator MODE=cold
+make benchmark COMPONENT=ambient-control-plane MODE=cold
 ```
 
 Benchmark notes:
@@ -114,7 +117,7 @@ Cross-cutting rules that apply across ALL components. Component-specific convent
 - **Restricted SecurityContext on all containers**: `runAsNonRoot`, drop `ALL` capabilities, `readOnlyRootFilesystem`
 
 Component-specific conventions:
-- Operator: [conventions](specs/standards/control-plane/conventions.spec.md)
+- Control Plane: [conventions](specs/standards/control-plane/conventions.spec.md)
 - Security: [security standards](specs/standards/security/security.spec.md)
 
 ## Pre-commit Hooks
