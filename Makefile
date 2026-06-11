@@ -753,7 +753,7 @@ dev: ## Local dev: preflight, cluster, dev-env, port-forwards; COMPONENT=ambient
 	else \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Keycloak hostname already correct"; \
 	fi; \
-	kubectl port-forward.*ambient-api-server $(KIND_FWD_API_SERVER_PORT):8000 >/tmp/acp-dev-pf-api.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
+	kubectl port-forward -n $(NAMESPACE) svc/ambient-api-server $(KIND_FWD_API_SERVER_PORT):8000 >/tmp/acp-dev-pf-api.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
 	kubectl port-forward -n $(NAMESPACE) svc/keycloak-service $(KIND_FWD_KEYCLOAK_PORT):8080 >/tmp/acp-dev-pf-keycloak.log 2>&1 & PF_PIDS="$$PF_PIDS $$!"; \
 	sleep 2; \
 	echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server  → http://localhost:$(KIND_FWD_API_SERVER_PORT)"; \
@@ -880,7 +880,7 @@ kind-login: check-kubectl check-local-context ## Set kubectl context, port-forwa
 	@echo "Starting port-forwards..."
 	@pkill -f "port-forward.*ambient-api-server" 2>/dev/null || true
 	@pkill -f "port-forward.*ambient-ui-service" 2>/dev/null || true
-	@kubectl port-forward.*ambient-api-server $(KIND_FWD_API_SERVER_PORT):8000 >/tmp/pf-api-server.log 2>&1 & \
+	@kubectl port-forward -n $(NAMESPACE) svc/ambient-api-server $(KIND_FWD_API_SERVER_PORT):8000 >/tmp/pf-api-server.log 2>&1 & \
 		sleep 1; \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) ambient-api-server → http://localhost:$(KIND_FWD_API_SERVER_PORT)"
 	@kubectl port-forward -n $(NAMESPACE) svc/ambient-ui-service $(KIND_FWD_FRONTEND_PORT):3000 >/tmp/pf-ui.log 2>&1 & \

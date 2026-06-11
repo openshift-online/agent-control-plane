@@ -73,7 +73,7 @@ reviews:
         - Limit to 3-5 comments max; group similar issues; mention repeated patterns once.
         - If nothing is broken, approve briefly.
 
-    - path: "components/{backend,operator}/**/*.go"
+    - path: "components/{ambient-api-server,ambient-control-plane}/**/*.go"
       instructions: |
         - User-facing API ops MUST use GetK8sClientsForRequest(c), never the backend service account.
         - No panic() -- return fmt.Errorf with context.

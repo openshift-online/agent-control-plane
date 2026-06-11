@@ -32,8 +32,6 @@ The Ambient Code Platform consists of these containerized components:
 | **Frontend** | `components/ambient-ui` | `acp_ambient_ui:latest` | NextJS web interface |
 | **Operator** | `components/ambient-control-plane` | `acp_control_plane:latest` | Kubernetes operator (Go) |
 | **Runner** | `components/runners/ambient-runner` | `acp_claude_runner:latest` | Python Claude Code runner |
-| **State Sync** | `components/runners/state-sync` | `acp_state_sync:latest` | S3 persistence service |
-| **Public API** | `components/public-api` | `acp_public_api:latest` | External API gateway |
 
 ## Development Cluster: Kind
 
@@ -180,8 +178,6 @@ Determine which components are affected:
 - Changes in `components/ambient-ui/` → frontend
 - Changes in `components/ambient-control-plane/` → operator
 - Changes in `components/runners/ambient-runner/` → runner
-- Changes in `components/runners/state-sync/` → state-sync
-- Changes in `components/public-api/` → public-api
 
 ### Step 2: Explain the Plan
 Tell the user:
@@ -210,8 +206,6 @@ make build-backend CONTAINER_ENGINE=$CONTAINER_ENGINE
 make build-frontend CONTAINER_ENGINE=$CONTAINER_ENGINE
 make build-operator CONTAINER_ENGINE=$CONTAINER_ENGINE
 make build-runner CONTAINER_ENGINE=$CONTAINER_ENGINE
-make build-state-sync CONTAINER_ENGINE=$CONTAINER_ENGINE
-make build-public-api CONTAINER_ENGINE=$CONTAINER_ENGINE
 
 # Or build all at once
 make build-all CONTAINER_ENGINE=$CONTAINER_ENGINE
@@ -516,7 +510,6 @@ make benchmark COMPONENT=backend MODE=warm
 - If `reports/benchmarks/` is not writable in the current environment, the harness will fall back to a temp directory and print a warning.
 - Session benchmarking is **contract-only** in v1 (`bench_session_*` stubs in `scripts/benchmarks/bench-manifest.sh`).
 - Start with the **smallest relevant benchmark**:
-  - backend/operator/public-api change -> `MODE=warm COMPONENT=<component> REPEATS=1`
   - frontend contributor setup -> `MODE=cold COMPONENT=frontend REPEATS=1`
   - only run all components when you explicitly need the whole matrix
 - Treat preflight failures as useful environment signals; do not work around them unless the user asks.
