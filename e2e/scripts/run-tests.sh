@@ -39,7 +39,7 @@ if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
   if [ -f .env.local ]; then
     source .env.local
   elif [ -f .env.test ]; then
-    # Load ANTHROPIC_API_KEY from .env.test if present (set by deploy.sh in CI)
+    # Load ANTHROPIC_API_KEY from .env.test if present (set during CI setup)
     source .env.test
   elif [ -f .env ]; then
     source .env
@@ -84,7 +84,7 @@ else
   echo "❌ Some tests failed (exit code: $exit_code)"
   echo ""
   echo "Debugging tips:"
-  echo "  - Check pod logs: kubectl logs -n ambient-code -l app=frontend"
+  echo "  - Check pod logs: kubectl logs -n ambient-code -l app=ambient-ui"
   echo "  - Check services: kubectl get svc -n ambient-code"
   echo "  - Test NodePort: curl http://localhost:8080 (podman) or http://localhost (docker)"
   echo "  - Port-forward: kubectl port-forward -n ambient-code svc/ambient-ui-service 8080:3000"

@@ -293,7 +293,7 @@ test_pods_running() {
     log_section "Test 7: Pod Status"
 
     assert_pod_running "app=ambient-api-server" "Backend pod is running"
-    assert_pod_running "app=frontend" "Frontend pod is running"
+    assert_pod_running "app=ambient-ui" "Frontend pod is running"
     assert_pod_running "app=ambient-control-plane" "Operator pod is running"
 
     # Check pod readiness
@@ -366,7 +366,7 @@ test_frontend_accessibility() {
     log_section "Test 11: Frontend Accessibility"
 
     # Check frontend health via pod readiness
-    if kubectl get pods -n "$NAMESPACE" -l app=frontend -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q "True"; then
+    if kubectl get pods -n "$NAMESPACE" -l app=ambient-ui -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q "True"; then
         log_success "Frontend is accessible (pod readiness probe passes)"
         ((PASSED_TESTS++))
     else

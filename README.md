@@ -36,8 +36,8 @@ The platform consists of containerized microservices orchestrated via Kubernetes
 | **MCP Server** (`ambient-mcp`) | Go | MCP tool definitions and sidecar/public endpoint modes |
 
 ```
-User Creates Session → API Server Creates CR → Control Plane Spawns Job →
-Pod Runs Claude CLI → Results Stored in CR → UI Displays Progress
+User Creates Session → API Server Persists to DB → Control Plane Spawns Job →
+Pod Runs AI Agent → Results Stream to API Server → UI Displays Progress
 ```
 
 See [docs/internal/architecture/](docs/internal/architecture/) for detailed architecture documentation.

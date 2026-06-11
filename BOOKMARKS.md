@@ -93,7 +93,7 @@ Component-specific conventions loaded by review agents on demand.
 | [Kind](docs/internal/developer/local-development/kind.md) | Recommended local dev setup (Kubernetes in Docker) |
 | [OpenShift](docs/internal/developer/local-development/openshift.md) | OpenShift Local (CRC) setup for OCP-specific features |
 | [Hybrid](docs/internal/developer/local-development/hybrid.md) | Run components locally with breakpoint debugging |
-| [Manifests](components/manifests/README.md) | Kustomize overlay structure, deploy.sh usage |
+| [Manifests](components/manifests/README.md) | Kustomize overlay structure and deployment |
 
 ## Testing
 

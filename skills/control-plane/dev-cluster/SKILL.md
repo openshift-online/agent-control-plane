@@ -286,7 +286,7 @@ for attempt in 1 2 3; do
     sleep 3
   else
     echo "Attempt $attempt: frontend returned HTTP $STATUS — check pod logs"
-    kubectl logs -l app=frontend -n ambient-code --tail=20
+    kubectl logs -l app=ambient-ui -n ambient-code --tail=20
     break
   fi
 done
@@ -307,7 +307,7 @@ Access the platform at:
 
 To view logs:
   kubectl logs -f -l app=backend -n ambient-code
-  kubectl logs -f -l app=frontend -n ambient-code
+  kubectl logs -f -l app=ambient-ui -n ambient-code
   kubectl logs -f -l app=operator -n ambient-code
 
 To teardown:
@@ -338,7 +338,7 @@ kubectl rollout status deployment/ambient-api-server -n ambient-code
 ### "Show me the logs"
 ```bash
 kubectl logs -f -l app=backend -n ambient-code
-kubectl logs -f -l app=frontend -n ambient-code
+kubectl logs -f -l app=ambient-ui -n ambient-code
 kubectl logs -f -l app=operator -n ambient-code
 ```
 

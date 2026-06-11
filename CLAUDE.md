@@ -30,8 +30,8 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 ## Session Flow
 
 ```
-User Creates Session → Backend Creates CR → Operator Spawns Job →
-Pod Runs Claude CLI → Results Stored in CR → UI Displays Progress
+User Creates Session → API Server Persists to DB → Control Plane Spawns Job →
+Pod Runs AI Agent → Results Stream to API Server → UI Displays Progress
 ```
 
 ## Commands

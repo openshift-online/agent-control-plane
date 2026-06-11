@@ -216,7 +216,7 @@ make local-troubleshoot
 #### "Backend not responding"
 ```bash
 make local-logs-backend
-make kind-reload-backend
+make kind-rebuild
 ```
 
 ## Writing New Tests

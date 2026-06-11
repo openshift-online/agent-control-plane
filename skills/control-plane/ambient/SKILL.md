@@ -147,10 +147,9 @@ For the production namespace (`ambient-code`), use:
 
 ```bash
 make deploy
-# calls components/manifests/deploy.sh — handles OAuth, restores kustomization after apply
+# applies components/manifests/overlays/production via kubectl apply -k
 ```
 
-`deploy.sh` mutates `kustomization.yaml` in-place and restores it post-apply. It also handles the OpenShift OAuth `OAuthClient` (requires cluster-admin). Use `make deploy` only for the canonical production namespace.
 
 ### Manual (for debugging or one-off namespaces)
 

@@ -199,7 +199,7 @@ open e2e/cypress/videos/acp.cy.ts.mp4
 ### View Pod Logs
 
 ```bash
-kubectl logs -n ambient-code -l app=frontend
+kubectl logs -n ambient-code -l app=ambient-ui
 kubectl logs -n ambient-code -l app=ambient-api-server
 ```
 
