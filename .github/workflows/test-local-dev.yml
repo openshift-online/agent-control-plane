@@ -130,7 +130,7 @@ jobs:
     - name: Deploy using Makefile
       run: |
         echo "Using Makefile to deploy complete stack..."
-        make kind-up CONTAINER_ENGINE=docker CI_MODE=true LOCAL_IMAGES=true
+        make kind-up CONTAINER_ENGINE=docker CI_MODE=true
 
     - name: Wait for deployments
       run: |
