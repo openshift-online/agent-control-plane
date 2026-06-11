@@ -8,9 +8,9 @@ Choose which components to run locally based on what you're developing:
 
 | Scenario | Local | In Cluster | Port-Forward | Best For |
 |----------|-------|------------|--------------|----------|
-| **UI Only** | Frontend | API Server, Control Plane, MinIO | Backend → 8090 | UI/UX work |
-| **UI + API Server** | UI, API Server | Control Plane, MinIO | None | API development |
-| **Full Stack** | UI, API Server, Control Plane | MinIO only | None | Control plane work |
+| **UI Only** | Frontend | API Server, Control Plane, PostgreSQL, MinIO | API Server → 8000 | UI/UX work |
+| **UI + API Server** | UI, API Server | Control Plane, PostgreSQL, MinIO | PostgreSQL → 5432 | API development |
+| **Full Stack** | UI, API Server, Control Plane | PostgreSQL, MinIO | PostgreSQL → 5432 | Control plane work |
 
 **Benefits:**
 - ⚡ Instant reloads (no image build/push)
@@ -23,26 +23,26 @@ Choose which components to run locally based on what you're developing:
 
 **Best for:** UI/UX work, React components, styling
 
-Run Next.js dev server locally, connect to backend in cluster via port-forward.
+Run Next.js dev server locally, connect to API server in cluster via port-forward.
 
 ```
-Frontend (localhost:3000) → Backend (cluster:8090) → K8s API
+Frontend (localhost:3000) → API Server (cluster:8000) → PostgreSQL
 ```
 
 ### Setup
 
-**Terminal 1 - Port-forward backend:**
+**Terminal 1 - Port-forward API server:**
 ```bash
-# Forward backend service to localhost:8090
-kubectl port-forward -n ambient-code svc/ambient-api-server 8090:8080
+# Forward API server service to localhost:8000
+kubectl port-forward -n ambient-code svc/ambient-api-server 8000:8000
 ```
 
 **Terminal 2 - Run frontend:**
 ```bash
 cd components/ambient-ui
 
-# Set backend URL to port-forwarded backend
-export BACKEND_URL=http://localhost:8090/api
+# Set backend URL to port-forwarded API server
+export BACKEND_URL=http://localhost:8000/api
 
 # Run dev server
 npm run dev
@@ -52,9 +52,9 @@ npm run dev
 
 ### What's Happening
 
-- Frontend talks to backend via port-forward tunnel
-- Backend runs in cluster, has full K8s access
-- Control Plane in cluster handles sessions
+- Frontend talks to API server via port-forward tunnel
+- API server runs in cluster, persists sessions in PostgreSQL
+- Control plane in cluster watches API server via gRPC, creates runner jobs
 
 ### Fast Iteration
 
@@ -68,12 +68,12 @@ npm run dev
 
 **Best for:** Backend API work, handler logic, new endpoints
 
-Run frontend and backend locally, control plane stays in cluster.
+Run frontend and API server locally, control plane stays in cluster.
 
 ```
-Frontend (localhost:3000) → Backend (localhost:8090) → K8s API (via KUBECONFIG)
-                                                       ↓
-                                          Control plane watches API server via gRPC
+Frontend (localhost:3000) → API Server (localhost:8000) → PostgreSQL (cluster)
+                                                          ↓ gRPC events
+                                          Control Plane (cluster) → creates K8s Jobs
 ```
 
 ### Setup
@@ -85,18 +85,20 @@ make kind-up
 kubectl scale -n ambient-code deployment/ambient-api-server deployment/ambient-ui --replicas=0
 ```
 
-**Terminal 1 - Backend:**
+**Terminal 1 - API Server:**
 ```bash
 cd components/ambient-api-server
-export KUBECONFIG=~/.kube/config  # Direct K8s API access
-export PORT=8090
+# API server connects to PostgreSQL (in cluster via port-forward or local)
+# Port-forward PostgreSQL if using the in-cluster instance:
+# kubectl port-forward -n ambient-code svc/ambient-api-server-db 5432:5432
 go run .
+# Listens on localhost:8000 by default (development environment)
 ```
 
 **Terminal 2 - Frontend:**
 ```bash
 cd components/ambient-ui
-export BACKEND_URL=http://localhost:8090/api
+export BACKEND_URL=http://localhost:8000/api
 npm run dev
 
 # Access at http://localhost:3000
@@ -104,14 +106,14 @@ npm run dev
 
 ### What's Happening
 
-- **No port-forwarding needed!**
-- Backend uses `KUBECONFIG` to talk directly to K8s API
-- API server persists sessions, control plane in cluster reconciles them
-- Frontend talks to local backend
+- API server runs locally, persists sessions in PostgreSQL
+- Control plane in cluster watches API server via gRPC, creates runner jobs
+- Frontend talks to local API server
+- You may need to port-forward PostgreSQL from the cluster, or run it locally
 
 ### Fast Iteration
 
-- Edit backend code → restart (few seconds)
+- Edit API server code → restart (few seconds)
 - Edit frontend code → instant hot reload
 - See logs directly in terminal
 - Full debugging with breakpoints
@@ -125,8 +127,8 @@ npm run dev
 Run everything locally except MinIO and runner jobs.
 
 ```
-Frontend (localhost:3000) → Backend (localhost:8090) → K8s API (via KUBECONFIG)
-                                                       ↓
+Frontend (localhost:3000) → API Server (localhost:8000) → PostgreSQL (cluster or local)
+                                                          ↓ gRPC events
                                           Control Plane (localhost) → K8s API (via KUBECONFIG)
                                                                 ↓
                                                    Creates runner jobs in cluster
@@ -141,26 +143,30 @@ make kind-up
 kubectl scale -n ambient-code deployment/ambient-api-server deployment/ambient-ui deployment/ambient-control-plane --replicas=0
 ```
 
-**Terminal 1 - Control Plane:**
+**Terminal 1 - API Server:**
+```bash
+cd components/ambient-api-server
+# Ensure PostgreSQL is accessible (port-forward or local)
+go run .
+# Listens on localhost:8000 (REST) and localhost:9000 (gRPC) by default
+```
+
+**Terminal 2 - Control Plane:**
 ```bash
 cd components/ambient-control-plane
 export KUBECONFIG=~/.kube/config
-export AMBIENT_CODE_RUNNER_IMAGE=quay.io/ambient_code/acp_claude_runner:latest
-go run .
-```
-
-**Terminal 2 - Backend:**
-```bash
-cd components/ambient-api-server
-export KUBECONFIG=~/.kube/config
-export PORT=8090
-go run .
+export AMBIENT_API_SERVER_URL=http://localhost:8000   # local API server
+export AMBIENT_GRPC_SERVER_ADDR=localhost:9000         # local gRPC
+export AMBIENT_GRPC_USE_TLS=false                      # no TLS for local dev
+export AMBIENT_API_TOKEN=<your-token>                  # or set OIDC_CLIENT_ID + OIDC_CLIENT_SECRET
+export RUNNER_IMAGE=quay.io/ambient_code/acp_claude_runner:latest
+go run ./cmd/ambient-control-plane
 ```
 
 **Terminal 3 - Frontend:**
 ```bash
 cd components/ambient-ui
-export BACKEND_URL=http://localhost:8090/api
+export BACKEND_URL=http://localhost:8000/api
 npm run dev
 
 # Access at http://localhost:3000
@@ -168,16 +174,16 @@ npm run dev
 
 ### What's Happening
 
-- **No port-forwarding needed!**
-- All components use `KUBECONFIG` for direct K8s API access
-- Control plane watches API server, creates runner jobs in cluster
-- MinIO stays in cluster (for session state storage)
+- API server stores sessions in PostgreSQL (in-cluster or local)
+- Control plane connects to local API server via gRPC watch streams
+- Control plane uses `KUBECONFIG` to create runner jobs in cluster
+- MinIO stays in cluster (for session artifact storage)
 - Runner jobs still run as pods (containerized execution)
 
 ### Fast Iteration
 
 - Edit control plane code → restart (~10 seconds)
-- Edit backend code → restart (~5 seconds)
+- Edit API server code → restart (~5 seconds)
 - Edit frontend code → instant hot reload
 - See all logs in separate terminals
 - Full debugging across entire stack
@@ -191,12 +197,12 @@ We've created VS Code tasks for quick access:
 **Kind Cluster:**
 - `Kind: Start Cluster` - Create kind cluster with all components
 - `Kind: Stop Cluster` - Delete kind cluster
-- `Kind: Port-Forward Backend` - Forward backend to localhost:8090
+- `Kind: Port-Forward Backend` - Forward API server to localhost:8000
 - `Kind: Port-Forward Frontend` - Forward frontend to localhost:3000
 
 **Hybrid Development:**
-- `Hybrid: UI Only` - Run frontend + port-forward backend
-- `Hybrid: UI + API Server` - Run frontend + backend locally
+- `Hybrid: UI Only` - Run frontend + port-forward API server
+- `Hybrid: UI + API Server` - Run frontend + API server locally
 - `Hybrid: Full Local Stack` - Run all three locally
 
 Access via `Cmd+Shift+P` → "Tasks: Run Task"
@@ -208,19 +214,19 @@ Access via `Cmd+Shift+P` → "Tasks: Run Task"
 **Common confusion:** Many think `export KUBECONFIG=~/.kube/config` is port-forwarding. It's not!
 
 **`KUBECONFIG`:**
-- Gives your local Go processes direct access to the Kubernetes API
-- They can create/read CRs, pods, secrets, deployments, etc.
-- This is why backend and control plane don't need port-forwarding
+- Gives the control plane direct access to the Kubernetes API
+- The control plane uses it to create/manage runner jobs, namespaces, secrets, etc.
+- The API server does NOT use KUBECONFIG -- it talks to PostgreSQL, not K8s
 
 **Port-forwarding (`kubectl port-forward`):**
 - Tunnels traffic to a **service** running inside the cluster
 - Only needed when you want to access a service's HTTP endpoint from localhost
-- Example: Frontend needs to call backend API running in cluster
+- Example: Frontend needs to call API server running in cluster, or API server needs PostgreSQL in cluster
 
 **When you need port-forwarding:**
-- ✅ Scenario 1 (UI Only) - frontend needs to reach backend service in cluster
-- ❌ Scenario 2 (UI + API Server) - backend runs locally, frontend talks to localhost
-- ❌ Scenario 3 (Full Stack) - everything local, no services in cluster to reach
+- ✅ Scenario 1 (UI Only) - frontend needs to reach API server in cluster
+- ⚠️ Scenario 2 (UI + API Server) - may need port-forward for PostgreSQL if using in-cluster DB
+- ⚠️ Scenario 3 (Full Stack) - may need port-forward for PostgreSQL if using in-cluster DB
 
 ---
 
@@ -229,50 +235,63 @@ Access via `Cmd+Shift+P` → "Tasks: Run Task"
 ### Required Environment Variables
 
 **Frontend:**
-- `BACKEND_URL=http://localhost:8090/api` - Backend URL for Next.js server-side routes
+- `BACKEND_URL=http://localhost:8000/api` - API server URL for Next.js server-side routes
 - `NEXT_PUBLIC_API_BASE_URL=/api` - Client-side API base (use `/api` for Next.js proxy)
 
-**Backend:**
-- `KUBECONFIG=~/.kube/config` - Path to kubeconfig (for K8s API access)
-- `PORT=8090` - Server port (avoid 8080 conflict with ingress)
+**API Server:**
+- Requires PostgreSQL connection (configured via `--db-*` flags or environment defaults)
+- Listens on `localhost:8000` (REST) and gRPC port by default in development mode
 
 **Control Plane:**
-- `KUBECONFIG=~/.kube/config` - Path to kubeconfig
-- `AMBIENT_CODE_RUNNER_IMAGE` - Runner image (e.g., `quay.io/ambient_code/acp_claude_runner:latest`)
+- `KUBECONFIG=~/.kube/config` - Path to kubeconfig (for creating K8s jobs/namespaces)
+- `AMBIENT_API_SERVER_URL=http://localhost:8000` - API server REST endpoint
+- `AMBIENT_GRPC_SERVER_ADDR=localhost:9000` - API server gRPC endpoint
+- `AMBIENT_GRPC_USE_TLS=false` - Disable TLS for local dev
+- `AMBIENT_API_TOKEN` - API token (or set `OIDC_CLIENT_ID` + `OIDC_CLIENT_SECRET`)
+- `RUNNER_IMAGE` - Runner image (e.g., `quay.io/ambient_code/acp_claude_runner:latest`)
 
 ### Debugging
 
 Local processes are much easier to debug:
-- **VS Code Go Debugger**: Set breakpoints in backend/control plane code
+- **VS Code Go Debugger**: Set breakpoints in API server/control plane code
 - **Browser DevTools**: Full React component inspection, network tab
 - **Direct logs**: See logs in terminal, no `kubectl logs` needed
 - **Fast iteration**: Change code → see results in seconds
 
 ### Common Issues
 
-**Backend can't connect to K8s API:**
+**API server can't connect to PostgreSQL:**
 ```bash
-# Verify KUBECONFIG is set and valid
-echo $KUBECONFIG
-kubectl get pods -n ambient-code
+# Check if PostgreSQL is running in-cluster
+kubectl get pods -n ambient-code -l app=ambient-api-server-db
+
+# If running API server locally, port-forward PostgreSQL
+kubectl port-forward -n ambient-code svc/ambient-api-server-db 5432:5432
 ```
 
-**Frontend can't reach backend:**
+**Frontend can't reach API server:**
 ```bash
 # Scenario 1: Check port-forward is running
-lsof -i:8090
+lsof -i:8000
 
-# Scenario 2/3: Check backend is running locally
-curl http://localhost:8090/health
+# Scenario 2/3: Check API server is running locally
+curl http://localhost:8000/api/ambient
 ```
 
-**Control Plane not creating jobs:**
+**Control plane not creating jobs:**
 ```bash
-# Check control plane is running and watching
-# Should see logs about watching AgenticSessions
+# Check control plane logs for gRPC watch stream status
+# Should see "session watch stream established"
 
-# Check API server is running
-kubectl get crd agenticsessions.vteam.ambient-code
+# Verify API server is reachable from control plane
+curl http://localhost:8000/api/ambient
+
+# Verify KUBECONFIG is set and valid (needed for creating K8s jobs)
+echo $KUBECONFIG
+kubectl get pods -n ambient-code
+
+# Check that AMBIENT_API_TOKEN or OIDC credentials are set
+echo $AMBIENT_API_TOKEN
 ```
 
 ---
@@ -283,8 +302,8 @@ kubectl get crd agenticsessions.vteam.ambient-code
 |------|---------------------|-----|
 | **UI/UX changes** | UI Only | Fastest - only need frontend hot reload |
 | **New API endpoint** | UI + API Server | Test backend logic with fast restarts |
-| **Handler debugging** | UI + API Server | Set breakpoints in backend code |
-| **Control Plane reconciliation** | Full Stack | See control plane logs directly |
+| **API handler debugging** | UI + API Server | Set breakpoints in API server code |
+| **Control plane logic** | Full Stack | See control plane logs directly |
 | **Integration testing** | Full Kind Cluster | Test real container behavior |
 | **E2E testing** | Full Kind Cluster | Run Cypress tests |
 

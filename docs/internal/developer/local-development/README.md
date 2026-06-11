@@ -58,7 +58,6 @@ make kind-up
 make local-up    # Note: CRC dev-* targets have been replaced with local-* equivalents
 ```
 
-**Full Guides:** [crc.md](crc.md) | [openshift.md](openshift.md)
 
 ---
 
@@ -180,7 +179,6 @@ cd components/ambient-api-server && go run .
 
 - [Kind Quick Start](../../../QUICK_START.md) - 2-minute setup
 - [Kind Development Guide](kind.md) - Using Kind for development and testing
-- [CRC Development Guide](crc.md) - OpenShift Local development
 - [OpenShift Cluster Guide](openshift.md) - OpenShift cluster deployment
 - [Hybrid Development Guide](hybrid.md) - Running components locally
 - [E2E Testing](../../testing/e2e-guide.md) - End-to-end test suite

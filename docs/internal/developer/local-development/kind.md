@@ -71,30 +71,30 @@ Creates kind cluster and deploys platform with Quay.io images.
 
 **What it does:**
 1. Creates minimal kind cluster (no ingress)
-2. Deploys platform (backend, frontend, operator, minio)
+2. Deploys platform (API server, UI, control plane, minio)
 3. Deploys Keycloak with pre-configured realm (`ambient-code`)
 4. Initializes MinIO storage
 5. Extracts test token to `e2e/.env.test`
 
 **Access:**
 - Run `make kind-port-forward` in another terminal
-- Frontend: `http://localhost:<port>` (port shown in output)
-- Backend: `http://localhost:<port>`
+- UI: `http://localhost:<port>` (port shown in output)
+- API server: `http://localhost:<port>`
 
 **Authentication:**
 - By default, the cluster starts in **legacy auth mode** (SA token via `OC_TOKEN`)
 - To enable SSO/Keycloak authentication: `make kind-sso-toggle`
 - Dev credentials (when SSO is on): `developer` / `developer` (or `admin` / `admin`)
 - Sessions last 30 minutes; access tokens refresh silently every 5 minutes
-- Toggle back to legacy: `make kind-sso-toggle` (it flips both frontend and backend)
+- Toggle back to legacy: `make kind-sso-toggle` (it flips both UI and API server)
 
 ### `make kind-sso-toggle`
 
-Toggles SSO authentication on/off in the Kind cluster. Affects both the frontend
-(`SSO_ENABLED` env var) and the backend (`sso-authentication` Unleash flag).
+Toggles SSO authentication on/off in the Kind cluster. Affects both the UI
+(`SSO_ENABLED` env var) and the API server (`sso-authentication` Unleash flag).
 
-- **SSO on**: Frontend redirects to Keycloak login, backend validates JWTs
-- **SSO off** (default): Frontend uses `OC_TOKEN` SA token, backend uses raw bearer tokens
+- **SSO on**: UI redirects to Keycloak login, API server validates JWTs
+- **SSO off** (default): UI uses `OC_TOKEN` SA token, API server uses raw bearer tokens
 
 ### `make test-e2e`
 
@@ -169,9 +169,9 @@ make build-api-server && \
 kubectl get deployments -n ambient-code \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.template.spec.containers[0].image}{"\n"}{end}'
 
-# Check runner image configured in operator
-kubectl get configmap operator-config -n ambient-code \
-  -o jsonpath='{.data.AMBIENT_CODE_RUNNER_IMAGE}'
+# Check runner image configured in control plane
+kubectl get deployment ambient-control-plane -n ambient-code \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="RUNNER_IMAGE")].value}'
 ```
 
 With `LOCAL_IMAGES=true`, images show as `localhost/acp_*:latest` (Podman prefix, no `quay.io`).
@@ -246,15 +246,9 @@ cp e2e/env.example e2e/.env
 # Enable agent testing
 ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
 
-# Override specific images (for testing custom builds)
-IMAGE_BACKEND=quay.io/your-org/acp_api_server:custom-tag
-IMAGE_FRONTEND=quay.io/your-org/acp_ambient_ui:custom-tag
-IMAGE_OPERATOR=quay.io/your-org/acp_control_plane:custom-tag
+# Override specific images (used by deploy.sh during kind-up)
+DEFAULT_API_SERVER_IMAGE=quay.io/your-org/acp_api_server:custom-tag
 IMAGE_RUNNER=quay.io/your-org/acp_claude_runner:custom-tag
-IMAGE_STATE_SYNC=quay.io/your-org/acp_control_plane:custom-tag
-
-# Or override registry for all images
-CONTAINER_REGISTRY=quay.io/your-org
 ```
 
 **Apply changes:**
@@ -269,7 +263,7 @@ To run interactive sessions from the UI (not just automated e2e tests), the runn
 needs credentials. How you set this up depends on your AI provider:
 
 **With Vertex AI (recommended):** Run `setup-vertex-kind.sh` (see [Vertex AI](#vertex-ai-optional)
-above). Sessions work out of the box — the operator automatically copies the
+above). Sessions work out of the box — the control plane automatically copies the
 `ambient-vertex` secret into each project namespace and skips `ambient-runner-secrets`
 validation.
 
@@ -283,12 +277,12 @@ kubectl create secret generic ambient-runner-secrets \
 
 ### Running Frontend Locally (Fast Iteration)
 
-For frontend-only changes, skip image rebuilds entirely. Run NextJS with
-hot-reload against the kind cluster backend:
+For UI-only changes, skip image rebuilds entirely. Run NextJS with
+hot-reload against the kind cluster API server:
 
 ```bash
-# Terminal 1: port-forward the backend
-kubectl port-forward svc/ambient-api-server 8081:8080 -n ambient-code
+# Terminal 1: port-forward the API server
+kubectl port-forward svc/ambient-api-server 8081:8000 -n ambient-code
 
 # Terminal 2: start the frontend dev server
 cd components/ambient-ui
@@ -410,8 +404,8 @@ kubectl logs -n ambient-code -l app=ambient-api-server -f
 # Restart component
 kubectl rollout restart -n ambient-code deployment/ambient-api-server
 
-# List sessions
-kubectl get agenticsessions -A
+# List sessions (via CLI; sessions are stored in PostgreSQL, not CRDs)
+acpctl get sessions
 
 # Delete cluster
 make kind-down

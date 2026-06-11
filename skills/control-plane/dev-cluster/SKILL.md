@@ -84,9 +84,9 @@ The platform uses **Unleash** for feature flags, running in-cluster. Some endpoi
 To test workflow changes from a different branch of `ambient-code/workflows`:
 
 ```bash
-kubectl set env deployment/backend-api -n ambient-code \
+kubectl set env deployment/ambient-api-server -n ambient-code \
   OOTB_WORKFLOWS_BRANCH="your-branch-name"
-kubectl rollout restart deployment/backend-api -n ambient-code
+kubectl rollout restart deployment/ambient-api-server -n ambient-code
 ```
 
 The backend caches workflows for 5 minutes. Restart clears the cache immediately.
@@ -96,7 +96,7 @@ The backend caches workflows for 5 minutes. Restart clears the cache immediately
 Testing Google Drive or other Google integrations requires OAuth credentials on the backend:
 
 ```bash
-kubectl set env deployment/backend-api -n ambient-code \
+kubectl set env deployment/ambient-api-server -n ambient-code \
   GOOGLE_OAUTH_CLIENT_ID="your-client-id" \
   GOOGLE_OAUTH_CLIENT_SECRET="your-secret" \
   OAUTH_STATE_SECRET="$(openssl rand -hex 32)" \
@@ -235,9 +235,9 @@ kind load docker-image localhost/acp_control_plane:latest --name $KIND_CLUSTER_N
 ### Step 5: Verify Deployment
 ```bash
 # Wait for rollout to complete
-kubectl rollout status deployment/backend -n ambient-code
-kubectl rollout status deployment/frontend -n ambient-code
-kubectl rollout status deployment/operator -n ambient-code
+kubectl rollout status deployment/ambient-api-server -n ambient-code
+kubectl rollout status deployment/ambient-ui -n ambient-code
+kubectl rollout status deployment/ambient-control-plane -n ambient-code
 
 # Check pod status
 kubectl get pods -n ambient-code
@@ -330,9 +330,9 @@ make kind-rebuild
 ```bash
 make build-backend CONTAINER_ENGINE=$CONTAINER_ENGINE
 kind load docker-image localhost/acp_api_server:latest --name $KIND_CLUSTER_NAME
-kubectl set image deployment/backend backend=localhost/acp_api_server:latest -n ambient-code
-kubectl rollout restart deployment/backend -n ambient-code
-kubectl rollout status deployment/backend -n ambient-code
+kubectl set image deployment/ambient-api-server backend=localhost/acp_api_server:latest -n ambient-code
+kubectl rollout restart deployment/ambient-api-server -n ambient-code
+kubectl rollout status deployment/ambient-api-server -n ambient-code
 ```
 
 ### "Show me the logs"
@@ -419,8 +419,8 @@ make build-backend  # (or whatever component)
 kind load docker-image localhost/acp_api_server:latest --name $KIND_CLUSTER_NAME
 
 # Force restart
-kubectl rollout restart deployment/backend -n ambient-code
-kubectl rollout status deployment/backend -n ambient-code
+kubectl rollout restart deployment/ambient-api-server -n ambient-code
+kubectl rollout status deployment/ambient-api-server -n ambient-code
 
 # Verify new pods are running
 kubectl get pods -n ambient-code -l app=backend
@@ -586,7 +586,7 @@ Assistant (using dev-cluster skill):
 4. Runs: `make kind-up`
 5. Loads image: `kind load docker-image localhost/acp_api_server:latest --name $KIND_CLUSTER_NAME`
 6. Updates deployment with local image and ImagePullPolicy: Never
-7. Verifies: `kubectl rollout status deployment/backend -n ambient-code`
+7. Verifies: `kubectl rollout status deployment/ambient-api-server -n ambient-code`
 8. Provides access URL and log commands
 
 Result: User can test their backend changes at `http://localhost:$KIND_FWD_FRONTEND_PORT` (run `make kind-status` to see the assigned port)
@@ -614,7 +614,7 @@ Assistant (using dev-cluster skill):
 4. Checks events: `kubectl get events -n ambient-code --sort-by='.lastTimestamp'`
 5. Identifies issue (e.g., missing env var, bad configuration)
 6. Suggests fix
-7. After fix applied, verifies: `kubectl rollout status deployment/backend -n ambient-code`
+7. After fix applied, verifies: `kubectl rollout status deployment/ambient-api-server -n ambient-code`
 
 Result: Issue diagnosed and resolved
 

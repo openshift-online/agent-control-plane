@@ -35,21 +35,21 @@ UPDATED_DEPLOYMENTS=()
 if [ -n "${IMAGE_BACKEND:-}" ]; then
   echo ""
   echo "Updating backend image to: ${IMAGE_BACKEND}"
-  kubectl set image -n ambient-code deployment/backend-api backend-api="${IMAGE_BACKEND}"
+  kubectl set image -n ambient-code deployment/ambient-api-server backend-api="${IMAGE_BACKEND}"
   UPDATED_DEPLOYMENTS+=("backend-api")
 fi
 
 if [ -n "${IMAGE_FRONTEND:-}" ]; then
   echo ""
   echo "Updating frontend image to: ${IMAGE_FRONTEND}"
-  kubectl set image -n ambient-code deployment/frontend frontend="${IMAGE_FRONTEND}"
+  kubectl set image -n ambient-code deployment/ambient-ui frontend="${IMAGE_FRONTEND}"
   UPDATED_DEPLOYMENTS+=("frontend")
 fi
 
 if [ -n "${IMAGE_OPERATOR:-}" ]; then
   echo ""
   echo "Updating operator image to: ${IMAGE_OPERATOR}"
-  kubectl set image -n ambient-code deployment/agentic-operator agentic-operator="${IMAGE_OPERATOR}"
+  kubectl set image -n ambient-code deployment/ambient-control-plane agentic-operator="${IMAGE_OPERATOR}"
   UPDATED_DEPLOYMENTS+=("agentic-operator")
 fi
 
@@ -63,7 +63,7 @@ if [ -n "${IMAGE_RUNNER:-}" ] || [ -n "${IMAGE_STATE_SYNC:-}" ]; then
   [ -n "${IMAGE_RUNNER:-}" ] && ENV_PATCH="${ENV_PATCH} AMBIENT_CODE_RUNNER_IMAGE=${IMAGE_RUNNER}"
   [ -n "${IMAGE_STATE_SYNC:-}" ] && ENV_PATCH="${ENV_PATCH} STATE_SYNC_IMAGE=${IMAGE_STATE_SYNC}"
 
-  kubectl set env -n ambient-code deployment/agentic-operator $ENV_PATCH
+  kubectl set env -n ambient-code deployment/ambient-control-plane $ENV_PATCH
   UPDATED_DEPLOYMENTS+=("agentic-operator")
 fi
 

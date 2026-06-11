@@ -64,7 +64,7 @@ kubectl create secret generic google-workflow-app-secret \
 4. Restart the backend to pick up the new credentials:
 
 ```bash
-kubectl rollout restart deployment backend-api -n ambient-code
+kubectl rollout restart deployment ambient-api-server -n ambient-code
 ```
 
 ## Security & Privacy

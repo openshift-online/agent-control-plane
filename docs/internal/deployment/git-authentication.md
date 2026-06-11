@@ -113,7 +113,6 @@ repos:
       url: "https://gitlab.company.com/org/repo.git"
 ```
 
-See [GitLab Integration Guide](../gitlab-integration.md) for detailed setup.
 
 ## Security Best Practices
 
@@ -184,6 +183,4 @@ The runner automatically detects the provider and uses appropriate authenticatio
 ## Related Documentation
 
 - [GitHub App Setup](../GITHUB_APP_SETUP.md) - OAuth and repository browser
-- [GitLab Integration](../gitlab-integration.md) - GitLab-specific configuration
-- [GitLab Token Setup](../gitlab-token-setup.md) - Creating GitLab PATs
 - [ProjectSettings Reference](../reference/project-settings.md) - Configuration schema (if exists)

@@ -12,7 +12,6 @@ Documentation for integrating the Ambient Code Platform with external services.
 - PR creation
 - OAuth flow for users
 
-**[GitLab Integration](../gitlab-integration.md)**
 - GitLab.com and self-hosted support
 - Personal Access Token authentication
 - Clone, commit, and push operations
@@ -20,8 +19,6 @@ Documentation for integrating the Ambient Code Platform with external services.
 
 **Getting Started:**
 - [GitHub Setup Guide](../GITHUB_APP_SETUP.md)
-- [GitLab Token Setup](../gitlab-token-setup.md)
-- [GitLab Self-Hosted Configuration](../gitlab-self-hosted.md)
 
 ---
 
@@ -71,11 +68,6 @@ All integrations are configured per-project via:
 - [API Endpoints](../api/github-endpoints.md) - GitHub API reference (if exists)
 
 ### GitLab
-- [GitLab Integration](../gitlab-integration.md) - User guide
-- [GitLab Token Setup](../gitlab-token-setup.md) - PAT creation
-- [Self-Hosted GitLab](../gitlab-self-hosted.md) - Enterprise setup
-- [GitLab Testing](../gitlab-testing-procedures.md) - Test procedures
-- [GitLab API Endpoints](../api/gitlab-endpoints.md) - API reference
 
 ### Google Workspace
 - [Google Workspace Integration](google-workspace.md) - Setup and usage

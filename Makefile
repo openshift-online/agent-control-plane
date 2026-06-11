@@ -492,9 +492,6 @@ local-test-quick: check-kubectl ## Quick smoke test of local environment
 	@echo ""
 	@echo "$(COLOR_GREEN)✓ Quick smoke test passed!$(COLOR_RESET)"
 
-dev-test-operator: ## Run only operator tests
-	@echo "Running operator-specific tests..."
-	@bash components/scripts/local-dev/crc-test.sh 2>&1 | grep -A 1 "Operator"
 
 ##@ Development Tools
 

@@ -11,7 +11,6 @@ Guides for deploying the Ambient Code Platform to various environments.
 ### Configuration
 - **[Git Authentication](git-authentication.md)** - Configure Git credentials for runners
 - **[GitHub App Setup](../GITHUB_APP_SETUP.md)** - GitHub App integration
-- **[GitLab Integration](../gitlab-integration.md)** - GitLab configuration
 
 ### Observability
 - **[Langfuse Deployment](langfuse.md)** - LLM observability and tracing
