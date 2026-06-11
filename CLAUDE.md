@@ -25,7 +25,7 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 - Control plane reconciler: `components/ambient-control-plane/internal/reconciler/kube_reconciler.go`
 - K8s client init: `components/ambient-control-plane/internal/config/config.go`
 - Runner entry point: `components/runners/ambient-runner/main.py`
-- CRDs (`AgenticSession`, `ProjectSettings`): applied externally via RBAC manifests (`vteam.ambient-code` API group), not shipped as YAML in this repo
+- RBAC: ClusterRoles in `components/manifests/base/rbac/` grant `vteam.ambient-code` API group access (legacy CRs created as side-effects, not used as source of truth)
 
 ## Session Flow
 
