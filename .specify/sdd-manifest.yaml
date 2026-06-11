@@ -26,8 +26,6 @@ managed-components:
       Manages AG-UI adapter, MCP integrations, and agent bridges.
     paths:
       - components/runners/ambient-runner/**
-      - components/frontend/src/components/claude-agent-options/**
-      - components/frontend/src/components/create-session-dialog.tsx
       - .github/workflows/runner-tool-versions.yml
     constitution: .specify/constitutions/runner.md
     spec: .specify/specs/runner.md
