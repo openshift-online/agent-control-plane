@@ -31,7 +31,7 @@ This test plan validates the GitLab integration implemented in Ambient Code Plat
 
 4. **Ambient Code Platform Environment**
    - Ambient Code Platform backend running with Kubernetes access
-   - Backend namespace: `vteam-backend`
+   - Backend namespace: `ambient-code`
    - kubectl access to backend namespace
    - Valid user authentication token
 
@@ -84,19 +84,19 @@ Example: https://gitlab.example.com/dev/integration-test.git
     "message": "GitLab account connected successfully"
   }
   ```
-- Kubernetes Secret `gitlab-user-tokens` created in `vteam-backend` namespace
+- Kubernetes Secret `gitlab-user-tokens` created in `ambient-code` namespace
 - Secret contains entry with key=`<user-id>`, value=`<token>`
-- ConfigMap `gitlab-connections` created in `vteam-backend` namespace
+- ConfigMap `gitlab-connections` created in `ambient-code` namespace
 - ConfigMap contains JSON entry with connection metadata
 
 **Validation**:
 ```bash
 # Check secret
-kubectl get secret gitlab-user-tokens -n vteam-backend -o json | \
+kubectl get secret gitlab-user-tokens -n ambient-code -o json | \
   jq '.data["<user-id>"]' | base64 -d
 
 # Check configmap
-kubectl get configmap gitlab-connections -n vteam-backend -o json | \
+kubectl get configmap gitlab-connections -n ambient-code -o json | \
   jq '.data["<user-id>"]'
 ```
 
@@ -226,11 +226,11 @@ kubectl get configmap gitlab-connections -n vteam-backend -o json | \
 **Validation**:
 ```bash
 # Verify token removed
-kubectl get secret gitlab-user-tokens -n vteam-backend -o json | \
+kubectl get secret gitlab-user-tokens -n ambient-code -o json | \
   jq '.data["<user-id>"]'  # Should return null
 
 # Verify connection removed
-kubectl get configmap gitlab-connections -n vteam-backend -o json | \
+kubectl get configmap gitlab-connections -n ambient-code -o json | \
   jq '.data["<user-id>"]'  # Should return null
 ```
 
@@ -506,8 +506,8 @@ curl -H "Authorization: Bearer <token>" \
 **Validation**:
 ```bash
 # Search backend logs for tokens
-kubectl logs <backend-pod> -n vteam-backend | grep -i "glpat-"  # Should find no matches
-kubectl logs <backend-pod> -n vteam-backend | grep "oauth2:" | grep -v "***"  # Should find no matches
+kubectl logs <backend-pod> -n ambient-code | grep -i "glpat-"  # Should find no matches
+kubectl logs <backend-pod> -n ambient-code | grep "oauth2:" | grep -v "***"  # Should find no matches
 
 # Search session logs
 kubectl logs <session-pod> -n <project> | grep -i "token" | grep -v "***"  # Should find no matches
@@ -643,7 +643,7 @@ kubectl logs <session-pod> -n <project> | grep -i "token" | grep -v "***"  # Sho
 
 ### Setup Phase
 - [ ] Deploy Ambient Code Platform backend with GitLab support
-- [ ] Verify backend namespace exists (`vteam-backend`)
+- [ ] Verify backend namespace exists (`ambient-code`)
 - [ ] Create GitLab.com test account and repository
 - [ ] Generate GitLab PAT with required scopes
 - [ ] (Optional) Set up self-hosted GitLab instance
@@ -739,7 +739,7 @@ kubectl logs <session-pod> -n <project> | grep -i "token" | grep -v "***"  # Sho
 ## Support
 
 For issues or questions during testing:
-- Review backend logs: `kubectl logs -l app=vteam-backend -n vteam-backend`
+- Review backend logs: `kubectl logs -l app=ambient-code -n ambient-code`
 - Review session logs: `kubectl logs <session-pod> -n <project-namespace>`
 - Check GitLab API responses using curl with PAT
-- Verify Kubernetes resources: Secrets and ConfigMaps in `vteam-backend` namespace
+- Verify Kubernetes resources: Secrets and ConfigMaps in `ambient-code` namespace

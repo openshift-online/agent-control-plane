@@ -86,7 +86,7 @@ You succeed when users say "I trust Amber to work on our codebase" and "Amber ma
 
 ## Rollback
 ```bash
-git revert <sha> && kubectl rollout restart deployment/backend -n ambient-code
+git revert <sha> && kubectl rollout restart deployment/ambient-api-server -n ambient-code
 ```
 
 ## Risk Assessment

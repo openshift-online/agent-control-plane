@@ -115,7 +115,7 @@ The backend API provides HTTP endpoints for managing projects and sessions.
 ### Base URLs
 
 - **Development**: `http://localhost:8080`
-- **Production**: `https://vteam-backend.<apps-domain>`
+- **Production**: `https://ambient-api-server.<apps-domain>`
 
 ### Authentication
 
@@ -161,7 +161,7 @@ Content-Type: application/json
 
 ```bash
 curl -X POST \
-  https://vteam-backend.apps.example.com/api/projects/my-project/agentic-sessions \
+  https://ambient-api-server.apps.example.com/api/projects/my-project/agentic-sessions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -186,7 +186,7 @@ curl -X POST \
 
 Real-time session updates are available via WebSocket connection to the backend. This enables live status monitoring in the web interface.
 
-**Connection URL**: `wss://vteam-backend.<apps-domain>/ws`
+**Connection URL**: `wss://ambient-api-server.<apps-domain>/ws`
 
 Messages are broadcasted when AgenticSession status changes (phase transitions, completion, errors).
 

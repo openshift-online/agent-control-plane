@@ -43,7 +43,7 @@ spec:
           configMap:
             name: trusted-ca-bundle
       containers:
-        - name: backend-api
+        - name: ambient-api-server
           volumeMounts:
             - name: trusted-ca-bundle
               mountPath: /etc/pki/tls/certs/ca-bundle.crt
@@ -56,7 +56,7 @@ spec:
 After the pod restarts, confirm it can connect to your internal service:
 
 ```bash
-kubectl exec deployment/backend-api -- curl -I https://your-internal-host
+kubectl exec deployment/ambient-api-server -- curl -I https://your-internal-host
 ```
 
 ## On other Kubernetes distributions
@@ -82,7 +82,7 @@ Then apply the same volume mount as above.
 
 | Component | Custom CA support |
 |-----------|-------------------|
-| `backend-api` | Supported — mount the ConfigMap as shown above |
+| `ambient-api-server` | Supported — mount the ConfigMap as shown above |
 | Runner pods | Pending — see [#1247](https://github.com/ambient-code/platform/issues/1247) and [#1038](https://github.com/ambient-code/platform/issues/1038) |
 
 Runner pods are created dynamically by the agentic-operator for each session. Until #1247 is resolved, the operator does not mount the ConfigMap into runner pods, so runners cannot connect to services that require a custom CA.

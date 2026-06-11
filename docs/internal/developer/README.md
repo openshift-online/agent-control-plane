@@ -113,8 +113,8 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for full workflow details.
 ### Build
 ```bash
 make build-all              # Build all components
-make build-frontend         # Build frontend only
-make build-backend          # Build backend only
+make build-ambient-ui      # Build UI only
+make build-api-server      # Build API server only
 ```
 
 ### Local Development

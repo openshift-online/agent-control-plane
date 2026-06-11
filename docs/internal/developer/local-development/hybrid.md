@@ -82,7 +82,7 @@ Frontend (localhost:3000) → Backend (localhost:8090) → K8s API (via KUBECONF
 ```bash
 # Start kind, scale down components we'll run locally
 make kind-up
-kubectl scale -n ambient-code deployment/backend-api deployment/frontend --replicas=0
+kubectl scale -n ambient-code deployment/ambient-api-server deployment/ambient-ui --replicas=0
 ```
 
 **Terminal 1 - Backend:**
@@ -138,7 +138,7 @@ Frontend (localhost:3000) → Backend (localhost:8090) → K8s API (via KUBECONF
 ```bash
 # Start kind, scale down all components we'll run locally
 make kind-up
-kubectl scale -n ambient-code deployment/backend-api deployment/frontend deployment/agentic-control plane --replicas=0
+kubectl scale -n ambient-code deployment/ambient-api-server deployment/ambient-ui deployment/ambient-control-plane --replicas=0
 ```
 
 **Terminal 1 - Control Plane:**

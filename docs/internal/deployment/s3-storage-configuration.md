@@ -237,7 +237,7 @@ If S3 is not configured or disabled:
 
 Check operator logs:
 ```bash
-oc logs -f deployment/agentic-operator -n ambient-code | grep S3
+oc logs -f deployment/ambient-control-plane -n ambient-code | grep S3
 ```
 
 Common errors:
@@ -387,6 +387,6 @@ rclone sync s3-old:old-bucket/namespace/session s3-new:new-bucket/namespace/sess
 ## Support
 
 For issues or questions:
-- Check operator logs: `oc logs -f deployment/agentic-operator -n ambient-code`
+- Check operator logs: `oc logs -f deployment/ambient-control-plane -n ambient-code`
 - Check pod logs: `oc logs {pod-name} -c state-sync -n {namespace}`
 - File an issue: [GitHub Issues](https://github.com/gkrumbac/vTeam/issues)

@@ -11,11 +11,11 @@ Admin (one-time per cluster):
 1. Set the Route host to your cluster domain
 ```bash
 ROUTE_DOMAIN=$(oc get ingresses.config cluster -o jsonpath='{.spec.domain}')
-oc -n ambient-code patch route frontend-route --type=merge -p '{"spec":{"host":"ambient-code.'"$ROUTE_DOMAIN"'"}}'
+oc -n ambient-code patch route ambient-ui --type=merge -p '{"spec":{"host":"ambient-code.'"$ROUTE_DOMAIN"'"}}'
 ```
 2. Create OAuthClient and keep the secret
 ```bash
-ROUTE_HOST=$(oc -n ambient-code get route frontend-route -o jsonpath='{.spec.host}')
+ROUTE_HOST=$(oc -n ambient-code get route ambient-ui -o jsonpath='{.spec.host}')
 SECRET="$(openssl rand -base64 32 | tr -d '\n=+/0OIl')"; echo "$SECRET"
 cat <<EOF | oc apply -f -
 apiVersion: oauth.openshift.io/v1
@@ -36,9 +36,9 @@ oc -n ambient-code create secret generic frontend-oauth-config \
   --from-literal=client-secret="$SECRET" \
   --from-literal=cookie_secret="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)" \
   --dry-run=client -o yaml | oc apply -f -
-oc -n ambient-code rollout restart deployment/frontend
+oc -n ambient-code rollout restart deployment/ambient-ui
 ```
-4. Open the app: `oc -n ambient-code get route frontend-route -o jsonpath='{.spec.host}' | sed 's#^#https://#'`
+4. Open the app: `oc -n ambient-code get route ambient-ui -o jsonpath='{.spec.host}' | sed 's#^#https://#'`
 
 ### Prerequisites
 - oc CLI configured to your cluster
@@ -61,7 +61,7 @@ oc -n ambient-code rollout restart deployment/frontend
 
 1. Get your Route host for the app:
 ```bash
-ROUTE_HOST=$(oc -n ambient-code get route frontend -o jsonpath='{.spec.host}')
+ROUTE_HOST=$(oc -n ambient-code get route ambient-ui -o jsonpath='{.spec.host}')
 echo "$ROUTE_HOST"
 ```
 
@@ -105,7 +105,7 @@ OCP_OAUTH_CLIENT_SECRET=$SECRET
 # OCP_OAUTH_COOKIE_SECRET=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)
 EOF
 ./deploy.sh secrets
-oc -n ambient-code rollout restart deployment/frontend
+oc -n ambient-code rollout restart deployment/ambient-ui
 ```
 
 Option B) Manually create/update the Secret:
@@ -114,7 +114,7 @@ oc -n ambient-code create secret generic frontend-oauth-config \
   --from-literal=client-secret="$SECRET" \
   --from-literal=cookie_secret="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)" \
   --dry-run=client -o yaml | oc apply -f -
-oc -n ambient-code rollout restart deployment/frontend
+oc -n ambient-code rollout restart deployment/ambient-ui
 ```
 
 The Deployment mounts this Secret at `/etc/oauth/config` and reads:
@@ -123,7 +123,7 @@ The Deployment mounts this Secret at `/etc/oauth/config` and reads:
 
 ### Step 3 — Open the app
 ```bash
-oc -n ambient-code get route frontend -o jsonpath='{.spec.host}' | sed 's#^#https://#'
+oc -n ambient-code get route ambient-ui -o jsonpath='{.spec.host}' | sed 's#^#https://#'
 ```
 Visit the printed URL. You should be redirected to OpenShift login and returned to the app after authentication.
 

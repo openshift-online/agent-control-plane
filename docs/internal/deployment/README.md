@@ -140,13 +140,13 @@ oc get pods -n ambient-code -l app=ambient-control-plane
 
 ```bash
 # API server logs
-oc logs -n ambient-code deployment/backend-api -f
+oc logs -n ambient-code deployment/ambient-api-server -f
 
 # Frontend logs
-oc logs -n ambient-code deployment/frontend -f
+oc logs -n ambient-code deployment/ambient-ui -f
 
 # Control plane logs
-oc logs -n ambient-code deployment/agentic-operator -f
+oc logs -n ambient-code deployment/ambient-control-plane -f
 
 # Runner job logs (in project namespaces)
 oc logs -n <project-namespace> job/<job-name>
@@ -207,7 +207,7 @@ oc logs <pod-name> -n ambient-code
 
 ```bash
 # Check image pull secrets
-oc get deployment backend-api -n ambient-code -o jsonpath='{.spec.template.spec.imagePullSecrets}'
+oc get deployment ambient-api-server -n ambient-code -o jsonpath='{.spec.template.spec.imagePullSecrets}'
 
 # Verify image exists
 ```
@@ -216,7 +216,7 @@ oc get deployment backend-api -n ambient-code -o jsonpath='{.spec.template.spec.
 
 ```bash
 # Check route
-oc get route frontend-route -n ambient-code
+oc get route ambient-ui -n ambient-code
 
 # Check service
 oc get svc ambient-ui-service -n ambient-code
@@ -229,7 +229,7 @@ oc port-forward svc/ambient-ui-service 3000:3000 -n ambient-code
 
 ```bash
 # Check operator logs
-oc logs -n ambient-code deployment/agentic-operator -f
+oc logs -n ambient-code deployment/ambient-control-plane -f
 
 # Check platform is deployed
 oc get crd agenticsessions.vteam.ambient-code

@@ -199,10 +199,10 @@ grep apps-crc.testing /etc/hosts
 
 ```bash
 # Check build logs
-oc logs -n vteam-dev bc/vteam-backend -f
+oc logs -n vteam-dev bc/ambient-api-server -f
 
 # Restart build
-oc start-build vteam-backend -n vteam-dev
+oc start-build ambient-api-server -n vteam-dev
 ```
 
 ## Advanced Configuration

@@ -148,20 +148,19 @@ make kind-rebuild
 To rebuild a single component (faster):
 
 ```bash
-# Example: backend change
-make build-backend && \
+# Example: API server change
+make build-api-server && \
   kind load docker-image acp_api_server:latest --name ambient-local && \
-  kubectl rollout restart deployment/backend-api -n ambient-code
+  kubectl rollout restart deployment/ambient-api-server -n ambient-code
 ```
 
 | Component | Build target | Deployment to restart |
 |-----------|-------------|----------------------|
-| Backend | `make build-backend` | `backend-api` |
-| Frontend | `make build-frontend` | `frontend` |
-| Control Plane | `make build-control-plane` | `acp_control_plane` |
-| Public API | `make build-public-api` | `public-api` |
+| API Server | `make build-api-server` | `ambient-api-server` |
+| Control Plane | `make build-control-plane` | `ambient-control-plane` |
+| UI | `make build-ambient-ui` | `ambient-ui` |
+| MCP Server | `make build-mcp` | *(restarts with control plane)* |
 | Runner | `make build-runner` | *(none -- picked up by next session)* |
-| State Sync | `make build-state-sync` | *(none -- picked up by next session)* |
 
 #### Verify Which Images Are Running
 
@@ -324,12 +323,11 @@ platform pods plus session runner pods can exceed it.
 
 **Fix:** Scale down non-essential deployments:
 ```bash
-# These are safe to remove for local development
-kubectl scale deployment ambient-api-server ambient-api-server-db \
-  public-api unleash --replicas=0 -n ambient-code
+# Scale down components you're running locally
+kubectl scale deployment ambient-api-server --replicas=0 -n ambient-code
 
-# If running frontend locally, also scale down the in-cluster frontend
-kubectl scale deployment frontend --replicas=0 -n ambient-code
+# If running UI locally, also scale down the in-cluster UI
+kubectl scale deployment ambient-ui --replicas=0 -n ambient-code
 ```
 
 ### Cluster won't start
@@ -347,7 +345,7 @@ make kind-up
 
 ```bash
 kubectl get pods -n ambient-code
-kubectl logs -n ambient-code deployment/backend-api
+kubectl logs -n ambient-code deployment/ambient-api-server
 ```
 
 ### Port 8080 stops working (Podman on macOS)
@@ -410,7 +408,7 @@ cd e2e && ./scripts/init-minio.sh
 kubectl logs -n ambient-code -l app=ambient-api-server -f
 
 # Restart component
-kubectl rollout restart -n ambient-code deployment/backend-api
+kubectl rollout restart -n ambient-code deployment/ambient-api-server
 
 # List sessions
 kubectl get agenticsessions -A
