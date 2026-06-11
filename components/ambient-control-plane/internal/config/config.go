@@ -65,7 +65,7 @@ func Load() (*ControlPlaneConfig, error) {
 		OIDCClientID:          os.Getenv("OIDC_CLIENT_ID"),
 		OIDCClientSecret:      os.Getenv("OIDC_CLIENT_SECRET"),
 		Reconcilers:           parseReconcilers(envOrDefault("RECONCILERS", "tally,kube")),
-		RunnerImage:           envOrDefault("RUNNER_IMAGE", "quay.io/ambient_code/vteam_claude_runner:latest"),
+		RunnerImage:           envOrDefault("RUNNER_IMAGE", "quay.io/ambient_code/acp_claude_runner:latest"),
 		RunnerGRPCUseTLS:      os.Getenv("AMBIENT_GRPC_USE_TLS") == "true",
 		Namespace:             envOrDefault("NAMESPACE", "ambient-code"),
 		AnthropicAPIKey:       os.Getenv("ANTHROPIC_API_KEY"),

@@ -41,7 +41,7 @@ else
 fi
 
 echo "==> Installing Ambient into $NAMESPACE (standard OpenShift mode)"
-echo "    Images: ${REGISTRY}/vteam_*:${IMAGE_TAG}"
+echo "    Images: ${REGISTRY}/acp_*:${IMAGE_TAG}"
 echo ""
 
 echo "==> Step 1: Ensuring secrets"
@@ -324,7 +324,7 @@ spec:
           type: RuntimeDefault
       initContainers:
       - name: migration
-        image: ${REGISTRY}/vteam_api_server:${IMAGE_TAG}
+        image: ${REGISTRY}/acp_api_server:${IMAGE_TAG}
         imagePullPolicy: Always
         command:
         - /usr/local/bin/ambient-api-server
@@ -354,7 +354,7 @@ spec:
             drop: ["ALL"]
       containers:
       - name: api-server
-        image: ${REGISTRY}/vteam_api_server:${IMAGE_TAG}
+        image: ${REGISTRY}/acp_api_server:${IMAGE_TAG}
         imagePullPolicy: Always
         command:
         - /usr/local/bin/ambient-api-server
@@ -522,7 +522,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: ambient-control-plane
-        image: ${REGISTRY}/vteam_control_plane:${IMAGE_TAG}
+        image: ${REGISTRY}/acp_control_plane:${IMAGE_TAG}
         imagePullPolicy: Always
         securityContext:
           allowPrivilegeEscalation: false
@@ -549,17 +549,17 @@ spec:
         - name: LOG_LEVEL
           value: "info"
         - name: RUNNER_IMAGE
-          value: "${REGISTRY}/vteam_claude_runner:${IMAGE_TAG}"
+          value: "${REGISTRY}/acp_claude_runner:${IMAGE_TAG}"
         - name: MCP_IMAGE
-          value: "${REGISTRY}/vteam_mcp:${IMAGE_TAG}"
+          value: "${REGISTRY}/acp_mcp:${IMAGE_TAG}"
         - name: GITHUB_MCP_IMAGE
-          value: "${REGISTRY}/vteam_credential_github:${IMAGE_TAG}"
+          value: "${REGISTRY}/acp_credential_github:${IMAGE_TAG}"
         - name: JIRA_MCP_IMAGE
-          value: "${REGISTRY}/vteam_credential_jira:${IMAGE_TAG}"
+          value: "${REGISTRY}/acp_credential_jira:${IMAGE_TAG}"
         - name: K8S_MCP_IMAGE
-          value: "${REGISTRY}/vteam_credential_k8s:${IMAGE_TAG}"
+          value: "${REGISTRY}/acp_credential_k8s:${IMAGE_TAG}"
         - name: GOOGLE_MCP_IMAGE
-          value: "${REGISTRY}/vteam_credential_google:${IMAGE_TAG}"
+          value: "${REGISTRY}/acp_credential_google:${IMAGE_TAG}"
         - name: MCP_API_SERVER_URL
           value: "http://ambient-api-server.${NAMESPACE}.svc:8000"
         - name: CP_TOKEN_URL

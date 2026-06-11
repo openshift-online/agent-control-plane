@@ -62,8 +62,8 @@ fi
 # When IMAGE_* overrides are set, also switch imagePullPolicy to IfNotPresent
 # since the images are pre-loaded into kind via `kind load docker-image`.
 kubectl kustomize ../components/manifests/overlays/kind/ | \
-  sed "s|quay.io/ambient_code/vteam_claude_runner:latest|${IMAGE_RUNNER:-quay.io/ambient_code/vteam_claude_runner:latest}|g" | \
-  sed "s|quay.io/ambient_code/vteam_api_server:latest|${DEFAULT_API_SERVER_IMAGE:-quay.io/ambient_code/vteam_api_server:latest}|g" | \
+  sed "s|quay.io/ambient_code/acp_claude_runner:latest|${IMAGE_RUNNER:-quay.io/ambient_code/acp_claude_runner:latest}|g" | \
+  sed "s|quay.io/ambient_code/acp_api_server:latest|${DEFAULT_API_SERVER_IMAGE:-quay.io/ambient_code/acp_api_server:latest}|g" | \
   if [ -n "${IMAGE_RUNNER:-}${DEFAULT_API_SERVER_IMAGE:-}" ]; then
     sed "s|imagePullPolicy: Always|imagePullPolicy: IfNotPresent|g"
   else

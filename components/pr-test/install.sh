@@ -88,7 +88,7 @@ text = re.sub(r'(^namespace:\s*).*', r'\g<1>' + namespace, text, flags=re.MULTIL
 if not re.search(r'^namespace:', text, re.MULTILINE):
     text = "namespace: " + namespace + "\n" + text
 
-for repo in ("vteam_api_server", "vteam_control_plane"):
+for repo in ("acp_api_server", "acp_control_plane"):
     text = re.sub(
         r'(- name: quay\.io/ambient_code/' + repo + r':latest\n\s+newName:.*\n\s+newTag:\s*).*',
         r'\g<1>' + tag, text,

@@ -17,7 +17,7 @@ spec:
       containers:
       - name: ambient-ui
         imagePullPolicy: Always
-        image: quay.io/ambient_code/vteam_ambient_ui:latest
+        image: quay.io/ambient_code/acp_ambient_ui:latest
         ports:
         - containerPort: 3000
           name: http

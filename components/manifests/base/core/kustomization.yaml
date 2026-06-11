@@ -6,5 +6,4 @@ resources:
 - postgresql-deployment.yaml
 - ambient-api-server-service.yml
 - limitrange.yaml
-- observability-dashboard-deployment.yaml
 - ambient-ui-deployment.yaml

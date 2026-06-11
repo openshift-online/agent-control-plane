@@ -29,15 +29,15 @@ patches:
     version: v1
 
 images:
-- name: quay.io/ambient_code/vteam_api_server
+- name: quay.io/ambient_code/acp_api_server
   newTag: latest
-- name: quay.io/ambient_code/vteam_api_server:latest
-  newName: quay.io/ambient_code/vteam_api_server
+- name: quay.io/ambient_code/acp_api_server:latest
+  newName: quay.io/ambient_code/acp_api_server
   newTag: latest
-- name: quay.io/ambient_code/vteam_control_plane
+- name: quay.io/ambient_code/acp_control_plane
   newTag: latest
-- name: quay.io/ambient_code/vteam_control_plane:latest
-  newName: quay.io/ambient_code/vteam_control_plane
+- name: quay.io/ambient_code/acp_control_plane:latest
+  newName: quay.io/ambient_code/acp_control_plane
   newTag: latest
-- name: quay.io/ambient_code/vteam_mcp
+- name: quay.io/ambient_code/acp_mcp
   newTag: latest

@@ -60,16 +60,15 @@ endif
 IMAGE_TAG ?= latest
 
 # Image names
-RUNNER_IMAGE ?= vteam_claude_runner:$(IMAGE_TAG)
-API_SERVER_IMAGE ?= vteam_api_server:$(IMAGE_TAG)
-OBSERVABILITY_DASHBOARD_IMAGE ?= vteam_observability_dashboard:$(IMAGE_TAG)
-GITHUB_MCP_IMAGE ?= vteam_credential_github:$(IMAGE_TAG)
-JIRA_MCP_IMAGE ?= vteam_credential_jira:$(IMAGE_TAG)
-K8S_MCP_IMAGE ?= vteam_credential_k8s:$(IMAGE_TAG)
-GOOGLE_MCP_IMAGE ?= vteam_credential_google:$(IMAGE_TAG)
-AMBIENT_UI_IMAGE ?= vteam_ambient_ui:$(IMAGE_TAG)
+RUNNER_IMAGE ?= acp_claude_runner:$(IMAGE_TAG)
+API_SERVER_IMAGE ?= acp_api_server:$(IMAGE_TAG)
+GITHUB_MCP_IMAGE ?= acp_credential_github:$(IMAGE_TAG)
+JIRA_MCP_IMAGE ?= acp_credential_jira:$(IMAGE_TAG)
+K8S_MCP_IMAGE ?= acp_credential_k8s:$(IMAGE_TAG)
+GOOGLE_MCP_IMAGE ?= acp_credential_google:$(IMAGE_TAG)
+AMBIENT_UI_IMAGE ?= acp_ambient_ui:$(IMAGE_TAG)
 
-# kind-local overlay always references localhost/vteam_* images.
+# kind-local overlay always references localhost/acp_* images.
 # Podman produces this prefix natively; for Docker we tag before loading.
 KIND_IMAGE_PREFIX := localhost/
 
@@ -168,7 +167,7 @@ help: ## Display this help message
 
 ##@ Building
 
-build-all: build-runner build-api-server build-observability-dashboard build-ambient-ui ## Build all container images
+build-all: build-runner build-api-server build-ambient-ui ## Build all container images
 
 build-ambient-ui: ## Build ambient-ui image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building ambient-ui with $(CONTAINER_ENGINE)..."
@@ -191,12 +190,6 @@ build-api-server: ## Build ambient API server image
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(API_SERVER_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server built: $(API_SERVER_IMAGE)"
-
-build-observability-dashboard: ## Build observability dashboard image
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building observability-dashboard with $(CONTAINER_ENGINE)..."
-	@cd ../observability/dashboard && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
-		-t $(OBSERVABILITY_DASHBOARD_IMAGE) .
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Observability dashboard built: $(OBSERVABILITY_DASHBOARD_IMAGE)"
 
 build-credential-sidecars: build-credential-github build-credential-jira build-credential-k8s build-credential-google ## Build all credential sidecar images
 
@@ -272,7 +265,6 @@ registry-login: ## Login to container registry
 
 push-all: registry-login ## Push all images to registry
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Pushing images to $(REGISTRY)..."
-	@for image in $(RUNNER_IMAGE) $(API_SERVER_IMAGE) $(OBSERVABILITY_DASHBOARD_IMAGE) $(AMBIENT_UI_IMAGE); do \
 		echo "  Tagging and pushing $$image..."; \
 		$(CONTAINER_ENGINE) tag $$image $(REGISTRY)/$$image && \
 		$(CONTAINER_ENGINE) push $(REGISTRY)/$$image; \
@@ -826,7 +818,7 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 		kubectl apply --validate=false -k components/manifests/overlays/kind-local/; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching agent registry for local images..."; \
 		REGISTRY=$$(kubectl get configmap ambient-agent-registry -n $(NAMESPACE) -o jsonpath='{.data.agent-registry\.json}'); \
-		UPDATED=$$(echo "$$REGISTRY" | sed 's|quay.io/ambient_code/vteam_claude_runner:[^"]*|localhost/vteam_claude_runner:latest|g; s|quay.io/ambient_code/vteam_state_sync:[^"]*|localhost/vteam_state_sync:latest|g'); \
+		UPDATED=$$(echo "$$REGISTRY" | sed 's|quay.io/ambient_code/acp_claude_runner:[^"]*|localhost/acp_claude_runner:latest|g; s|quay.io/ambient_code/acp_state_sync:[^"]*|localhost/acp_state_sync:latest|g'); \
 		kubectl patch configmap ambient-agent-registry -n $(NAMESPACE) --type=merge \
 			-p "{\"data\":{\"agent-registry.json\":$$(echo "$$UPDATED" | jq -Rs .)}}"; \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Agent registry patched for local images"; \
@@ -1215,7 +1207,6 @@ check-architecture: ## Validate build architecture matches host
 
 _kind-load-images: ## Internal: Load images into kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind ($(KIND_CLUSTER_NAME))..."
-	@for img in $(RUNNER_IMAGE) $(API_SERVER_IMAGE) $(OBSERVABILITY_DASHBOARD_IMAGE) $(AMBIENT_UI_IMAGE); do \
 		echo "  Loading $(KIND_IMAGE_PREFIX)$$img..."; \
 		if [ -n "$(KIND_HOST)" ] || [ "$(CONTAINER_ENGINE)" = "podman" ]; then \
 			$(CONTAINER_ENGINE) save $(KIND_IMAGE_PREFIX)$$img | \

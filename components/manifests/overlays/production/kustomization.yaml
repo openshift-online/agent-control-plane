@@ -65,21 +65,15 @@ patches:
 
 # Production images
 images:
-- name: quay.io/ambient_code/vteam_api_server:latest
-  newName: quay.io/ambient_code/vteam_api_server
+- name: quay.io/ambient_code/acp_api_server:latest
+  newName: quay.io/ambient_code/acp_api_server
   newTag: latest
-- name: quay.io/ambient_code/vteam_claude_runner
-  newName: quay.io/ambient_code/vteam_claude_runner
+- name: quay.io/ambient_code/acp_claude_runner
+  newName: quay.io/ambient_code/acp_claude_runner
   newTag: latest
-- name: quay.io/ambient_code/vteam_claude_runner:latest
-  newName: quay.io/ambient_code/vteam_claude_runner
+- name: quay.io/ambient_code/acp_claude_runner:latest
+  newName: quay.io/ambient_code/acp_claude_runner
   newTag: latest
-- name: quay.io/ambient_code/vteam_control_plane:latest
-  newName: quay.io/ambient_code/vteam_control_plane
-  newTag: latest
-- name: ghcr.io/ambient-code/observability
-  newName: ghcr.io/ambient-code/observability
-  newTag: latest
-- name: ghcr.io/ambient-code/observability:latest
-  newName: ghcr.io/ambient-code/observability
+- name: quay.io/ambient_code/acp_control_plane:latest
+  newName: quay.io/ambient_code/acp_control_plane
   newTag: latest

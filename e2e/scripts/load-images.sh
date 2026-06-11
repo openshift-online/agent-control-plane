@@ -45,9 +45,9 @@ esac
 
 # Images to load
 IMAGES=(
-  "vteam_claude_runner:latest"
-  "vteam_api_server:latest"
-  "vteam_ambient_ui:latest"
+  "acp_claude_runner:latest"
+  "acp_api_server:latest"
+  "acp_ambient_ui:latest"
 )
 
 echo ""
@@ -87,4 +87,4 @@ echo ""
 echo "All images loaded into kind cluster!"
 echo ""
 echo "Verifying images in cluster..."
-$CONTAINER_ENGINE exec "${KIND_CLUSTER_NAME}-control-plane" crictl images | grep vteam_ | head -n 5
+$CONTAINER_ENGINE exec "${KIND_CLUSTER_NAME}-control-plane" crictl images | grep acp_ | head -n 5

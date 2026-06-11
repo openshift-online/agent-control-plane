@@ -107,4 +107,4 @@ build-image: binary
 		--build-arg GIT_VERSION=$(build_version) \
 		--build-arg GIT_TAG=$(git_tag) \
 		--build-arg BUILD_TIME="$(build_time)" \
-		-t vteam_api_server:latest .
+		-t acp_api_server:latest .

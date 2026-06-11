@@ -20,12 +20,6 @@ patches:
     apiVersion: apps/v1
     kind: Deployment
     metadata: { name: minio }
-- target: { group: apps, version: v1, kind: Deployment, name: observability-dashboard }
-  patch: |
-    $patch: delete
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata: { name: observability-dashboard }
 # --- Delete unwanted services ---
 - target: { version: v1, kind: Service, name: minio }
   patch: |
@@ -33,12 +27,6 @@ patches:
     apiVersion: v1
     kind: Service
     metadata: { name: minio }
-- target: { version: v1, kind: Service, name: observability-dashboard-service }
-  patch: |
-    $patch: delete
-    apiVersion: v1
-    kind: Service
-    metadata: { name: observability-dashboard-service }
 # --- Delete unwanted PVCs ---
 - target: { version: v1, kind: PersistentVolumeClaim, name: minio-data }
   patch: |
@@ -68,9 +56,9 @@ patches:
   target: { group: apps, version: v1, kind: Deployment, name: ambient-ui }
 
 images:
-- name: quay.io/ambient_code/vteam_api_server
+- name: quay.io/ambient_code/acp_api_server
   newTag: latest
-- name: quay.io/ambient_code/vteam_control_plane
+- name: quay.io/ambient_code/acp_control_plane
   newTag: latest
-- name: quay.io/ambient_code/vteam_ambient_ui
+- name: quay.io/ambient_code/acp_ambient_ui
   newTag: latest
