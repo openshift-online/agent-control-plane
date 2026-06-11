@@ -67,6 +67,8 @@ JIRA_MCP_IMAGE ?= acp_credential_jira:$(IMAGE_TAG)
 K8S_MCP_IMAGE ?= acp_credential_k8s:$(IMAGE_TAG)
 GOOGLE_MCP_IMAGE ?= acp_credential_google:$(IMAGE_TAG)
 AMBIENT_UI_IMAGE ?= acp_ambient_ui:$(IMAGE_TAG)
+CONTROL_PLANE_IMAGE ?= acp_control_plane:$(IMAGE_TAG)
+MCP_IMAGE ?= acp_mcp:$(IMAGE_TAG)
 
 # kind-local overlay always references localhost/acp_* images.
 # Podman produces this prefix natively; for Docker we tag before loading.
@@ -167,7 +169,7 @@ help: ## Display this help message
 
 ##@ Building
 
-build-all: build-runner build-api-server build-ambient-ui ## Build all container images
+build-all: build-runner build-api-server build-control-plane build-mcp build-ambient-ui ## Build all container images
 
 build-ambient-ui: ## Build ambient-ui image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building ambient-ui with $(CONTAINER_ENGINE)..."
@@ -190,6 +192,21 @@ build-api-server: ## Build ambient API server image
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(API_SERVER_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) API server built: $(API_SERVER_IMAGE)"
+
+build-control-plane: ## Build control plane image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building control plane with $(CONTAINER_ENGINE)..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-f components/ambient-control-plane/Dockerfile \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		-t $(CONTROL_PLANE_IMAGE) components
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Control plane built: $(CONTROL_PLANE_IMAGE)"
+
+build-mcp: ## Build MCP server image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building MCP server with $(CONTAINER_ENGINE)..."
+	@cd components/ambient-mcp && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		-t $(MCP_IMAGE) .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) MCP server built: $(MCP_IMAGE)"
 
 build-credential-sidecars: build-credential-github build-credential-jira build-credential-k8s build-credential-google ## Build all credential sidecar images
 
