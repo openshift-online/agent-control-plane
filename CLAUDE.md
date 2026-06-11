@@ -1,13 +1,13 @@
 # Ambient Code Platform
 
-Kubernetes-native AI automation platform that orchestrates agentic sessions through containerized microservices. Built with Go (backend, operator), NextJS + Shadcn (frontend), Python (runner), and Kubernetes CRDs.
+Kubernetes-native AI automation platform that orchestrates agentic sessions through containerized microservices. Built with Go (API server, control plane), NextJS + Shadcn (UI), and Python (runner). PostgreSQL is the source of truth; the control plane reconciles via gRPC watch streams.
 
-> Technical artifacts still use "vteam" for backward compatibility.
+> Some RBAC manifests still reference the `vteam.ambient-code` API group for backward compatibility.
 
 ## Structure
 
 - `components/ambient-api-server/` - Go REST API microservice (rh-trex-ai framework), PostgreSQL-backed
-- `components/ambient-control-plane/` - Go Kubernetes controller, watches CRDs and reconciles sessions
+- `components/ambient-control-plane/` - Go service, watches API server via gRPC and reconciles sessions into K8s Jobs
 - `components/ambient-ui/` - NextJS + Shadcn web UI for session management and monitoring
 - `components/ambient-mcp/` - MCP server integration
 - `components/runners/ambient-runner/` - Python runner executing Claude Code CLI in Job pods
@@ -94,7 +94,7 @@ Cross-cutting rules that apply across ALL components. Component-specific convent
 - **No `panic()` in production**: Return explicit `fmt.Errorf` with context
 - **No `any` types in frontend**: Use proper types, `unknown`, or generic constraints
 - **Feature flags strongly recommended**: Gate new features behind Unleash flags. Use `/unleash-flag` to set up
-- **No new CRDs**: Existing CRDs (AgenticSession, ProjectSettings) are grandfathered. For new persistent storage, confirm with the user whether to use repo files or PostgreSQL — do not default to K8s custom resources
+- **PostgreSQL for persistent storage**: Sessions, projects, and settings live in the API server's database. For new persistent storage, confirm with the user whether to use repo files or PostgreSQL
 - **Conventional commits**: Squashed on merge to `main`
 - **Design for extensibility before adding items**: When building infrastructure that will have
   things added to it (menus, config schemas, API surfaces), build the extensibility mechanism

@@ -10,12 +10,11 @@ This SDK is one piece of a multi-component system coordinated via `../working.md
 
 | Component | Purpose | Relationship to SDK |
 |---|---|---|
-| **ambient-api-server** | REST API gateway (Go + Gin) | The server this SDK talks to — implements `/v1/sessions` |
-| **ambient-control-plane** | Reconciler / controller | Watches API server for session changes; SDK users never interact with it |
-| **ambient-sdk** (this) | Client libraries (Go, Python) | Consumes the API server's public endpoints |
-| **Frontend** | NextJS web UI | Will eventually share generated types from `openapi.yaml` |
-| **Operator** | Kubernetes controller | Internal only — spawns Jobs from CRs |
-| **Runner** | Claude Code CLI executor | Internal only — runs inside Job pods |
+| **ambient-api-server** | REST + gRPC API (Go, rh-trex-ai, PostgreSQL) | The server this SDK talks to |
+| **ambient-control-plane** | gRPC-driven reconciler | Watches API server via gRPC streams; SDK users never interact with it |
+| **ambient-sdk** (this) | Client libraries (Go, Python, TypeScript) | Generated from the API server's OpenAPI spec |
+| **ambient-ui** | NextJS web UI | Shares generated types from `openapi.yaml` |
+| **Runner** | AI agent executor (Python) | Internal only — runs inside Job pods |
 
 ## Quick Reference
 

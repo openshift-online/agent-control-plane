@@ -97,7 +97,7 @@ The Python client is a class wrapping `httpx.Client` with:
                    └─────────┘
 ```
 
-- **pending**: CR created, waiting for operator to schedule a Job
+- **pending**: Session created, waiting for control plane to schedule a Job
 - **running**: Job pod is executing the Claude Code CLI
 - **completed**: Task finished successfully; `result` field populated
 - **failed**: Task failed; `error` field populated

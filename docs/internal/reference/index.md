@@ -231,7 +231,7 @@ All resources use **OwnerReferences** for automatic cleanup when the AgenticSess
 
 | Operation | Target Time | Notes |
 |-----------|-------------|-------|
-| Session Creation (API) | < 2 seconds | Creates CR, returns immediately |
+| Session Creation (API) | < 2 seconds | Persists to DB, returns immediately |
 | Job Pod Startup | 10-30 seconds | Image pull, volume mount |
 | Simple Code Analysis | 2-5 minutes | Depends on repository size |
 | Complex Refactoring | 10-30 minutes | Multiple file changes |
