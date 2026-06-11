@@ -70,9 +70,9 @@ The skill will:
 - `make kind-port-forward` - Port-forward services
 - `make kind-status` - Show cluster status and ports
 - `make build-all` - Build all images
-- `make build-backend` - Build backend only
-- `make build-frontend` - Build frontend only
-- `make build-operator` - Build operator only
+- `make build-api-server` - Build backend only
+- `make build-ambient-ui` - Build frontend only
+- `make build-control-plane` - Build operator only
 - `make local-status` - Check pod status
 - `make local-logs` - View all logs
 

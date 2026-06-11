@@ -140,7 +140,7 @@ fi
 
 **Always pass `CONTAINER_ENGINE=` to make commands:**
 ```bash
-make build-frontend CONTAINER_ENGINE=docker
+make build-ambient-ui CONTAINER_ENGINE=docker
 make build-all CONTAINER_ENGINE=docker
 ```
 
@@ -202,9 +202,9 @@ Note: By default, kind uses production Quay.io images. We'll need to:
 
 ```bash
 # Build specific components — always pass CONTAINER_ENGINE
-make build-backend CONTAINER_ENGINE=$CONTAINER_ENGINE
-make build-frontend CONTAINER_ENGINE=$CONTAINER_ENGINE
-make build-operator CONTAINER_ENGINE=$CONTAINER_ENGINE
+make build-api-server CONTAINER_ENGINE=$CONTAINER_ENGINE
+make build-ambient-ui CONTAINER_ENGINE=$CONTAINER_ENGINE
+make build-control-plane CONTAINER_ENGINE=$CONTAINER_ENGINE
 make build-runner CONTAINER_ENGINE=$CONTAINER_ENGINE
 
 # Or build all at once
@@ -328,7 +328,7 @@ make kind-rebuild
 
 ### "Just rebuild the backend"
 ```bash
-make build-backend CONTAINER_ENGINE=$CONTAINER_ENGINE
+make build-api-server CONTAINER_ENGINE=$CONTAINER_ENGINE
 kind load docker-image localhost/acp_api_server:latest --name $KIND_CLUSTER_NAME
 kubectl set image deployment/ambient-api-server backend=localhost/acp_api_server:latest -n ambient-code
 kubectl rollout restart deployment/ambient-api-server -n ambient-code
@@ -413,7 +413,7 @@ make kind-port-forward
 **Solution:**
 ```bash
 # Force rebuild
-make build-backend  # (or whatever component)
+make build-api-server  # (or whatever component)
 
 # Reload into cluster
 kind load docker-image localhost/acp_api_server:latest --name $KIND_CLUSTER_NAME
@@ -582,7 +582,7 @@ User: "Test this changeset in kind"
 Assistant (using dev-cluster skill):
 1. Checks git status → finds backend changes
 2. Explains: "I see changes in components/ambient-api-server. I'll build the backend image, create a kind cluster, and deploy your changes."
-3. Runs: `make build-backend`
+3. Runs: `make build-api-server`
 4. Runs: `make kind-up`
 5. Loads image: `kind load docker-image localhost/acp_api_server:latest --name $KIND_CLUSTER_NAME`
 6. Updates deployment with local image and ImagePullPolicy: Never
@@ -629,8 +629,8 @@ This skill knows all the relevant Makefile targets:
 - `make kind-port-forward` - Port-forward services to localhost
 - `make kind-status` - Show cluster status and port assignments
 - `make build-all` - Build all container images
-- `make build-backend` - Build backend image only
-- `make build-frontend` - Build frontend image only
-- `make build-operator` - Build operator image only
+- `make build-api-server` - Build backend image only
+- `make build-ambient-ui` - Build frontend image only
+- `make build-control-plane` - Build operator image only
 - `make local-status` - Check pod status
 - `make local-logs` - Follow all component logs

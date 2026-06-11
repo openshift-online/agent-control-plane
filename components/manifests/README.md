@@ -11,28 +11,21 @@ manifests/
 ├── base/                                  # Secure production-grade defaults
 │   ├── kustomization.yaml                 # Delegates to core/, platform/, rbac/
 │   ├── core/                              # Application deployments + config
-│   │   ├── backend-deployment.yaml
-│   │   ├── frontend-deployment.yaml
-│   │   ├── operator-deployment.yaml
-│   │   ├── public-api-deployment.yaml
-│   │   ├── ambient-api-server-service.yml # ambient-api-server Deployment + Service
-│   │   ├── agent-registry-configmap.yaml
+│   │   ├── ambient-api-server-service.yml # API server Deployment + Service
+│   │   ├── ambient-ui-deployment.yaml     # UI Deployment + Service
 │   │   ├── minio-deployment.yaml
 │   │   ├── postgresql-deployment.yaml
-│   │   ├── unleash-deployment.yaml
-│   │   ├── workspace-pvc.yaml
-│   │   ├── models.json                    # Available LLM models (ConfigMap source)
-│   │   └── flags.json                     # Feature flags (ConfigMap source)
+│   │   └── limitrange.yaml
+│   ├── ambient-control-plane-service.yml  # Control plane Deployment + Service
 │   ├── platform/                          # Cluster-level resources
 │   │   ├── namespace.yaml
-│   │   ├── ambient-api-server-db.yml      # ambient-api-server PostgreSQL deployment
+│   │   ├── ambient-api-server-db.yml      # API server PostgreSQL deployment
 │   │   └── ambient-api-server-secrets.yml # Secret template (values injected per-env)
-│   ├── crds/                              # Custom Resource Definitions
-│   │   ├── agenticsessions-crd.yaml
-│   │   └── projectsettings-crd.yaml
-│   └── rbac/                              # ClusterRoles for backend and operator
-│       ├── backend-clusterrole.yaml
-│       └── operator-clusterrole.yaml
+│   └── rbac/                              # ClusterRoles and ServiceAccounts
+│       ├── control-plane-clusterrole.yaml
+│       ├── control-plane-sa.yaml
+│       ├── cluster-roles.yaml
+│       └── ambient-project-{admin,edit,view}-clusterrole.yaml
 │
 ├── components/                            # Reusable opt-in kustomize components
 │   ├── oauth-proxy/                       # OpenShift OAuth proxy sidecar for frontend
@@ -102,14 +95,13 @@ Cypress-compatible service configuration on top of the kind overlay.
 make test-e2e-local
 ```
 
-### `local-dev/` — CRC / OpenShift Local
-- **Images**: Internal OpenShift registry (`image-registry.openshift-image-registry.svc:5000/vteam-dev/*`)
-- **Namespace**: `vteam-dev` (with `namePrefix: vteam-`)
+### `local-dev/` — OpenShift Local development
+- **Namespace**: Configurable (uses `namePrefix`)
 - **Auth**: OpenShift service-ca TLS, JWKS enabled
 - **Database**: RHEL PostgreSQL with init containers
 
 ```bash
-make local-up
+oc apply -k overlays/local-dev/
 ```
 
 ## Reusable Components

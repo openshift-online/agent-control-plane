@@ -68,12 +68,13 @@ REGISTRY_HOST=$(oc get route default-route -n openshift-image-registry \
   --template='{{ .spec.host }}')
 
 cd components/manifests/overlays/production
-sed -i "s#newName: quay.io/ambient_code/#newName: ${REGISTRY_HOST}/ambient-code/#g" kustomization.yaml
+kustomize edit set image quay.io/ambient_code/acp_api_server=${REGISTRY_HOST}/ambient-code/acp_api_server
+kustomize edit set image quay.io/ambient_code/acp_control_plane=${REGISTRY_HOST}/ambient-code/acp_control_plane
+kustomize edit set image quay.io/ambient_code/acp_ambient_ui=${REGISTRY_HOST}/ambient-code/acp_ambient_ui
+kustomize edit set image quay.io/ambient_code/acp_claude_runner=${REGISTRY_HOST}/ambient-code/acp_claude_runner
 
-cd ../..
-./deploy.sh
+oc apply -k . -n ambient-code
 
-cd overlays/production
 git checkout kustomization.yaml
 ```
 

@@ -246,7 +246,7 @@ cp e2e/env.example e2e/.env
 # Enable agent testing
 ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
 
-# Override specific images (used by deploy.sh during kind-up)
+# Override specific images (used during kind-up)
 DEFAULT_API_SERVER_IMAGE=quay.io/your-org/acp_api_server:custom-tag
 IMAGE_RUNNER=quay.io/your-org/acp_claude_runner:custom-tag
 ```

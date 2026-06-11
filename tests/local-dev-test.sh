@@ -397,18 +397,18 @@ test_build_command() {
     log_section "Test 13: Build Commands (Dry Run)"
 
     if make -n build-backend >/dev/null 2>&1; then
-        log_success "make build-backend syntax is valid"
+        log_success "make build-api-server syntax is valid"
         ((PASSED_TESTS++))
     else
-        log_error "make build-backend has syntax errors"
+        log_error "make build-api-server has syntax errors"
         ((FAILED_TESTS++))
     fi
 
     if make -n build-frontend >/dev/null 2>&1; then
-        log_success "make build-frontend syntax is valid"
+        log_success "make build-ambient-ui syntax is valid"
         ((PASSED_TESTS++))
     else
-        log_error "make build-frontend has syntax errors"
+        log_error "make build-ambient-ui has syntax errors"
         ((FAILED_TESTS++))
     fi
 }

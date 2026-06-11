@@ -2,85 +2,51 @@
 
 This directory contains the core components of the Ambient Code Platform.
 
-See the main [README.md](../README.md) for complete documentation, deployment instructions, and usage examples.
-
-## 📊 Architecture Diagrams
-
-View the platform architecture in detail:
-- [Platform Architecture](../docs/platform-architecture.mmd) - Overall system architecture and data flow
-- [Component Structure](../docs/component-structure.mmd) - Directory structure and development workflow
-- [Agentic Session Flow](../docs/agentic-session-flow.mmd) - Detailed sequence diagram of session execution
-- [Deployment Stack](../docs/deployment-stack.mmd) - Technology stack and deployment options
+See the main [README.md](../README.md) for complete documentation.
 
 ## Component Directory Structure
 
 ```
 components/
-├── frontend/                   # NextJS web interface with Shadcn UI
-├── backend/                    # Go API service for Kubernetes CRD management
-├── operator/                   # Kubernetes operator (Go)
-├── runners/                    # AI runner services
-│   └── ambient-runner/     # Python service running Claude Code CLI with MCP
-├── manifests/                  # Kubernetes deployment manifests
-└── README.md                   # This documentation
+├── ambient-api-server/         # Go REST + gRPC API (rh-trex-ai, PostgreSQL)
+├── ambient-control-plane/      # Go service, watches API server via gRPC, creates K8s Jobs
+├── ambient-ui/                 # NextJS + Shadcn web interface
+├── ambient-mcp/                # MCP server integration
+├── ambient-cli/                # Go CLI (acpctl)
+├── ambient-sdk/                # Go, Python, TypeScript SDKs (generated from OpenAPI)
+├── credential-sidecars/        # Per-provider credential containers (GitHub, Jira, K8s, Google)
+├── runners/
+│   └── ambient-runner/         # Python runner executing AI agents in Job pods
+├── manifests/                  # Kustomize deployment manifests
+└── README.md
 ```
 
-## 🎯 Agentic Session Flow
+## Session Flow
 
-1. **Create Session**: User creates a new agentic session via the web UI
-2. **API Processing**: Backend creates an `AgenticSession` Custom Resource in Kubernetes
-3. **Job Scheduling**: Operator detects the CR and creates a Kubernetes Job
-4. **Execution**: Job runs a pod with AI CLI and Playwright MCP server
-5. **Task Execution**: AI executes the specified task using MCP capabilities
-6. **Result Storage**: Results are stored back in the Custom Resource
-7. **UI Update**: Frontend displays the completed agentic session with results
+1. **Create Session**: User creates a session via UI or CLI
+2. **API Server**: Persists session to PostgreSQL
+3. **Control Plane**: Receives gRPC event, creates Kubernetes Job
+4. **Execution**: Job pod runs AI agent with configured bridge
+5. **Results**: Runner streams results back to API server via gRPC
+6. **UI Update**: UI displays progress
 
-## ⚡ Quick Start
+## Quick Start
 
-### Local Development (Recommended)
 ```bash
-# Single command to start everything
+# Start local Kind cluster with all components
 make kind-up
+
+# Rebuild after code changes
+make kind-rebuild
 ```
 
-**Prerequisites:**
-- Kind (`brew install kind`) + Docker or Podman
-
-**What you get:**
-- ✅ Complete local development environment
-- ✅ Frontend and backend accessible via localhost
-- ✅ Backend API working with authentication
-- ✅ Ready for project creation and agentic sessions
-
-### Production Deployment
-```bash
-# Build and push images to your registry
-export REGISTRY="your-registry.com"
-make build-all push-all REGISTRY=$REGISTRY
-
-# Deploy to OpenShift/Kubernetes
-cd components/manifests
-CONTAINER_REGISTRY=$REGISTRY ./deploy.sh
-```
-
-### Rebuild Components
-```bash
-make kind-rebuild             # Rebuild and reload all components
-make kind-reload-backend     # Rebuild and reload backend only
-make kind-reload-frontend    # Rebuild and reload frontend only
-make kind-reload-operator    # Rebuild and reload operator only
-```
-
-## Quick Deploy
-
-From the project root:
+## Build Targets
 
 ```bash
-# Deploy with default images
-make deploy
-
-# Or deploy to custom namespace
-make deploy NAMESPACE=my-namespace
+make build-all                # Build all container images
+make build-api-server         # API server only
+make build-control-plane      # Control plane only
+make build-ambient-ui         # UI only
+make build-mcp                # MCP server only
+make build-runner             # Runner only
 ```
-
-For detailed deployment instructions, see [../docs/deployment/OPENSHIFT_DEPLOY.md](../docs/deployment/OPENSHIFT_DEPLOY.md).

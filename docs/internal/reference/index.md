@@ -220,7 +220,7 @@ When you create an AgenticSession, the platform automatically creates these Kube
 
 - **Job**: Manages the pod lifecycle for session execution
 - **Pod**: Runs the Claude Code runner container
-- **PersistentVolumeClaim**: Provides workspace storage for repository clones
+- **EmptyDir + S3 sync**: Ephemeral workspace storage with S3 persistence
 - **Secret**: Contains API keys (created by ProjectSettings)
 
 All resources use **OwnerReferences** for automatic cleanup when the AgenticSession is deleted.
@@ -259,7 +259,7 @@ Default limits (configurable via ProjectSettings):
 
 **Breaking Changes:**
 
-- Complete architecture rewrite: moved from LlamaDeploy to Kubernetes operators
+- Complete architecture rewrite: moved from LlamaDeploy to REST API + gRPC-driven control plane
 - API endpoints now use project-scoped pattern: `/api/projects/:project/*`
 - Frontend migrated from @llamaindex/server to Next.js with Shadcn UI
 - Authentication now uses OpenShift OAuth with user bearer tokens
