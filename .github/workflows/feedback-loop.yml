@@ -36,10 +36,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: '3.11'
 
@@ -74,7 +74,7 @@ jobs:
 
       - name: Upload session configs
         if: steps.query.outputs.session_count != '0'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: session-configs
           path: /tmp/feedback-loop/sessions.json
@@ -121,7 +121,7 @@ jobs:
 
     steps:
       - name: Download session configs
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: session-configs
 
@@ -156,7 +156,7 @@ jobs:
 
       - name: Create improvement session
         id: session
-        uses: ambient-code/ambient-action@v0.0.2
+        uses: ambient-code/ambient-action@b33b11ee7f64c325fa28bcc53a951f61e983bae0 # v0.0.2
         with:
           api-url: ${{ secrets.AMBIENT_API_URL }}
           api-token: ${{ secrets.AMBIENT_BOT_TOKEN }}
