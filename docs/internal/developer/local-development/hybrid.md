@@ -91,7 +91,7 @@ cd components/ambient-api-server
 # API server connects to PostgreSQL (in cluster via port-forward or local)
 # Port-forward PostgreSQL if using the in-cluster instance:
 # kubectl port-forward -n ambient-code svc/ambient-api-server-db 5432:5432
-go run .
+go run ./cmd/ambient-api-server
 # Listens on localhost:8000 by default (development environment)
 ```
 
@@ -147,7 +147,7 @@ kubectl scale -n ambient-code deployment/ambient-api-server deployment/ambient-u
 ```bash
 cd components/ambient-api-server
 # Ensure PostgreSQL is accessible (port-forward or local)
-go run .
+go run ./cmd/ambient-api-server
 # Listens on localhost:8000 (REST) and localhost:9000 (gRPC) by default
 ```
 
@@ -160,7 +160,7 @@ export AMBIENT_GRPC_SERVER_ADDR=localhost:9000         # local gRPC
 export AMBIENT_GRPC_USE_TLS=false                      # no TLS for local dev
 export AMBIENT_API_TOKEN=<your-token>                  # or set OIDC_CLIENT_ID + OIDC_CLIENT_SECRET
 export RUNNER_IMAGE=quay.io/ambient_code/acp_claude_runner:latest
-go run ./cmd/ambient-control-plane
+go run ./cmd/ambient-api-server/cmd/ambient-control-plane
 ```
 
 **Terminal 3 - Frontend:**

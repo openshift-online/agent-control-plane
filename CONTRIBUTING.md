@@ -72,9 +72,9 @@ Code contributions should:
 
 Before contributing, ensure you have:
 
-- Go 1.24+ (for backend/operator development)
-- Node.js 20+ and npm (for frontend development)
-- Python 3.11+ (for runner development)
+- Go 1.25+ (for API server and control plane development)
+- Node.js 20+ and npm (for UI development)
+- Python 3.12+ (for runner development)
 - Podman or Docker (for building containers)
 - Kind and kubectl (for local development)
 - Git for version control
@@ -89,7 +89,7 @@ Before contributing, ensure you have:
    ```
 3. Add the upstream repository:
    ```bash
-   git remote add upstream https://github.com/ambient-code/agent-control-plane.git
+   git remote add upstream https://github.com/openshift-online/agent-control-plane.git
    ```
 
 ### Install Git Hooks (Recommended)
@@ -111,7 +111,6 @@ Or run the installation script directly:
 - **File hygiene** - trailing whitespace, EOF fixer, YAML validation, large file check, merge conflict markers, private key detection
 - **Python** - `ruff format` + `ruff check --fix` (runners and scripts)
 - **Go** - `gofmt`, `go vet`, `golangci-lint` (API server, control plane, CLI)
-- **UI** - ESLint (TypeScript/JavaScript)
 - **Branch protection** - blocks commits to `main`/`master`/`production`
 
 **What runs on push:**

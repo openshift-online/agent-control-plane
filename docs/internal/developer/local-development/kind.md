@@ -2,7 +2,7 @@
 
 Run the Ambient Code Platform locally using kind (Kubernetes in Podman/Docker) for development and testing.
 
-> **Cluster Name**: `ambient-local`
+> **Cluster Name**: `ambient-<branch-slug>` (e.g. `ambient-main`, `ambient-jsell-my-feature`). Override with `KIND_CLUSTER_NAME=...`
 > **Default Engine**: Podman (use `CONTAINER_ENGINE=docker` for more stable networking on macOS)
 
 ## Quick Start
@@ -148,9 +148,9 @@ make kind-rebuild
 To rebuild a single component (faster):
 
 ```bash
-# Example: API server change
+# Example: API server change (replace <cluster> with your cluster name from `kind get clusters`)
 make build-api-server && \
-  kind load docker-image acp_api_server:latest --name ambient-local && \
+  kind load docker-image acp_api_server:latest --name <cluster> && \
   kubectl rollout restart deployment/ambient-api-server -n ambient-code
 ```
 
@@ -236,19 +236,8 @@ export GOOGLE_APPLICATION_CREDENTIALS=~/.config/gcloud/application_default_crede
 Create `e2e/.env` to customize the deployment:
 
 ```bash
-# Copy example
-cp e2e/env.example e2e/.env
-```
-
-**Available options:**
-
-```bash
 # Enable agent testing
 ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
-
-# Override specific images (used during kind-up)
-DEFAULT_API_SERVER_IMAGE=quay.io/your-org/acp_api_server:custom-tag
-IMAGE_RUNNER=quay.io/your-org/acp_claude_runner:custom-tag
 ```
 
 **Apply changes:**
