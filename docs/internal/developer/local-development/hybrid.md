@@ -160,7 +160,7 @@ export AMBIENT_GRPC_SERVER_ADDR=localhost:9000         # local gRPC
 export AMBIENT_GRPC_USE_TLS=false                      # no TLS for local dev
 export AMBIENT_API_TOKEN=<your-token>                  # or set OIDC_CLIENT_ID + OIDC_CLIENT_SECRET
 export RUNNER_IMAGE=quay.io/ambient_code/acp_claude_runner:latest
-go run ./cmd/ambient-api-server/cmd/ambient-control-plane
+go run ./cmd/ambient-control-plane
 ```
 
 **Terminal 3 - Frontend:**
