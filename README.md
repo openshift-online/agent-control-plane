@@ -1,10 +1,10 @@
-# Ambient Code Platform
+# Agent Control Plane
 
 > Kubernetes-native AI automation platform for intelligent agentic sessions
 
 ## Overview
 
-The Ambient Code Platform combines Claude Code CLI with multi-agent collaboration capabilities. Teams create and manage intelligent agentic sessions through a modern web interface, backed by Kubernetes Custom Resources and operators.
+The Agent Control Plane combines Claude Code CLI with multi-agent collaboration capabilities. Teams create and manage intelligent agentic sessions through a modern web interface, backed by Kubernetes Custom Resources and operators.
 
 ### Key Capabilities
 

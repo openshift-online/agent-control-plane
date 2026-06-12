@@ -1,8 +1,8 @@
 ---
-title: "Ambient Code Platform"
+title: "Agent Control Plane"
 ---
 
-Ambient Code Platform (ACP) runs AI agents against real developer work: repositories, project context, credentials, messages, and long-running tasks. You can start work from the web UI, `acpctl`, the REST API, generated SDKs, or the MCP server.
+Agent Control Plane (ACP) runs AI agents against real developer work: repositories, project context, credentials, messages, and long-running tasks. You can start work from the web UI, `acpctl`, the REST API, generated SDKs, or the MCP server.
 
 ACP is not a CRD data model. The API server is a Go service backed by PostgreSQL and exposes `/api/ambient/v1/...` on port 8000. The control plane watches the API server over gRPC and creates Kubernetes runner Pods for sessions. Each runner is a Python AG-UI server with bridges for Claude Agent SDK, Gemini CLI, and LangGraph.
 
@@ -16,7 +16,7 @@ ACP is not a CRD data model. The API server is a Go service backed by PostgreSQL
 
 ## First steps
 
-1. Read [What is Ambient?](getting-started/) for the system model.
+1. Read [What is ACP?](getting-started/) for the system model.
 2. Use [Quick start](getting-started/quickstart-ui/) to create a project, agent, and session from the UI.
 3. Use [CLI Reference](getting-started/cli/) when you want repeatable automation from a terminal or CI job.
 

@@ -19,7 +19,7 @@ export default defineConfig({
   base: getBasePath(),
   integrations: [
     starlight({
-      title: 'Ambient Code Platform',
+      title: 'Agent Control Plane',
       favicon: '/favicon.ico',
       description:
         'AI-powered automation platform for intelligent agentic workflows',

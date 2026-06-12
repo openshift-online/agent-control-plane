@@ -1,6 +1,6 @@
-# Contributing to Ambient Code Platform
+# Contributing to Agent Control Plane
 
-Thank you for your interest in contributing to Ambient Code Platform (formerly known as vTeam)! This document provides guidelines and instructions for contributing to the project.
+Thank you for your interest in contributing to Agent Control Plane (formerly known as vTeam)! This document provides guidelines and instructions for contributing to the project.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 ## Ways to Contribute
 
-There are many ways to contribute to Ambient Code Platform:
+There are many ways to contribute to Agent Control Plane:
 
 ### Report Bugs
 
@@ -348,7 +348,7 @@ Your PR should include:
 
 ## Local Development Setup
 
-The recommended way to develop and test Ambient Code Platform locally is using **Kind (Kubernetes in Docker)**. This provides a lightweight Kubernetes environment that matches our CI/CD setup.
+The recommended way to develop and test Agent Control Plane locally is using **Kind (Kubernetes in Docker)**. This provides a lightweight Kubernetes environment that matches our CI/CD setup.
 
 ### Installing Kind and Prerequisites
 
@@ -555,4 +555,4 @@ If you're stuck or have questions:
 
 ## License
 
-By contributing to Ambient Code Platform, you agree that your contributions will be licensed under the same license as the project (MIT License).
+By contributing to Agent Control Plane, you agree that your contributions will be licensed under the same license as the project (MIT License).

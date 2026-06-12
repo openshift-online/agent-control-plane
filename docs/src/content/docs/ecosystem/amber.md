@@ -2,7 +2,7 @@
 title: "Amber"
 ---
 
-Amber is the Ambient name for a codebase-focused agent. In ACP terms, Amber is not a special API kind; it is an agent prompt, project context, repository credentials, and sessions that run against your code.
+Amber is the ACP name for a codebase-focused agent. In ACP terms, Amber is not a special API kind; it is an agent prompt, project context, repository credentials, and sessions that run against your code.
 
 If your deployment ships an Amber agent, use it like any other project agent. If it does not, you can create one.
 

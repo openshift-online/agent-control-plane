@@ -1,6 +1,6 @@
 ---
 title: Mounting a Custom CA Bundle
-description: How to configure Ambient to trust certificates from a private or corporate CA
+description: How to configure ACP to trust certificates from a private or corporate CA
 ---
 
 Use a custom CA bundle when ACP components must call services with certificates signed by an internal CA: Git hosts, OIDC issuers, artifact systems, or internal APIs.

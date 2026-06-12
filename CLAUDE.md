@@ -1,4 +1,4 @@
-# Ambient Code Platform
+# Agent Control Plane
 
 Kubernetes-native AI automation platform that orchestrates agentic sessions through containerized microservices. Built with Go (API server, control plane), NextJS + Shadcn (UI), and Python (runner). PostgreSQL is the source of truth; the control plane reconciles via gRPC watch streams.
 

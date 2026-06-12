@@ -1,8 +1,8 @@
 ---
-title: "What is Ambient?"
+title: "What is ACP?"
 ---
 
-Ambient Code Platform (ACP) is a Kubernetes-native platform for running AI agents as isolated, observable sessions. A developer describes the work, ACP stores the request in PostgreSQL, the control plane sees the change over gRPC, and Kubernetes runs a dedicated runner Pod for the session.
+Agent Control Plane (ACP) is a Kubernetes-native platform for running AI agents as isolated, observable sessions. A developer describes the work, ACP stores the request in PostgreSQL, the control plane sees the change over gRPC, and Kubernetes runs a dedicated runner Pod for the session.
 
 The platform is built for developer automation: code fixes, repo analysis, issue triage, project agents, and repeatable workflows. It gives agents project context and credentials without making Kubernetes CRDs the source of truth.
 

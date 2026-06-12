@@ -1,6 +1,6 @@
-# Ambient Code Platform Components
+# Agent Control Plane Components
 
-This directory contains the core components of the Ambient Code Platform.
+This directory contains the core components of the Agent Control Plane.
 
 See the main [README.md](../README.md) for complete documentation.
 
