@@ -510,13 +510,16 @@ class TestGRPCMessageWriterConsume:
             session_id="s-1", run_id="r-1", grpc_client=client
         ), client
 
-    async def test_messages_snapshot_accumulated(self):
+    async def test_text_message_buffered(self):
         writer, _ = self._writer()
-        msg = MagicMock()
-        msg.model_dump.return_value = {"role": "assistant", "content": "hi"}
-        snap = self._make_messages_snapshot([msg])
-        await writer.consume(snap)
-        assert len(writer._accumulated_messages) == 1
+        start = MagicMock()
+        start.type = MagicMock(value="TEXT_MESSAGE_START")
+        content = MagicMock()
+        content.type = MagicMock(value="TEXT_MESSAGE_CONTENT")
+        content.delta = "hi"
+        await writer.consume(start)
+        await writer.consume(content)
+        assert writer._text_buffer == "hi"
 
     async def test_run_finished_pushes_completed(self):
         writer, client = self._writer()
