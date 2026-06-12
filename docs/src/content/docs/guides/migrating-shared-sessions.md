@@ -1,44 +1,44 @@
 ---
-title: Migrating to Per-Message Credentials
-description: How to update existing shared sessions for per-message credential behavior
+title: Credential Scoping for Shared Sessions
+description: How credentials are bound and isolated when multiple users share a session
 ---
 
-Use this guide when moving from "the session owner owns all runtime credentials" to ACP's current role-binding and caller-token model.
+## How credential injection works
 
-## What changed
+When a session starts, the control plane resolves which credentials to inject:
 
-Credentials are API records with separate token-read authorization. A user who can view or message a session does not automatically get access to every credential used by that session.
+1. **Binding resolution** — queries role bindings at agent → project → global scope to find credentials with injection intent (not just ownership).
+2. **Token-reader grant** — creates a temporary `credential:token-reader` binding so the session's service identity can read the credential token from the API server.
+3. **Sidecar injection** — for providers with credential sidecars (GitHub, Jira, K8s, Google), the control plane adds a sidecar container that fetches the token at startup and runs the provider's MCP server.
+4. **Cleanup** — when the session ends, the token-reader binding is revoked.
 
-For HTTP runner turns, the runner can use the caller's token to fetch credentials for that turn. The Claude bridge clears that caller token after the turn. If caller-token context is unavailable, the runner may use the control-plane/bot token path with current-user context.
+The credential used for a given provider is determined once at session start and does not change for the lifetime of the pod.
 
-Credential sidecar mode moves provider token handling out of the runner process where supported.
+## Shared session implications
 
-## Migration steps
+When multiple users collaborate on a session, all users share the same provider credentials that were injected at session start. A user who can message a session can use the tools backed by those credentials — for example, pushing commits via the GitHub MCP server.
 
-1. Inventory shared projects and sessions.
-2. List credentials used by those projects and agents.
-3. Confirm each collaborator has the project or session role they need.
-4. Grant credential token access only where required.
-5. Prefer project or agent credential bindings over global credential access.
-6. Start a fresh session and verify each collaborator can perform only the expected operations.
-7. Remove old assumptions from runbooks, prompts, and automation scripts.
+To control this:
 
-## What to check
+- **Bind credentials at the narrowest scope** — prefer agent or project bindings over global ones.
+- **Use separate sessions** when users need different provider access levels.
+- **Review who has session access** — session access implies access to the tools (and credentials) that session was started with.
 
-- Private Git clone succeeds for users who should have access.
-- Git/Jira/Google/kubeconfig tools fail cleanly for users who should not have access.
-- Logs report credential failures without printing tokens.
-- Runner messages and artifacts do not contain copied secrets.
-- Sidecar-enabled deployments do not also pass the same provider token through broad environment variables.
+## Migration checklist
 
-## If a shared session fails after migration
+If you're moving from a setup where credentials were broadly shared:
 
-Check in this order:
+1. Inventory which credentials are bound at each scope (global, project, agent).
+2. Remove global bindings where project or agent scope is sufficient.
+3. Confirm each collaborator has only the project/session roles they need.
+4. Start a fresh session and verify tools work for authorized users and fail cleanly for others.
+5. Check that logs report credential failures without printing tokens.
 
-1. Does the caller have project or session access?
-2. Is the credential bound at the correct scope?
-3. Does the caller or session ServiceAccount have token-reader permission?
-4. Is sidecar mode enabled for that provider, and is the sidecar image configured?
-5. Is the runner receiving caller-token headers for HTTP turns?
+## Troubleshooting
 
-Avoid fixing failures by granting global credential access unless that is genuinely the intended policy.
+If a shared session can't access a provider:
+
+1. Does the credential have an injection binding at the right scope?
+2. Was the session started *after* the binding was created? (Bindings are resolved at session start.)
+3. Is the sidecar image configured for that provider?
+4. Check control plane logs for "credential resolution failed" warnings.
