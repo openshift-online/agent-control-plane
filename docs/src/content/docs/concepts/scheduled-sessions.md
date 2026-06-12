@@ -2,9 +2,9 @@
 title: "Scheduled Sessions"
 ---
 
-Scheduled sessions are project-scoped API records for recurring session intent. They store cron metadata and a session template, but the current API service does not yet enqueue automatic runs.
-
-This matters operationally: you can create, update, suspend, resume, trigger, and list scheduled-session records, but `trigger` currently records success without starting a session, and `runs` returns an empty list.
+:::caution[Not yet automated]
+Scheduled sessions are **CRUD-only** right now. You can create and manage schedule records, but nothing evaluates the cron expressions or starts sessions automatically. The `trigger` endpoint is a stub that returns success without creating a session. Use an external scheduler (GitHub Actions, CronJob) to call `acpctl agent start` on your own schedule until this is implemented.
+:::
 
 ## API shape
 
