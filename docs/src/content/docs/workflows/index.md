@@ -24,7 +24,7 @@ The platform ships with these ready-to-use workflows:
 |----------|-------------|----------|
 | [**Bugfix**](bugfix/) | Systematic bug resolution with reproduction, diagnosis, fix, testing, and PR submission | `/assess`, `/reproduce`, `/diagnose`, `/fix`, `/test`, `/review`, `/document`, `/pr` |
 | [**Triage**](triage/) | Issue backlog analysis with actionable reports and bulk operations | Conversational |
-| [**Spec-kit**](spec-kit/) | Specification-driven development for feature planning and implementation | Key commands include `/speckit.specify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement` |
+| [**Spec-kit**](spec-kit/) | Specification-driven development for feature planning and implementation | Key commands include Specification-driven planning tools |
 | [**PRD / RFE**](prd-rfe/) | Product requirements documentation and RFE task breakdown | Key commands include `/prd.discover`, `/prd.create`, `/rfe.breakdown`, `/rfe.prioritize` |
 
 The platform also includes the **Amber Interview** workflow for collecting user feedback and a **Claude.md Generator** workflow. See the [workflows repository](https://github.com/ambient-code/workflows) for the full list.

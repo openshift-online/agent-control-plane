@@ -57,8 +57,7 @@ Component-specific conventions loaded by review agents on demand.
 
 | Document | Purpose |
 |----------|---------|
-| [ACP Constitution](.specify/memory/constitution.md) | 10 core principles: K8s-native, security, type safety, TDD, modularity, observability, lifecycle, context engineering, data access, commit discipline |
-| [Runner Constitution](.specify/constitutions/runner.md) | Version pinning, automated freshness, image discipline, schema sync, bridge modularity |
+| [Runner Constitution](specs/agents/runner-constitution.md) | Version pinning, automated freshness, image discipline, schema sync, bridge modularity |
 | [SDD Preflight](.github/workflows/sdd-preflight.yml) | CI workflow enforcing constitution compliance on PRs |
 
 ## Architecture Decisions

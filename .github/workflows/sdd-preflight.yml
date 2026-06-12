@@ -28,7 +28,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          MANIFEST=".specify/sdd-manifest.yaml"
+          MANIFEST="sdd-manifest.yaml"
           if [ ! -f "$MANIFEST" ]; then
             echo "No SDD manifest found, skipping"
             echo "violation=false" >> "$GITHUB_OUTPUT"
@@ -123,7 +123,7 @@ jobs:
           ${VIOLATIONS}
           **Action required**: These components are in \`enforce\` mode. Please use the component's agent workflow to make these changes, or request an exemption by adding the \`sdd-exempt\` label.
 
-          📖 See [SDD Manifest](.specify/sdd-manifest.yaml) for details.
+          📖 See [SDD Manifest](sdd-manifest.yaml) for details.
           COMMENTEOF
           elif [ -n "$WARNINGS" ]; then
             cat > "$BODY_FILE" <<COMMENTEOF
@@ -137,7 +137,7 @@ jobs:
           ${WARNINGS}
           **No action required** — these components are in \`warn\` mode. Consider using the component's agent workflow for future changes.
 
-          📖 Specs: [Runner Spec](.specify/specs/runner.md) · [Runner Constitution](.specify/constitutions/runner.md)
+          📖 Specs: [Runner Spec](specs/agents/runner.spec.md) · [Runner Constitution](specs/agents/runner-constitution.md)
           COMMENTEOF
           fi
 

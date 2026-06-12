@@ -81,7 +81,7 @@ All specification artifacts are written to the `artifacts/specs/` directory:
 
 ## Workspace initialization
 
-The first time the workflow runs, it executes an initialization script (`.specify/scripts/bash/init-workspace.sh`) that sets up the workspace structure and creates symlinks for shared artifacts. This happens automatically at session startup.
+The first time the workflow runs, it executes an initialization script (`the workspace initialization script`) that sets up the workspace structure and creates symlinks for shared artifacts. This happens automatically at session startup.
 
 ## Tips
 

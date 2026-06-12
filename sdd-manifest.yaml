@@ -5,15 +5,15 @@
 # The sdd-preflight CI job enforces this boundary.
 #
 # To add a new component:
-#   1. Create its constitution in .specify/constitutions/<component>.md
-#   2. Create its spec in .specify/specs/<component>.md
+#   1. Create its constitution in specs/<component>.md
+#   2. Create its spec in specs/<component>.md
 #   3. Add an entry below with paths, spec, constitution, and agent
 #   4. The preflight job will begin enforcing on the next PR
 
 version: 1
 
 # Platform-wide constitution (all components inherit from this)
-platform-constitution: .specify/memory/constitution.md
+platform-constitution: CLAUDE.md
 
 # Enforcement mode for new components during migration
 # "warn" = comment on PR but don't block; "enforce" = required check
@@ -27,8 +27,8 @@ managed-components:
     paths:
       - components/runners/ambient-runner/**
       - .github/workflows/runner-tool-versions.yml
-    constitution: .specify/constitutions/runner.md
-    spec: .specify/specs/runner.md
+    constitution: specs/agents/runner-constitution.md
+    spec: specs/agents/runner.spec.md
     mode: warn
     added-in-pr: 1091
     # Future: when a GitHub App or bot account is set up for the agent,
@@ -40,7 +40,5 @@ managed-components:
   #   description: Go REST API (Gin), manages K8s Custom Resources
   #   paths:
   #     - components/ambient-api-server/**
-  #   constitution: .specify/constitutions/backend.md
-  #   spec: .specify/specs/backend.md
   #   mode: warn
   #   added-in-pr: TBD

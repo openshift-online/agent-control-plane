@@ -150,4 +150,3 @@ When both the self-review and the hook pass, apply the `ambient-code:self-review
 
 ## Convention Authority
 
-This file and [BOOKMARKS.md](BOOKMARKS.md) are the authoritative source of project conventions. The [ACP Constitution](.specify/memory/constitution.md) covers spec-kit-specific governance (commit discipline thresholds, context engineering, amendment process) but defers to this file for shared conventions. If they conflict, this file wins. Spec-kit is optional tooling, not mandatory.
