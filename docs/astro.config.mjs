@@ -27,12 +27,12 @@ export default defineConfig({
         {
           icon: 'github',
           label: 'GitHub',
-          href: 'https://github.com/ambient-code/platform',
+          href: 'https://github.com/openshift-online/agent-control-plane',
         },
       ],
       editLink: {
         baseUrl:
-          'https://github.com/ambient-code/platform/edit/main/docs/',
+          'https://github.com/openshift-online/agent-control-plane/edit/main/docs/',
       },
       sidebar: [
         {

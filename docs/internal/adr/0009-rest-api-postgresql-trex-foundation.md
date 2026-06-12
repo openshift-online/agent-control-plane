@@ -47,6 +47,6 @@ The control plane (`ambient-control-plane`) bridges the API server to Kubernetes
 
 ## Links
 
-- [GitHub Issue #642](https://github.com/ambient-code/platform/issues/642)
+- [GitHub Issue #642](https://github.com/openshift-online/agent-control-plane/issues/642)
 - [Technical Evaluation](https://gist.github.com/markturansky/5ca6c955b536f344c24af5b90f5f07bb)
 - Complements: [ADR-0001](0001-kubernetes-native-architecture.md) (V1, still active)

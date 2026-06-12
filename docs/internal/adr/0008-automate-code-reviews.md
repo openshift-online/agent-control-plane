@@ -6,7 +6,7 @@
 
 ## Context and Problem Statement
 
-Human code review is the single largest bottleneck in the ambient-code/platform release cycle:
+Human code review is the single largest bottleneck in the agent-control-plane release cycle:
 
 - **44 open PRs** accumulate during the week with no review activity.
 - **No auto-rebase** — PRs go stale against main. By Friday, most have merge conflicts.

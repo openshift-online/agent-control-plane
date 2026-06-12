@@ -127,7 +127,7 @@ Operators and developers have no way to verify which version of the API server i
 - Define a `versionResponse` struct with `json` tags matching the wire format
 - In `init()`, marshal the response once into a package-level `[]byte`
 - Register a `PreAuthMiddleware` that matches `GET` on `/api/ambient/v1/version` (with trailing slash tolerance via `strings.TrimSuffix`), writes the pre-marshaled bytes with `Content-Type: application/json`, and calls `next.ServeHTTP` for all other requests
-- Add `_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/version"` to `main.go` imports
+- Add `_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/version"` to `main.go` imports
 
 **Patterns to follow:**
 - `plugins/proxy/plugin.go` — same `RegisterPreAuthMiddleware` pattern, same `init()` side-effect import
