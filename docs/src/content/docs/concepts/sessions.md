@@ -65,18 +65,18 @@ A session stopped by the idler behaves the same as a manually stopped session. Y
 
 The inactivity timeout is resolved in this order:
 
-1. **Session-level** — set `spec.inactivityTimeout` on the session (in seconds). This takes highest priority.
-2. **Project-level** — if the session does not specify a value, the platform checks the `ProjectSettings` for the namespace (`spec.inactivityTimeoutSeconds`).
-3. **Platform default** — if neither is set, the platform uses a default of **86,400 seconds (24 hours)**. This default can be overridden by the `DEFAULT_INACTIVITY_TIMEOUT` environment variable on the operator.
+1. **Session-level** — set `inactivityTimeout` on the session (in seconds). This takes highest priority.
+2. **Project-level** — if the session does not specify a value, the platform checks the project settings for the workspace.
+3. **Platform default** — if neither is set, the platform uses a default of **86,400 seconds (24 hours)**.
 
 Setting the inactivity timeout to `0` at any level disables the auto-stop behavior for that scope.
 
 #### Verifying the idler is working
 
-You can check the operator logs to see which sessions have been stopped due to inactivity:
+You can check the control plane logs to see which sessions have been stopped due to inactivity:
 
 ```sh
-kubectl logs -l app=ambient-code-operator -n <namespace> | grep '[Inactivity]'
+kubectl logs -l app=ambient-control-plane -n <namespace> | grep '[Inactivity]'
 ```
 
 Each entry corresponds to a session that was automatically stopped by the idler.

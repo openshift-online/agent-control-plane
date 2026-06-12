@@ -3,23 +3,11 @@
 # shellcheck shell=bash
 
 BENCH_COMPONENTS=(
-  operator
-  public-api
   api-server
   cli
   sdk
   runner
 )
-
-bench_env_operator() {
-  local cache_root=$1
-  bench_setup_go_env "$cache_root"
-}
-
-bench_env_public_api() {
-  local cache_root=$1
-  bench_setup_go_env "$cache_root"
-}
 
 bench_env_api_server() {
   local cache_root=$1
@@ -41,27 +29,21 @@ bench_env_runner() {
   bench_setup_runner_env "$cache_root"
 }
 
-bench_preflight_operator() {
+bench_preflight_api_server() {
   bench_require_command go
   bench_require_go_version 1 21
-}
-
-bench_preflight_public_api() {
-  bench_preflight_operator
-}
-
-bench_preflight_api_server() {
-  bench_preflight_operator
   bench_require_command make
 }
 
 bench_preflight_cli() {
-  bench_preflight_operator
+  bench_require_command go
+  bench_require_go_version 1 21
   bench_require_command make
 }
 
 bench_preflight_sdk() {
-  bench_preflight_operator
+  bench_require_command go
+  bench_require_go_version 1 21
   bench_require_command make
 }
 
@@ -97,46 +79,6 @@ bench_create_runner_venv() {
   fi
   ./.venv/bin/python -m pip install --upgrade pip >/dev/null
   ./.venv/bin/python -m pip install -e '.[all]'
-}
-
-bench_cold_operator() {
-  local worktree_dir=$1
-
-  cd "$worktree_dir/components/ambient-control-plane" || return 1
-  go mod download
-  go build ./...
-}
-
-bench_warm_operator() {
-  local worktree_dir=$1
-
-  cd "$worktree_dir/components/ambient-control-plane" || return 1
-  touch main.go
-  go build ./...
-}
-
-bench_cleanup_operator() {
-  :
-}
-
-bench_cold_public_api() {
-  local worktree_dir=$1
-
-  cd "$worktree_dir/components/public-api" || return 1
-  go mod download
-  go build ./...
-}
-
-bench_warm_public_api() {
-  local worktree_dir=$1
-
-  cd "$worktree_dir/components/public-api" || return 1
-  touch main.go
-  go build ./...
-}
-
-bench_cleanup_public_api() {
-  :
 }
 
 bench_cold_api_server() {

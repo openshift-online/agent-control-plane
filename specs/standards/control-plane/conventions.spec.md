@@ -1,20 +1,20 @@
-# Operator Development Context
+# Control Plane Development Context
 
 > Part of [CLAUDE.md Critical Conventions](../../CLAUDE.md#critical-conventions)
 
-**When to load:** Working on the Kubernetes operator, reconciliation logic, or Job management
+**When to load:** Working on the control plane, reconciliation logic, or Job management
 
 ## Quick Reference
 
 - **Language:** Go 1.21+
-- **Pattern:** Controller-runtime based operator
+- **Pattern:** gRPC watch-stream reconciler (watches the API server via gRPC streams, not controller-runtime)
 - **Primary Files:** `internal/handlers/sessions.go`, `internal/config/config.go`
 
 ## Critical Rules
 
 ### OwnerReferences on All Child Resources
 
-Every Job, Secret, and PVC the operator creates **must** set OwnerReferences pointing to the parent AgenticSession CR. This ensures automatic cleanup when the session is deleted.
+Every Job, Secret, and PVC the control plane creates **must** set OwnerReferences pointing to the parent AgenticSession CR. This ensures automatic cleanup when the session is deleted.
 
 ```go
 OwnerReferences: []metav1.OwnerReference{
@@ -92,7 +92,7 @@ ctx := context.TODO()
 
 ### No panic() in Production
 
-Same as backend: return `fmt.Errorf` with context instead. A panic crashes the entire operator, affecting all sessions.
+Same as backend: return `fmt.Errorf` with context instead. A panic crashes the entire control plane, affecting all sessions.
 
 ## Pre-Commit Checklist
 

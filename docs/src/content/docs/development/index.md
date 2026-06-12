@@ -8,7 +8,7 @@ The Ambient Code Platform is open source. Whether you are fixing a bug, adding a
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| **Go** | 1.24+ | Backend, operator, public API |
+| **Go** | 1.24+ | API server, control plane, CLI |
 | **Node.js** | 20+ | Frontend |
 | **Python** | 3.11+ | Runner |
 | **Docker** | Latest | Container builds |
@@ -34,7 +34,6 @@ Each component has its own README with build instructions, test commands, and de
 
 | Component | Technology | README |
 |-----------|------------|--------|
-| Backend | Go + Gin | [components/ambient-api-server/](https://github.com/ambient-code/platform/tree/main/components/ambient-api-server) |
 | API Server | Go + rh-trex-ai | [components/ambient-api-server/](https://github.com/ambient-code/platform/tree/main/components/ambient-api-server) |
 | Control Plane | Go | [components/ambient-control-plane/](https://github.com/ambient-code/platform/tree/main/components/ambient-control-plane) |
 | UI | NextJS + Shadcn | [components/ambient-ui/](https://github.com/ambient-code/platform/tree/main/components/ambient-ui) |

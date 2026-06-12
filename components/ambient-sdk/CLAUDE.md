@@ -2,7 +2,7 @@
 
 ## Project Intent
 
-The Ambient Platform SDK provides language-idiomatic HTTP client libraries for the Ambient Code Platform's public REST API. It exists so that external developers and internal automation can create and manage AI agentic sessions **without Kubernetes dependencies or cluster access**. The SDK is the public-facing contract for the platform — everything behind it (CRDs, operators, runners) is an implementation detail.
+The Ambient Platform SDK provides language-idiomatic HTTP client libraries for the Ambient Code Platform's public REST API. It exists so that external developers and internal automation can create and manage AI agentic sessions **without Kubernetes dependencies or cluster access**. The SDK is the public-facing contract for the platform — everything behind it (the API server, control plane, runners) is an implementation detail.
 
 ## Role in the Platform
 
@@ -95,7 +95,7 @@ ambient-sdk/
 The API server owns the canonical OpenAPI spec at `../ambient-api-server/openapi/openapi.yaml`. The SDK does **not** maintain its own copy — it derives types and client behavior from the API server's spec.
 
 - **Spec location**: `../ambient-api-server/openapi/` (split by resource: sessions, agents, tasks, workflows, etc.)
-- **Session endpoints**: `GET /api/ambient-api-server/v1/sessions`, `POST ...`, `GET .../sessions/{id}`
+- **Session endpoints**: `GET /api/ambient/v1/sessions`, `POST ...`, `GET .../sessions/{id}`
 - **Auth**: `Authorization: Bearer <token>` header (project scoping via `X-Ambient-Project`)
 - **Statuses**: `pending` → `running` → `completed` | `failed`
 - Update the API server's spec before changing SDK types or client behavior
@@ -110,7 +110,7 @@ The API server owns the canonical OpenAPI spec at `../ambient-api-server/openapi
 
 ## Smoke Test
 
-Run `cd go-sdk && go run examples/main.go` until it passes. This is the SDK's end-to-end smoke test against the live API server. It currently returns 404 because the API server has not been migrated to serve `/api/ambient-api-server/v1/sessions` yet. Once the full migration (api-server + control-plane + deployment) is complete, this test will pass. Keep running it — when it stops returning 404, the platform is wired up.
+Run `cd go-sdk && go run examples/main.go` to verify SDK connectivity against the live API server. This is the SDK's end-to-end smoke test. The API server serves `/api/ambient/v1/sessions` and the full platform stack (api-server + control-plane + deployment) is wired up.
 
 ## Loadable Context
 

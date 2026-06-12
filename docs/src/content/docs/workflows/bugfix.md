@@ -279,8 +279,8 @@ scheduled jobs, or custom tooling.
 ### How it works
 
 Under the hood, creating a session is a single HTTP POST to the platform's
-backend API. The request body includes the prompt, the repositories to clone,
-and an `activeWorkflow` object that tells the platform which workflow to load.
+API server. The request body includes the prompt, the repositories to clone,
+and a `workflow_id` that tells the platform which workflow to load.
 Anything that can make an authenticated HTTP request can create a bug fix
 session.
 
@@ -288,34 +288,27 @@ Here is the equivalent `curl` call:
 
 ```bash
 curl -X POST \
-  "${ACP_API_URL}/projects/${ACP_PROJECT}/agentic-sessions" \
+  "${ACP_API_URL}/api/ambient/v1/sessions" \
   -H "Authorization: Bearer ${ACP_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
-    "initialPrompt": "/speedrun https://github.com/llamastack/llama-stack/issues/5119",
-    "activeWorkflow": {
-      "gitUrl": "https://github.com/ambient-code/workflows",
-      "branch": "main",
-      "path": "workflows/bugfix"
-    },
-    "repos": [
-      {"url": "https://github.com/llamastack/llama-stack", "branch": "main", "autoPush": true}
-    ],
-    "llmSettings": {"model": "claude-sonnet-4-5"},
+    "name": "bugfix-llama-stack-5119",
+    "project_id": "'"${ACP_PROJECT}"'",
+    "prompt": "/speedrun https://github.com/llamastack/llama-stack/issues/5119",
+    "repos": "[{\"url\":\"https://github.com/llamastack/llama-stack\",\"branch\":\"main\",\"autoPush\":true}]",
+    "llm_model": "claude-sonnet-4-5",
     "timeout": 1800
   }'
 ```
 
 The key fields are:
 
-- **`initialPrompt`** is what the agent sees as its first instruction. This is
+- **`prompt`** is what the agent sees as its first instruction. This is
   where you pass the bug description, issue link, or `/speedrun` command.
-- **`activeWorkflow`** tells the platform which workflow to load. For the Bug
-  Fix workflow, point it at this repository with the path `workflows/bugfix`.
-  If you omit this field, the session starts with no workflow.
-- **`repos`** is an array of repositories to clone into the session. Set
+- **`project_id`** is the workspace the session belongs to.
+- **`repos`** is a JSON-encoded array of repositories to clone into the session. Set
   `autoPush` to `true` if you want the agent to push its fix automatically.
-- **`llmSettings.model`** selects the model.
+- **`llm_model`** selects the model.
 - **`timeout`** is the session timeout in seconds.
 
 Authentication uses a bearer token in the `Authorization` header.
@@ -389,9 +382,8 @@ provides.
   session management.
 
 If you want to automate bug fix sessions from a script, CI pipeline, or any
-other environment, you do not need any of these tools. The platform's backend
-API accepts a straightforward JSON POST request (as shown in the `curl` example
-above). The `activeWorkflow` field in that request is what tells the platform to
-load the Bug Fix workflow into the session. Any HTTP client in any language can
-make that call. The GitHub Action is just a convenience wrapper that does the
-same thing and adds polling for completion.
+other environment, you do not need any of these tools. The platform's API
+server accepts a straightforward JSON POST request (as shown in the `curl`
+example above). Any HTTP client in any language can make that call. The GitHub
+Action is just a convenience wrapper that does the same thing and adds polling
+for completion.

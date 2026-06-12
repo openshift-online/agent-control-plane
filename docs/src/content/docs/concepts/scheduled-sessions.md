@@ -2,7 +2,7 @@
 title: "Scheduled Sessions"
 ---
 
-A **scheduled session** is a recurring AI agent execution that runs automatically on a cron schedule. Each scheduled session is backed by a Kubernetes CronJob that creates a new agentic session at every scheduled interval, using a preconfigured session template. You can use scheduled sessions to automate repetitive tasks such as nightly code reviews, dependency scans, or periodic issue triage -- without manually creating a session each time.
+A **scheduled session** is a recurring AI agent execution that runs automatically on a cron schedule. The API server stores each scheduled session as a database record with a cron expression and session template. At every scheduled interval, the platform creates a new session from the template automatically. You can use scheduled sessions to automate repetitive tasks such as nightly code reviews, dependency scans, or periodic issue triage -- without manually creating a session each time.
 
 ## Create a scheduled session
 
@@ -49,7 +49,7 @@ You can manage scheduled sessions from the **Scheduled Sessions** tab or from th
 | **Resume** | Reactivates a suspended schedule. The next session is created at the next scheduled time. |
 | **Trigger now** | Immediately creates a one-off session from the schedule's template, regardless of the cron timing. The triggered session is linked to the schedule as a child job. |
 | **Update** | Changes the schedule, display name, or session template. You can update any combination of fields. |
-| **Delete** | Permanently removes the schedule and its associated Kubernetes CronJob. Child jobs are cleaned up in the background. |
+| **Delete** | Permanently removes the schedule. Sessions previously created by the schedule are not affected. |
 
 ### Schedule status
 
@@ -68,7 +68,7 @@ The platform retains history for the last 5 successful runs and 3 failed runs pe
 
 Scheduled sessions use a **forbid-concurrent** policy: if a session from a previous run is still active when the next scheduled time arrives, the new run is skipped. This prevents overlapping agent executions on the same task.
 
-If the platform is unavailable at the scheduled time, the CronJob has a 5-minute starting deadline. Runs that miss this window are skipped entirely.
+If the platform is unavailable at the scheduled time, the missed run is skipped.
 
 ## Use cases
 

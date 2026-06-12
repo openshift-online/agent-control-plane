@@ -37,7 +37,7 @@ Each workspace carries its own configuration. Open **Settings** from the workspa
 Session state is stored using an S3-compatible backend (such as MinIO), typically configured cluster-wide by the platform administrator.
 
 :::note
-By default, workspaces use the cluster-level storage configuration. Per-project storage overrides are supported via project secrets, with operator defaults as fallback.
+By default, workspaces use the cluster-level storage configuration. Per-project storage overrides are supported via project secrets, with platform defaults as fallback.
 :::
 
 ### Secrets

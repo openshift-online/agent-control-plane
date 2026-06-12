@@ -113,14 +113,8 @@ Component-specific conventions loaded by review agents on demand.
 
 | Document | Purpose |
 |----------|---------|
-| [Declarative Session Reconciliation](docs/internal/design/declarative-session-reconciliation.md) | Session lifecycle via declarative status transitions |
-| [Runner-Operator Contract](docs/internal/design/runner-operator-contract.md) | Interface contract between operator and runner pods |
-| [Session Status Redesign](docs/internal/design/session-status-redesign.md) | Status field evolution and phase transitions |
-| [Session Initialization Flow](docs/internal/design/session-initialization-flow.md) | How sessions are initialized and configured |
-| [Spec-Runtime Synchronization](docs/internal/design/spec-runtime-synchronization.md) | Keeping spec and runtime state in sync |
 | [Agent Runtime Registry](docs/internal/design/agent-runtime-registry-plan.md) | Agent runtime registry architecture |
 | [CLI Runners](docs/internal/design/cli-runners-plan.md) | CLI runner design and implementation |
-| [Status Update Comparison](docs/internal/design/status-update-comparison.md) | Comparison of status update approaches |
 
 ## Dependency Automation
 

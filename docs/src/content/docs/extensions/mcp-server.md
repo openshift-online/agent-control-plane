@@ -44,7 +44,7 @@ The [`mcp-acp`](https://github.com/ambient-code/mcp) server is a Model Context P
 ## Requirements
 
 - Python 3.10+
-- Bearer token for the ACP public-api gateway
+- Bearer token for the ACP API server
 - Access to an ACP cluster
 
 ## Installation

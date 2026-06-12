@@ -32,28 +32,28 @@ fi
 # Update deployment images if IMAGE_* vars are set
 UPDATED_DEPLOYMENTS=()
 
-if [ -n "${IMAGE_BACKEND:-}" ]; then
+if [ -n "${IMAGE_API_SERVER:-}" ]; then
   echo ""
-  echo "Updating backend image to: ${IMAGE_BACKEND}"
-  kubectl set image -n ambient-code deployment/ambient-api-server backend-api="${IMAGE_BACKEND}"
-  UPDATED_DEPLOYMENTS+=("backend-api")
+  echo "Updating api-server image to: ${IMAGE_API_SERVER}"
+  kubectl set image -n ambient-code deployment/ambient-api-server api-server="${IMAGE_API_SERVER}"
+  UPDATED_DEPLOYMENTS+=("ambient-api-server")
 fi
 
-if [ -n "${IMAGE_FRONTEND:-}" ]; then
+if [ -n "${IMAGE_UI:-}" ]; then
   echo ""
-  echo "Updating frontend image to: ${IMAGE_FRONTEND}"
-  kubectl set image -n ambient-code deployment/ambient-ui frontend="${IMAGE_FRONTEND}"
-  UPDATED_DEPLOYMENTS+=("frontend")
+  echo "Updating ambient-ui image to: ${IMAGE_UI}"
+  kubectl set image -n ambient-code deployment/ambient-ui ambient-ui="${IMAGE_UI}"
+  UPDATED_DEPLOYMENTS+=("ambient-ui")
 fi
 
-if [ -n "${IMAGE_OPERATOR:-}" ]; then
+if [ -n "${IMAGE_CONTROL_PLANE:-}" ]; then
   echo ""
-  echo "Updating operator image to: ${IMAGE_OPERATOR}"
-  kubectl set image -n ambient-code deployment/ambient-control-plane agentic-operator="${IMAGE_OPERATOR}"
-  UPDATED_DEPLOYMENTS+=("agentic-operator")
+  echo "Updating control-plane image to: ${IMAGE_CONTROL_PLANE}"
+  kubectl set image -n ambient-code deployment/ambient-control-plane ambient-control-plane="${IMAGE_CONTROL_PLANE}"
+  UPDATED_DEPLOYMENTS+=("ambient-control-plane")
 fi
 
-# Update runner/state-sync via operator env vars
+# Update runner/state-sync via control-plane env vars
 if [ -n "${IMAGE_RUNNER:-}" ] || [ -n "${IMAGE_STATE_SYNC:-}" ]; then
   echo ""
   [ -n "${IMAGE_RUNNER:-}" ] && echo "Updating runner image to: ${IMAGE_RUNNER}"
@@ -64,7 +64,7 @@ if [ -n "${IMAGE_RUNNER:-}" ] || [ -n "${IMAGE_STATE_SYNC:-}" ]; then
   [ -n "${IMAGE_STATE_SYNC:-}" ] && ENV_PATCH="${ENV_PATCH} STATE_SYNC_IMAGE=${IMAGE_STATE_SYNC}"
 
   kubectl set env -n ambient-code deployment/ambient-control-plane $ENV_PATCH
-  UPDATED_DEPLOYMENTS+=("agentic-operator")
+  UPDATED_DEPLOYMENTS+=("ambient-control-plane")
 fi
 
 # Restart updated deployments if any
@@ -78,7 +78,7 @@ if [ ${#UPDATED_DEPLOYMENTS[@]} -gt 0 ]; then
 else
   echo ""
   echo "⚠️  No image overrides found in .env"
-  echo "   Set IMAGE_BACKEND, IMAGE_FRONTEND, IMAGE_OPERATOR, IMAGE_RUNNER, or IMAGE_STATE_SYNC"
+  echo "   Set IMAGE_API_SERVER, IMAGE_UI, IMAGE_CONTROL_PLANE, IMAGE_RUNNER, or IMAGE_STATE_SYNC"
 fi
 
 echo ""

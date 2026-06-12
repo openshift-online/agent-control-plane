@@ -30,9 +30,9 @@ data: {}
 
 Leave `data: {}` empty — OpenShift's CA bundle injector will populate the `ca-bundle.crt` key automatically.
 
-**2. Mount it into the backend Deployment**
+**2. Mount it into the API server Deployment**
 
-Patch your backend `Deployment` to mount the ConfigMap over the system CA path:
+Patch the `ambient-api-server` Deployment to mount the ConfigMap over the system CA path:
 
 ```yaml
 spec:
@@ -85,4 +85,4 @@ Then apply the same volume mount as above.
 | `ambient-api-server` | Supported — mount the ConfigMap as shown above |
 | Runner pods | Pending — see [#1247](https://github.com/ambient-code/platform/issues/1247) and [#1038](https://github.com/ambient-code/platform/issues/1038) |
 
-Runner pods are created dynamically by the agentic-operator for each session. Until #1247 is resolved, the operator does not mount the ConfigMap into runner pods, so runners cannot connect to services that require a custom CA.
+Runner pods are created dynamically by the control plane for each session. Until #1247 is resolved, the control plane does not mount the ConfigMap into runner pods, so runners cannot connect to services that require a custom CA.

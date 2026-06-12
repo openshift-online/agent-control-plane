@@ -18,7 +18,7 @@ The [`ambient-action`](https://github.com/ambient-code/ambient-action) GitHub Ac
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `api-url` | Yes | -- | Ambient Code Platform backend API URL |
+| `api-url` | Yes | -- | Ambient Code Platform API server URL |
 | `api-token` | Yes | -- | Bot user bearer token for authentication (store as a GitHub secret) |
 | `project` | Yes | -- | Target workspace/project name |
 | `prompt` | Yes | -- | Initial prompt for the session, or message to send to an existing session |

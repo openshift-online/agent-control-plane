@@ -63,15 +63,14 @@ bash scripts/hooks/coderabbit-review-gate.sh
 
 ## How It Works in ACP Sessions
 
-When a session starts, the runner fetches credentials from the backend:
+When a session starts, the control plane resolves credentials from the API server:
 
-1. **Backend** stores the API key in a Kubernetes Secret, scoped per user
-2. **Runner** calls `GET /credentials/coderabbit` with RBAC enforcement
-3. If an API key is configured, `CODERABBIT_API_KEY` is set in the session environment
-4. If no API key is configured, the runner skips silently — no error, no delay
-5. On turn completion, the key is cleared from the environment
+1. **API server** stores the API key as a credential record in the database, scoped per user or project
+2. **Control plane** resolves credential bindings and injects `CODERABBIT_API_KEY` into the runner pod environment
+3. If no API key is configured, the runner starts without it — no error, no delay
+4. On turn completion, the key is cleared from the environment
 
-For multi-user sessions, RBAC ensures the correct user's credentials are used based on who initiated the current run.
+RBAC credential bindings ensure the correct credentials are injected based on the project, agent, and user context.
 
 ## Configuration File
 
