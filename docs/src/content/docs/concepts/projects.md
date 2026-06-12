@@ -1,5 +1,5 @@
 ---
-title: "Workspaces"
+title: "Projects"
 ---
 
 In the UI, a workspace is the top-level place where a team runs agents. In the API, CLI, database, and control plane, the same object is called a project.

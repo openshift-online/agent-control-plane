@@ -47,12 +47,13 @@ export default defineConfig({
         {
           label: 'Core Concepts',
           items: [
-            { slug: 'concepts/workspaces' },
+            { slug: 'concepts/credentials' },
+            { slug: 'concepts/projects' },
+            { slug: 'concepts/agents' },
             { slug: 'concepts/sessions' },
-            { slug: 'concepts/integrations' },
+            { slug: 'concepts/scheduled-sessions' },
             { slug: 'concepts/context-and-artifacts' },
             { slug: 'concepts/workflows' },
-            { slug: 'concepts/scheduled-sessions' },
           ],
         },
         {

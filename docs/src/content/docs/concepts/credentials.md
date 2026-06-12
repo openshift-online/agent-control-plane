@@ -1,5 +1,5 @@
 ---
-title: "Integrations"
+title: "Credentials"
 ---
 
 ACP integrations are credential records plus runtime wiring. The API stores credentials, role bindings control token access, and the control plane decides how to expose those credentials to a session.

@@ -22,9 +22,9 @@ ACP is not a CRD data model. The API server is a Go service backed by PostgreSQL
 
 ## Core objects
 
-- [Workspaces / projects](concepts/workspaces/) group agents, sessions, credentials, settings, and team access.
+- [Projects](concepts/projects/) group agents, sessions, credentials, and settings.
 - [Sessions](concepts/sessions/) are the execution records that the control plane turns into runner Pods.
-- [Integrations](concepts/integrations/) are credential records and sidecars that let runners reach GitHub, GitLab, Jira, Google, Vertex, and Kubernetes.
+- [Credentials](concepts/credentials/) are credential records and sidecars that let runners reach GitHub, GitLab, Jira, Google, Vertex, and Kubernetes.
 - [Context & artifacts](concepts/context-and-artifacts/) explains what the runner sees in `/workspace` and what you can retrieve afterward.
 - [Workflows](concepts/workflows/) are optional Git-backed instruction bundles loaded into a session.
 - [Scheduled sessions](concepts/scheduled-sessions/) are project records for recurring work; the current API stores and manages them, but automatic firing is not implemented in the API service yet.
