@@ -7,8 +7,8 @@ const isNetlify = !!process.env.NETLIFY;
 export default defineConfig({
   site: isNetlify
     ? process.env.URL
-    : 'https://ambient-code.github.io',
-  base: isNetlify ? '/' : '/platform/',
+    : 'https://openshift-online.github.io',
+  base: isNetlify ? '/' : '/agent-control-plane/',
   integrations: [
     starlight({
       title: 'Ambient Code Platform',
