@@ -226,6 +226,7 @@ jobs:
         run: python tests/test_model_discovery.py -v
 
   summary:
+    name: Unit Tests CI Gate
     runs-on: ubuntu-latest
     needs: [detect-changes, api-server, runner, cli, ambient-ui, scripts]
     if: always()

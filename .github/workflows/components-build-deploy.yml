@@ -14,15 +14,6 @@ on:
       - 'components/credential-sidecars/**'
   pull_request:
     branches: [main]
-    paths:
-      - '.github/workflows/components-build-deploy.yml'
-      - 'components/manifests/**'
-      - 'components/runners/**'
-      - 'components/ambient-api-server/**'
-      - 'components/ambient-control-plane/**'
-      - 'components/ambient-mcp/**'
-      - 'components/ambient-ui/**'
-      - 'components/credential-sidecars/**'
   workflow_dispatch:
     inputs:
       components:

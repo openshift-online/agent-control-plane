@@ -11,11 +11,6 @@ on:
 
   pull_request:
     branches: [main]
-    paths:
-      - 'components/ambient-api-server/**'
-      - 'components/ambient-cli/**'
-      - '.github/workflows/lint.yml'
-      - '!**/*.md'
 
   workflow_dispatch:
 
@@ -144,6 +139,7 @@ jobs:
           args: --timeout=5m
 
   summary:
+    name: Lint CI Gate
     runs-on: ubuntu-latest
     needs: [detect-changes, go-api-server, go-cli]
     if: always()

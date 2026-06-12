@@ -39,7 +39,7 @@ jobs:
 
     - name: Run cspell
       working-directory: docs
-      run: cspell lint --no-progress "src/content/docs/**/*.md"
+      run: cspell lint --no-progress --config cspell.json "src/content/docs/**/*.md"
 
     - name: Build docs (structural validation)
       working-directory: docs
