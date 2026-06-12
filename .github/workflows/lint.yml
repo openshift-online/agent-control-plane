@@ -3,11 +3,6 @@ name: Lint
 on:
   push:
     branches: [main]
-    paths:
-      - 'components/ambient-api-server/**'
-      - 'components/ambient-cli/**'
-      - '.github/workflows/lint.yml'
-      - '!**/*.md'
 
   pull_request:
     branches: [main]

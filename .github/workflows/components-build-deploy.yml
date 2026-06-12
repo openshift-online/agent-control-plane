@@ -3,15 +3,6 @@ name: Build and Push Component Docker Images
 on:
   push:
     branches: [main]
-    paths:
-      - '.github/workflows/components-build-deploy.yml'
-      - 'components/manifests/**'
-      - 'components/runners/**'
-      - 'components/ambient-api-server/**'
-      - 'components/ambient-control-plane/**'
-      - 'components/ambient-mcp/**'
-      - 'components/ambient-ui/**'
-      - 'components/credential-sidecars/**'
   pull_request:
     branches: [main]
   workflow_dispatch:

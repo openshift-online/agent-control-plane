@@ -6,16 +6,6 @@ permissions:
 on:
   push:
     branches: [main]
-    paths:
-      - 'components/ambient-api-server/**'
-      - 'components/runners/ambient-runner/**'
-      - 'components/ambient-cli/**'
-      - 'components/ambient-sdk/go-sdk/**'
-      - 'components/ambient-ui/**'
-      - '.github/scripts/**'
-      - 'tests/**'
-      - '.github/workflows/unit-tests.yml'
-      - '!**/*.md'
 
   pull_request:
 
