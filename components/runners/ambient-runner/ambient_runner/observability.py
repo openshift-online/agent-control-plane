@@ -277,7 +277,9 @@ class ObservabilityManager:
             metadata = {
                 "namespace": namespace,
                 "user_name": self.user_name,
-                "initial_prompt": prompt[:200] if len(prompt) > 200 else prompt,
+                "initial_prompt": validate_and_sanitize_for_logging(
+                    prompt[:200] if len(prompt) > 200 else prompt
+                ),
             }
 
             tags = [f"runner:{_runner_type_slug()}", f"namespace:{namespace}"]

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -157,7 +158,7 @@ func callbackHandler(expectedState string, resultCh chan<- authCodeResult) http.
 				desc = errParam
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			fmt.Fprintf(w, callbackHTMLError, desc)
+			fmt.Fprintf(w, callbackHTMLError, html.EscapeString(desc))
 			resultCh <- authCodeResult{err: errors.New(desc)}
 			return
 		}
