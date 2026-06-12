@@ -1,85 +1,65 @@
 # Agent Control Plane
 
-> Kubernetes-native AI automation platform for intelligent agentic sessions
+> AI automation platform for orchestrating agentic sessions on Kubernetes
 
 ## Overview
 
-The Agent Control Plane combines Claude Code CLI with multi-agent collaboration capabilities. Teams create and manage intelligent agentic sessions through a modern web interface, backed by Kubernetes Custom Resources and operators.
+The Agent Control Plane (ACP) lets teams create and manage AI agentic sessions — automated tasks that clone repos, run AI agents, and push results. Sessions are stored in PostgreSQL and reconciled into Kubernetes pods via gRPC.
 
 ### Key Capabilities
 
-- **Intelligent Agentic Sessions**: AI-powered automation for analysis, research, content creation, and development tasks
-- **Multi-Agent Workflows**: Specialized AI agents model realistic software team dynamics
-- **Git Provider Support**: Native integration with GitHub and GitLab (SaaS and self-hosted)
-- **Kubernetes Native**: Custom Resources, Operators, and proper RBAC for enterprise deployment
-- **Real-time Monitoring**: Live status updates and job execution tracking
+- **Agentic Sessions**: AI-powered automation for code review, bug fixes, research, and development tasks
+- **Multi-Agent Workflows**: Specialized AI agents with configurable prompts, models, and repos
+- **Git Provider Support**: GitHub and GitLab (SaaS and self-hosted) via credential sidecars
+- **Kubernetes Execution**: Sessions run as pods with RBAC, resource limits, and namespace isolation
+- **CLI and SDK**: `acpctl` CLI and generated SDKs (Go, Python, TypeScript) for automation
 
 ## Quick Start
 
-See [CONTRIBUTING.md](CONTRIBUTING.md#local-development-setup) for full local development setup with Kind.
-
 ```bash
 make kind-up
-# Access at http://localhost:8080
+make kind-port-forward   # ports shown in output
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md#local-development-setup) for full local development setup.
 
 ## Architecture
 
-The platform consists of containerized microservices orchestrated via Kubernetes:
-
 | Component | Technology | Description |
 |-----------|------------|-------------|
-| **API Server** (`ambient-api-server`) | Go + rh-trex-ai | REST API microservice, PostgreSQL-backed |
-| **Control Plane** (`ambient-control-plane`) | Go | Kubernetes controller that reconciles sessions and spawns Jobs |
-| **UI** (`ambient-ui`) | NextJS + Shadcn | Web interface for managing agentic sessions |
-| **Runner** (`ambient-runner`) | Python + Claude Code CLI | Pod that executes AI with multi-agent collaboration |
-| **MCP Server** (`ambient-mcp`) | Go | MCP tool definitions and sidecar/public endpoint modes |
+| **API Server** (`ambient-api-server`) | Go + rh-trex-ai | REST + gRPC API, PostgreSQL-backed. Source of truth. |
+| **Control Plane** (`ambient-control-plane`) | Go | Watches API server via gRPC streams, creates K8s pods |
+| **UI** (`ambient-ui`) | NextJS + Shadcn | Web interface for managing sessions and agents |
+| **Runner** (`ambient-runner`) | Python | Executes AI agents inside pods (Claude, Gemini, LangGraph bridges) |
+| **MCP Server** (`ambient-mcp`) | Go | MCP tool definitions, deployed as credential sidecars |
 
 ```
-User Creates Session → API Server Persists to DB → Control Plane Spawns Job →
-Pod Runs AI Agent → Results Stream to API Server → UI Displays Progress
+User Creates Session → API Server Persists to DB → Control Plane Creates Pod →
+Runner Executes AI Agent → Results Stream to API Server → UI Displays Progress
 ```
-
-See [docs/internal/architecture/](docs/internal/architecture/) for detailed architecture documentation.
 
 ## Documentation
 
-- **User documentation** -- see the [documentation site](docs/) built with Astro Starlight
-- **Developer/architecture docs** -- see [docs/internal/](docs/internal/)
-- **Component READMEs** -- each component has its own README with development instructions
-
-### Key Links
-
-| Resource | Location |
-|----------|----------|
-| Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
-| Development standards | [CLAUDE.md](CLAUDE.md) |
-| Developer bookmarks | [BOOKMARKS.md](BOOKMARKS.md) |
-| Architecture decisions | [docs/internal/adr/](docs/internal/adr/) |
-| Testing | [docs/internal/testing/](docs/internal/testing/) |
-| Local dev setup | [docs/internal/developer/local-development/](docs/internal/developer/local-development/) |
+- **[Documentation site](https://openshift-online.github.io/agent-control-plane/)** — user-facing docs (Astro Starlight)
+- **[docs/internal/](docs/internal/)** — developer and architecture docs
+- **[CLAUDE.md](CLAUDE.md)** — development standards and conventions
+- **[BOOKMARKS.md](BOOKMARKS.md)** — developer reference index
 
 ## Components
 
-Each component has its own detailed README:
-
-- [API Server](components/ambient-api-server/) -- Go REST API microservice (rh-trex-ai)
-- [Control Plane](components/ambient-control-plane/) -- Kubernetes controller
-- [UI](components/ambient-ui/) -- NextJS web application
-- [Runner](components/runners/ambient-runner/) -- AI execution pods
-- [MCP Server](components/ambient-mcp/) -- MCP integration
-- [CLI](components/ambient-cli/) -- `acpctl` command-line tool
-- [SDK](components/ambient-sdk/) -- Go, Python, and TypeScript clients generated from the OpenAPI spec
-- [Manifests](components/manifests/) -- Kubernetes deployment resources
+- [API Server](components/ambient-api-server/) — REST + gRPC API (rh-trex-ai, PostgreSQL)
+- [Control Plane](components/ambient-control-plane/) — gRPC-driven session reconciler
+- [UI](components/ambient-ui/) — NextJS web application
+- [Runner](components/runners/ambient-runner/) — AI agent execution
+- [MCP Server](components/ambient-mcp/) — MCP tool integration
+- [CLI](components/ambient-cli/) — `acpctl` command-line tool
+- [SDK](components/ambient-sdk/) — generated from the OpenAPI spec (Go, Python, TypeScript)
+- [Manifests](components/manifests/) — Kustomize deployment resources
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines, code standards, and local development setup.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines, code standards, and local development setup.
 
 ## License
 
-This project is licensed under the MIT License -- see the [LICENSE](LICENSE) file for details.
-
----
-
-**Note:** This project was formerly known as "vTeam". Some RBAC manifests still reference the `vteam.ambient-code` API group for backward compatibility.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
