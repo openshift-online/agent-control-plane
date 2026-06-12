@@ -2,13 +2,21 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import rehypeMermaid from 'rehype-mermaid';
 
-const isNetlify = !!process.env.NETLIFY;
+const getBasePath = () => {
+  if (process.env.PR_PREVIEW_PATH) {
+    return process.env.PR_PREVIEW_PATH;
+  }
+  if (process.env.NETLIFY) {
+    return '/';
+  }
+  return process.env.CI ? '/agent-control-plane/' : '/';
+};
 
 export default defineConfig({
-  site: isNetlify
+  site: process.env.NETLIFY
     ? process.env.URL
     : 'https://openshift-online.github.io',
-  base: isNetlify ? '/' : '/agent-control-plane/',
+  base: getBasePath(),
   integrations: [
     starlight({
       title: 'Ambient Code Platform',
