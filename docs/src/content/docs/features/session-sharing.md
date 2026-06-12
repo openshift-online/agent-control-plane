@@ -3,50 +3,45 @@ title: Session Sharing & Credentials
 description: How credentials work in shared sessions
 ---
 
-## Overview
+ACP separates session access from credential access. A user can be allowed to view or message a session without automatically receiving every credential the session can use.
 
-When multiple users collaborate in a shared session, **each message uses the sender's credentials**, not the session owner's. This ensures that all actions are correctly attributed and that each user's access permissions are respected.
+## Access model
 
-## Credential Behavior
+Session, project, agent, and credential permissions are represented with role bindings. Project roles control who can see and operate on project resources. Credential roles control who can read credential tokens.
 
-### Interactive Sessions
+Normal credential responses do not include the token. Token reads go through:
 
-| Scenario | Session Owner | Message Sender | Credentials Used |
-|----------|---------------|----------------|------------------|
-| Single-user session | User A | User A | User A |
-| Shared session | User A | User B | User B |
+```text
+GET /api/ambient/v1/credentials/{cred_id}/token
+GET /api/ambient/v1/projects/{id}/credentials/{cred_id}/token
+```
 
-**Example:**
+These calls require token-read authorization.
 
-- User A creates a session and adds User B as an editor
-- Both User A and User B have configured their GitHub integrations
-- User A sends "Create a PR" -- the PR is created using User A's GitHub token
-- User B sends "Create a PR" -- the PR is created using User B's GitHub token
+## Runtime credentials
 
-### Automated Sessions
+When the control plane starts a session, it resolves credentials visible at global, project, and agent scope. More specific bindings override less specific ones for the same provider.
 
-**API Keys:** Always use the **creator's credentials** (the user who created the API key).
+At runtime, the runner has two credential paths:
 
-- GitHub commits show the creator's username
-- The creator is responsible for all actions performed via their API key
+- **Credential sidecar mode:** provider sidecars handle token access, and the runner talks to sidecar MCP URLs.
+- **Runner fetch mode:** the runner uses `CREDENTIAL_IDS` and calls the API token endpoints before a turn.
 
-**Scheduled Sessions:** Always use the **creator's credentials** (the user who scheduled the session).
+For HTTP runner turns, the runner can use the caller's bearer token from the request headers for credential fetches, and it clears that caller token after the turn. If a caller token is not available or has expired, the runner may fall back to the control-plane/bot token path with current-user context.
 
-- The session runs as the creating user even when they are offline
-- The creator is accountable for all scheduled session behavior
+## What this means for shared sessions
 
-## Requirements
+- Grant session or project visibility with project/session role bindings.
+- Grant credential token access separately and narrowly.
+- Prefer sidecar mode for provider credentials when your deployment supports it.
+- Do not assume the session creator's credential is used for every later message.
+- Do not put long-lived tokens in prompts, labels, annotations, or session messages.
 
-Each editor in a shared session must configure their own integrations before using features that require credentials:
+## Practical setup
 
-1. Go to **Settings > Integrations**
-2. Connect the required services (GitHub, Jira, Google, GitLab)
+1. Give collaborators the minimum project or session role needed.
+2. Bind only the credentials they need to the project or agent.
+3. Start a test session and verify the runner can reach the intended repo or external service.
+4. Review logs for credential failures without exposing token values.
 
-If an editor sends a message that requires credentials they have not configured, Claude will report an error explaining which integration is missing.
-
-## Security
-
-- All actions are attributed to the actual message sender
-- Audit logs show the correct user for each operation
-- Credentials are never shared between users
-- Each user's tokens are scoped to their own permissions
+If a user can send messages but the runner cannot access a private repo for that turn, check both the user's project/session access and the credential token-reader path for the relevant provider.

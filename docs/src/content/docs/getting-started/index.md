@@ -2,39 +2,36 @@
 title: "What is Ambient?"
 ---
 
-The **Ambient Code Platform (ACP)** is a Kubernetes-native platform that lets development teams run AI-powered agents for real engineering work -- bug fixes, code analysis, sprint planning, issue triage, and more.
+Ambient Code Platform (ACP) is a Kubernetes-native platform for running AI agents as isolated, observable sessions. A developer describes the work, ACP stores the request in PostgreSQL, the control plane sees the change over gRPC, and Kubernetes runs a dedicated runner Pod for the session.
 
-You define a task in natural language. ACP spins up a containerized agent session, connects it to your repositories and tools, and delivers results you can review, iterate on, and ship.
+The platform is built for developer automation: code fixes, repo analysis, issue triage, project agents, and repeatable workflows. It gives agents project context and credentials without making Kubernetes CRDs the source of truth.
 
-## What You Can Do
+## How work runs
 
-- **Fix bugs and write code** -- Point an agent at a repo, describe the problem, and get a working pull request.
-- **Triage issues** -- Automatically classify, prioritize, and route incoming issues across your backlog.
-- **Plan sprints** -- Generate sprint plans from your issue tracker with dependency analysis and effort estimates.
-- **Analyze codebases** -- Get architectural reviews, security audits, or dependency assessments on demand.
-- **Run structured workflows** -- Use built-in templates (Bugfix, Triage, Spec-kit, PRD/RFE) or bring your own from any git repo.
+1. A user, script, or MCP client creates a project, agent, or session through `/api/ambient/v1/...`.
+2. The API server persists the resource in PostgreSQL and emits watch events.
+3. The control plane watches the API server over gRPC and reconciles pending sessions.
+4. For each runnable session, the control plane creates a Kubernetes Pod, Service, ServiceAccount, and any credential sidecars needed by that session.
+5. The Python runner starts an AG-UI server, loads the configured bridge, clones repos or workflow context, and streams messages/events back through the API surface.
 
-## How It Works
+## Main resources
 
-```
-You describe a task  -->  ACP creates an agent session  -->  Agent works in a container  -->  You review the results
-```
+- **Projects** are the API object behind UI workspaces. They group agents, sessions, credentials, and settings.
+- **Agents** are reusable project-scoped definitions with standing prompts and optional model/runtime settings.
+- **Sessions** are individual runs. They have prompts, phases, messages, repo context, Kubernetes namespace metadata, and runner-facing endpoints.
+- **Credentials** store external service tokens. Role bindings decide who or what can read the token.
+- **Scheduled sessions** are API records for recurring work. The current service stores and manages schedule metadata; automatic execution is not wired in yet.
 
-Sessions run as Kubernetes Jobs with full isolation. Each session gets its own workspace with cloned repositories, configured integrations, and access to external tools via MCP (Model Context Protocol).
+## Ways to use ACP
 
-## Key Capabilities
+- Use the **web UI** for project setup, agents, sessions, credentials, chat, and session inspection.
+- Use **`acpctl`** for terminal workflows, CI jobs, and automation scripts.
+- Use the **REST API or generated SDKs** for application integration.
+- Use the **MCP server** when another agent or MCP client should create sessions, inspect projects, or send messages.
 
-**Workspaces** -- Multi-tenant project containers where teams organize sessions, configure integrations, and manage permissions. Learn more in [Workspaces](../concepts/workspaces/).
+## What you need
 
-**Sessions** -- AI agent execution environments with a chat interface, configurable model settings, timeout controls, and artifact output. Learn more in [Sessions](../concepts/sessions/).
-
-**Integrations** -- Connect GitHub (App or PAT), GitLab (OAuth), Jira (OAuth), and Google Workspace (OAuth) so agents can read and write to your existing tools. Learn more in [Integrations](../concepts/integrations/).
-
-**Workflows** -- Structured task templates that guide agent behavior. Use the built-in templates or point to a custom workflow in any git repo. Learn more in [Workflows](../concepts/workflows/).
-
-**Multi-repo support** -- Clone multiple repositories into a single session for cross-repo analysis and changes.
-
-## Getting Started
-
-- **[Quickstart](quickstart-ui/)** -- Create your first session through the web interface.
-- **[Core Concepts](concepts/)** -- Understand the building blocks before diving in.
+- An ACP deployment URL and a bearer token or SSO login.
+- A project to work in.
+- A Git credential if the agent needs private repositories.
+- An agent prompt or one-off session prompt that says what done looks like.

@@ -2,59 +2,62 @@
 title: "Workflows"
 ---
 
-A **workflow** is a structured task template that gives the AI agent a proven plan for a specific type of work. Instead of writing a long prompt every time, you select a workflow and the agent follows a defined process -- complete with system instructions, phases, and quality rubrics.
+A workflow is optional Git-backed context for a session. It is not a separate scheduler or catalog in the API. It is session configuration that tells the runner where to clone an instruction bundle.
 
-## How workflows work
+## How a session references a workflow
 
-When you attach a workflow to a session, the platform loads a set of instructions from a Git repository and injects them into the agent's context. The agent then follows the workflow's process rather than relying solely on your ad-hoc prompt.
+The sessions plugin exposes:
 
-Workflows typically include:
+```text
+POST /api/ambient/v1/sessions/{id}/workflow
+```
 
-- A **system prompt** that sets the agent's role and approach.
-- **Slash commands and skills** -- these are Claude Code features defined in the workflow's `.claude/` directory that trigger specific phases or actions.
-- A **rubric** the agent uses to self-evaluate its output quality.
-
-## Out-of-the-box workflows
-
-The platform ships with several ready-to-use workflows:
-
-| Workflow | What it does |
-|----------|-------------|
-| [**Bugfix**](../workflows/bugfix/) | Systematic multi-phase bug resolution: assess, reproduce, diagnose, fix, test, review, document, and submit a PR. |
-| [**Triage**](../workflows/triage/) | Analyzes an issue backlog, categorizes items by severity and effort, and produces actionable reports with bulk operations. |
-| [**PRD / RFE**](../workflows/prd-rfe/) | Creates Product Requirements Documents and breaks them into actionable Request for Enhancement items with prioritization. |
-| **Amber Interview** | Guided interview format for collecting user feedback through structured Q&A. (No detail page.) |
-| **Template** | A minimal starting point for building your own custom workflow. (No detail page.) |
-
-See the [Workflows section](../workflows/) for detailed documentation on the linked workflows above, including commands, phases, generated artifacts, and tips.
-
-### Using a workflow in a session
-
-1. Create a session and open it.
-2. In the session sidebar, open the **Workflow** dropdown.
-3. Select one of the out-of-the-box workflows.
-4. Provide your prompt as usual -- the workflow adds structure around it.
-5. Use the workflow's slash commands from the chat to trigger specific phases.
-
-You can switch workflows on a running session at any time from the session sidebar.
-
-## Custom workflows
-
-If the built-in workflows do not fit your process, you can create your own from any Git repository. See [Custom Workflows](../workflows/custom/) for the full guide, including directory structure, `ambient.json` configuration, and development workflow.
-
-### Quick overview
-
-A custom workflow lives in a Git repository that the platform can access. The only required file is `.ambient/ambient.json`:
+The request body uses:
 
 ```json
 {
-  "name": "My Custom Workflow",
-  "description": "A workflow that does X, Y, and Z",
-  "systemPrompt": "You are a helpful assistant for...",
-  "startupPrompt": "Welcome! Use /start to begin."
+  "git_url": "https://github.com/acme/agent-workflows.git",
+  "branch": "main",
+  "path": "bugfix"
 }
 ```
 
-To load a custom workflow, select **Custom Workflow...** from the workflow dropdown in the session sidebar and enter the Git URL, branch, and path.
+The API stores this as session workflow configuration. The runner endpoint accepts the same idea internally with `gitUrl`, `branch`, and `path`.
 
-For detailed workflow internals, advanced configuration, and the full `ambient.json` schema, see [Custom Workflows](../workflows/custom/) and the [workflows repository](https://github.com/ambient-code/workflows).
+## What the runner loads
+
+When a workflow is active, the runner uses `/workspace/workflows/{workflow-name}` as its working directory. It can discover:
+
+- `.ambient/ambient.json` for workflow metadata.
+- `.claude/commands` for Claude command files.
+- `.ambient/rubric.md` for rubric evaluation when the Claude bridge wires the rubric MCP tool.
+- repository and artifact directories under `/workspace/repos`, `/workspace/artifacts`, and `/workspace/file-uploads`.
+
+MCP server configuration is loaded from the runner's `MCP_CONFIG_FILE` plus project and session environment configuration. A `.mcp.json` inside a workflow repository is not automatically used unless your deployment points `MCP_CONFIG_FILE` at it.
+
+The exact behavior depends on the bridge. The default runner type is `claude-agent-sdk`; other runner bridges may support fewer filesystem or MCP features.
+
+## When to use workflows
+
+Use a workflow when the process is repeatable:
+
+- bug investigation.
+- issue triage.
+- release-note drafting.
+- PRD/RFE review.
+- security review.
+- repository maintenance.
+
+Use a normal session prompt when the instructions are one-off.
+
+## Keep workflows portable
+
+A good workflow repository should include:
+
+- explicit task phases.
+- expected inputs.
+- output format.
+- validation steps.
+- any command files or MCP config needed by the runner.
+
+Do not store secrets in workflow repos. Use ACP credentials and role bindings instead.

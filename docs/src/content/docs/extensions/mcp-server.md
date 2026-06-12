@@ -6,129 +6,80 @@ import { Badge } from '@astrojs/starlight/components';
 
 <Badge text="Stable" variant="success" />
 
-The [`mcp-acp`](https://github.com/ambient-code/mcp) server is a Model Context Protocol server that lets Claude manage Ambient Code Platform sessions programmatically.
+`components/ambient-mcp` is a Go MCP server for ACP. It exposes project, agent, session, message, label, and annotation tools over stdio or SSE.
 
-## Capabilities
+## Run modes
 
-### Session management
+Environment variables:
 
-- Create sessions with custom prompts, repos, model selection, and timeout
-- Create sessions from predefined templates (triage, bugfix, feature, exploration)
-- Restart, clone, delete, and update sessions
-- Dry-run mode for previewing destructive operations
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `AMBIENT_API_URL` | `http://localhost:8080` | ACP base URL. |
+| `AMBIENT_TOKEN` | none | Bearer token for API calls when not using control-plane token exchange. |
+| `MCP_TRANSPORT` | `stdio` | `stdio` or `sse`. |
+| `MCP_BIND_ADDR` | `:8090` | SSE bind address. |
+| `AMBIENT_CP_TOKEN_URL` | none | Control-plane token endpoint for sidecar mode. |
+| `AMBIENT_CP_TOKEN_PUBLIC_KEY` | none | RSA public key used by sidecar token exchange. |
+| `SESSION_ID` | none | Session ID used by sidecar token exchange. |
 
-### Observability
+If the control-plane token exchange variables and `SESSION_ID` are set, the MCP server fetches a short-lived token from the control plane and refreshes it in the background. Otherwise `AMBIENT_TOKEN` is required.
 
-- Retrieve container logs for a session
-- Get conversation transcripts in JSON or Markdown format
-- View usage statistics (tokens, duration, tool calls)
-
-### Labels and bulk operations
-
-- Add and remove labels for organizing and filtering sessions
-- Filter sessions by label selectors
-- Bulk operations on up to 3 sessions at a time (delete, stop, restart, label)
-
-### Cluster management
-
-- List configured clusters and check authentication status
-- Switch between clusters
-- Authenticate with Bearer tokens
-
-## Safety
-
-- **Dry-run mode** -- All mutating operations support `dry_run` for safe preview before executing.
-- **Bulk operation limits** -- A maximum of 3 sessions can be affected per bulk operation.
-- **Label validation** -- Labels must be 1-63 alphanumeric characters, dashes, dots, or underscores.
-
-## Requirements
-
-- Python 3.10+
-- Bearer token for the ACP API server
-- Access to an ACP cluster
-
-## Installation
+## Stdio
 
 ```bash
-# From wheel
-pip install dist/mcp_acp-*.whl
-
-# From source
-git clone https://github.com/ambient-code/mcp
-cd mcp
-uv pip install -e ".[dev]"
+AMBIENT_API_URL=https://acp.example.com \
+AMBIENT_TOKEN="$AMBIENT_TOKEN" \
+MCP_TRANSPORT=stdio \
+./ambient-mcp
 ```
 
-## Configuration
+Use stdio for local MCP clients that launch the server process directly.
 
-The primary configuration method uses a YAML config file at `~/.config/acp/clusters.yaml`.
-
-### Cluster config file
-
-Create `~/.config/acp/clusters.yaml`:
-
-```yaml
-clusters:
-  my-staging:
-    server: https://public-api-ambient.apps.my-staging.example.com
-    token: your-bearer-token-here
-    description: "Staging Environment"
-    default_project: my-workspace
-
-  my-prod:
-    server: https://public-api-ambient.apps.my-prod.example.com
-    token: your-bearer-token-here
-    description: "Production"
-    default_project: my-workspace
-
-default_cluster: my-staging
-```
-
-Secure the file:
+## SSE
 
 ```bash
-chmod 600 ~/.config/acp/clusters.yaml
+AMBIENT_API_URL=https://acp.example.com \
+AMBIENT_TOKEN="$AMBIENT_TOKEN" \
+MCP_TRANSPORT=sse \
+MCP_BIND_ADDR=:8090 \
+./ambient-mcp
 ```
 
-Alternatively, set the `ACP_TOKEN` environment variable to provide a token without editing the config file.
+The server exposes SSE at `/sse` and messages at `/message` on its own bind address.
 
-### Claude Desktop
+The current API server code does not register `/api/ambient/v1/mcp` routes, so do not configure clients against an API-server MCP endpoint unless your deployment adds one separately.
 
-Add to your Claude Desktop configuration file (`claude_desktop_config.json`):
+## Tools
 
-```json
-{
-  "mcpServers": {
-    "acp": {
-      "command": "mcp-acp",
-      "args": [],
-      "env": {
-        "ACP_CLUSTER_CONFIG": "${HOME}/.config/acp/clusters.yaml"
-      }
-    }
-  }
-}
-```
+Session tools:
 
-Using uvx (zero-install):
+- `list_sessions`
+- `get_session`
+- `create_session`
+- `push_message`
+- `patch_session_labels`
+- `patch_session_annotations`
+- `watch_session_messages`
+- `unwatch_session_messages`
 
-```json
-{
-  "mcpServers": {
-    "acp": {
-      "command": "uvx",
-      "args": ["mcp-acp"]
-    }
-  }
-}
-```
+Agent tools:
 
-### Claude Code CLI
+- `list_agents`
+- `get_agent`
+- `create_agent`
+- `update_agent`
+- `patch_agent_annotations`
 
-```bash
-claude mcp add mcp-acp -t stdio mcp-acp
-```
+Project tools:
 
-## Multi-cluster support
+- `list_projects`
+- `get_project`
+- `patch_project_annotations`
 
-Define multiple clusters in `~/.config/acp/clusters.yaml` and switch between them using the `acp_switch_cluster` tool or by changing the `default_cluster` value. The server supports listing clusters, checking authentication status, and authenticating to new clusters at runtime.
+`create_session` creates a session and then starts it. `push_message` can also resolve `@agent` mentions and create a delegated child session.
+
+`watch_session_messages` requires SSE transport. In stdio mode it returns `TRANSPORT_NOT_SUPPORTED`.
+
+## Runner sidecar
+
+The control plane can inject `ambient-mcp` as a sidecar when `MCP_IMAGE`, `CP_TOKEN_URL`, and the token public key are configured. The runner receives `AMBIENT_MCP_URL` and can add the sidecar as an MCP server for Claude.

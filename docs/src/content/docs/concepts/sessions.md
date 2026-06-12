@@ -2,143 +2,87 @@
 title: "Sessions"
 ---
 
-A **session** is an AI agent execution environment. When you create a session, the platform spins up an isolated container running Claude, connects it to your repositories and integrations, and gives you a real-time chat interface to collaborate with the agent.
+A session is one run of an agent. It is stored by the API server, reconciled by the control plane, and executed by a Kubernetes runner Pod.
 
-## Creating a session
+## What a session contains
 
-Click **New Session** inside a workspace. The creation dialog lets you configure:
+A session can include:
 
-<figure class="screenshot-pair">
-  <img class="screenshot-light" src="/platform/images/screenshots/new-session-dialog-light.png" alt="New session creation dialog" />
-  <img class="screenshot-dark" src="/platform/images/screenshots/new-session-dialog-dark.png" alt="New session creation dialog" />
-</figure>
+- `project_id`: the project boundary for auth, settings, credentials, and namespace selection.
+- `agent_id`: optional reusable agent definition.
+- `prompt`: the task for this run.
+- `repo_url` or `repos`: Git repositories to clone into the runner workspace.
+- `workflow_id`: optional workflow configuration stored as JSON.
+- model settings such as `llm_model`, `llm_temperature`, and `llm_max_tokens`.
+- runtime settings such as `timeout`, labels, annotations, environment variables, and resource overrides.
+- status fields such as `phase`, `start_time`, `completion_time`, `conditions`, and `kube_namespace`.
 
-| Setting | Description | Default |
-|---------|------------|---------|
-| **Display name** | A label for the session. | Auto-generated |
-| **Model** | Which AI model to use. Available models: Claude Sonnet 4.5, Claude Opus 4.5, Claude Haiku 4.5, Gemini 2.5 Flash (generally available); Claude Opus 4.6, Claude Sonnet 4.6, Gemini 2.5 Pro (feature-gated, visible only when enabled for your workspace). | Claude Sonnet 4.5 |
-| **Temperature** | Controls response randomness (0 = deterministic, 2 = highly creative). | 0.7 |
-| **Max tokens** | Maximum output length per response. The UI enforces a range of 100--8,000, but the platform API accepts other values. | 4,000 |
-| **Timeout** | Hard limit on total session duration. The UI enforces a range of 60--1,800 seconds, but the platform API accepts other values. | 300 seconds |
-| **Inactivity timeout** | How long a session can remain idle before the platform automatically stops it. See [Inactivity timeout (idler)](#inactivity-timeout-idler) below for full details. Set to `0` to disable. | Inherited from project settings, then platform default (24 hours) |
+The API path is `/api/ambient/v1/sessions`.
 
-After the session is created, you can attach repositories and select a workflow from the session sidebar. See [Context & Artifacts](../context-and-artifacts/) and [Workflows](../workflows/) for details.
+## Lifecycle
 
-## Session lifecycle
+Common phases are:
 
-<figure class="screenshot-pair">
-  <img class="screenshot-light" src="/platform/images/screenshots/session-list-light.png" alt="Sessions list" />
-  <img class="screenshot-dark" src="/platform/images/screenshots/session-list-dark.png" alt="Sessions list" />
-</figure>
+| Phase | Meaning |
+| --- | --- |
+| `Pending` | The session should run and is waiting for reconciliation. |
+| `Creating` | Kubernetes resources are being created or runner setup is in progress. |
+| `Running` | The runner Pod is available and processing work. |
+| `Stopping` | The control plane should remove runner resources. |
+| `Stopped` | The run was stopped. |
+| `Completed` | The run finished successfully. |
+| `Failed` | The run failed. |
 
-Every session moves through a series of phases:
+Creating a session does not have to start it. `POST /sessions/{id}/start` transitions an empty, stopped, failed, or completed session to `Pending`. `POST /sessions/{id}/stop` transitions an active session to `Stopping`.
 
-```
-Pending --> Creating --> Running --> Completed
-                          |
-                          +--> Stopping --> Stopped
-                          |
-                          +--> Failed
-```
+## What the control plane creates
 
-| Phase | What is happening |
-|-------|------------------|
-| **Pending** | The session request has been accepted and is waiting to be scheduled. |
-| **Creating** | The platform is provisioning the container, cloning repositories, and injecting secrets. |
-| **Running** | The agent is active and ready to accept messages. |
-| **Stopping** | A stop was requested; the agent is finishing its current turn and saving state. |
-| **Stopped** | The session was stopped manually or by the [inactivity idler](#inactivity-timeout-idler). It can be continued later. |
-| **Completed** | The agent finished its work and exited on its own. |
-| **Failed** | Something went wrong -- check the session events for details. |
+For a pending session, the control plane:
 
-### Inactivity timeout (idler)
+- verifies the project exists through the generated SDK client.
+- provisions or resolves the project namespace.
+- creates a session ServiceAccount.
+- resolves visible credentials from global, project, and agent bindings.
+- creates the runner Pod and a Service that exposes the runner's AG-UI port.
+- optionally injects the platform MCP sidecar and credential MCP sidecars.
+- updates the session status with the Kubernetes namespace and running phase.
 
-The platform includes a background controller (the **idler**) that automatically stops sessions that have been idle for too long. This prevents abandoned sessions from consuming cluster resources indefinitely.
+The control plane creates Pods, not Jobs, and it does not watch a session CRD as the source of truth.
 
-#### How it works
+## Messages
 
-While a session is **Running**, the platform tracks its `lastActivityTime`. The idler periodically checks whether the elapsed time since the last activity exceeds the session's configured inactivity timeout. If it does, the idler triggers a graceful stop: it sets the session's desired phase to `Stopped` and records the stop reason as `inactivity`. The session's state — including local git branches and uncommitted changes — is preserved in a backup so you can resume later.
+Session messages are stored at `/api/ambient/v1/sessions/{id}/messages`.
 
-A session stopped by the idler behaves the same as a manually stopped session. You can **Resume** it at any time.
-
-#### Configuration hierarchy
-
-The inactivity timeout is resolved in this order:
-
-1. **Session-level** — set `inactivityTimeout` on the session (in seconds). This takes highest priority.
-2. **Project-level** — if the session does not specify a value, the platform checks the project settings for the workspace.
-3. **Platform default** — if neither is set, the platform uses a default of **86,400 seconds (24 hours)**.
-
-Setting the inactivity timeout to `0` at any level disables the auto-stop behavior for that scope.
-
-#### Verifying the idler is working
-
-You can check the control plane logs to see which sessions have been stopped due to inactivity:
-
-```sh
-kubectl logs -l app=ambient-control-plane -n <namespace> | grep '[Inactivity]'
+```bash
+acpctl session messages <session-id>
+acpctl session messages <session-id> -f
+acpctl session send <session-id> "Use the smaller fix." -f
 ```
 
-Each entry corresponds to a session that was automatically stopped by the idler.
+The messages endpoint supports normal JSON listing and Server-Sent Events when the request accepts `text/event-stream`.
 
-## The chat interface
+## Runner-backed endpoints
 
-Once a session is **Running**, the chat panel is your primary way to interact with the agent.
+While the runner Pod is reachable, the API server proxies operational endpoints for:
 
-### Agent status indicators
+- AG-UI events, run, interrupt, feedback, tasks, and capabilities.
+- workspace and file operations.
+- Git status, remote configuration, and branch listing.
+- repository add/remove/status operations.
+- workflow metadata.
+- MCP status.
 
-At any moment the agent is in one of three states:
+If the runner is not running or cannot be reached, these endpoints may return fallback data or an error depending on the endpoint.
 
-- `working` -- actively processing your request, calling tools, or writing code.
-- `idle` -- finished its current turn and waiting for your next message.
-- `waiting_input` -- the agent has asked a clarifying question and is blocked until you reply.
+## Agent starts
 
-### What you see in the chat
+Starting an agent is different from directly starting a session. `POST /projects/{id}/agents/{agent_id}/start` is idempotent:
 
-- **Messages** -- your prompts and the agent's responses.
-- **Tool use blocks** -- expandable panels showing each tool the agent called (file reads, edits, shell commands, searches) along with their results.
-- **Thinking blocks** -- the agent's internal reasoning, visible for transparency.
+- if the agent has an active session, the API returns that session.
+- otherwise it creates a new session, builds a start prompt from project context, agent prompt, peer agents, unread inbox messages, and the run prompt, then starts the session.
 
-### Interrupting the agent
+Use agents when the same role should run repeatedly.
 
-If the agent is heading in the wrong direction while it is still **Working**, you can send a new message at any time. The agent will read your message after its current tool call finishes and adjust course.
+## Clone and export
 
-## Human-in-the-loop
-
-Sometimes the agent needs your input before it can continue. When this happens, the agent pauses and presents a **question panel** in the chat. The agent's status changes to `waiting_input` until you respond. After you submit your answer, the agent resumes work automatically.
-
-### Question types
-
-The question panel supports three input styles depending on what the agent needs to know:
-
-- **Free-text** -- an open text field for you to type any response.
-- **Single-select** -- a list of radio buttons when the agent offers predefined choices. An **Other** option lets you type a custom answer if none of the choices fit.
-- **Multi-select** -- a list of checkboxes when the agent wants you to pick one or more options.
-
-### Multiple questions at once
-
-When the agent has several questions, the panel displays them in a **tabbed interface**. Each tab shows one question, and a counter tracks how many you have answered. After you select an answer the panel auto-advances to the next tab. You can click any tab to revisit a previous answer before submitting.
-
-Once all questions are answered, click **Submit** to send your responses and let the agent continue.
-
-## Session operations
-
-| Operation | What it does |
-|-----------|-------------|
-| **Stop** | Gracefully halts the agent. You can resume later. |
-| **Resume** | Resumes a stopped session from where it left off. |
-| **Clone** | Creates a new session with the same configuration and repos -- useful for trying a different approach. Chat history is not copied. |
-| **Export** | Downloads session data and offers Markdown or PDF export. If the session is running and Google Drive is connected, you can also save directly to your Drive. |
-| **Delete** | Permanently removes the session and its data. |
-
-## Feedback
-
-You can rate any agent response with a thumbs-up or thumbs-down button that appears alongside messages in the chat. Clicking either button opens a feedback modal where you can optionally add a comment explaining what went well or what could be improved. The platform sends your rating to Langfuse for observability and quality tracking, automatically associating it with the session, message, user, active workflow, and trace so that teams can analyze agent performance over time.
-
-## Tips for effective sessions
-
-- **Be specific in your first message.** A clear prompt saves back-and-forth. Instead of "fix the bug," try "the login endpoint in `auth.go` returns 500 when the token is expired -- fix the error handling."
-- **Attach the right repos.** The agent can only see code that has been added as context.
-- **Pick the right model.** Sonnet 4.5 is fast and cost-effective for most tasks. Opus 4.6 excels at complex multi-step reasoning (if enabled for your workspace).
-- **Use workflows for structured tasks.** If there is a workflow that matches your goal (bug fix, triage, spec writing), attach it from the session sidebar to give the agent a proven plan.
-- **Review tool calls.** Expanding tool-use blocks lets you verify what the agent actually did before merging its changes.
+The sessions plugin exposes clone and export endpoints. Clone copies the source session configuration into a new session with `parent_session_id`; it does not copy messages or automatically start the clone. Export returns a JSON envelope with session metadata, export time, and version.

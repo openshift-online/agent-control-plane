@@ -6,84 +6,52 @@ import { Badge } from '@astrojs/starlight/components';
 
 <Badge text="Stable" variant="success" />
 
-[AgentReady](https://github.com/ambient-code/agentready) (v2.29.4) is a CLI tool that evaluates repositories for AI-assisted development readiness.
+AgentReady is an external CLI for checking whether a repository is prepared for AI-assisted development. Use it before connecting important repos to ACP, or feed its report into a session as context.
 
-## What it does
+## Why it helps ACP
 
-AgentReady scans a repository and scores it across **13 assessment categories**:
+Agents perform better when repositories contain:
 
-- Documentation Standards
-- Repository Structure
-- Testing & CI/CD
-- Security
-- Context Window Optimization (includes `CLAUDE.md` presence and quality)
-- Dependency Management
-- CI/CD Integration
-- Error Handling
-- API Documentation
-- Code Quality (includes complexity, type annotations, code smells)
-- Git & Version Control
-- Modularity
-- Build & Development
+- clear build and test commands.
+- current documentation.
+- repository instructions such as `CLAUDE.md`.
+- predictable structure.
+- CI configuration.
+- security and contribution guidance.
 
-## Certification levels
+AgentReady gives you a report you can use to improve those inputs.
 
-Based on the overall score, repositories receive a certification:
-
-| Level | Score range | Meaning |
-|-------|-----------|---------|
-| **Platinum** | 90--100 | Fully optimized for AI-assisted development |
-| **Gold** | 75--89 | Well prepared with minor gaps |
-| **Silver** | 60--74 | Functional but could benefit from improvements |
-| **Bronze** | Below 60 | Significant preparation needed |
-
-## Installation
+## Run it locally
 
 ```bash
-# Using pip
-pip install agentready
-
-# Using uvx (no install needed)
-uvx agentready
-
-# Using a container
-podman pull ghcr.io/ambient-code/agentready:latest
+uvx agentready assess .
+agentready assess /path/to/repo --format markdown --output agentready-report.md
+agentready assess /path/to/repo --format json --output agentready-report.json
 ```
 
-## Usage
+## Use the report in ACP
 
-```bash
-# Assess the current directory
-agentready assess .
+Attach or paste the report into a session:
 
-# Assess a specific repository
-agentready assess /path/to/repo
-
-# Output JSON report
-agentready assess /path/to/repo --format json
-
-# Generate markdown report (git-friendly)
-agentready assess /path/to/repo --format markdown --output report.md
+```text
+Read artifacts/agentready-report.md and identify the top five improvements that
+would make this repository easier for ACP agents to work on. Do not change files yet.
 ```
 
-## Output formats
+Then run focused follow-up sessions for documentation, test command cleanup, or repository instruction updates.
 
-- **Interactive HTML** -- Opens in your browser with detailed breakdowns per category.
-- **Markdown** -- Git-friendly report suitable for committing to the repository.
-- **JSON** -- Machine-readable output for CI pipelines.
+## CI pattern
 
-## CI integration
-
-Run AgentReady in CI to enforce a minimum readiness score:
+Run AgentReady in CI when you want a readiness floor:
 
 ```yaml
-- name: Check AI readiness
+- name: Check agent readiness
   run: |
-    pip install agentready
-    agentready assess . --format json --output report.json
-    score=$(python -c "import json; print(json.load(open('report.json'))['score'])")
-    if [ "$score" -lt 75 ]; then
-      echo "AI readiness score $score is below threshold (75)"
-      exit 1
-    fi
+    uvx agentready assess . --format json --output agentready-report.json
+    python - <<'PY'
+    import json
+    score = json.load(open("agentready-report.json"))["score"]
+    if score < 75:
+        raise SystemExit(f"AgentReady score {score} is below threshold")
+    PY
 ```

@@ -1,99 +1,50 @@
 ---
 title: CodeRabbit Integration
-description: AI-powered code review with CodeRabbit — automatic for public repos, API key for private repos
+description: Current CodeRabbit support in the runner and repository review workflow
 ---
 
-CodeRabbit provides AI-powered code review for pull requests and local changes. Public repositories get free reviews automatically. Private repositories require an API key.
+CodeRabbit support in this repository is primarily development and runner tooling. It is not a first-class ACP REST integration in the current OpenAPI credential provider list.
 
-## Public Repositories (free, no configuration)
+## What exists
 
-If an org admin has installed the [CodeRabbit GitHub App](https://github.com/apps/coderabbitai) on your organization, every PR to a public repo gets AI-powered review comments automatically. No API key, no integration configuration, no session setup.
+- The runner image attempts to install the CodeRabbit CLI.
+- The runner can use `CODERABBIT_API_KEY` when that environment variable is available during a turn.
+- The runner clears `CODERABBIT_API_KEY` after a turn along with other sensitive runtime variables.
+- This repository includes `.coderabbit.yaml`, `scripts/hooks/pr-review-gate.sh`, `scripts/hooks/coderabbit-review-gate.sh`, a CodeRabbit smoke-test workflow, and triage scripts for analyzing CodeRabbit comments.
 
-This is the default path for most users. Nothing to configure.
+## What does not exist in the public API
 
-## Private Repositories (API key required)
+The current credential OpenAPI provider enum includes `github`, `gitlab`, `jira`, `google`, `vertex`, and `kubeconfig`. It does not include `coderabbit`.
 
-For private repos, you need a CodeRabbit [Pro plan](https://coderabbit.ai/pricing) or the usage-based add-on ($0.25/file reviewed).
+The old `/api/auth/coderabbit/...` style endpoints are not part of the current `ambient-api-server` plugin routes. If your deployment has those endpoints, they are outside the code documented here.
 
-### 1. Generate an API key
+## Use CodeRabbit in an ACP session
 
-1. Go to [app.coderabbit.ai/settings/api-keys](https://app.coderabbit.ai/settings/api-keys)
-2. Log in with **GitHub** (not email — this links your CodeRabbit account to your GitHub identity)
-3. Generate an Agentic API key (starts with `cr-`)
+If your runner image includes the CodeRabbit CLI and your deployment can provide `CODERABBIT_API_KEY`, ask the agent to run CodeRabbit as part of the task:
 
-### 2. Add to ACP
-
-1. Navigate to **Integrations** in the ACP UI
-2. On the CodeRabbit card, expand **Private repository access**
-3. Paste your API key and click **Save Key**
-
-### 3. Use in sessions
-
-The next session you create will have `CODERABBIT_API_KEY` injected into the session environment automatically. The CodeRabbit CLI and pre-commit hook use this to authenticate.
-
-:::caution[Billing]
-Adding an API key routes all CodeRabbit CLI reviews through the usage-based plan. For public repos, PR reviews via the GitHub App are free — using an API key for the same reviews will incur charges. Only add an API key if you need CLI reviews on private repos.
-:::
-
-## Local Development
-
-For reviewing changes on your own machine (outside of ACP sessions):
-
-```bash
-# Install the CLI
-brew install coderabbit
-
-# Authenticate (opens browser — free for public repos)
-coderabbit auth login
-
-# Review uncommitted changes
-coderabbit review --agent
+```text
+Run CodeRabbit review against the current branch, summarize blocking findings,
+fix only issues that are clearly correct, and leave uncertain comments for a human.
 ```
 
-### Review Gate (PR creation)
-
-A PreToolUse hook in `.claude/settings.json` intercepts `gh pr create` and runs CodeRabbit review on the full branch diff before allowing PR creation. If CodeRabbit finds blocking issues (severity=error), the PR creation is blocked and the agent fixes the findings before retrying.
-
-This is the enforcement point for the inner-loop review described in [ADR-0008](../../../internal/adr/0008-automate-code-reviews.md). The same script works standalone for CI:
+Inside the runner, the command is typically:
 
 ```bash
-# Run the review gate directly (outside of Claude Code)
-bash scripts/hooks/coderabbit-review-gate.sh
+coderabbit review --agent --base main
 ```
 
-## How It Works in ACP Sessions
+Do not pass the API key on the command line. Provide it through runner environment wiring or a deployment-specific credential mechanism.
 
-When a session starts, the control plane resolves credentials from the API server:
+## Repository review gate
 
-1. **API server** stores the API key as a credential record in the database, scoped per user or project
-2. **Control plane** resolves credential bindings and injects `CODERABBIT_API_KEY` into the runner pod environment
-3. If no API key is configured, the runner starts without it — no error, no delay
-4. On turn completion, the key is cleared from the environment
-
-RBAC credential bindings ensure the correct credentials are injected based on the project, agent, and user context.
-
-## Configuration File
-
-The platform's `.coderabbit.yaml` configures CodeRabbit's review behavior for PR reviews. Key settings:
-
-- **Review profile**: `chill` (less verbose, focuses on real issues)
-- **Path instructions**: component-specific review guidance (Go backend, TypeScript frontend, Python runner, K8s manifests, GitHub Actions)
-- **Pre-merge checks**: performance/algorithmic complexity, security/secret handling, Kubernetes resource safety
-- **Auto-review**: enabled on `main` and `alpha` branches, skips WIP and dependency bot PRs
-
-See the [CodeRabbit docs](https://docs.coderabbit.ai/cli#ai-agent-integration) for CLI integration best practices.
-
-## Integration Test
-
-Validate the full integration stack against a running cluster:
+For contributors to this repository, the PR review gate runs mechanical checks and, when the `coderabbit` CLI is installed and authenticated, runs:
 
 ```bash
-# Against the current kubectl context
-./scripts/test-coderabbit-integration.sh
-
-# Against a specific kind cluster
-./scripts/test-coderabbit-integration.sh --context kind-ambient-001-coderabbit-integ
-
-# With live API key validation
-CODERABBIT_API_KEY=cr-... ./scripts/test-coderabbit-integration.sh
+coderabbit review --agent --base main
 ```
+
+The hook is `scripts/hooks/pr-review-gate.sh`. It is part of the repository development workflow, not a generic ACP user feature.
+
+## Public repository reviews
+
+If your organization uses the CodeRabbit GitHub App for public repositories, configure that in GitHub/CodeRabbit directly. ACP sessions can still consume the review output as ordinary repository or PR context, but ACP does not install or manage the GitHub App.

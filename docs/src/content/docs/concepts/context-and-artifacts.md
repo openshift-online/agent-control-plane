@@ -2,92 +2,74 @@
 title: "Context & Artifacts"
 ---
 
-In the Ambient Code Platform, **context** is what you give the agent and **artifacts** are what it gives back.
+Context is what the runner receives. Artifacts are files and results the runner creates while doing the work.
 
-## Context -- the input
+## Workspace layout
 
-Context is the information the agent has access to when it starts working. The primary form of context is source code from Git repositories, but you can also provide files and instructions through the chat.
+Runner Pods use `/workspace`.
 
-### Adding repositories
+Depending on session configuration, the runner uses:
 
-After creating a session, you can attach one or more Git repositories from the session sidebar:
+- `/workspace/repos` for cloned repositories.
+- `/workspace/workflows` for workflow repositories.
+- `/workspace/artifacts` for generated outputs.
+- `/workspace/file-uploads` for uploaded files.
+- `/workspace/.google_workspace_mcp/credentials` for Google Workspace MCP credentials when configured.
 
-1. Open the session and click **Add Repository** in the sidebar.
-2. Enter the Git URL (HTTPS or SSH).
-3. Select the **branch** to clone. The agent will work on this branch.
-4. Repeat for additional repositories if your task spans multiple codebases.
+The active working directory depends on available context. If a workflow is active, the runner works inside the workflow directory. If repositories are configured without a workflow, it works in the main repo. Otherwise it falls back to the artifacts directory.
 
-The agent clones each repository into its workspace and has full read/write access to the files.
+## Repository context
 
-<figure class="screenshot-pair">
-  <img class="screenshot-light" src="/platform/images/screenshots/session-page-light.png" alt="Session with file browser and artifacts" />
-  <img class="screenshot-dark" src="/platform/images/screenshots/session-page-dark.png" alt="Session with file browser and artifacts" />
-</figure>
+A session can use a single `repo_url` or a structured `repos` JSON value. The runner clones repositories into `/workspace/repos/{name}` and can report repository status through runner-backed endpoints.
 
-### Branch management
+The session API also exposes repository subresources:
 
-- **Branch selection** -- choose any branch at the time you add a repository.
-- **Branch switching** -- the agent can create and switch branches during a session as part of its normal Git workflow.
-- **Multiple repos** -- each repository tracks its own branch independently.
+```text
+POST   /api/ambient/v1/sessions/{id}/repos
+DELETE /api/ambient/v1/sessions/{id}/repos/{repoName}
+GET    /api/ambient/v1/sessions/{id}/repos/status
+```
 
-### Auto-push
+The add-repo handler accepts URL, branch, and name data and updates the session's repo configuration. Branch defaults to `main` when omitted.
 
-When a session completes or is stopped, the platform can **automatically push** the agent's commits back to the remote repository. This behavior is configurable per repository when you add it to a session.
+## Files and Git
 
-Auto-push is useful for fully automated workflows where you want changes delivered without manual intervention. For review-first workflows, leave auto-push off and inspect the agent's changes in the artifact browser before pushing manually.
+The API server proxies runner endpoints for file and Git operations:
 
-## Artifacts -- the output
+```text
+GET    /api/ambient/v1/sessions/{id}/workspace
+GET    /api/ambient/v1/sessions/{id}/files
+GET    /api/ambient/v1/sessions/{id}/files/{path}
+GET    /api/ambient/v1/sessions/{id}/git/status
+POST   /api/ambient/v1/sessions/{id}/git/configure-remote
+GET    /api/ambient/v1/sessions/{id}/git/branches
+```
 
-Artifacts are files the agent creates, modifies, or generates during a session. They live in the session's workspace and persist after the session ends.
+These endpoints are available only when the runner Pod is reachable.
 
-### File browser
+## Prompt context
 
-Every session has a **file browser** accessible from the session sidebar. It lets you:
+Session start context can include:
 
-- Browse the full directory tree of the session workspace.
-- View file contents, including diffs of what the agent changed.
-- See which files were added, modified, or deleted.
+- project prompt.
+- agent prompt.
+- peer agent summaries for agent starts.
+- unread inbox messages for agent starts.
+- the session or agent-start task prompt.
+- workflow files.
+- repository files and metadata.
 
-### Downloading artifacts
+Keep stable instructions in the project or agent prompt. Put the current task in the session prompt.
 
-You can download individual files or the entire workspace from the file browser. This is useful for:
+## Artifacts
 
-- Reviewing generated code before merging.
-- Saving reports, specs, or documentation the agent produced.
-- Archiving session output for compliance or audit purposes.
+Artifacts are ordinary files under `/workspace/artifacts`. Ask the agent to write reports, summaries, patches, or generated assets there when you need durable output beyond chat messages.
 
-## Putting it together
+Example prompt:
 
-A typical workflow looks like this:
+```text
+Analyze the failing auth tests. Write a concise report to artifacts/auth-test-findings.md
+with root cause, changed files, and tests run.
+```
 
-1. **Provide context** -- attach one or more repositories, select the right branches, and write a clear prompt.
-2. **The agent works** -- it reads your code, makes changes, runs tools, and writes new files.
-3. **Review artifacts** -- browse the file tree, inspect diffs, and download what you need.
-4. **Push or merge** -- if auto-push is enabled the changes are already on the remote; otherwise, push manually after review.
-
-### Tips
-
-- **Attach only the repos the agent needs.** Extra repositories add clone time and noise.
-- **Use the right branch.** Point the agent at a feature branch if you do not want changes landing directly on `main`.
-- **Check diffs before pushing.** The file browser shows exactly what changed -- use it.
-- **Combine with workflows.** Workflows like Bugfix or Spec-kit structure the agent's output so artifacts are consistent and easy to review.
-
-## Git operations
-
-After the agent finishes working, you can inspect and manage the resulting Git state directly from the session sidebar. The platform exposes several Git operations that help you review changes, configure remotes, and push code without leaving the UI.
-
-The agent handles most Git work (committing, branching, pulling) during a session. The operations below let you manage what happens *after* the agent is done.
-
-| Operation | What it does |
-|-----------|-------------|
-| **Repository status** | View cloned repositories, their current branch, default branch, and clone state (Cloning, Ready, or Failed). Expand a repository to see all available local branches. |
-| **Git status** | Check whether a repository has uncommitted changes, including counts of added and removed files and total lines changed. |
-| **Configure remote** | Set or change the remote URL for a repository in the session workspace. The branch defaults to `main`. You need write access to the target repository. |
-| **List branches** | View all branches available in a repository's workspace, including branches the agent created during the session. |
-| **Merge status** | Check whether changes can merge cleanly into a target branch. The platform reports conflicting files, local change counts, and whether the remote branch exists. |
-| **Push to remote** | Push the agent's commits to the configured remote repository. If auto-push is off, use this to deliver changes after reviewing them. |
-| **Abandon changes** | Discard all uncommitted changes in a repository, resetting it to the last committed state. This is irreversible. |
-
-:::note
-Some Git operations (push, abandon, create branch) are handled by the agent during the session. The UI operations listed above are available for post-session management and review.
-:::
+Use the file endpoints or UI file panels to inspect artifacts while the runner is active.

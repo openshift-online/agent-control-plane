@@ -2,78 +2,44 @@
 title: "Core Concepts"
 ---
 
-This page introduces the main building blocks of the Ambient Code Platform. Each concept links to a deeper reference page where available.
+ACP is easiest to understand as a REST-backed control loop: users create project resources in the API server, and the control plane turns runnable session state into Kubernetes runner Pods.
 
-## Workspaces
+## Projects
 
-A workspace is a project container that groups sessions, integrations, and team members together. Workspaces map to Kubernetes namespaces under the hood, providing resource isolation between teams.
+Projects are the top-level boundary for work. They group agents, sessions, credentials, project settings, role bindings, and project-wide prompt context. The UI may call them workspaces; the API, CLI, database, and control plane call them projects.
 
-Each workspace has:
+## Agents
 
-- **Members and roles** -- Control who can create sessions, manage integrations, or administer the workspace.
-- **Settings** -- Default model configuration and API keys.
-
-Learn more in [Workspaces](../../concepts/workspaces/).
+Agents are reusable project-scoped definitions. An agent stores a name, prompt, optional model settings, optional repository/workflow defaults, labels, and annotations. Starting an agent creates a session or returns the existing active session for that agent.
 
 ## Sessions
 
-A session is a single AI agent execution. When you create a session, ACP provisions a containerized environment, clones any requested repositories, and runs the agent with your prompt.
+Sessions are individual runs. A session stores the task prompt, project, optional agent, lifecycle phase, message log, repository context, model settings, and Kubernetes namespace metadata. Pending sessions are reconciled into runner Pods.
 
-Sessions have a defined lifecycle:
+## Messages and events
 
-**Pending** &rarr; **Creating** &rarr; **Running** &rarr; **Stopping** &rarr; **Stopped** / **Completed** / **Failed**
+Session messages are stored by the API server and can be listed or streamed with Server-Sent Events. Runner AG-UI events are proxied while the runner Pod is available.
 
-While running, you can interact with the agent through a chat interface, observe its progress in real time, and browse output artifacts. Sessions are configurable:
+## Credentials
 
-- **Model** -- Which LLM powers the agent. Available models include Claude Sonnet 4.5, Claude Opus 4.5, Claude Haiku 4.5, and Gemini 2.5 Flash (generally available), plus Claude Opus 4.6, Claude Sonnet 4.6, and Gemini 2.5 Pro (feature-gated, when enabled by your administrator).
-- **Temperature** -- Controls response randomness (default: 0.7).
-- **Max tokens** -- Maximum output tokens per response (default: 4000).
-- **Timeout** -- Maximum execution time in seconds before the session is stopped (default: 300).
-- **Repositories** -- One or more git repos cloned into the session workspace.
-- **Workflow** -- An optional structured template guiding the agent's approach.
-
-Learn more in [Sessions](../../concepts/sessions/).
-
-## Integrations
-
-Integrations connect ACP to external services so agents can read from and write to the tools your team already uses. Integrations are user-scoped (tied to your SSO identity) and available across all your workspaces.
-
-| Integration | Auth Method | What Agents Can Do |
-|---|---|---|
-| **GitHub** | GitHub App or PAT | Clone repos, open PRs, read/comment on issues |
-| **GitLab** | Personal Access Token (PAT) | Clone repos, open merge requests, interact with issues |
-| **Jira** | API Token (email + token) | Read and update tickets, add comments, transition status |
-| **Google Drive** | OAuth | Access Drive files for context |
-
-Once connected, every session can use them.
-
-Learn more in [Integrations](../../concepts/integrations/).
+Credentials are API records with a provider, token, URL, email, labels, and annotations. Token access is controlled by role bindings. The control plane resolves visible credentials for a session and passes them to the runner through sidecars or environment-based fallback.
 
 ## Workflows
 
-Workflows are structured task templates that guide how an agent approaches a problem. They provide consistent, repeatable processes for common tasks.
+Workflows are optional Git-backed instruction bundles. A session can reference a workflow repository and path; the runner clones it into `/workspace/workflows/...` and loads files such as `.ambient/ambient.json` and `.claude/commands` when present. MCP config is loaded from runner/project/session configuration, not automatically from a workflow-local `.mcp.json`.
 
-**Built-in workflows:**
+## Context and artifacts
 
-- **Bugfix** -- Diagnose and fix a reported bug, including tests.
-- **Triage** -- Classify, prioritize, and route an issue.
-- **Spec-kit** -- Generate a technical specification from requirements.
-- **PRD/RFE** -- Produce a product requirements document or request for enhancement.
+The runner works inside `/workspace`. Depending on session configuration, it uses `/workspace/repos`, `/workspace/workflows`, `/workspace/artifacts`, and `/workspace/file-uploads`. The API server exposes runner-backed endpoints for files, Git state, repository status, and workspace state while the runner is running.
 
-**Custom workflows** can be loaded from any git repository, letting teams codify their own processes and share them across the organization.
+## Scheduled sessions
 
-Learn more in [Workflows](../../concepts/workflows/).
+Scheduled sessions are project-scoped records with cron, timezone, agent, prompt, timeout, and runner-type fields. The current API and CLI can create, update, suspend, resume, trigger, and list runs, but the service implementation does not yet enqueue automatic runs.
 
-## Context and Artifacts
+## Interfaces
 
-**Context** is the input an agent works with: cloned repositories, linked documents, integration data, and your prompt.
-
-**Artifacts** are the outputs a session produces: modified files, generated documents, pull requests, and any other files the agent creates during execution. You can browse and download artifacts from the session detail page.
-
-Learn more in [Context and Artifacts](../../concepts/context-and-artifacts/).
-
-## MCP Tools
-
-The Model Context Protocol (MCP) lets agents call external tools during a session. MCP tools extend what an agent can do beyond code and text -- for example, querying a database, calling an internal API, or running a specialized analysis tool.
-
-MCP tools are configured at the workspace level and made available to all sessions within that workspace.
+- **UI:** interactive project, agent, credential, and session management.
+- **`acpctl`:** terminal and CI automation.
+- **REST API:** `/api/ambient/v1/...` on the API server.
+- **SDKs:** Go, Python, and TypeScript clients generated from OpenAPI.
+- **MCP:** tools for project, agent, session, message, label, and annotation operations.

@@ -2,110 +2,65 @@
 title: "Amber"
 ---
 
-[**Amber**](https://github.com/ambient-code/amber) is the Ambient Code Platform's AI-powered codebase intelligence agent. Amber reads your attached repositories, understands your project standards, and works alongside you -- from quick consultations to autonomous background maintenance. Amber maintains awareness of session-accessible files, runs configured lint checks, and is available whenever your deployment and integrations are online.
+Amber is the Ambient name for a codebase-focused agent. In ACP terms, Amber is not a special API kind; it is an agent prompt, project context, repository credentials, and sessions that run against your code.
 
-## What Amber can do
+If your deployment ships an Amber agent, use it like any other project agent. If it does not, you can create one.
 
-Amber covers a wide range of software engineering tasks:
+## Create an Amber-style agent
 
-| Capability | Examples |
-|-----------|---------|
-| **Code analysis** | Explain how a module works, trace a call chain, identify dead code. |
-| **Bug fixing** | Reproduce, diagnose, and fix bugs -- with root cause analysis and tests. |
-| **Issue triage** | Categorize new issues by severity and component, link related items, suggest assignees. |
-| **Sprint planning** | Cluster issues into themes, estimate effort, recommend sprint priorities. |
-| **PR reviews** | Check for standards violations, security concerns, and performance regressions. |
-| **Refactoring** | Break large files into modules, extract patterns, unify duplicated logic. |
-| **Test generation** | Write unit tests, contract tests, and edge-case coverage for untested code. |
-| **Dependency monitoring** | Scan for outdated packages, upstream breaking changes, and security advisories. |
-| **Health reports** | Produce periodic assessments of test coverage, tech debt, and codebase quality. |
+```bash
+acpctl agent create \
+  --name amber \
+  --prompt "You are a codebase maintenance agent. Read repository instructions, keep changes focused, run targeted checks, and summarize files changed, tests run, and residual risk."
+```
 
-## How to work with Amber
+Start it with a specific task:
 
-There are two main ways to interact with Amber: through sessions in the platform UI and through GitHub automation.
+```bash
+acpctl agent start amber --prompt "Find why the session status endpoint returns 500 on expired tokens and fix it."
+```
 
-### Interactive sessions
+## Good Amber tasks
 
-The most common way to work with Amber is to create a session from the platform UI.
+- Explain how a module works.
+- Trace a bug from symptom to root cause.
+- Make a narrow code fix with tests.
+- Review a pull request for repository standards.
+- Add missing test coverage for a specific file.
+- Produce an issue triage report.
+- Draft a refactor plan without changing code yet.
 
-1. Open a workspace and click **New Session**.
-2. Attach the repositories Amber should work with.
-3. Optionally select a **workflow** (such as Bugfix or Triage) to give Amber a structured plan.
-4. Write your prompt and start the session.
+## Give it useful context
 
-Once running, Amber appears in the chat interface just like any other session. You can ask questions, request changes, and review the results in real time. Amber displays every tool call it makes -- file reads, edits, shell commands, searches -- so you always know what happened.
+Amber works best when the project has:
 
-**Example prompts for interactive sessions:**
+- repository credentials for the target repos.
+- a project prompt with team conventions.
+- a `CLAUDE.md` or similar repo instruction file.
+- focused task prompts with expected verification commands.
+- clear limits on what not to change.
 
-- "What changed in the backend this week? Anything I should be concerned about?"
-- "The `/sessions` endpoint returns 500 when the token is expired. Find the bug and fix it."
-- "Review the open issues and group them by component. Which ones should we tackle this sprint?"
-- "Refactor `handlers/sessions.go` -- it is too large. Break it into smaller, focused modules."
+## Prompt example
 
-### GitHub automation
+```text
+You are working in the API server repo.
 
-Amber can also work autonomously via GitHub. GitHub events such as issue creation or webhook integrations can trigger Amber to analyze issues, implement fixes, and open pull requests without you needing to open the platform UI.
+Task:
+Fix the bug where stopping a pending session sometimes leaves runner resources behind.
 
-The specific trigger methods depend on your deployment configuration. Common approaches include GitHub Actions workflows that start Amber on issue events, webhook integrations, and scheduled jobs.
+Definition of done:
+- explain the root cause.
+- make the smallest code change.
+- add or update a focused test.
+- run the relevant test command.
+- write artifacts/summary.md with files changed, tests run, and risks.
 
-Amber creates a feature branch, runs linters and tests, and opens a PR linked back to the original issue. By default, Amber does not merge its own PRs -- a human must review and merge.
+Constraints:
+- follow CLAUDE.md.
+- do not refactor unrelated reconcilers.
+- do not log tokens.
+```
 
-## Workflows that pair well with Amber
+## Review the output
 
-Amber works with any prompt, but it is especially effective when paired with a workflow. Workflows provide a structured plan to follow, which improves consistency and output quality.
-
-| Workflow | When to use it with Amber |
-|----------|--------------------------|
-| **Bugfix** | Systematic five-phase bug resolution: reproduce, diagnose, fix, test, verify. |
-| **Triage** | Process an issue backlog and produce a prioritized, categorized breakdown. |
-| **Spec-kit** | Generate a detailed specification from requirements, then implement to spec. |
-| **Amber Interview** | Gather context and requirements through a structured question-and-answer format. |
-
-See [Workflows](../concepts/workflows) for the full list and details on creating custom workflows.
-
-## Amber's capabilities
-
-Under the hood, Amber has access to the same toolset as any session on the platform, plus domain knowledge that makes it particularly effective at codebase work.
-
-### Repository access
-
-Amber reads and writes files across every repository attached to the session. It parses directory structures, import graphs, and language-specific patterns. When you attach multiple repositories, Amber can reason across all of them -- for instance, tracing how a backend API change affects the frontend.
-
-### Tool use
-
-During a session, Amber uses tools to do real work:
-
-- **File operations** -- read, write, and edit files with surgical precision.
-- **Shell commands** -- run builds, tests, linters, and Git operations.
-- **Search** -- find code patterns, function definitions, and references across the codebase.
-- **Web search and fetch** -- look up documentation, upstream changelogs, and API references.
-- **MCP integrations** -- interact with GitHub (PRs, issues, commits), Jira, and other connected services through the workspace's configured integrations.
-
-### Standards awareness
-
-Amber reads your project's `CLAUDE.md` and any workflow instructions to apply your team's conventions. It follows your coding standards, commit message format, testing requirements, and tooling preferences. If your project says "use `gofmt`" or "zero `any` types in TypeScript," Amber enforces that in its own output.
-
-### Confidence and transparency
-
-Amber reports what it is doing and why. It shows its reasoning, flags uncertainty, and prompts for confirmation before making risky changes. When Amber opens a pull request, it includes:
-
-- What changed and why.
-- A confidence level (high, medium, or low).
-- Rollback instructions in case something goes wrong.
-- A risk assessment of the change's blast radius.
-
-## Tips for getting the best results
-
-**Be specific.** A prompt like "fix the bug in the login endpoint where expired tokens return 500 instead of 401" will get a targeted fix. A prompt like "make the code better" will get a generic response.
-
-**Point to files.** If you know which files are involved, mention them. Amber focuses its analysis instead of scanning the entire codebase.
-
-**Provide success criteria.** Tell Amber what "done" looks like: "all tests pass," "coverage above 60%," "no lint warnings." Amber uses these criteria to validate its own output.
-
-**Start small.** If you are new to Amber, begin with a low-risk task -- a formatting fix, a missing test, or a code review. As you build confidence in the output, move to larger refactors and autonomous workflows.
-
-**Use workflows for repeatable tasks.** If you run the same kind of task regularly (bug triage, sprint planning, test coverage), select a workflow. Workflows provide a proven process and produce more consistent output.
-
-**Review before merging.** Amber does not merge its own pull requests by default. Always review the diff, check the test results, and verify the changes make sense in context.
-
-**Give feedback.** If Amber's output missed the mark, provide corrections. Amber adjusts its approach based on your input within the session. Over time, your team's standards in `CLAUDE.md` and custom workflows encode your preferences so every session starts from a better baseline.
+Amber can edit code and run tools, but its output still needs normal engineering review. Check the diff, commands run, tests, and any assumptions in the final summary before merging changes.

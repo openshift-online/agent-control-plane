@@ -2,41 +2,35 @@
 title: "Ambient Code Platform"
 ---
 
-Welcome to the **Ambient Code Platform** -- a Kubernetes-native platform for running AI-powered agents that do real engineering work. Define a task, connect your repos and tools, and let an agent handle the rest.
+Ambient Code Platform (ACP) runs AI agents against real developer work: repositories, project context, credentials, messages, and long-running tasks. You can start work from the web UI, `acpctl`, the REST API, generated SDKs, or the MCP server.
 
-## Get Started
+ACP is not a CRD data model. The API server is a Go service backed by PostgreSQL and exposes `/api/ambient/v1/...` on port 8000. The control plane watches the API server over gRPC and creates Kubernetes runner Pods for sessions. Each runner is a Python AG-UI server with bridges for Claude Agent SDK, Gemini CLI, and LangGraph.
 
-New to ACP? Start here:
+## Use ACP for
 
-- **[What is Ambient?](getting-started/)** -- Understand what the platform does and how it works.
-- **[Quickstart (UI)](getting-started/quickstart-ui/)** -- Create your first agent session through the web interface.
-- **[Core Concepts](getting-started/concepts/)** -- Learn about workspaces, sessions, integrations, and workflows.
+- Running a code agent on a repository with project instructions and credentials.
+- Creating reusable project agents with standing prompts.
+- Starting sessions from the UI, CLI, CI, scripts, SDKs, or MCP tools.
+- Streaming messages and AG-UI events while the agent works.
+- Inspecting files, Git state, repository status, artifacts, and MCP status for active sessions.
 
-## Learn
+## First steps
 
-Dive deeper into the platform's building blocks:
+1. Read [What is Ambient?](getting-started/) for the system model.
+2. Use [Quick start](getting-started/quickstart-ui/) to create a project, agent, and session from the UI.
+3. Use [CLI Reference](getting-started/cli/) when you want repeatable automation from a terminal or CI job.
 
-- **[Workspaces](concepts/workspaces/)** -- Multi-tenant project containers for organizing sessions and teams.
-- **[Sessions](concepts/sessions/)** -- AI agent execution environments with chat, model settings, and artifact output.
-- **[Integrations](concepts/integrations/)** -- Connect GitHub, GitLab, Jira, and Google Workspace.
-- **[Context and Artifacts](concepts/context-and-artifacts/)** -- Inputs agents work with and outputs they produce.
-- **[Workflows](concepts/workflows/)** -- Structured task templates for common engineering tasks.
+## Core objects
 
-## Workflows
+- [Workspaces / projects](concepts/workspaces/) group agents, sessions, credentials, settings, and team access.
+- [Sessions](concepts/sessions/) are the execution records that the control plane turns into runner Pods.
+- [Integrations](concepts/integrations/) are credential records and sidecars that let runners reach GitHub, GitLab, Jira, Google, Vertex, and Kubernetes.
+- [Context & artifacts](concepts/context-and-artifacts/) explains what the runner sees in `/workspace` and what you can retrieve afterward.
+- [Workflows](concepts/workflows/) are optional Git-backed instruction bundles loaded into a session.
+- [Scheduled sessions](concepts/scheduled-sessions/) are project records for recurring work; the current API stores and manages them, but automatic firing is not implemented in the API service yet.
 
-Use built-in templates or bring your own:
+## Automation paths
 
-- **[Bugfix](workflows/bugfix/)** -- Diagnose and fix reported bugs.
-- **[Triage](workflows/triage/)** -- Classify, prioritize, and route issues.
-- **[PRD/RFE](workflows/prd-rfe/)** -- Produce product requirements documents.
-- **[Custom Workflows](workflows/custom/)** -- Load workflows from any git repository.
-
-## Extensions
-
-- **[GitHub Action](extensions/github-action/)** -- Trigger sessions from CI/CD pipelines.
-- **[MCP Server](extensions/mcp-server/)** -- Expose ACP capabilities via the Model Context Protocol.
-
-## Ecosystem
-
-- **[Amber](ecosystem/amber/)** -- Secret management for agent sessions.
-- **[AgentReady](ecosystem/agentready/)** -- Prepare repositories for AI agent consumption.
+- [GitHub Actions](extensions/github-action/) can create or start sessions with `curl` or `acpctl`.
+- [MCP Server](extensions/mcp-server/) exposes ACP project, agent, session, and message tools to MCP clients.
+- [Bugfix](workflows/bugfix/), [triage](workflows/triage/), and [PRD/RFE](workflows/prd-rfe/) pages give prompt patterns you can run as ordinary ACP sessions.

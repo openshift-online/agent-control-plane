@@ -2,6 +2,10 @@ name: Deploy Documentation to Pages
 
 on:
   push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
     tags:
       - 'v*'
   workflow_dispatch:

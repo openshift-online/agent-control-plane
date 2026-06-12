@@ -3,38 +3,40 @@ title: Mounting a Custom CA Bundle
 description: How to configure Ambient to trust certificates from a private or corporate CA
 ---
 
-By default, Ambient components only trust certificates signed by the public CAs baked into the base container image. If your deployment connects to services that use a private or corporate CA — for example, an internal Git host — you need to provide that CA bundle to the relevant components.
+Use a custom CA bundle when ACP components must call services with certificates signed by an internal CA: Git hosts, OIDC issuers, artifact systems, or internal APIs.
 
-## How it works
+## What is built in
 
-Ambient reads the system CA bundle at `/etc/pki/tls/certs/ca-bundle.crt` inside each container. Replacing or augmenting that file with your CA certificates causes all outbound TLS connections to trust those CAs automatically — no code changes or custom environment variables needed.
+OpenShift service CA support is already present in several paths:
 
-## On OpenShift: CA bundle injection
+- OpenShift overlays annotate the API server Service so OpenShift can provision serving certificates.
+- The control plane adds `/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt` to its HTTP and gRPC trust pool when that file exists.
+- Runner Pods mount a ConfigMap named `openshift-service-ca.crt` at `/etc/pki/ca-trust/extracted/pem/service-ca.crt`.
+- Runner containers set `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` to that mounted file.
 
-OpenShift can automatically populate a ConfigMap with the cluster's full trusted CA bundle (including any custom CAs configured via the cluster proxy). To use this:
+That covers OpenShift service certificates. A separate corporate CA still needs to be mounted or baked into images for the components that call corporate services.
 
-**1. Create the ConfigMap in each relevant namespace**
+## Create a CA bundle ConfigMap
 
-Apply the following manifest, changing `namespace` to match your deployment:
+Create the bundle in each namespace where a component needs outbound trust.
 
-```yaml
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: trusted-ca-bundle
-  namespace: <your-namespace>
-  labels:
-    config.openshift.io/inject-trusted-cabundle: "true"
-data: {}
+```bash
+kubectl create configmap trusted-ca-bundle \
+  --from-file=ca-bundle.crt=./corp-ca-bundle.crt \
+  -n ambient-code
 ```
 
-Leave `data: {}` empty — OpenShift's CA bundle injector will populate the `ca-bundle.crt` key automatically.
+For runner Pods, remember they run in project namespaces, not only the control-plane namespace.
 
-**2. Mount it into the API server Deployment**
+## Patch API server and control plane Deployments
 
-Patch the `ambient-api-server` Deployment to mount the ConfigMap over the system CA path:
+Mount the bundle and set standard trust environment variables:
 
 ```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server
 spec:
   template:
     spec:
@@ -43,46 +45,41 @@ spec:
           configMap:
             name: trusted-ca-bundle
       containers:
-        - name: ambient-api-server
+        - name: api-server
+          env:
+            - name: SSL_CERT_FILE
+              value: /etc/pki/custom-ca/ca-bundle.crt
+            - name: REQUESTS_CA_BUNDLE
+              value: /etc/pki/custom-ca/ca-bundle.crt
           volumeMounts:
             - name: trusted-ca-bundle
-              mountPath: /etc/pki/tls/certs/ca-bundle.crt
-              subPath: ca-bundle.crt
+              mountPath: /etc/pki/custom-ca
               readOnly: true
 ```
 
-**3. Verify**
+Apply the same pattern to `ambient-control-plane` if it must trust the same internal endpoints.
 
-After the pod restarts, confirm it can connect to your internal service:
+## Runner Pods
+
+The current reconciler hardcodes a runner volume from ConfigMap `openshift-service-ca.crt`, key `service-ca.crt`, and points `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` at that file.
+
+For OpenShift service CA, let the platform manage that ConfigMap in each project namespace.
+
+For a different corporate CA, use one of these approaches:
+
+- create `openshift-service-ca.crt` with key `service-ca.crt` in each project namespace containing the corporate bundle, if that does not conflict with your OpenShift service CA flow.
+- update the control-plane reconciler/manifests to mount a separate ConfigMap and set runner trust paths.
+- bake the corporate CA into the runner image's system trust store.
+
+Do not assume a ConfigMap in the control-plane namespace will automatically appear in project namespaces.
+
+## Verify
+
+After rollout, test from the component that makes the outbound call:
 
 ```bash
-kubectl exec deployment/ambient-api-server -- curl -I https://your-internal-host
+kubectl exec deploy/ambient-api-server -n ambient-code -- \
+  sh -c 'test -f /etc/pki/custom-ca/ca-bundle.crt && echo ok'
 ```
 
-## On other Kubernetes distributions
-
-If you are not using OpenShift's CA injector, create the ConfigMap yourself with the PEM-encoded CA certificate(s):
-
-```yaml
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: trusted-ca-bundle
-  namespace: <your-namespace>
-data:
-  ca-bundle.crt: |
-    -----BEGIN CERTIFICATE-----
-    <your CA certificate here>
-    -----END CERTIFICATE-----
-```
-
-Then apply the same volume mount as above.
-
-## Current support status
-
-| Component | Custom CA support |
-|-----------|-------------------|
-| `ambient-api-server` | Supported — mount the ConfigMap as shown above |
-| Runner pods | Pending — see [#1247](https://github.com/ambient-code/platform/issues/1247) and [#1038](https://github.com/ambient-code/platform/issues/1038) |
-
-Runner pods are created dynamically by the control plane for each session. Until #1247 is resolved, the control plane does not mount the ConfigMap into runner pods, so runners cannot connect to services that require a custom CA.
+For runner trust, start a test session in the target project and have the agent run a TLS request to the internal host.

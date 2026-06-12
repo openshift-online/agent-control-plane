@@ -2,92 +2,63 @@
 title: "Integrations"
 ---
 
-Integrations connect external services to the Ambient Code Platform, giving the AI agent access to tools like repository hosting, issue trackers, and document storage. Integrations are **user-scoped** -- they are tied to your SSO identity and stored at the cluster level, so once configured, they are available across all your workspaces. MCP tools and runner secrets are workspace-scoped.
+ACP integrations are credential records plus runtime wiring. The API stores credentials, role bindings control token access, and the control plane decides how to expose those credentials to a session.
 
-## Overview
+## Credential records
 
-Each integration appears on the **Integrations** page with a connection status indicator:
+Credential endpoints exist globally and under projects:
 
-<figure class="screenshot-pair">
-  <img class="screenshot-light" src="/platform/images/screenshots/integrations-page-light.png" alt="Integrations page" />
-  <img class="screenshot-dark" src="/platform/images/screenshots/integrations-page-dark.png" alt="Integrations page" />
-</figure>
+```text
+GET  /api/ambient/v1/credentials
+POST /api/ambient/v1/credentials
+GET  /api/ambient/v1/projects/{id}/credentials
+POST /api/ambient/v1/projects/{id}/credentials
+GET  /api/ambient/v1/projects/{id}/credentials/{cred_id}/token
+```
 
-- **Connected** -- credentials are valid and the service is reachable.
-- **Disconnected** -- no credentials configured, or the existing ones have expired.
+A credential has:
 
-You can connect and disconnect integrations at any time without affecting running sessions (changes take effect on the next session start).
+- `name`
+- `provider`
+- `token`
+- `url`
+- `email`
+- `labels`
+- `annotations`
 
-## GitHub
+The OpenAPI provider enum includes `github`, `gitlab`, `jira`, `google`, `vertex`, and `kubeconfig`. The CLI create command currently advertises `github`, `gitlab`, `jira`, `google`, and `kubeconfig`.
 
-GitHub integration lets the agent clone repositories, read pull requests, create branches, and push commits.
+## Token access
 
-### Setup options
+The API does not return credential tokens in normal credential responses. Token reads go through `/token` endpoints and require authorization.
 
-| Method | Best for |
-|--------|---------|
-| **GitHub App** (recommended) | Organizations that want fine-grained permission control and automatic token refresh. |
-| **Personal Access Token (PAT)** | Individual users or quick setups where installing an app is not practical. |
+Use role bindings to grant access at the right scope. The control plane may also create internal `credential:token-reader` bindings for session ServiceAccounts when sidecar-based token exchange is enabled.
 
-### GitHub App
+## Runtime injection
 
-1. Navigate to **Integrations > GitHub**.
-2. Click **Connect to GitHub App**.
-3. You will be redirected to GitHub to authorize the Ambient Code Platform app.
-4. Select the organization and repositories you want to grant access to.
-5. Complete the OAuth flow -- you will be redirected back to the platform.
+When a session starts, credential resolution is layered:
 
-The app handles token refresh automatically. You can adjust repository access at any time from your GitHub organization settings.
+1. global credentials.
+2. project credentials.
+3. agent credentials.
 
-### Personal Access Token
+For each provider, a more specific layer can override a less specific one. Management-only `credential:owner` bindings are not treated as runtime injection bindings.
 
-1. In GitHub, go to **Settings > Developer settings > Personal access tokens > Fine-grained tokens**.
-2. Create a token with the `repo` scope (or specific repository access).
-3. Back in the platform, go to **Integrations > GitHub** and paste the token.
+If credential sidecars are enabled, the control plane adds provider sidecars for supported providers and passes sidecar URLs to the runner. If sidecars are not enabled, the runner can fall back to `CREDENTIAL_IDS` and fetch tokens from the API.
 
-PATs do not auto-refresh. You will need to rotate them before they expire.
+## MCP tools
 
-## GitLab
+The Claude runner can use MCP servers for platform tools and credential-backed providers. The control plane can inject an `ambient-mcp` sidecar when `MCP_IMAGE`, the control-plane token URL, and public key are configured. Credential sidecars can expose GitHub, Jira, kubeconfig, and Google tools when their images and credentials are configured.
 
-GitLab integration provides the same repository access capabilities as GitHub.
+## OAuth status
 
-### Setup
+The current session plugin contains an OAuth URL handler that returns `501 not implemented`. Do not rely on OAuth setup flows unless your deployment has added them outside this codebase.
 
-1. Navigate to **Integrations > GitLab**.
-2. Optionally enter your **GitLab instance URL** if you use a self-managed instance (defaults to `https://gitlab.com`).
-3. In GitLab, go to **Preferences > Access Tokens** and create a token with `read_repository` and `write_repository` scopes.
-4. Paste the token and click **Connect**.
+## CLI examples
 
-## Jira
-
-Jira integration enables the agent to read issues, create tickets, and update statuses.
-
-### Setup
-
-1. Navigate to **Integrations > Jira**.
-2. Provide your **Jira instance URL** (e.g., `https://yourcompany.atlassian.net`).
-3. Enter the **email address** associated with your Jira account.
-4. Generate an [API token](https://id.atlassian.com/manage-profile/security/api-tokens) from your Atlassian account and paste it into the **API Token** field.
-5. Click **Connect**.
-
-Ensure your Atlassian account has the required project permissions.
-
-## Google Drive
-
-Google Drive integration allows the agent to access files stored in your Google Drive.
-
-### Setup
-
-1. Navigate to **Integrations > Google Drive**.
-2. Click **Connect Google Drive**.
-3. Sign in with your Google account and grant the requested Drive permissions.
-4. You will be redirected back to the platform once authorization is complete.
-
-## Troubleshooting
-
-| Symptom | Likely cause | Fix |
-|---------|-------------|-----|
-| Status stays **Disconnected** after setup | Authorization callback did not complete | Retry the connection flow; check for pop-up blockers. |
-| Token expired errors in sessions | PAT reached its expiry date | Generate a new token and update the integration. |
-| "Insufficient permissions" in agent logs | Token scope is too narrow | Recreate the token with the required scopes. |
-| Jira actions fail | Network or permission issue | Verify the Jira URL is reachable from the cluster and that your account has project access. |
+```bash
+acpctl credential create --name github-main --provider github --token "$GITHUB_TOKEN"
+acpctl credential create --name jira --provider jira --url https://example.atlassian.net --email dev@example.com --token "$JIRA_API_TOKEN"
+acpctl credential list --provider github
+acpctl credential bind github-main --project my-project
+```

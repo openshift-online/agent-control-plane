@@ -6,121 +6,95 @@ import { Badge } from '@astrojs/starlight/components';
 
 <Badge text="Beta" variant="caution" />
 
-The [`ambient-action`](https://github.com/ambient-code/ambient-action) GitHub Action creates Ambient Code Platform sessions directly from GitHub workflows. Use it to automate bug fixes on new issues, run code analysis on pull requests, or trigger any agent workflow from CI/CD.
+Use GitHub Actions to start ACP work from issues, pull requests, schedules, or manual workflow dispatch. The reliable integration point in this repository is the ACP REST API or `acpctl`.
 
-## Modes
+## Required secrets
 
-- **Fire-and-forget** -- Create a session and move on. The workflow does not wait for the session to finish.
-- **Wait-for-completion** -- Create a session and poll until it completes (or times out). Useful when subsequent steps depend on the agent's output.
-- **Send to existing session** -- Send a message to a running session instead of creating a new one (set `session-name`).
+Use deployment-specific secret names, but keep the values separate:
 
-## Inputs
+- `AMBIENT_API_URL`: ACP base URL, without `/api/ambient/v1`.
+- `AMBIENT_TOKEN`: bearer token with access to the target project and agent.
+- `AMBIENT_PROJECT`: project ID or name.
+- `AMBIENT_AGENT`: agent ID or name.
 
-| Input | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `api-url` | Yes | -- | Ambient Code Platform API server URL |
-| `api-token` | Yes | -- | Bot user bearer token for authentication (store as a GitHub secret) |
-| `project` | Yes | -- | Target workspace/project name |
-| `prompt` | Yes | -- | Initial prompt for the session, or message to send to an existing session |
-| `session-name` | No | -- | Existing session name to send a message to (skips session creation) |
-| `display-name` | No | -- | Human-readable session display name |
-| `repos` | No | -- | JSON array of repo objects (`[{"url":"...","branch":"...","autoPush":true}]`) |
-| `labels` | No | -- | JSON object of labels for the session |
-| `environment-variables` | No | -- | JSON object of environment variables to inject into the runner |
-| `workflow` | No | -- | JSON workflow object (e.g., `{"gitUrl":"https://...","branch":"main","path":"workflows/my-wf"}`) |
-| `model` | No | -- | Model override (e.g., `claude-sonnet-4-20250514`) |
-| `timeout` | No | `0` | Session inactivity timeout in seconds -- auto-stops after this duration of inactivity (`0` means no timeout) |
-| `stop-on-run-finished` | No | `false` | Stop the session automatically when the agent finishes its run |
-| `wait` | No | `false` | Wait for session completion |
-| `poll-interval` | No | `15` | Seconds between status checks (only when `wait: true`) |
-| `poll-timeout` | No | `60` | Maximum minutes to poll before giving up (only when `wait: true`) |
-| `no-verify-ssl` | No | `false` | Disable SSL certificate verification (for self-signed certs) |
+## Start an agent
 
-## Outputs
-
-| Output | Description |
-|--------|-------------|
-| `session-name` | Name of the created session |
-| `session-uid` | UID of the created session |
-| `session-url` | URL to the session in the Ambient UI |
-| `session-phase` | Final session phase (only set when `wait: true`) |
-| `session-result` | Session result text (only set when `wait: true`) |
-
-## Quick start
-
-Add the action to any GitHub Actions workflow:
+This is the simplest pattern because `agent start` is idempotent.
 
 ```yaml
-name: Run ACP Session
+name: Start ACP agent
+
 on:
-  issues:
-    types: [opened]
+  workflow_dispatch:
+    inputs:
+      prompt:
+        required: true
+        type: string
 
 jobs:
-  triage:
+  start:
     runs-on: ubuntu-latest
     steps:
-      - uses: ambient-code/ambient-action@v0.0.5
-        with:
-          api-url: ${{ secrets.ACP_URL }}
-          api-token: ${{ secrets.ACP_TOKEN }}
-          project: my-team
-          prompt: |
-            Triage this issue and suggest a severity label:
-            ${{ github.event.issue.title }}
-            ${{ github.event.issue.body }}
+      - name: Start ACP session
+        env:
+          AMBIENT_API_URL: ${{ secrets.AMBIENT_API_URL }}
+          AMBIENT_TOKEN: ${{ secrets.AMBIENT_TOKEN }}
+          AMBIENT_PROJECT: ${{ secrets.AMBIENT_PROJECT }}
+          AMBIENT_AGENT: ${{ secrets.AMBIENT_AGENT }}
+          PROMPT: ${{ inputs.prompt }}
+        run: |
+          curl -fsS \
+            -X POST \
+            -H "Authorization: Bearer ${AMBIENT_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg prompt "$PROMPT" '{prompt: $prompt}')" \
+            "${AMBIENT_API_URL}/api/ambient/v1/projects/${AMBIENT_PROJECT}/agents/${AMBIENT_AGENT}/start"
 ```
 
-## Wait for completion
+## Create a one-off session
 
-Set `wait: true` to block the workflow until the session finishes:
+Use direct sessions when you do not have a reusable agent.
 
 ```yaml
-- uses: ambient-code/ambient-action@v0.0.5
-  with:
-    api-url: ${{ secrets.ACP_URL }}
-    api-token: ${{ secrets.ACP_TOKEN }}
-    project: my-team
-    prompt: "Analyze the codebase for security vulnerabilities and report findings."
-    wait: true
-    poll-timeout: 30
+- name: Create session
+  env:
+    AMBIENT_API_URL: ${{ secrets.AMBIENT_API_URL }}
+    AMBIENT_TOKEN: ${{ secrets.AMBIENT_TOKEN }}
+    AMBIENT_PROJECT: ${{ secrets.AMBIENT_PROJECT }}
+    PROMPT: "Review this PR and summarize risks."
+    REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+  run: |
+    session_json=$(curl -fsS \
+      -X POST \
+      -H "Authorization: Bearer ${AMBIENT_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d "$(jq -nc \
+        --arg project_id "$AMBIENT_PROJECT" \
+        --arg prompt "$PROMPT" \
+        --arg repo_url "$REPO_URL" \
+        '{project_id: $project_id, prompt: $prompt, repo_url: $repo_url}')" \
+      "${AMBIENT_API_URL}/api/ambient/v1/sessions")
+
+    session_id=$(printf '%s' "$session_json" | jq -r '.id')
+
+    curl -fsS \
+      -X POST \
+      -H "Authorization: Bearer ${AMBIENT_TOKEN}" \
+      "${AMBIENT_API_URL}/api/ambient/v1/sessions/${session_id}/start"
 ```
 
-## Send a message to an existing session
+## Scheduled workflows
 
-Use `session-name` to send a follow-up prompt to a running session instead of creating a new one:
+Because automatic scheduled-session execution is not wired in the API service yet, use GitHub Actions cron when you need recurring work:
 
 ```yaml
-- uses: ambient-code/ambient-action@v0.0.5
-  with:
-    api-url: ${{ secrets.ACP_URL }}
-    api-token: ${{ secrets.ACP_TOKEN }}
-    project: my-team
-    session-name: my-existing-session
-    prompt: "Run the test suite again and report the results."
+on:
+  schedule:
+    - cron: "0 14 * * 1-5"
 ```
 
-## Multi-repo sessions
+Have the job call the agent start endpoint with the task prompt for that run.
 
-Pass a JSON array to clone multiple repositories into the session:
+## About `ambient-action`
 
-```yaml
-- uses: ambient-code/ambient-action@v0.0.5
-  id: session
-  with:
-    api-url: ${{ secrets.ACP_URL }}
-    api-token: ${{ secrets.ACP_TOKEN }}
-    project: platform-team
-    prompt: "Refactor shared types to use the new schema"
-    repos: |
-      [
-        {"url": "https://github.com/org/frontend.git", "branch": "main", "autoPush": true},
-        {"url": "https://github.com/org/backend.git", "branch": "main", "autoPush": true}
-      ]
-    workflow: |
-      {"gitUrl": "https://github.com/org/workflows.git", "branch": "main", "path": "workflows/cross-repo-refactor"}
-    wait: true
-    poll-timeout: 45
-
-- run: echo "Session ${{ steps.session.outputs.session-name }} finished"
-```
+Some workflows in this repository reference an external `ambient-code/ambient-action`. That action is not implemented in this repository. If your organization uses it, check that action's own README and pin it to a commit SHA.

@@ -2,111 +2,52 @@
 title: "Quick start"
 ---
 
-Create your first AI agent session using the Ambient Code Platform web interface.
+Use the web UI when you want to create a project, configure an agent, start a session, and watch the work happen.
 
-## Sign in
+## 1. Sign in
 
-ACP uses SSO for authentication -- there is no separate account to create. Navigate to your organization's ACP URL and sign in with your existing credentials.
+Open your ACP deployment URL and sign in with your organization SSO. The UI uses OIDC through Keycloak; API requests are made with bearer-token identity behind the UI.
 
-After signing in, you land on the **Workspaces** page.
+## 2. Open a project
 
-<figure class="screenshot-pair">
-  <img class="screenshot-light" src="/platform/images/screenshots/workspaces-page-light.png" alt="Workspaces page" />
-  <img class="screenshot-dark" src="/platform/images/screenshots/workspaces-page-dark.png" alt="Workspaces page" />
-</figure>
+Create or select a project from the dashboard. In the API and CLI, this object is called a `project`; some UI text may still call it a workspace.
 
-## Create a workspace
+Use the project prompt for durable context that should apply to every agent and session in that project: repository conventions, review standards, product constraints, or deployment rules.
 
-Workspaces are project containers that hold your sessions, integrations, and team permissions.
+## 3. Add credentials
 
-1. Click **Create Workspace**.
-2. Enter a **name** (e.g., `my-team`) and optional **description**.
-3. Click **Create**.
+If the agent needs private repos or external tools, add project credentials before starting work. Supported credential records include GitHub, GitLab, Jira, Google, Vertex, and kubeconfig.
 
-You are now inside your workspace. From here you can configure integrations and start sessions.
+Credentials are stored by the API server, and token access is controlled by role bindings. When a session starts, the control plane resolves the credentials visible to that project or agent and injects them into the runner through sidecars or runner environment wiring.
 
-## Configure integrations (optional)
+## 4. Create an agent
 
-Integrations let agents interact with your external services. You can skip this step and add integrations later.
+Create an agent in the project with a short name and standing prompt. The prompt should describe the agent's role and constraints, not just the immediate task.
 
-To connect a service:
+Example agent prompt:
 
-1. Open your workspace and navigate to **Settings** > **Integrations**.
-2. Select the service you want to connect:
-   - **GitHub** -- Authenticate via GitHub App installation or Personal Access Token.
-   - **GitLab** -- Authenticate with a Personal Access Token.
-   - **Jira** -- Authenticate with your Jira instance URL, email, and API token.
-   - **Google Drive** -- Authenticate via OAuth to access Drive files.
-3. Follow the OAuth or token flow to authorize ACP.
+```text
+You maintain the API server. Follow the repository conventions, keep changes narrow,
+run targeted tests, and explain any behavior change before finishing.
+```
 
-<figure class="screenshot-pair">
-  <img class="screenshot-light" src="/platform/images/screenshots/integrations-page-light.png" alt="Integrations settings" />
-  <img class="screenshot-dark" src="/platform/images/screenshots/integrations-page-dark.png" alt="Integrations settings" />
-</figure>
+## 5. Start a session
 
-Once connected, agents in this workspace can read from and write to the linked service.
+Start the agent with a task prompt. ACP creates or reuses an active session for that agent, drains unread inbox messages into the start context, and transitions the session to `Pending`.
 
-## Create your first session
+The control plane then creates a runner Pod. When the runner is reachable, the session moves toward `Running` and starts streaming messages and AG-UI events.
 
-1. From your workspace, click **New Session**.
-2. In the create session dialog, configure:
-   - **Display name** (optional) -- A human-readable label for the session.
-   - **Model** -- Select an available LLM from the dropdown. Model availability and feature-gated access depend on your organization's configuration.
-   - **Integrations** -- Review the read-only status indicators showing which integrations are connected.
-3. Click **Create Session**.
+## 6. Work with the session
 
-<figure class="screenshot-pair">
-  <img class="screenshot-light" src="/platform/images/screenshots/new-session-dialog-light.png" alt="New session creation" />
-  <img class="screenshot-dark" src="/platform/images/screenshots/new-session-dialog-dark.png" alt="New session creation" />
-</figure>
+Use the session view to follow the conversation, send more messages, inspect events, and review available file, Git, repository, workspace, and MCP status panels. These panels are backed by runner endpoints and are most useful while the session Pod is running.
 
-The session enters the **Pending** state and begins provisioning.
+Stop the session when the work is no longer needed. Stopping a session asks the control plane to remove the runner resources and move the session out of the active phases.
 
-## Work with the session
+## CLI equivalent
 
-Once the session reaches the **Running** state, the session chat page opens.
-
-<figure class="screenshot-pair">
-  <img class="screenshot-light" src="/platform/images/screenshots/session-page-light.png" alt="Session chat interface" />
-  <img class="screenshot-dark" src="/platform/images/screenshots/session-page-dark.png" alt="Session chat interface" />
-</figure>
-
-From here you can:
-
-- **Type your prompt** in the chat input -- describe what you want the agent to do. Be specific: _"Fix the null pointer exception in the login handler and open a PR"_ works better than _"Fix bugs."_
-- **Add repositories** from the sidebar to give the agent access to your code.
-- **Select a workflow** from the sidebar to apply a structured task template (e.g., Bugfix, Triage).
-
-## Monitor the session
-
-The session moves through these states:
-
-| Status | What is happening |
-|---|---|
-| **Pending** | Session is queued and waiting for resources. |
-| **Creating** | The platform is provisioning the agent container. |
-| **Running** | The agent is actively working on your task. |
-| **Stopping** | The session is gracefully shutting down. |
-| **Stopped** | The session was manually stopped before completion. |
-| **Completed** | The agent has finished. Review the results. |
-| **Failed** | Something went wrong. Check the session logs. |
-
-While the session is running you can:
-
-- **Chat** with the agent to provide clarification or redirect its work.
-- **View logs** to see what the agent is doing in real time.
-- **Browse Shared Artifacts** in the sidebar accordion to inspect files the agent has created or modified.
-
-## Review results
-
-When the session completes:
-
-1. Open the session to see the full conversation and any final output.
-2. Expand **Shared Artifacts** in the sidebar to browse files the agent produced.
-3. If the agent opened a pull request, follow the link to review it in your source control provider.
-
-## Keyboard shortcuts
-
-Press **Cmd+K** (Mac) or **Ctrl+K** (Windows/Linux) to open the command palette.
-From the command palette you can quickly navigate to any workspace, jump to settings or integrations, and start a new session.
-Type in the search field to filter the available commands and workspaces.
+```bash
+acpctl login https://acp.example.com --use-auth-code --project my-project
+acpctl agent create --name api-maintainer --prompt "You maintain the API server."
+acpctl agent start api-maintainer --prompt "Find and fix the failing auth test."
+acpctl get sessions -w
+```

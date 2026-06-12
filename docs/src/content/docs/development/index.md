@@ -2,63 +2,81 @@
 title: "Contributing"
 ---
 
-The Ambient Code Platform is open source. Whether you are fixing a bug, adding a feature, or improving documentation, contributions are welcome.
+This repository contains the API server, control plane, UI, runner, CLI, SDKs, MCP server, credential sidecars, manifests, docs, specs, and workflows for ACP.
 
-## Prerequisites
+## Main components
 
-| Tool | Version | Purpose |
-|------|---------|---------|
-| **Go** | 1.24+ | API server, control plane, CLI |
-| **Node.js** | 20+ | Frontend |
-| **Python** | 3.11+ | Runner |
-| **Docker** | Latest | Container builds |
-| **kubectl** | Latest | Cluster access |
-| **Kind** | Latest | Local Kubernetes cluster |
+| Component | Path | Stack |
+| --- | --- | --- |
+| API server | `components/ambient-api-server` | Go, rh-trex-ai, PostgreSQL, REST, gRPC |
+| Control plane | `components/ambient-control-plane` | Go, Kubernetes client, gRPC watches |
+| UI | `components/ambient-ui` | Next.js, Shadcn, React Query |
+| Runner | `components/runners/ambient-runner` | Python, FastAPI, AG-UI bridges |
+| CLI | `components/ambient-cli` | Go, generated SDK |
+| SDKs | `components/ambient-sdk` | Generated Go, Python, TypeScript |
+| MCP server | `components/ambient-mcp` | Go, mark3labs/mcp-go |
+| Manifests | `components/manifests` | Kustomize |
 
----
-
-## Local setup
+## Common commands
 
 ```bash
-# Start a local Kind cluster with all components
+make dev-bootstrap
 make kind-up
+make kind-login
+make kind-rebuild
+make test-all
+make lint
+make benchmark
 ```
 
-Once the cluster is running, access the platform at `http://localhost:8080`. Open a workspace and configure your API key in **Project Settings** before creating sessions.
+For benchmark output that is easier for automation to parse:
 
----
+```bash
+make benchmark FORMAT=tsv
+make benchmark COMPONENT=ambient-control-plane MODE=cold
+```
 
-## Components
+## Component checks
 
-Each component has its own README with build instructions, test commands, and development tips.
+```bash
+cd components/ambient-api-server
+gofmt -l .
+go vet ./...
+golangci-lint run
 
-| Component | Technology | README |
-|-----------|------------|--------|
-| API Server | Go + rh-trex-ai | [components/ambient-api-server/](https://github.com/ambient-code/platform/tree/main/components/ambient-api-server) |
-| Control Plane | Go | [components/ambient-control-plane/](https://github.com/ambient-code/platform/tree/main/components/ambient-control-plane) |
-| UI | NextJS + Shadcn | [components/ambient-ui/](https://github.com/ambient-code/platform/tree/main/components/ambient-ui) |
-| Runner | Python | [components/runners/ambient-runner/](https://github.com/ambient-code/platform/tree/main/components/runners/ambient-runner) |
-| MCP Server | Go | [components/ambient-mcp/](https://github.com/ambient-code/platform/tree/main/components/ambient-mcp) |
+cd components/ambient-control-plane
+gofmt -l .
+go vet ./...
+golangci-lint run
 
----
+cd components/runners/ambient-runner
+python -m pytest tests/
 
-## Developer docs
+cd docs
+npm run dev
+```
 
-Internal developer documentation lives alongside these docs in [`docs/internal/`](https://github.com/ambient-code/platform/tree/main/docs/internal):
+## Development rules that matter
 
-| Section | What's there |
-|---------|-------------|
-| [Architecture](https://github.com/ambient-code/platform/tree/main/docs/internal/architecture) | System diagrams, component structure, session lifecycle |
-| [ADRs](https://github.com/ambient-code/platform/tree/main/docs/internal/adr) | Architectural Decision Records (Kubernetes-native, user token auth, language choices, etc.) |
-| [Design](https://github.com/ambient-code/platform/tree/main/docs/internal/design) | Technical design docs (agent runtime registry, CLI runners) |
-| [Deployment](https://github.com/ambient-code/platform/tree/main/docs/internal/deployment) | OpenShift deployment, OAuth, git authentication, S3 storage |
-| [Integrations](https://github.com/ambient-code/platform/tree/main/docs/internal/integrations) | GitHub App, GitLab, Google Workspace setup |
-| [Local dev](https://github.com/ambient-code/platform/tree/main/docs/internal/developer/local-development) | Kind, CRC, and hybrid development setup |
-| [Testing](https://github.com/ambient-code/platform/tree/main/docs/internal/testing) | E2E testing guide, test overview |
-| [Observability](https://github.com/ambient-code/platform/tree/main/docs/internal/observability) | Langfuse, control plane metrics, Grafana dashboards |
+- PostgreSQL is the source of truth for projects, agents, sessions, credentials, and settings.
+- The control plane watches the API server over gRPC and creates Kubernetes Pods, not Jobs.
+- Do not introduce CRDs as the persistent data model.
+- User-facing API operations must use user-scoped auth.
+- Never log, return, or echo tokens.
+- Do not use `panic()` in production Go code.
+- Do not use `any` in frontend TypeScript.
+- New Kubernetes child resources need owner references where applicable.
+- Containers must use restricted security contexts.
+- New persistent storage should be PostgreSQL unless the change explicitly calls for repo files.
 
----
+## PR readiness
 
-## Contribution guidelines
+Before opening a PR:
 
-See [`CONTRIBUTING.md`](https://github.com/ambient-code/platform/blob/main/CONTRIBUTING.md) for the full contribution workflow -- branching strategy, pull request conventions, code standards, and commit message format.
+1. Review the diff against `CLAUDE.md`, `BOOKMARKS.md`, and `specs/standards/`.
+2. Check API, CLI, SDK, runner, UI, and manifest consumers when changing contracts.
+3. Run targeted tests and formatting.
+4. Confirm no secrets were added.
+5. Confirm docs match implemented behavior.
+
+The PR review hook runs mechanical checks and CodeRabbit review when the CLI is available.

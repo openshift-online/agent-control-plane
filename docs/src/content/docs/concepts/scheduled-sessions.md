@@ -2,80 +2,65 @@
 title: "Scheduled Sessions"
 ---
 
-A **scheduled session** is a recurring AI agent execution that runs automatically on a cron schedule. The API server stores each scheduled session as a database record with a cron expression and session template. At every scheduled interval, the platform creates a new session from the template automatically. You can use scheduled sessions to automate repetitive tasks such as nightly code reviews, dependency scans, or periodic issue triage -- without manually creating a session each time.
+Scheduled sessions are project-scoped API records for recurring session intent. They store cron metadata and a session template, but the current API service does not yet enqueue automatic runs.
 
-## Create a scheduled session
+This matters operationally: you can create, update, suspend, resume, trigger, and list scheduled-session records, but `trigger` currently records success without starting a session, and `runs` returns an empty list.
 
-Open a workspace and navigate to the **Scheduled Sessions** tab. Click **New Scheduled Session** to open the creation dialog.
+## API shape
 
-<figure class="screenshot-pair">
-  <img class="screenshot-light" src="/platform/images/screenshots/scheduled-sessions-light.png" alt="Scheduled sessions" />
-  <img class="screenshot-dark" src="/platform/images/screenshots/scheduled-sessions-dark.png" alt="Scheduled sessions" />
-</figure>
+Scheduled sessions live under projects:
 
-| Setting | Description | Default |
-|---------|------------|---------|
-| **Name** | A display name for the schedule (up to 50 characters). | Auto-generated |
-| **Schedule** | How often the session runs. Choose a preset or enter a custom cron expression. | Every hour (`0 * * * *`) |
-| **Initial prompt** | The prompt sent to the agent when each session starts. This defines the task the agent performs on every run. | *(required)* |
-| **Runner type** | The runtime environment for the agent. | Claude Agent SDK |
-| **Model** | Which AI model the agent uses. | Claude Sonnet 4.5 |
+```text
+GET    /api/ambient/v1/projects/{id}/scheduled-sessions
+POST   /api/ambient/v1/projects/{id}/scheduled-sessions
+GET    /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}
+PATCH  /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}
+DELETE /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}
+POST   /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/suspend
+POST   /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/resume
+POST   /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/trigger
+GET    /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/runs
+```
 
-### Schedule presets
+## Fields
 
-The creation dialog offers common presets so you do not need to write cron expressions manually:
+Important fields are:
 
-| Preset | Cron expression |
-|--------|----------------|
-| Every hour | `0 * * * *` |
-| Daily at 9:00 AM | `0 9 * * *` |
-| Every weekday at 9:00 AM | `0 9 * * 1-5` |
-| Weekly on Monday | `0 9 * * 1` |
-| Custom | Enter any valid 5-field cron expression |
+- `name`
+- `description`
+- `project_id`
+- `agent_id`
+- `schedule`
+- `timezone`
+- `enabled`
+- `session_prompt`
+- `timeout`
+- `inactivity_timeout`
+- `stop_on_run_finished`
+- `runner_type`
+- `last_run_at`
+- `next_run_at`
 
-When you select or enter a schedule, the dialog shows a human-readable description and previews the next three run times.
+The service requires `name` and `schedule` on create.
 
-### Session template
+## CLI
 
-Each scheduled session stores a **session template** that defines the configuration for every session it creates. The template includes the initial prompt, model, runner type, temperature (0.7), max tokens (4,000), and timeout (300 seconds). To change these values after creation, update the scheduled session.
+```bash
+acpctl scheduled-session create \
+  --name weekday-triage \
+  --agent-id api-maintainer \
+  --schedule "0 9 * * 1-5" \
+  --timezone America/New_York \
+  --prompt "Triage new issues and summarize priorities."
 
-## Manage schedules
+acpctl scheduled-session list
+acpctl scheduled-session update weekday-triage --schedule "0 10 * * 1-5"
+acpctl scheduled-session suspend weekday-triage
+acpctl scheduled-session resume weekday-triage
+acpctl scheduled-session trigger weekday-triage
+acpctl scheduled-session runs weekday-triage
+```
 
-You can manage scheduled sessions from the **Scheduled Sessions** tab or from the actions menu on each row.
+## Current automation pattern
 
-| Operation | What it does |
-|-----------|-------------|
-| **Suspend** | Pauses the schedule. No new sessions are created until you resume. Existing running sessions are not affected. |
-| **Resume** | Reactivates a suspended schedule. The next session is created at the next scheduled time. |
-| **Trigger now** | Immediately creates a one-off session from the schedule's template, regardless of the cron timing. The triggered session is linked to the schedule as a child job. |
-| **Update** | Changes the schedule, display name, or session template. You can update any combination of fields. |
-| **Delete** | Permanently removes the schedule. Sessions previously created by the schedule are not affected. |
-
-### Schedule status
-
-Each scheduled session displays one of two statuses:
-
-- **Active** -- the schedule is running and creates sessions at the configured interval.
-- **Suspended** -- the schedule is paused and does not create new sessions.
-
-## View run history
-
-Click a scheduled session name to view its detail page, which lists all sessions created by that schedule. Each run is a standard agentic session that follows the same lifecycle as manually created sessions (Pending, Creating, Running, Completed, Failed, or Stopped). The scheduled sessions list also shows the **Last Run** column, indicating when the most recent session was created.
-
-The platform retains history for the last 5 successful runs and 3 failed runs per schedule.
-
-## Concurrency and reliability
-
-Scheduled sessions use a **forbid-concurrent** policy: if a session from a previous run is still active when the next scheduled time arrives, the new run is skipped. This prevents overlapping agent executions on the same task.
-
-If the platform is unavailable at the scheduled time, the missed run is skipped.
-
-## Use cases
-
-Scheduled sessions work well for tasks that benefit from regular, unattended execution:
-
-- **Nightly code health reports** -- run a daily scan that reviews code quality, flags potential issues, and generates a summary.
-- **Recurring dependency scans** -- check for outdated or vulnerable dependencies on a weekly cadence.
-- **Periodic issue triage** -- have the agent review and categorize new issues every morning before the team starts work.
-- **Automated documentation updates** -- regenerate or validate documentation against code changes on a schedule.
-- **Regression checks** -- run a suite of verification prompts after each nightly build to catch regressions early.
+Until automatic firing is implemented, use an external scheduler such as GitHub Actions, Kubernetes CronJob, or another CI system to call `acpctl agent start` or the REST API on a schedule.
