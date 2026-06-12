@@ -214,7 +214,7 @@ These UI surfaces are unaffected or require only minor data-fetching changes:
 
 **Current OpenAPI**: Returns `{ kind, page, size, total, items }`.
 
-**Recommended** (per DATA_MODEL_COMPARISON.md): `{ kind, items, total, limit, offset }`.
+**Recommended** `{ kind, items, total, limit, offset }`.
 
 The React Query hooks need their pagination params and response parsing adjusted regardless of which standard is chosen.
 
@@ -222,7 +222,7 @@ The React Query hooks need their pagination params and response parsing adjusted
 
 ## 6. Gaps in Current OpenAPI Schemas
 
-The OpenAPI specs define minimal schemas. The Postgres schema in `DATA_MODEL_COMPARISON.md` is the complete picture. These fields are in Postgres but **not yet in the OpenAPI**:
+The OpenAPI specs define minimal schemas. The Postgres schema is the complete picture. These fields are in Postgres but **not yet in the OpenAPI**:
 
 ### Session (most gaps)
 

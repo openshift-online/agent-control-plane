@@ -405,6 +405,6 @@ make kind-down
 ## See Also
 
 - [Hybrid Local Development](hybrid.md) - Run components locally (faster iteration)
-- [E2E Testing Guide](../e2e/README.md) - Running e2e tests
+- [E2E Testing Guide](../../testing/e2e-guide.md) - Running e2e tests
 - [Testing Strategy](../CLAUDE.md#testing-strategy) - Overview
 - [kind Documentation](https://kind.sigs.k8s.io/)

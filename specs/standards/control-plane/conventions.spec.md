@@ -12,22 +12,9 @@
 
 ## Critical Rules
 
-### OwnerReferences on All Child Resources
+### Resource Cleanup
 
-Every Job, Secret, and PVC the control plane creates **must** set OwnerReferences pointing to the parent AgenticSession CR. This ensures automatic cleanup when the session is deleted.
-
-```go
-OwnerReferences: []metav1.OwnerReference{
-    {
-        APIVersion:         obj.GetAPIVersion(),
-        Kind:               obj.GetKind(),
-        Name:               obj.GetName(),
-        UID:                obj.GetUID(),
-        Controller:         boolPtr(true),
-        // BlockOwnerDeletion omitted — causes permission issues in constrained RBAC environments
-    },
-},
-```
+The control plane is responsible for cleaning up Kubernetes resources (Pods, Secrets) when a session is deleted or completed. Since v2 does not use CRDs as parent objects, cleanup is driven by the API server's session lifecycle events received via gRPC.
 
 ### SecurityContext on Job Pod Specs
 

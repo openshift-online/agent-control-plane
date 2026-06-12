@@ -46,7 +46,7 @@ The SDK's contract is defined entirely by the API server's OpenAPI spec (`../amb
 
 | Visible to SDK | Hidden from SDK |
 |---|---|
-| `/v1/sessions` endpoints | AgenticSession CRD schema |
+| `/v1/sessions` endpoints | PostgreSQL schema and internal data model |
 | Bearer token + project header | Kubernetes RBAC policies |
 | Session status lifecycle | Job scheduling, pod creation |
 | JSON request/response shapes | CR spec/status fields |

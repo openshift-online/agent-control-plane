@@ -36,11 +36,9 @@ main.go → imports plugins (init side-effects) → registers routes, controller
         → pkgcmd.NewMigrateCommand runs gormigrate migrations
 ```
 
-**→ Load `docs/architecture.md` for the full request lifecycle, environment system, and framework integration.**
 
 ## Domain Model
 
-Four resource Kinds currently implemented. Additional Kinds (Agent, Skill, Task, Workflow, WorkflowSkill, WorkflowTask) are planned for Phase 2 — see `DATA_MODEL_COMPARISON.md` for the full roadmap.
 
 | Kind | Key Fields | Purpose | Status |
 |------|-----------|---------|--------|
