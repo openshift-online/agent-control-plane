@@ -204,7 +204,7 @@ The skill replaces the need to read and follow this document manually. Invoke wi
 
 Use the platform's own session scheduling to run the skill on a cron:
 
-1. Create a Project Settings CRD with a scheduled session:
+1. Create a scheduled session via the API server:
    ```yaml
    schedule:
      cron: "0 9 1 * *"  # First of each month at 09:00

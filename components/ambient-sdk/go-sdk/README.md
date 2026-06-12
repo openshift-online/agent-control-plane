@@ -305,7 +305,7 @@ This SDK provides a **simplified HTTP interface** to the Ambient Platform:
 
 | Aspect | HTTP SDK (This Package) | Internal Platform |
 |--------|------------------------|-------------------|
-| **API** | Simple REST endpoints (`/v1/sessions`) | Complex Kubernetes CRDs |
+| **API** | Simple REST endpoints (`/v1/sessions`) | Direct Kubernetes API / kubectl |
 | **Auth** | Bearer token + project header | RBAC + service accounts |
 | **Types** | Flat JSON structs | Full K8s metadata/spec/status |
 | **Usage** | Any HTTP client, any environment | Kubernetes cluster access required |

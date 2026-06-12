@@ -38,7 +38,7 @@ Spec (ambient-model.spec.md)
                     ├─► BE  (REST handlers, DAOs, migrations)
                     ├─► CLI (commands, output formatters)
                     ├─► CP  (gRPC middleware, interceptors)
-                    ├─► Operator (CRD reconcilers, Job spawning)
+                    ├─► Control Plane (gRPC reconciler, Job spawning)
                     ├─► Runners (Python SDK calls, gRPC push)
                     └─► FE  (TypeScript API layer, UI components)
 ```
@@ -88,7 +88,7 @@ Compare the spec against the current state of the code. For each component, ask:
 | **BE**       | Read `plugins/<kind>/model.go` for every Kind. Compare field-by-field against the Spec. Drift here is the most common source of gaps. |
 | **CP**       | Does middleware handle new RBAC scopes and auth requirements?                                         |
 | **CLI**      | Does `acpctl` implement every route marked ✅ in the spec CLI table?                                  |
-| **Operator** | Do CRD reconcilers handle Agent-scoped session start?                                                 |
+| **Operator** | Does the control plane handle Agent-scoped session start?                                                 |
 | **Runners**  | Does the runner drain inbox at session start and push correct event types?                            |
 | **FE**       | Do API service layer, queries, and components exist for all new entities?                             |
 
@@ -150,7 +150,7 @@ Decompose the gap table into per-agent work items, sequenced by pipeline order:
 **Wave 5 — CLI + Operator + Runners** (parallel after Wave 3 + BE)
 
 - **CLI**: implement all 🔲 commands that are now unblocked — see `.claude/context/cli-development.md`
-- **Operator**: CRD reconciler updates for Agent start — see `.claude/context/operator-development.md`
+- **Control Plane: reconciler updates for Agent start`
 - **Runners**: inbox drain at session start, correct event types — see `.claude/context/control-plane-development.md`
 - **Security gate (Operator):** all Job pods set `SecurityContext` with `AllowPrivilegeEscalation: false`, capabilities dropped; OwnerReferences set on all child resources
 - **Acceptance:** CLI `make test` passes; Operator `go vet ./... && golangci-lint run` clean; Runner `python -m pytest tests/` passes; all tested in kind cluster

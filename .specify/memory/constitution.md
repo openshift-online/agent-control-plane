@@ -21,7 +21,7 @@ Changelog (v1.0.0):
 Changelog (v0.2.0):
   - Added Development Standards: Naming & Legacy Migration subsection
     * Naming guidance for legacy vTeam references
-    * DO NOT update without explicit instruction: API groups, CRDs, container names, K8s resources
+    * DO NOT update without explicit instruction: API groups, container names, K8s resources
     * Safe to update: docs, comments, logs, UI text, new variable names
 
 Changelog (v0.1.0):
@@ -54,7 +54,7 @@ Follow-up TODOs:
   - Design RAG pipeline architecture
   - Add commit size validation tooling (pre-commit hook or CI check)
   - Update PR template to include commit discipline checklist
-  - Do NOT rename Kubernetes API group (vteam.ambient-code), CRDs, or container image names without explicit instruction
+  - Do NOT rename Kubernetes API group (vteam.ambient-code) or container image names without explicit instruction
 -->
 
 # ACP Constitution
@@ -65,7 +65,7 @@ Follow-up TODOs:
 
 All features MUST be built using Kubernetes primitives and patterns:
 
-- Custom Resource Definitions (CRDs) for domain objects (AgenticSession, ProjectSettings, RFEWorkflow)
+- PostgreSQL-backed domain objects (sessions, projects, settings) via the API server
 - Operators for reconciliation loops and lifecycle management
 - Jobs for execution workloads with proper resource limits
 - ConfigMaps and Secrets for configuration management
@@ -205,7 +205,7 @@ Each commit MUST be atomic, reviewable, and independently testable:
 
 **Mandatory Exceptions** (requires justification in PR description):
 
-- **Code Generation**: Generated CRD YAML, OpenAPI schemas, protobuf
+- **Code Generation**: Generated OpenAPI schemas, protobuf, SDK code
 - **Data Migration**: Database migrations, fixture updates
 - **Dependency Updates**: go.mod, package.json, requirements.txt
 - **Configuration**: Kubernetes manifests for new components (≤800 lines)
@@ -232,7 +232,7 @@ Each commit MUST be atomic, reviewable, and independently testable:
 - ✅ Source code (`*.go`, `*.ts`, `*.tsx`, `*.py`)
 - ✅ Configuration specific to feature (new YAML, JSON)
 - ✅ Test code
-- ❌ Generated code (CRDs, OpenAPI, mocks)
+- ❌ Generated code (OpenAPI, SDK, mocks)
 - ❌ Lock files (`go.sum`, `package-lock.json`)
 - ❌ Vendored dependencies
 - ❌ Binary files

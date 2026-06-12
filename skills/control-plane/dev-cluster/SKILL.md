@@ -28,7 +28,7 @@ The Ambient Code Platform consists of these containerized components:
 
 | Component | Location | Image Name | Purpose |
 |-----------|----------|------------|---------|
-| **Backend** | `components/ambient-api-server` | `acp_api_server:latest` | Go API for K8s CRD management |
+| **Backend** | `components/ambient-api-server` | `acp_api_server:latest` | Go REST + gRPC API (PostgreSQL-backed) |
 | **Frontend** | `components/ambient-ui` | `acp_ambient_ui:latest` | NextJS web interface |
 | **Operator** | `components/ambient-control-plane` | `acp_control_plane:latest` | Kubernetes operator (Go) |
 | **Runner** | `components/runners/ambient-runner` | `acp_claude_runner:latest` | Python Claude Code runner |

@@ -47,14 +47,14 @@ Credential sidecar containers are injected into session pods when the correspond
 
 ---
 
-## Step 1: Apply CRDs and RBAC (cluster-scoped, once per cluster)
+## Step 1: Apply RBAC (cluster-scoped, once per cluster)
 
 ```bash
 oc apply -k components/manifests/base/crds/
 oc apply -k components/manifests/base/rbac/
 ```
 
-These are idempotent. On a shared cluster where CRDs already exist from another namespace, this is safe to re-run.
+These are idempotent and safe to re-run on shared clusters.
 
 ---
 

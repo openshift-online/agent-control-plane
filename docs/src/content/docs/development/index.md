@@ -50,12 +50,12 @@ Internal developer documentation lives alongside these docs in [`docs/internal/`
 |---------|-------------|
 | [Architecture](https://github.com/ambient-code/platform/tree/main/docs/internal/architecture) | System diagrams, component structure, session lifecycle |
 | [ADRs](https://github.com/ambient-code/platform/tree/main/docs/internal/adr) | Architectural Decision Records (Kubernetes-native, user token auth, language choices, etc.) |
-| [Design](https://github.com/ambient-code/platform/tree/main/docs/internal/design) | Technical design docs (session reconciliation, runner-operator contract, status redesign) |
+| [Design](https://github.com/ambient-code/platform/tree/main/docs/internal/design) | Technical design docs (agent runtime registry, CLI runners) |
 | [Deployment](https://github.com/ambient-code/platform/tree/main/docs/internal/deployment) | OpenShift deployment, OAuth, git authentication, S3 storage |
 | [Integrations](https://github.com/ambient-code/platform/tree/main/docs/internal/integrations) | GitHub App, GitLab, Google Workspace setup |
 | [Local dev](https://github.com/ambient-code/platform/tree/main/docs/internal/developer/local-development) | Kind, CRC, and hybrid development setup |
 | [Testing](https://github.com/ambient-code/platform/tree/main/docs/internal/testing) | E2E testing guide, test overview |
-| [Observability](https://github.com/ambient-code/platform/tree/main/docs/internal/observability) | Langfuse, operator metrics, Grafana dashboards |
+| [Observability](https://github.com/ambient-code/platform/tree/main/docs/internal/observability) | Langfuse, control plane metrics, Grafana dashboards |
 
 ---
 

@@ -30,7 +30,7 @@ The `repomix-analysis/` directory contains one pre-generated codebase view:
 - ✓ Design guidelines
 - ✓ Route definitions
 - ✓ Infrastructure manifests
-- ✓ CRD definitions
+- ✓ RBAC definitions
 - ✓ 132 critical files across all components
 
 **What's excluded:**
