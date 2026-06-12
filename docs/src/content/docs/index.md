@@ -28,7 +28,6 @@ Use built-in templates or bring your own:
 
 - **[Bugfix](workflows/bugfix/)** -- Diagnose and fix reported bugs.
 - **[Triage](workflows/triage/)** -- Classify, prioritize, and route issues.
-- **[Spec-kit](workflows/spec-kit/)** -- Generate technical specifications from requirements.
 - **[PRD/RFE](workflows/prd-rfe/)** -- Produce product requirements documents.
 - **[Custom Workflows](workflows/custom/)** -- Load workflows from any git repository.
 

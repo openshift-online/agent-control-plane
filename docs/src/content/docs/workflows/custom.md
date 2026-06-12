@@ -201,7 +201,7 @@ A human collaborates with the agent, guiding the process and providing judgment.
 - **Pause at decision points.** "Before submitting the PR, present the changes and wait for approval."
 - **Keep commands focused.** One command, one job. Don't bundle diagnose + fix + test into a single command.
 
-Examples: [Spec-kit](../spec-kit/), [PRD/RFE](../prd-rfe/).
+Examples: [PRD/RFE](../prd-rfe/).
 
 ---
 

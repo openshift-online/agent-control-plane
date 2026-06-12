@@ -22,7 +22,6 @@ The platform ships with several ready-to-use workflows:
 |----------|-------------|
 | [**Bugfix**](../workflows/bugfix/) | Systematic multi-phase bug resolution: assess, reproduce, diagnose, fix, test, review, document, and submit a PR. |
 | [**Triage**](../workflows/triage/) | Analyzes an issue backlog, categorizes items by severity and effort, and produces actionable reports with bulk operations. |
-| [**Spec-kit**](../workflows/spec-kit/) | Specification-driven development: generates a detailed spec from requirements, plans implementation, breaks into tasks, and implements. |
 | [**PRD / RFE**](../workflows/prd-rfe/) | Creates Product Requirements Documents and breaks them into actionable Request for Enhancement items with prioritization. |
 | **Amber Interview** | Guided interview format for collecting user feedback through structured Q&A. (No detail page.) |
 | **Template** | A minimal starting point for building your own custom workflow. (No detail page.) |
