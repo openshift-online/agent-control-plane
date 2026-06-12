@@ -75,7 +75,6 @@ export default defineConfig({
         {
           label: 'Guides',
           items: [
-            { slug: 'guides/migrating-shared-sessions' },
             { slug: 'guides/custom-ca-bundle' },
           ],
         },
