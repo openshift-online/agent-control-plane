@@ -9,8 +9,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  pages: write
-  id-token: write
+  actions: read
 
 concurrency:
   group: docs-preview-${{ github.event.pull_request.number }}
@@ -21,9 +20,6 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment:
-      name: docs-preview-pr-${{ github.event.pull_request.number }}
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -47,21 +43,27 @@ jobs:
         working-directory: docs
         run: npm run build
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+      - name: Upload preview
+        id: upload
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
+          name: docs-preview
           path: docs/dist
-
-      - name: Deploy to GitHub Pages
-        id: deploy
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+          retention-days: 7
 
       - name: Comment on PR
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
-            const url = '${{ steps.deploy.outputs.page_url }}';
-            const body = `### 📖 Docs Preview\n\n**[View preview](${url})**\n\nDeployed from commit ${{ github.event.pull_request.head.sha }}`;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              '### 📖 Docs Preview',
+              '',
+              `Build succeeded — [download preview](${runUrl}#artifacts) and view locally:`,
+              '```bash',
+              'npx serve docs-preview',
+              '```',
+            ].join('\n');
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -70,21 +72,17 @@ jobs:
             });
 
             const existing = comments.find(c =>
-              c.body.includes('Docs Preview') && c.user.type === 'Bot'
+              c.body?.includes('Docs Preview') && c.user?.type === 'Bot'
             );
 
+            const params = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            };
+
             if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
+              await github.rest.issues.updateComment({ ...params, comment_id: existing.id });
             } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
+              await github.rest.issues.createComment({ ...params, issue_number: context.issue.number });
             }
