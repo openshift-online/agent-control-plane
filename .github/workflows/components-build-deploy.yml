@@ -28,6 +28,7 @@ jobs:
       build-matrix: ${{ steps.matrix.outputs.build-matrix }}
       merge-matrix: ${{ steps.matrix.outputs.merge-matrix }}
       built-images: ${{ steps.matrix.outputs.built-images }}
+      has-builds: ${{ steps.matrix.outputs.has-builds }}
     steps:
       - name: Checkout code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -83,8 +84,8 @@ jobs:
             # PR: build only changed components
             FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --argjson changes "$CHANGES_JSON"               '[.[] | select(.name as $n | $changes[$n] == "true")]')
             if [ "$FILTERED" = "[]" ]; then
-              echo "No component changes detected, building all"
-              FILTERED="$ALL_COMPONENTS"
+              echo "No component changes detected, skipping builds"
+              FILTERED="[]"
             fi
           else
             # Push to main: build all
@@ -94,12 +95,14 @@ jobs:
           echo "build-matrix=$(echo "$FILTERED" | jq -c '.')" >> $GITHUB_OUTPUT
           echo "merge-matrix=$(echo "$FILTERED" | jq -c '[.[] | {name, image}]')" >> $GITHUB_OUTPUT
           echo "built-images=$(echo "$FILTERED" | jq -c '[.[].image]')" >> $GITHUB_OUTPUT
+          echo "has-builds=$([ "$FILTERED" != "[]" ] && echo true || echo false)" >> $GITHUB_OUTPUT
 
           echo "Components to build:"
           echo "$FILTERED" | jq -r '.[].name'
 
   build-amd64:
     needs: build-matrix
+    if: needs.build-matrix.outputs.has-builds == 'true'
     permissions:
       contents: read
       pull-requests: read
@@ -158,6 +161,7 @@ jobs:
 
   build-arm64:
     needs: build-matrix
+    if: needs.build-matrix.outputs.has-builds == 'true'
     permissions:
       contents: read
       pull-requests: read
