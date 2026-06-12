@@ -53,7 +53,6 @@ export default defineConfig({
             { slug: 'workflows' },
             { slug: 'workflows/bugfix' },
             { slug: 'workflows/triage' },
-            { slug: 'workflows/spec-kit' },
             { slug: 'workflows/prd-rfe' },
             { slug: 'workflows/custom' },
           ],
@@ -62,12 +61,14 @@ export default defineConfig({
           label: 'Features',
           items: [
             { slug: 'features/session-sharing' },
+            { slug: 'features/coderabbit' },
           ],
         },
         {
           label: 'Guides',
           items: [
             { slug: 'guides/migrating-shared-sessions' },
+            { slug: 'guides/custom-ca-bundle' },
           ],
         },
         {
@@ -75,7 +76,6 @@ export default defineConfig({
           items: [
             { slug: 'extensions/github-action' },
             { slug: 'extensions/mcp-server' },
-            { slug: 'extensions/public-api' },
           ],
         },
         {
@@ -89,6 +89,7 @@ export default defineConfig({
           label: 'Development',
           items: [
             { slug: 'development' },
+            { slug: 'development/architecture' },
           ],
         },
       ],
