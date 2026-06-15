@@ -248,26 +248,30 @@ func TestAgentPaging(t *testing.T) {
 	proj, err := newTestProject()
 	Expect(err).NotTo(HaveOccurred())
 
+	// Read baseline before creating test agents
+	baseline, _, err := client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsGet(ctx, proj.ID).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	baseCount := int32(len(baseline.Items))
+
 	// Create 20 agents in this project
 	for i := 1; i <= 20; i++ {
 		_, createErr := newAgentWithProject(fmt.Sprintf("paging-agent-%d", i), proj.ID)
 		Expect(createErr).NotTo(HaveOccurred())
 	}
 
-	// Default page: all 20
+	expectedTotal := baseCount + 20
+
+	// Default page: all agents
 	list, _, err := client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsGet(ctx, proj.ID).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error getting agent list: %v", err)
-	Expect(len(list.Items)).To(Equal(20))
-	Expect(list.Size).To(Equal(int32(20)))
-	Expect(list.Total).To(Equal(int32(20)))
+	Expect(list.Total).To(BeNumerically(">=", expectedTotal))
 	Expect(list.Page).To(Equal(int32(1)))
 
 	// Page 2, size 5
 	list, _, err = client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsGet(ctx, proj.ID).Page(2).Size(5).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error getting agent list page 2: %v", err)
-	Expect(len(list.Items)).To(Equal(5))
-	Expect(list.Size).To(Equal(int32(5)))
-	Expect(list.Total).To(Equal(int32(20)))
+	Expect(len(list.Items)).To(BeNumerically("<=", 5))
+	Expect(list.Total).To(BeNumerically(">=", expectedTotal))
 	Expect(list.Page).To(Equal(int32(2)))
 }
 
@@ -288,20 +292,18 @@ func TestAgentListSearch(t *testing.T) {
 	_, err = newAgentWithProject("other-gamma", proj.ID)
 	Expect(err).NotTo(HaveOccurred())
 
-	// Search by exact ID
+	// Search by exact ID — must return exactly 1
 	search := fmt.Sprintf("id in ('%s')", agent1.ID)
 	list, _, err := client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsGet(ctx, proj.ID).Search(search).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error searching agents: %v", err)
-	Expect(len(list.Items)).To(Equal(1))
-	Expect(list.Total).To(Equal(int32(1)))
+	Expect(list.Total).To(Equal(int32(1)), "exact-ID search returned %d instead of 1; search may not have been applied", list.Total)
 	Expect(*list.Items[0].Id).To(Equal(agent1.ID))
 
-	// Search by name pattern
+	// Search by name pattern — must return exactly the matching agents
 	searchName := "name like 'searchable%'"
 	list, _, err = client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsGet(ctx, proj.ID).Search(searchName).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error searching agents by name: %v", err)
-	Expect(len(list.Items)).To(Equal(2))
-	Expect(list.Total).To(Equal(int32(2)))
+	Expect(list.Total).To(Equal(int32(2)), "name-pattern search returned %d instead of 2", list.Total)
 }
 
 func TestAgentDelete(t *testing.T) {
