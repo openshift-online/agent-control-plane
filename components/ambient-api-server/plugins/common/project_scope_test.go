@@ -90,7 +90,7 @@ func TestApplyProjectScope_CombinesWithExistingSearch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if listArgs.Search != "project_id = 'my-project' and (name = 'test')" {
+	if listArgs.Search != "(project_id = 'my-project') and (name = 'test')" {
 		t.Errorf("expected combined search, got %q", listArgs.Search)
 	}
 }

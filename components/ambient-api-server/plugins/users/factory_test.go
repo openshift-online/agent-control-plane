@@ -12,9 +12,9 @@ func newUser(id string) (*users.User, error) {
 	userService := users.Service(&environments.Environment().Services)
 
 	user := &users.User{
-		Username: "test-username",
-		Name:     "test-name",
-		Email:    stringPtr("test-email"),
+		Username: id,
+		Name:     id,
+		Email:    stringPtr(id + "@test.dev"),
 	}
 
 	sub, err := userService.Create(context.Background(), user)
