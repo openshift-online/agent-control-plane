@@ -102,21 +102,30 @@ func TestUserPaging(t *testing.T) {
 	account := h.NewRandAccount()
 	ctx := h.NewAuthenticatedContext(account)
 
-	_, err := newUserList("Bronto", 20)
+	// Read baseline before creating test users. The count may include
+	// auto-provisioned users from auth middleware or other test side-effects.
+	baseline, _, err := client.DefaultAPI.ApiAmbientV1UsersGet(ctx).Execute()
 	Expect(err).NotTo(HaveOccurred())
+	baseCount := int32(len(baseline.Items))
+
+	_, err = newUserList("Bronto", 20)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Use >= to tolerate users created concurrently by other goroutines
+	// (e.g. gRPC tests, controller event handlers) between baseline and
+	// the second list call.
+	minTotal := baseCount + 20
 
 	list, _, err := client.DefaultAPI.ApiAmbientV1UsersGet(ctx).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error getting user list: %v", err)
-	Expect(len(list.Items)).To(Equal(20))
-	Expect(list.Size).To(Equal(int32(20)))
-	Expect(list.Total).To(Equal(int32(20)))
+	Expect(list.Total).To(BeNumerically(">=", minTotal))
 	Expect(list.Page).To(Equal(int32(1)))
 
 	list, _, err = client.DefaultAPI.ApiAmbientV1UsersGet(ctx).Page(2).Size(5).Execute()
 	Expect(err).NotTo(HaveOccurred(), "Error getting user list: %v", err)
 	Expect(len(list.Items)).To(Equal(5))
 	Expect(list.Size).To(Equal(int32(5)))
-	Expect(list.Total).To(Equal(int32(20)))
+	Expect(list.Total).To(BeNumerically(">=", minTotal))
 	Expect(list.Page).To(Equal(int32(2)))
 }
 
