@@ -1,5 +1,9 @@
 # Agent Control Plane
 
+[![Lint](https://github.com/openshift-online/agent-control-plane/actions/workflows/lint.yml/badge.svg)](https://github.com/openshift-online/agent-control-plane/actions/workflows/lint.yml)
+[![Unit Tests](https://github.com/openshift-online/agent-control-plane/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/openshift-online/agent-control-plane/actions/workflows/unit-tests.yml)
+[![Docs](https://github.com/openshift-online/agent-control-plane/actions/workflows/docs.yml/badge.svg)](https://openshift-online.github.io/agent-control-plane/)
+
 > AI automation platform for orchestrating agentic sessions on Kubernetes
 
 ## Overview
