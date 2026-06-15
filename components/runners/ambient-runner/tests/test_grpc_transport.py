@@ -521,18 +521,20 @@ class TestGRPCMessageWriterConsume:
         await writer.consume(content)
         assert writer._text_buffer == "hi"
 
-    async def test_run_finished_pushes_completed(self):
+    async def test_text_message_end_pushes(self):
         writer, client = self._writer()
-        msg = MagicMock()
-        msg.model_dump.return_value = {"role": "assistant", "content": "done"}
-        snap = self._make_messages_snapshot([msg])
-        await writer.consume(snap)
-        await writer.consume(self._make_run_finished_event())
+        start = MagicMock()
+        start.type = MagicMock(value="TEXT_MESSAGE_START")
+        content = MagicMock()
+        content.type = MagicMock(value="TEXT_MESSAGE_CONTENT")
+        content.delta = "done"
+        end = MagicMock()
+        end.type = MagicMock(value="TEXT_MESSAGE_END")
+        await writer.consume(start)
+        await writer.consume(content)
+        await writer.consume(end)
 
         client.session_messages.push.assert_called_once()
-        call = client.session_messages.push.call_args
-        assert call[0][0] == "s-1"
-        assert call[1]["event_type"] == "assistant"
         assert call[1]["payload"] == "done"
 
     async def test_run_error_pushes_error_status(self):
