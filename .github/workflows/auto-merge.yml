@@ -1,0 +1,23 @@
+name: Auto-Merge
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.author_association != 'FIRST_TIME_CONTRIBUTOR' &&
+      github.event.pull_request.author_association != 'NONE'
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Enable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge ${{ github.event.pull_request.number }} --auto --squash --repo ${{ github.repository }}
