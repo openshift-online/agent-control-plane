@@ -26,3 +26,6 @@ EXPOSE 8092
 
 ENTRYPOINT ["credential-entrypoint", "mcp-atlassian"]
 CMD ["--transport", "sse", "--port", "8092"]
+
+ARG IMAGE_EXPIRY=
+LABEL quay.expires-after=${IMAGE_EXPIRY}

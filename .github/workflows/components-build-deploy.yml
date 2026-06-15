@@ -158,21 +158,9 @@ jobs:
           build-args: |
             AMBIENT_VERSION=${{ github.sha }}
             GIT_COMMIT=${{ github.sha }}
+            IMAGE_EXPIRY=48h
           cache-from: type=gha,scope=${{ matrix.component.name }}-amd64
           cache-to: type=gha,mode=max,ignore-error=true,scope=${{ matrix.component.name }}-amd64
-
-      - name: Set PR tag expiration (48h)
-        if: github.event_name == 'pull_request'
-        run: |
-          REPO=$(echo "${{ matrix.component.image }}" | sed 's|quay.io/||')
-          TAG="pr-${{ github.event.pull_request.number }}-amd64"
-          EXPIRY=$(date -d '+48 hours' +%s)
-          curl -sf -X PUT "https://quay.io/api/v1/repository/${REPO}/tag/${TAG}" \
-            -H "Authorization: Bearer ${QUAY_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "{\"expiration\": ${EXPIRY}}" || echo "::warning::Could not set tag expiration"
-        env:
-          QUAY_TOKEN: ${{ secrets.QUAY_PASSWORD }}
 
   build-arm64:
     needs: build-matrix
@@ -230,21 +218,9 @@ jobs:
           build-args: |
             AMBIENT_VERSION=${{ github.sha }}
             GIT_COMMIT=${{ github.sha }}
+            IMAGE_EXPIRY=48h
           cache-from: type=gha,scope=${{ matrix.component.name }}-arm64
           cache-to: type=gha,mode=max,ignore-error=true,scope=${{ matrix.component.name }}-arm64
-
-      - name: Set PR tag expiration (48h)
-        if: github.event_name == 'pull_request'
-        run: |
-          REPO=$(echo "${{ matrix.component.image }}" | sed 's|quay.io/||')
-          TAG="pr-${{ github.event.pull_request.number }}-arm64"
-          EXPIRY=$(date -d '+48 hours' +%s)
-          curl -sf -X PUT "https://quay.io/api/v1/repository/${REPO}/tag/${TAG}" \
-            -H "Authorization: Bearer ${QUAY_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "{\"expiration\": ${EXPIRY}}" || echo "::warning::Could not set tag expiration"
-        env:
-          QUAY_TOKEN: ${{ secrets.QUAY_PASSWORD }}
 
   merge-manifests:
     needs: [build-matrix, build-amd64, build-arm64]
