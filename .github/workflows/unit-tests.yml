@@ -90,6 +90,9 @@ jobs:
       - name: Run tests
         run: make test
 
+      - name: Run gRPC RBAC tests (authz enabled)
+        run: make test-rbac
+
   runner:
     runs-on: ubuntu-latest
     needs: detect-changes

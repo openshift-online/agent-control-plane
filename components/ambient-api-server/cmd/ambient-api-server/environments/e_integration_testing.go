@@ -45,13 +45,17 @@ func (e *IntegrationTestingEnvImpl) OverrideClients(c *pkgenv.Clients) error {
 }
 
 func (e *IntegrationTestingEnvImpl) Flags() map[string]string {
+	enableAuthz := "false"
+	if os.Getenv("ENABLE_AUTHZ") == "true" {
+		enableAuthz = "true"
+	}
 	return map[string]string{
 		"v":                               "0",
 		"logtostderr":                     "true",
 		"api-base-url":                    "https://api.integration.openshift.com",
 		"enable-https":                    "false",
 		"enable-metrics-https":            "false",
-		"enable-authz":                    "false",
+		"enable-authz":                    enableAuthz,
 		"debug":                           "false",
 		"enable-mock":                     "true",
 		"api-server-bindaddress":          "localhost:0",

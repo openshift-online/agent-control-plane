@@ -381,7 +381,7 @@ func TestGRPCRBAC_WatchSessionMessages(t *testing.T) {
 		if err != nil {
 			st, ok := status.FromError(err)
 			Expect(ok).To(BeTrue())
-			Expect(st.Code()).To(Equal(codes.PermissionDenied))
+			Expect(st.Code()).To(Equal(codes.Unauthenticated))
 			return
 		}
 
@@ -389,7 +389,7 @@ func TestGRPCRBAC_WatchSessionMessages(t *testing.T) {
 		Expect(recvErr).To(HaveOccurred())
 		st, ok := status.FromError(recvErr)
 		Expect(ok).To(BeTrue())
-		Expect(st.Code()).To(Equal(codes.PermissionDenied))
+		Expect(st.Code()).To(Equal(codes.Unauthenticated))
 	})
 
 	t.Run("admin_watches_any_session", func(t *testing.T) {
@@ -555,30 +555,33 @@ func TestGRPCRBAC_Malicious(t *testing.T) {
 		RegisterTestingT(t)
 		ctx := context.Background()
 
-		resp, err := projectClient.ListProjects(ctx, &pb.ListProjectsRequest{Page: 1, Size: 10})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(resp.GetItems()).To(BeEmpty())
-		Expect(resp.GetMetadata().GetTotal()).To(Equal(int32(0)))
+		_, err := projectClient.ListProjects(ctx, &pb.ListProjectsRequest{Page: 1, Size: 10})
+		Expect(err).To(HaveOccurred())
+		st, ok := status.FromError(err)
+		Expect(ok).To(BeTrue())
+		Expect(st.Code()).To(Equal(codes.Unauthenticated))
 	})
 
 	t.Run("empty_bearer_token", func(t *testing.T) {
 		RegisterTestingT(t)
 		ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer ")
 
-		resp, err := projectClient.ListProjects(ctx, &pb.ListProjectsRequest{Page: 1, Size: 10})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(resp.GetItems()).To(BeEmpty())
-		Expect(resp.GetMetadata().GetTotal()).To(Equal(int32(0)))
+		_, err := projectClient.ListProjects(ctx, &pb.ListProjectsRequest{Page: 1, Size: 10})
+		Expect(err).To(HaveOccurred())
+		st, ok := status.FromError(err)
+		Expect(ok).To(BeTrue())
+		Expect(st.Code()).To(Equal(codes.Unauthenticated))
 	})
 
 	t.Run("invalid_jwt", func(t *testing.T) {
 		RegisterTestingT(t)
 		ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer not.a.jwt")
 
-		resp, err := projectClient.ListProjects(ctx, &pb.ListProjectsRequest{Page: 1, Size: 10})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(resp.GetItems()).To(BeEmpty())
-		Expect(resp.GetMetadata().GetTotal()).To(Equal(int32(0)))
+		_, err := projectClient.ListProjects(ctx, &pb.ListProjectsRequest{Page: 1, Size: 10})
+		Expect(err).To(HaveOccurred())
+		st, ok := status.FromError(err)
+		Expect(ok).To(BeTrue())
+		Expect(st.Code()).To(Equal(codes.Unauthenticated))
 	})
 
 	t.Run("forged_project_access", func(t *testing.T) {

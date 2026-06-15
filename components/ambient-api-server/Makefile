@@ -39,6 +39,10 @@ test: install
 test-integration: install
 	DOCKER_HOST=$(DOCKER_HOST) TESTCONTAINERS_RYUK_DISABLED=true AMBIENT_ENV=integration_testing go test -p 1 -v ./test/integration/...
 
+.PHONY: test-rbac
+test-rbac: install
+	DOCKER_HOST=$(DOCKER_HOST) TESTCONTAINERS_RYUK_DISABLED=true AMBIENT_ENV=integration_testing ENABLE_AUTHZ=true go test -p 1 -v -run TestGRPCRBAC ./test/integration/...
+
 .PHONY: proto
 proto:
 	cd proto && buf generate
