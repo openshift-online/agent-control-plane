@@ -1,6 +1,5 @@
 """Tests for OperationalEventWriter and its payload-building helpers."""
 
-import asyncio
 import json
 from dataclasses import dataclass, field
 from enum import Enum
@@ -157,16 +156,16 @@ class TestOperationalEventWriter:
             grpc_client=grpc_client,
         )
 
-    def test_tool_call_start_accumulates_no_push(self, writer, grpc_client):
+    async def test_tool_call_start_accumulates_no_push(self, writer, grpc_client):
         event = FakeEvent(
             type=FakeEventType.TOOL_CALL_START,
             tool_call_name="Bash",
             tool_call_id="tc-1",
         )
-        asyncio.get_event_loop().run_until_complete(writer.consume(event))
+        await writer.consume(event)
         assert len(grpc_client.session_messages.calls) == 0
 
-    def test_full_tool_call_flow_pushes_with_args(self, writer, grpc_client):
+    async def test_full_tool_call_flow_pushes_with_args(self, writer, grpc_client):
         start = FakeEvent(
             type=FakeEventType.TOOL_CALL_START,
             tool_call_name="Read",
@@ -181,10 +180,9 @@ class TestOperationalEventWriter:
             type=FakeEventType.TOOL_CALL_END,
             tool_call_id="tc-1",
         )
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(writer.consume(start))
-        loop.run_until_complete(writer.consume(args))
-        loop.run_until_complete(writer.consume(end))
+        await writer.consume(start)
+        await writer.consume(args)
+        await writer.consume(end)
         assert len(grpc_client.session_messages.calls) == 1
         call = grpc_client.session_messages.calls[0]
         assert call["session_id"] == "sess-001"
@@ -193,67 +191,67 @@ class TestOperationalEventWriter:
         assert payload["tool"] == "Read"
         assert payload["input"] == {"file_path": "/app/main.py"}
 
-    def test_tool_call_result_pushes_tool_result(self, writer, grpc_client):
+    async def test_tool_call_result_pushes_tool_result(self, writer, grpc_client):
         event = FakeEvent(
             type=FakeEventType.TOOL_CALL_RESULT,
             tool_call_id="tc-2",
             content="output",
         )
-        asyncio.get_event_loop().run_until_complete(writer.consume(event))
+        await writer.consume(event)
         assert len(grpc_client.session_messages.calls) == 1
         assert grpc_client.session_messages.calls[0]["event_type"] == "tool_result"
 
-    def test_run_error_pushes_error(self, writer, grpc_client):
+    async def test_run_error_pushes_error(self, writer, grpc_client):
         event = FakeEvent(
             type=FakeEventType.RUN_ERROR,
             message="crashed",
             code="FATAL",
         )
-        asyncio.get_event_loop().run_until_complete(writer.consume(event))
+        await writer.consume(event)
         assert grpc_client.session_messages.calls[0]["event_type"] == "error"
 
-    def test_run_started_pushes_lifecycle(self, writer, grpc_client):
+    async def test_run_started_pushes_lifecycle(self, writer, grpc_client):
         event = FakeEvent(type=FakeEventType.RUN_STARTED)
-        asyncio.get_event_loop().run_until_complete(writer.consume(event))
+        await writer.consume(event)
         assert grpc_client.session_messages.calls[0]["event_type"] == "lifecycle"
 
-    def test_custom_error_pushes_error_type(self, writer, grpc_client):
+    async def test_custom_error_pushes_error_type(self, writer, grpc_client):
         event = FakeEvent(
             type=FakeEventType.CUSTOM,
             name="tool_execution_error",
         )
-        asyncio.get_event_loop().run_until_complete(writer.consume(event))
+        await writer.consume(event)
         assert grpc_client.session_messages.calls[0]["event_type"] == "error"
 
-    def test_custom_non_error_pushes_system_type(self, writer, grpc_client):
+    async def test_custom_non_error_pushes_system_type(self, writer, grpc_client):
         event = FakeEvent(
             type=FakeEventType.CUSTOM,
             name="status_update",
         )
-        asyncio.get_event_loop().run_until_complete(writer.consume(event))
+        await writer.consume(event)
         assert grpc_client.session_messages.calls[0]["event_type"] == "system"
 
-    def test_text_message_content_skipped(self, writer, grpc_client):
+    async def test_text_message_content_skipped(self, writer, grpc_client):
         event = FakeEvent(type=FakeEventType.TEXT_MESSAGE_CONTENT)
-        asyncio.get_event_loop().run_until_complete(writer.consume(event))
+        await writer.consume(event)
         assert len(grpc_client.session_messages.calls) == 0
 
-    def test_tool_call_args_accumulates_no_push(self, writer, grpc_client):
+    async def test_tool_call_args_accumulates_no_push(self, writer, grpc_client):
         event = FakeEvent(
             type=FakeEventType.TOOL_CALL_ARGS, tool_call_id="tc-orphan", delta="data"
         )
-        asyncio.get_event_loop().run_until_complete(writer.consume(event))
+        await writer.consume(event)
         assert len(grpc_client.session_messages.calls) == 0
 
-    def test_none_grpc_client_no_push_no_exception(self):
+    async def test_none_grpc_client_no_push_no_exception(self):
         writer = OperationalEventWriter(session_id="sess-002", grpc_client=None)
         event = FakeEvent(
             type=FakeEventType.TOOL_CALL_START,
             tool_call_name="Read",
         )
-        asyncio.get_event_loop().run_until_complete(writer.consume(event))
+        await writer.consume(event)
 
-    def test_none_event_type_no_push(self, writer, grpc_client):
+    async def test_none_event_type_no_push(self, writer, grpc_client):
         event = FakeEvent(type=None)
-        asyncio.get_event_loop().run_until_complete(writer.consume(event))
+        await writer.consume(event)
         assert len(grpc_client.session_messages.calls) == 0
