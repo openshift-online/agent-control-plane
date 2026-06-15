@@ -75,12 +75,13 @@ class AmbientClient:
         if not self._base_url:
             raise ValueError("base URL cannot be empty")
 
-        if "example.com" in self._base_url or "placeholder" in self._base_url:
-            raise ValueError("placeholder domain is not allowed")
-
         parsed = urlparse(self._base_url)
         if parsed.scheme not in ("http", "https"):
             raise ValueError("URL scheme must be http or https")
+
+        hostname = parsed.hostname or ""
+        if hostname in ("example.com", "placeholder") or "placeholder" in hostname:
+            raise ValueError("placeholder domain is not allowed")
 
         if not self._token:
             raise ValueError("token cannot be empty")

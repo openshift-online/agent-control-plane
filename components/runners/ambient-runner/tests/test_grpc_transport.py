@@ -482,27 +482,6 @@ class TestGRPCSessionListenerStop:
 
 @pytest.mark.asyncio
 class TestGRPCMessageWriterConsume:
-    def _make_messages_snapshot(self, messages):
-        event = MagicMock()
-        event.type = EventType.MESSAGES_SNAPSHOT
-        event.messages = messages
-        return event
-
-    def _make_run_finished_event(self):
-        event = MagicMock()
-        event.type = EventType.RUN_FINISHED
-        return event
-
-    def _make_run_error_event(self):
-        event = MagicMock()
-        event.type = EventType.RUN_ERROR
-        return event
-
-    def _make_text_event(self):
-        event = MagicMock()
-        event.type = EventType.TEXT_MESSAGE_CONTENT
-        return event
-
     def _writer(self):
         client = MagicMock()
         client.session_messages.push.return_value = MagicMock(seq=1)
@@ -510,38 +489,47 @@ class TestGRPCMessageWriterConsume:
             session_id="s-1", run_id="r-1", grpc_client=client
         ), client
 
-    async def test_messages_snapshot_accumulated(self):
+    def _text_events(self, text="hello"):
+        start = MagicMock()
+        start.type = MagicMock(value="TEXT_MESSAGE_START")
+        content = MagicMock()
+        content.type = MagicMock(value="TEXT_MESSAGE_CONTENT")
+        content.delta = text
+        end = MagicMock()
+        end.type = MagicMock(value="TEXT_MESSAGE_END")
+        return start, content, end
+
+    async def test_text_message_buffered(self):
         writer, _ = self._writer()
-        msg = MagicMock()
-        msg.model_dump.return_value = {"role": "assistant", "content": "hi"}
-        snap = self._make_messages_snapshot([msg])
-        await writer.consume(snap)
-        assert len(writer._accumulated_messages) == 1
+        start, content, _ = self._text_events("hi")
+        await writer.consume(start)
+        await writer.consume(content)
+        assert writer._text_buffer == "hi"
 
-    async def test_run_finished_pushes_completed(self):
+    async def test_text_message_end_pushes(self):
         writer, client = self._writer()
-        msg = MagicMock()
-        msg.model_dump.return_value = {"role": "assistant", "content": "done"}
-        snap = self._make_messages_snapshot([msg])
-        await writer.consume(snap)
-        await writer.consume(self._make_run_finished_event())
-
+        for ev in self._text_events("done"):
+            await writer.consume(ev)
         client.session_messages.push.assert_called_once()
-        call = client.session_messages.push.call_args
-        assert call[0][0] == "s-1"
-        assert call[1]["event_type"] == "assistant"
-        assert call[1]["payload"] == "done"
 
-    async def test_run_error_pushes_error_status(self):
+    async def test_text_message_end_clears_buffer(self):
+        writer, _ = self._writer()
+        for ev in self._text_events("done"):
+            await writer.consume(ev)
+        assert writer._text_buffer == ""
+
+    async def test_empty_text_does_not_push(self):
         writer, client = self._writer()
-        await writer.consume(self._make_run_error_event())
+        start, _, end = self._text_events()
+        await writer.consume(start)
+        await writer.consume(end)
+        client.session_messages.push.assert_not_called()
 
-        client.session_messages.push.assert_called_once()
-        assert client.session_messages.push.call_args[1]["event_type"] == "assistant"
-
-    async def test_non_terminal_events_do_not_push(self):
+    async def test_content_without_end_does_not_push(self):
         writer, client = self._writer()
-        await writer.consume(self._make_text_event())
+        start, content, _ = self._text_events()
+        await writer.consume(start)
+        await writer.consume(content)
         client.session_messages.push.assert_not_called()
 
     async def test_unknown_event_type_ignored(self):
@@ -551,33 +539,19 @@ class TestGRPCMessageWriterConsume:
         await writer.consume(event)
         client.session_messages.push.assert_not_called()
 
-    async def test_latest_snapshot_replaces_previous(self):
-        writer, client = self._writer()
-        msg1 = MagicMock()
-        msg1.model_dump.return_value = {"role": "assistant", "content": "first"}
-        msg2 = MagicMock()
-        msg2.model_dump.return_value = {"role": "assistant", "content": "second"}
-
-        await writer.consume(self._make_messages_snapshot([msg1]))
-        await writer.consume(self._make_messages_snapshot([msg2]))
-        await writer.consume(self._make_run_finished_event())
-
-        assert client.session_messages.push.call_args[1]["payload"] == "second"
-
-    async def test_no_grpc_client_write_skipped(self):
+    async def test_no_grpc_client_push_skipped(self):
         writer = GRPCMessageWriter(session_id="s-1", run_id="r-1", grpc_client=None)
-        event = MagicMock()
-        event.type = EventType.RUN_FINISHED
-        await writer.consume(event)
+        for ev in self._text_events("test"):
+            await writer.consume(ev)
 
     async def test_push_includes_correct_session_id(self):
         writer, client = self._writer()
-        await writer.consume(self._make_run_finished_event())
+        for ev in self._text_events("test"):
+            await writer.consume(ev)
         assert client.session_messages.push.call_args[0][0] == "s-1"
         assert client.session_messages.push.call_args[1]["event_type"] == "assistant"
 
     async def test_push_offloaded_to_executor_not_inline(self):
-        """The synchronous gRPC push must be run via run_in_executor, not inline."""
         writer, client = self._writer()
 
         executor_calls = []
@@ -589,16 +563,27 @@ class TestGRPCMessageWriterConsume:
             return await original(executor, fn, *args)
 
         with patch.object(real_loop, "run_in_executor", side_effect=capturing):
-            await writer.consume(self._make_run_finished_event())
+            for ev in self._text_events("test"):
+                await writer.consume(ev)
 
         assert len(executor_calls) == 1
 
     async def test_push_failure_does_not_raise(self):
-        """If the gRPC push in executor fails, _write_message must not re-raise."""
         writer, client = self._writer()
         client.session_messages.push.side_effect = RuntimeError("rpc unavailable")
+        for ev in self._text_events("test"):
+            await writer.consume(ev)
 
-        await writer.consume(self._make_run_finished_event())
+    async def test_push_error_flushes_buffer_then_pushes_error(self):
+        writer, client = self._writer()
+        start, content, _ = self._text_events("partial")
+        await writer.consume(start)
+        await writer.consume(content)
+        await writer.push_error("something broke")
+        assert client.session_messages.push.call_count == 2
+        calls = client.session_messages.push.call_args_list
+        assert calls[0][1]["event_type"] == "assistant"
+        assert calls[1][1]["event_type"] == "error"
 
 
 # ---------------------------------------------------------------------------
@@ -639,7 +624,7 @@ class TestSynthesizeRunError:
         await asyncio.sleep(0.1)
 
     async def test_schedules_writer_error_persist(self):
-        """_synthesize_run_error must schedule writer._write_message(status='error')."""
+        """_synthesize_run_error must schedule writer.push_error()."""
         tap_queue: asyncio.Queue = asyncio.Queue(maxsize=100)
         active_streams = {"t-wr": tap_queue}
 
@@ -647,16 +632,16 @@ class TestSynthesizeRunError:
         client.session_messages.push.return_value = MagicMock(seq=1)
         writer = GRPCMessageWriter(session_id="s-1", run_id="r-1", grpc_client=client)
 
-        write_calls = []
-        original_write = writer._write_message
+        push_error_calls = []
+        original_push_error = writer.push_error
 
-        async def tracking_write(status):
-            write_calls.append(status)
-            return await original_write(status)
+        async def tracking_push_error(msg):
+            push_error_calls.append(msg)
+            return await original_push_error(msg)
 
-        writer._write_message = tracking_write
+        writer.push_error = tracking_push_error
 
         _synthesize_run_error("t-wr", "boom", active_streams, writer)
         await asyncio.sleep(0.2)
 
-        assert "error" in write_calls
+        assert "boom" in push_error_calls

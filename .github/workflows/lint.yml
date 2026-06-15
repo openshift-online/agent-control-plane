@@ -3,16 +3,16 @@ name: Lint
 on:
   push:
     branches: [main]
-    paths:
-      - 'components/ambient-api-server/**'
-      - 'components/ambient-cli/**'
-      - '.github/workflows/lint.yml'
-      - '!**/*.md'
 
   pull_request:
+
+  merge_group:
     branches: [main]
 
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: lint-${{ github.event.pull_request.number || github.ref }}

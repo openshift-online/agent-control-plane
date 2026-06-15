@@ -6,18 +6,10 @@ permissions:
 on:
   push:
     branches: [main]
-    paths:
-      - 'components/ambient-api-server/**'
-      - 'components/runners/ambient-runner/**'
-      - 'components/ambient-cli/**'
-      - 'components/ambient-sdk/go-sdk/**'
-      - 'components/ambient-ui/**'
-      - '.github/scripts/**'
-      - 'tests/**'
-      - '.github/workflows/unit-tests.yml'
-      - '!**/*.md'
 
   pull_request:
+
+  merge_group:
 
   workflow_dispatch:
     inputs:
@@ -115,17 +107,16 @@ jobs:
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: '3.12'
-          cache: 'pip'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[all]"
-          pip install pytest pytest-asyncio pytest-cov httpx
+        run: uv sync --frozen --all-extras --group dev
 
       - name: Run unit tests with coverage
         run: |
-          pytest tests/ -v --tb=short --color=yes -x --cov=ambient_runner --cov-report=term-missing --cov-report=xml
+          uv run pytest tests/ -v --tb=short --color=yes -x --cov=ambient_runner --cov-report=term-missing --cov-report=xml
 
 
   cli:
@@ -188,7 +179,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'components/ambient-ui/package-lock.json'
 
-      - name: Build ambient-sdk (file: dependency)
+      - name: 'Build ambient-sdk (file: dependency)'
         working-directory: components/ambient-sdk/ts-sdk
         run: npm ci && npm run build
 

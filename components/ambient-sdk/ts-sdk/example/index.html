@@ -444,14 +444,14 @@ function renderBreadcrumb() {
     } else if (navState.type === 'pa') {
         var proj = allProjects.find(function(x) { return x.id === navState.projectId; }) || { name: navState.projectId, id: navState.projectId };
         var pa = (allPas[navState.projectId] || []).find(function(x) { return x.id === navState.paId; });
-        bar.append(sep + '<a class="bc-item" href="#" onclick="navProject(\'' + proj.id + '\');return false;"><i class="fas fa-folder-open me-1"></i>' + escHtml(proj.name) + '</a>');
+        bar.append(sep + '<a class="bc-item" href="#" onclick="navProject(\'' + escHtml(proj.id) + '\');return false;"><i class="fas fa-folder-open me-1"></i>' + escHtml(proj.name) + '</a>');
         bar.append(sep + '<span class="bc-current"><i class="fas fa-robot me-1"></i>' + escHtml(pa ? pa.name : navState.paId) + '</span>');
     } else if (navState.type === 'session') {
         var s = findSession(navState.id);
         var paForS = findPaForSession(navState.id);
         var projForS = paForS ? findProjectForPa(paForS.id) : null;
-        if (projForS) bar.append(sep + '<a class="bc-item" href="#" onclick="navProject(\'' + projForS.id + '\');return false;"><i class="fas fa-folder-open me-1"></i>' + escHtml(projForS.name) + '</a>');
-        if (paForS)   bar.append(sep + '<a class="bc-item" href="#" onclick="navPa(\'' + (projForS ? projForS.id : '') + '\',\'' + paForS.id + '\');return false;"><i class="fas fa-robot me-1"></i>' + escHtml(paForS.name) + '</a>');
+        if (projForS) bar.append(sep + '<a class="bc-item" href="#" onclick="navProject(\'' + escHtml(projForS.id) + '\');return false;"><i class="fas fa-folder-open me-1"></i>' + escHtml(projForS.name) + '</a>');
+        if (paForS)   bar.append(sep + '<a class="bc-item" href="#" onclick="navPa(\'' + (projForS ? escHtml(projForS.id) : '') + '\',\'' + escHtml(paForS.id) + '\');return false;"><i class="fas fa-robot me-1"></i>' + escHtml(paForS.name) + '</a>');
         bar.append(sep + '<span class="bc-current"><i class="fas fa-terminal me-1"></i>' + escHtml(s ? s.name : navState.id) + '</span>');
     }
 }
@@ -486,7 +486,7 @@ function renderProjectsPanel() {
             var pas = allPas[p.id] || [];
             var sessionCount = pas.reduce(function(n, pa) { return n + (allSessions[pa.id] || []).length; }, 0);
             var runningCount = pas.reduce(function(n, pa) { return n + (allSessions[pa.id] || []).filter(function(s) { return s.phase === 'running'; }).length; }, 0);
-            html += '<div class="project-card" onclick="navProject(\'' + p.id + '\')">' +
+            html += '<div class="project-card" onclick="navProject(\'' + escHtml(p.id) + '\')">' +
                 '<div class="d-flex align-items-start justify-content-between mb-2">' +
                 '<div><strong class="font-monospace">' + escHtml(p.name) + '</strong>' +
                 (p.description ? '<div class="text-muted" style="font-size:.75rem">' + escHtml(p.description) + '</div>' : '') + '</div>' +
@@ -536,7 +536,7 @@ function renderProjectPanel(projectId) {
         pas.forEach(function(pa) {
             var sessions = allSessions[pa.id] || [];
             var running = sessions.filter(function(s) { return s.phase === 'running'; }).length;
-            html += '<div class="pa-card" onclick="navPa(\'' + p.id + '\',\'' + pa.id + '\')">' +
+            html += '<div class="pa-card" onclick="navPa(\'' + escHtml(p.id) + '\',\'' + escHtml(pa.id) + '\')">' +
                 '<div class="d-flex align-items-start justify-content-between mb-2">' +
                 '<div><strong class="font-monospace">' + escHtml(pa.name) + '</strong>' +
                 '<div class="text-muted" style="font-size:.72rem">' + escHtml(pa.id ? pa.id.slice(0, 8) : '') + '</div></div>' +
@@ -586,7 +586,7 @@ function renderPaPanel(projectId, paId) {
     } else {
         html += '<div class="scope-header">Sessions</div><div class="card-grid">';
         sessions.slice().sort(function(a, b) { return (b.start_time || '').localeCompare(a.start_time || ''); }).forEach(function(s) {
-            html += '<div class="session-card" onclick="navSession(\'' + s.id + '\')">' +
+            html += '<div class="session-card" onclick="navSession(\'' + escHtml(s.id) + '\')">' +
                 '<div class="d-flex align-items-start justify-content-between mb-2">' +
                 '<div><strong>' + escHtml(s.name) + '</strong>' +
                 '<div class="font-monospace text-muted" style="font-size:.75rem">' + escHtml(s.id ? s.id.slice(0, 8) : '') + '</div></div>' +
