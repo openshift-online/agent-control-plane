@@ -166,9 +166,11 @@ jobs:
           TAG="pr-${{ github.event.pull_request.number }}-amd64"
           EXPIRY=$(date -d '+48 hours' +%s)
           curl -sf -X PUT "https://quay.io/api/v1/repository/${REPO}/tag/${TAG}" \
-            -H "Authorization: Bearer ${{ secrets.QUAY_PASSWORD }}" \
+            -H "Authorization: Bearer ${QUAY_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{\"expiration\": ${EXPIRY}}" || echo "::warning::Could not set tag expiration"
+        env:
+          QUAY_TOKEN: ${{ secrets.QUAY_PASSWORD }}
 
   build-arm64:
     needs: build-matrix
@@ -236,9 +238,11 @@ jobs:
           TAG="pr-${{ github.event.pull_request.number }}-arm64"
           EXPIRY=$(date -d '+48 hours' +%s)
           curl -sf -X PUT "https://quay.io/api/v1/repository/${REPO}/tag/${TAG}" \
-            -H "Authorization: Bearer ${{ secrets.QUAY_PASSWORD }}" \
+            -H "Authorization: Bearer ${QUAY_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{\"expiration\": ${EXPIRY}}" || echo "::warning::Could not set tag expiration"
+        env:
+          QUAY_TOKEN: ${{ secrets.QUAY_PASSWORD }}
 
   merge-manifests:
     needs: [build-matrix, build-amd64, build-arm64]
