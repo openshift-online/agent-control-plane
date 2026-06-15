@@ -38,10 +38,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr edit "${{ github.event.pull_request.number }}" \
-            --add-label auto-merge-pending \
-            --remove-label auto-merge-queue \
-            --repo "${{ github.repository }}" 2>/dev/null || true
+          # Only add pending if neither label is already set (avoid fighting with enqueue job)
+          LABELS=$(gh pr view "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --json labels --jq '[.labels[].name]' 2>/dev/null)
+          if echo "$LABELS" | grep -q 'auto-merge-queue'; then
+            echo "Already enqueued, skipping"
+          elif echo "$LABELS" | grep -q 'auto-merge-pending'; then
+            echo "Already pending, skipping"
+          else
+            gh pr edit "${{ github.event.pull_request.number }}" --add-label auto-merge-pending --repo "${{ github.repository }}"
+          fi
 
   enqueue:
     if: >-
