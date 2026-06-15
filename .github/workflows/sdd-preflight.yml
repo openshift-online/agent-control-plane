@@ -15,7 +15,7 @@ jobs:
     name: SDD boundary check
     runs-on: ubuntu-latest
     timeout-minutes: 2
-    # Skip entirely if PR has sdd-exempt label
+    # Skip if sdd-exempt label present. Merge group events pass automatically (already checked on PR).
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'sdd-exempt') }}
 
     steps:
@@ -29,6 +29,14 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+
+          # Merge queue events have no PR number — skip (already checked on the PR itself)
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No PR number (merge_group event), skipping"
+            echo "violation=false" >> "$GITHUB_OUTPUT"
+            echo "has_findings=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           MANIFEST="sdd-manifest.yaml"
           if [ ! -f "$MANIFEST" ]; then

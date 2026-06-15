@@ -6,6 +6,7 @@ on:
 
 permissions:
   pull-requests: write
+  contents: write
 
 jobs:
   auto-merge:
@@ -15,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
-      - name: Check author is org member
+      - name: Check author eligibility
         id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -28,14 +29,10 @@ jobs:
             echo "eligible=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Add auto-merge-queue label
+      - name: Add label and enable auto-merge
         if: steps.check.outputs.eligible == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr edit "${{ github.event.pull_request.number }}" --add-label auto-merge-queue --repo "${{ github.repository }}"
-
-      - name: Enable auto-merge
-        if: steps.check.outputs.eligible == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr merge "${{ github.event.pull_request.number }}" --auto --repo "${{ github.repository }}" || true
+        run: |
+          gh pr edit "${{ github.event.pull_request.number }}" --add-label auto-merge-queue --repo "${{ github.repository }}"
+          gh pr merge "${{ github.event.pull_request.number }}" --auto --repo "${{ github.repository }}"
