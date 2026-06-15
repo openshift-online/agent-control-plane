@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  merge_group:
+    branches: [main]
   workflow_dispatch:
     inputs:
       components:
@@ -277,3 +279,41 @@ jobs:
             ${{ matrix.component.image }}:${{ github.sha }}-amd64 \
             ${{ matrix.component.image }}:${{ github.sha }}-arm64
 
+
+  test-local-dev:
+    needs: [build-matrix, build-amd64]
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/test-local-dev.yml
+    with:
+      image-tag: pr-${{ github.event.pull_request.number }}
+      built-images: ${{ needs.build-matrix.outputs.built-images }}
+
+  build-ci-gate:
+    name: Build CI Gate
+    runs-on: ubuntu-latest
+    needs: [build-matrix, build-amd64, build-arm64, merge-manifests, test-local-dev]
+    if: always()
+    permissions: {}
+    timeout-minutes: 1
+    steps:
+      - name: Check build and test status
+        run: |
+          failed=false
+          for result in \
+            "${{ needs.build-amd64.result }}" \
+            "${{ needs.build-arm64.result }}" \
+            "${{ needs.merge-manifests.result }}" \
+            "${{ needs.test-local-dev.result }}"; do
+            if [ "$result" == "failure" ] || [ "$result" == "cancelled" ]; then
+              failed=true
+            fi
+          done
+          if [ "$failed" == "true" ]; then
+            echo "Build/test failed"
+            echo "  build-amd64: ${{ needs.build-amd64.result }}"
+            echo "  build-arm64: ${{ needs.build-arm64.result }}"
+            echo "  merge-manifests: ${{ needs.merge-manifests.result }}"
+            echo "  test-local-dev: ${{ needs.test-local-dev.result }}"
+            exit 1
+          fi
+          echo "All builds and tests passed (or skipped)!"
