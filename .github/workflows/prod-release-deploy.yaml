@@ -343,8 +343,11 @@ jobs:
           oc: latest
 
       - name: Log in to OpenShift Cluster
+        env:
+          OC_SERVER: ${{ secrets.PROD_OPENSHIFT_SERVER }}
+          OC_TOKEN: ${{ secrets.PROD_OPENSHIFT_TOKEN }}
         run: |
-          oc login ${{ secrets.PROD_OPENSHIFT_SERVER }} --token=${{ secrets.PROD_OPENSHIFT_TOKEN }}
+          oc login "$OC_SERVER" --token="$OC_TOKEN"
 
       - name: Deploy image puller infrastructure
         run: |

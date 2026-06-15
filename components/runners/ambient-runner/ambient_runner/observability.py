@@ -294,7 +294,7 @@ class ObservabilityManager:
                     )
                 else:
                     logging.warning(
-                        f"Langfuse: Model name '{model}' failed sanitization - omitting from metadata"
+                        "Langfuse: Model name failed sanitization - omitting from metadata"
                     )
 
             workflow_url = (workflow_url or "").strip()
@@ -343,8 +343,12 @@ class ObservabilityManager:
                     self._propagate_ctx = None
                 raise
 
+            sanitized_model_log = sanitize_model_name(model) if model else None
             logging.info(
-                f"Langfuse: Session tracking enabled (session_id={self.session_id}, user_id={self.user_id}, model={model})"
+                "Langfuse: Session tracking enabled (session_id=%s, user_id=%s, model=%s)",
+                self.session_id,
+                self.user_id,
+                sanitized_model_log,
             )
             return True
 
