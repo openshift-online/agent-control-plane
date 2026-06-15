@@ -87,6 +87,8 @@ type KubeReconcilerConfig struct {
 	ImagePullSecret       string
 	PlatformMode          string
 	MPPConfigNamespace    string
+	OpenShellEnabled      bool
+	OpenShellPolicyName   string
 	ServiceIdentity       string
 }
 
@@ -189,6 +191,12 @@ func (r *SimpleKubeReconciler) provisionSession(ctx context.Context, session typ
 	if r.cfg.VertexEnabled {
 		if err := r.ensureVertexSecret(ctx, namespace); err != nil {
 			return fmt.Errorf("ensuring vertex secret: %w", err)
+		}
+	}
+
+	if r.cfg.OpenShellEnabled {
+		if err := r.ensureOpenShellPolicy(ctx, namespace); err != nil {
+			return fmt.Errorf("ensuring openshell policy: %w", err)
 		}
 	}
 
@@ -566,12 +574,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 					"memory": "4Gi",
 				},
 			},
-			"securityContext": map[string]interface{}{
-				"allowPrivilegeEscalation": false,
-				"capabilities": map[string]interface{}{
-					"drop": []interface{}{"ALL"},
-				},
-			},
+			"securityContext": r.buildRunnerSecurityContext(),
 		},
 	}
 
@@ -632,6 +635,14 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 		},
 	}
 
+	if r.cfg.OpenShellEnabled {
+		pod.Object["spec"].(map[string]interface{})["securityContext"] = map[string]interface{}{
+			"seccompProfile": map[string]interface{}{
+				"type": "Unconfined",
+			},
+		}
+	}
+
 	if r.cfg.ImagePullSecret != "" {
 		pod.Object["spec"].(map[string]interface{})["imagePullSecrets"] = []interface{}{
 			map[string]interface{}{"name": r.cfg.ImagePullSecret},
@@ -644,6 +655,25 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 
 	r.logger.Info().Str("pod", name).Str("namespace", namespace).Str("image", runnerImage).Msg("runner pod created")
 	return nil
+}
+
+func (r *SimpleKubeReconciler) buildRunnerSecurityContext() map[string]interface{} {
+	sc := map[string]interface{}{
+		"allowPrivilegeEscalation": false,
+		"capabilities": map[string]interface{}{
+			"drop": []interface{}{"ALL"},
+		},
+	}
+	if r.cfg.OpenShellEnabled {
+		sc["allowPrivilegeEscalation"] = true
+		sc["runAsUser"] = int64(0)
+		sc["runAsNonRoot"] = false
+		sc["capabilities"] = map[string]interface{}{
+			"drop": []interface{}{"ALL"},
+			"add":  []interface{}{"NET_ADMIN", "SYS_ADMIN", "SYS_PTRACE", "SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE"},
+		}
+	}
+	return sc
 }
 
 func (r *SimpleKubeReconciler) buildVolumes(extraVolumes []interface{}) []interface{} {
@@ -668,6 +698,14 @@ func (r *SimpleKubeReconciler) buildVolumes(extraVolumes []interface{}) []interf
 			},
 		})
 	}
+	if r.cfg.OpenShellEnabled {
+		vols = append(vols, map[string]interface{}{
+			"name": "openshell-policy",
+			"configMap": map[string]interface{}{
+				"name": r.cfg.OpenShellPolicyName,
+			},
+		})
+	}
 	vols = append(vols, extraVolumes...)
 	return vols
 }
@@ -689,6 +727,13 @@ func (r *SimpleKubeReconciler) buildVolumeMounts() []interface{} {
 		mounts = append(mounts, map[string]interface{}{
 			"name":      "vertex",
 			"mountPath": "/app/vertex",
+			"readOnly":  true,
+		})
+	}
+	if r.cfg.OpenShellEnabled {
+		mounts = append(mounts, map[string]interface{}{
+			"name":      "openshell-policy",
+			"mountPath": "/etc/openshell",
 			"readOnly":  true,
 		})
 	}
@@ -729,6 +774,48 @@ func (r *SimpleKubeReconciler) ensureVertexSecret(ctx context.Context, namespace
 	}
 
 	r.logger.Debug().Str("namespace", namespace).Str("secret", r.cfg.VertexSecretName).Msg("vertex secret copied")
+	return nil
+}
+
+func (r *SimpleKubeReconciler) ensureOpenShellPolicy(ctx context.Context, namespace string) error {
+	policyName := r.cfg.OpenShellPolicyName
+
+	if _, err := r.nsKube().GetConfigMap(ctx, namespace, policyName); err == nil {
+		return nil
+	}
+
+	src, err := r.nsKube().GetConfigMap(ctx, r.cfg.CPRuntimeNamespace, policyName)
+	if err != nil {
+		return fmt.Errorf("reading openshell policy configmap %s/%s: %w", r.cfg.CPRuntimeNamespace, policyName, err)
+	}
+
+	data, _, _ := unstructured.NestedStringMap(src.Object, "data")
+	dataIface := make(map[string]interface{}, len(data))
+	for k, v := range data {
+		dataIface[k] = v
+	}
+
+	dst := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      policyName,
+				"namespace": namespace,
+				"labels": map[string]interface{}{
+					LabelManaged:   "true",
+					LabelManagedBy: "ambient-control-plane",
+				},
+			},
+			"data": dataIface,
+		},
+	}
+
+	if _, err := r.nsKube().CreateConfigMap(ctx, dst); err != nil && !k8serrors.IsAlreadyExists(err) {
+		return fmt.Errorf("copying openshell policy configmap to %s: %w", namespace, err)
+	}
+
+	r.logger.Debug().Str("namespace", namespace).Str("configmap", policyName).Msg("openshell policy configmap copied")
 	return nil
 }
 
@@ -811,6 +898,14 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 	}
 	if r.cfg.NoProxy != "" {
 		env = append(env, envVar("NO_PROXY", r.cfg.NoProxy))
+	}
+
+	if r.cfg.OpenShellEnabled {
+		env = append(env,
+			envVar("OPENSHELL_ENABLED", "true"),
+			envVar("OPENSHELL_POLICY_RULES", "/etc/openshell/policy.rego"),
+			envVar("OPENSHELL_POLICY_DATA", "/etc/openshell/policy.yaml"),
+		)
 	}
 
 	return env
