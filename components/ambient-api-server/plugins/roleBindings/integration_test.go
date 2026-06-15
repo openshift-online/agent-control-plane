@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -15,6 +16,7 @@ import (
 
 func TestRoleBindingGet(t *testing.T) {
 	h, client := test.RegisterIntegration(t)
+	ensureBuiltInRoles()
 
 	account := h.NewRandAccount()
 	ctx := h.NewAuthenticatedContext(account)
@@ -42,12 +44,18 @@ func TestRoleBindingGet(t *testing.T) {
 
 func TestRoleBindingPost(t *testing.T) {
 	h, client := test.RegisterIntegration(t)
+	ensureBuiltInRoles()
 
 	account := h.NewRandAccount()
 	ctx := h.NewAuthenticatedContext(account)
+	username := strings.ToLower(account.Username())
+	seedAdminBinding(username)
+
+	viewerRoleID := lookupRoleID("project:viewer")
+	Expect(viewerRoleID).NotTo(BeEmpty(), "project:viewer role must exist")
 
 	roleBindingInput := openapi.RoleBinding{
-		RoleId: "test-role_id",
+		RoleId: viewerRoleID,
 		Scope:  "project",
 	}
 	roleBindingInput.SetUserId("test-user_id")
@@ -73,9 +81,12 @@ func TestRoleBindingPost(t *testing.T) {
 
 func TestRoleBindingPatch(t *testing.T) {
 	h, client := test.RegisterIntegration(t)
+	ensureBuiltInRoles()
 
 	account := h.NewRandAccount()
 	ctx := h.NewAuthenticatedContext(account)
+	username := strings.ToLower(account.Username())
+	seedAdminBinding(username)
 
 	roleBindingModel, err := newRoleBinding(h.NewID())
 	Expect(err).NotTo(HaveOccurred())
@@ -102,6 +113,7 @@ func TestRoleBindingPatch(t *testing.T) {
 
 func TestRoleBindingPaging(t *testing.T) {
 	h, client := test.RegisterIntegration(t)
+	ensureBuiltInRoles()
 
 	account := h.NewRandAccount()
 	ctx := h.NewAuthenticatedContext(account)
@@ -126,6 +138,7 @@ func TestRoleBindingPaging(t *testing.T) {
 
 func TestRoleBindingListSearch(t *testing.T) {
 	h, client := test.RegisterIntegration(t)
+	ensureBuiltInRoles()
 
 	account := h.NewRandAccount()
 	ctx := h.NewAuthenticatedContext(account)
