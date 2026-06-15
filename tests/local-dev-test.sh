@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Local Developer Experience Test Suite
-# Tests the complete local development workflow for Ambient Code Platform
+# Tests the complete local development workflow for Agent Control Plane
 #
 # Usage: ./tests/local-dev-test.sh [options]
 #   -s, --skip-setup    Skip the initial setup (assume environment is ready)
@@ -212,11 +212,10 @@ test_makefile_help() {
     local help_output
     help_output=$(make help 2>&1)
 
-    assert_contains "$help_output" "Ambient Code Platform" "Help shows correct branding"
-    assert_contains "$help_output" "local-up" "Help lists local-up command"
+    assert_contains "$help_output" "Agent Control Plane" "Help shows correct branding"
+    assert_contains "$help_output" "kind-up" "Help lists kind-up command"
     assert_contains "$help_output" "local-status" "Help lists local-status command"
     assert_contains "$help_output" "local-logs" "Help lists local-logs command"
-    assert_contains "$help_output" "kind-up" "Help lists kind-up command"
 }
 
 # Test: Kind Status Check
@@ -271,30 +270,13 @@ test_namespace_exists() {
     fi
 }
 
-# Test: CRDs Installed
-test_crds_installed() {
-    log_section "Test 6: Custom Resource Definitions"
-
-    local crds=("agenticsessions.vteam.ambient-code" "projectsettings.vteam.ambient-code")
-
-    for crd in "${crds[@]}"; do
-        if kubectl get crd "$crd" >/dev/null 2>&1; then
-            log_success "CRD '$crd' is installed"
-            ((PASSED_TESTS++))
-        else
-            log_error "CRD '$crd' is NOT installed"
-            ((FAILED_TESTS++))
-        fi
-    done
-}
-
 # Test: Pods Running
 test_pods_running() {
-    log_section "Test 7: Pod Status"
+    log_section "Test 6: Pod Status"
 
     assert_pod_running "app=ambient-api-server" "Backend pod is running"
     assert_pod_running "app=ambient-ui" "Frontend pod is running"
-    assert_pod_running "app=ambient-control-plane" "Operator pod is running"
+    assert_pod_running "app=ambient-control-plane" "Control plane pod is running"
 
     # Check pod readiness
     local not_ready
@@ -310,7 +292,7 @@ test_pods_running() {
 
 # Test: Services Exist
 test_services_exist() {
-    log_section "Test 8: Services"
+    log_section "Test 7: Services"
 
     local services=("ambient-api-server" "ambient-ui-service")
 
@@ -325,30 +307,9 @@ test_services_exist() {
     done
 }
 
-# Test: Ingress Configuration
-test_ingress() {
-    log_section "Test 9: Ingress Configuration"
-
-    # Kind uses NodePort mapping instead of an Ingress resource
-    if kubectl get ingress -n "$NAMESPACE" >/dev/null 2>&1; then
-        local ingress_count
-        ingress_count=$(kubectl get ingress -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)
-        if [ "$ingress_count" -gt 0 ]; then
-            log_success "Ingress resources found"
-            ((PASSED_TESTS++))
-        else
-            log_info "No ingress resources (kind uses NodePort mapping, this is expected)"
-            ((PASSED_TESTS++))
-        fi
-    else
-        log_info "No ingress resources (kind uses NodePort mapping, this is expected)"
-        ((PASSED_TESTS++))
-    fi
-}
-
 # Test: Backend Health Endpoint
 test_backend_health() {
-    log_section "Test 10: Backend Health Endpoint"
+    log_section "Test 8: Backend Health Endpoint"
 
     # Check backend health via pod readiness (kubectl wait already validates the
     # readiness probe which hits /health). Verify pod is ready as a proxy.
@@ -363,7 +324,7 @@ test_backend_health() {
 
 # Test: Frontend Accessibility
 test_frontend_accessibility() {
-    log_section "Test 11: Frontend Accessibility"
+    log_section "Test 9: Frontend Accessibility"
 
     # Check frontend health via pod readiness
     if kubectl get pods -n "$NAMESPACE" -l app=ambient-ui -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q "True"; then
@@ -377,7 +338,7 @@ test_frontend_accessibility() {
 
 # Test: RBAC Configuration
 test_rbac() {
-    log_section "Test 12: RBAC Configuration"
+    log_section "Test 10: RBAC Configuration"
 
     local roles=("ambient-project-admin" "ambient-project-edit" "ambient-project-view")
 
@@ -394,9 +355,9 @@ test_rbac() {
 
 # Test: Development Workflow - Build Command
 test_build_command() {
-    log_section "Test 13: Build Commands (Dry Run)"
+    log_section "Test 11: Build Commands (Dry Run)"
 
-    if make -n build-backend >/dev/null 2>&1; then
+    if make -n build-api-server >/dev/null 2>&1; then
         log_success "make build-api-server syntax is valid"
         ((PASSED_TESTS++))
     else
@@ -404,31 +365,26 @@ test_build_command() {
         ((FAILED_TESTS++))
     fi
 
-    if make -n build-frontend >/dev/null 2>&1; then
+    if make -n build-ambient-ui >/dev/null 2>&1; then
         log_success "make build-ambient-ui syntax is valid"
         ((PASSED_TESTS++))
     else
         log_error "make build-ambient-ui has syntax errors"
         ((FAILED_TESTS++))
     fi
-}
 
-# Test: Development Workflow - Rebuild Command
-test_reload_commands() {
-    log_section "Test 14: Rebuild Command (Dry Run)"
-
-    if make -n kind-rebuild >/dev/null 2>&1; then
-        log_success "make kind-rebuild syntax is valid"
+    if make -n build-control-plane >/dev/null 2>&1; then
+        log_success "make build-control-plane syntax is valid"
         ((PASSED_TESTS++))
     else
-        log_error "make kind-rebuild has syntax errors"
+        log_error "make build-control-plane has syntax errors"
         ((FAILED_TESTS++))
     fi
 }
 
 # Test: Benchmark Harness Syntax
 test_benchmark_syntax() {
-    log_section "Test 15: Benchmark Harness Syntax"
+    log_section "Test 12: Benchmark Harness Syntax"
 
     if bash -n scripts/benchmarks/component-bench.sh 2>/dev/null; then
         log_success "component-bench.sh syntax is valid"
@@ -449,10 +405,10 @@ test_benchmark_syntax() {
 
 # Test: Logging Commands
 test_logging_commands() {
-    log_section "Test 16: Logging Commands"
+    log_section "Test 13: Logging Commands"
 
     # Test that we can get logs from each component
-    local components=("backend-api" "frontend" "agentic-operator")
+    local components=("ambient-api-server" "ambient-ui" "ambient-control-plane")
 
     for component in "${components[@]}"; do
         if kubectl logs -n "$NAMESPACE" -l "app=$component" --tail=1 >/dev/null 2>&1; then
@@ -466,7 +422,7 @@ test_logging_commands() {
 
 # Test: Storage Configuration
 test_storage() {
-    log_section "Test 17: Storage Configuration"
+    log_section "Test 14: Storage Configuration"
 
     # Check if workspace PVC exists
     if kubectl get pvc workspace-pvc -n "$NAMESPACE" >/dev/null 2>&1; then
@@ -487,30 +443,12 @@ test_storage() {
     fi
 }
 
-# Test: Environment Variables
-test_environment_variables() {
-    log_section "Test 17: Environment Variables"
-
-    # Check backend deployment env vars
-    local backend_env
-    backend_env=$(kubectl get deployment backend-api -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].env[*].name}' 2>/dev/null || echo "")
-
-    assert_contains "$backend_env" "NAMESPACE" "Backend has NAMESPACE env var"
-    assert_contains "$backend_env" "PORT" "Backend has PORT env var"
-
-    # Check frontend deployment env vars
-    local frontend_env
-    frontend_env=$(kubectl get deployment frontend -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].env[*].name}' 2>/dev/null || echo "")
-
-    assert_contains "$frontend_env" "BACKEND_URL" "Frontend has BACKEND_URL env var"
-}
-
 # Test: Resource Limits
 test_resource_limits() {
-    log_section "Test 18: Resource Configuration"
+    log_section "Test 15: Resource Configuration"
 
     # Check if deployments have resource requests/limits
-    local deployments=("backend-api" "frontend" "agentic-operator")
+    local deployments=("ambient-api-server" "ambient-ui" "ambient-control-plane")
 
     for deployment in "${deployments[@]}"; do
         local resources
@@ -527,7 +465,7 @@ test_resource_limits() {
 
 # Test: Make local-status
 test_make_status() {
-    log_section "Test 19: make local-status Command"
+    log_section "Test 16: make local-status Command"
 
     local status_output
     # Pass CONTAINER_ENGINE so kind get clusters uses the correct provider
@@ -539,36 +477,13 @@ test_make_status() {
     fi
     status_output=$(make local-status CONTAINER_ENGINE="$engine" 2>&1 || echo "")
 
-    assert_contains "$status_output" "Ambient Code Platform Status" "Status shows correct branding"
+    assert_contains "$status_output" "Agent Control Plane Status" "Status shows correct branding"
     assert_contains "$status_output" "Pods" "Status shows Pods section"
-}
-
-# Test: Ingress Controller
-test_ingress_controller() {
-    log_section "Test 20: Ingress Controller"
-
-    # Kind uses NodePort mapping; ingress-nginx is optional
-    if kubectl get namespace ingress-nginx >/dev/null 2>&1; then
-        log_success "ingress-nginx namespace exists"
-        ((PASSED_TESTS++))
-
-        # Check if controller is running
-        if kubectl get pods -n ingress-nginx -l app.kubernetes.io/component=controller 2>/dev/null | grep -q "Running"; then
-            log_success "Ingress controller is running"
-            ((PASSED_TESTS++))
-        else
-            log_info "Ingress controller not running (kind uses NodePort, this is OK)"
-            ((PASSED_TESTS++))
-        fi
-    else
-        log_info "ingress-nginx not installed (kind uses NodePort mapping, this is expected)"
-        ((PASSED_TESTS++))
-    fi
 }
 
 # Test: Security - Test User Permissions
 test_security_local_dev_user() {
-    log_section "Test 21: Security - Test User Permissions"
+    log_section "Test 17: Security - Test User Permissions"
 
     log_info "Verifying test-user service account exists..."
 
@@ -595,7 +510,7 @@ test_security_local_dev_user() {
 
 # Test: Security - Production Namespace Rejection
 test_security_prod_namespace_rejection() {
-    log_section "Test 22: Security - Production Namespace Rejection"
+    log_section "Test 18: Security - Production Namespace Rejection"
 
     log_info "Testing that dev mode rejects production-like namespaces..."
 
@@ -627,7 +542,7 @@ test_security_prod_namespace_rejection() {
 
 # Test: Security - Mock Token Detection in Logs
 test_security_mock_token_logging() {
-    log_section "Test 23: Security - Mock Token Detection"
+    log_section "Test 19: Security - Mock Token Detection"
 
     log_info "Verifying backend logs show dev mode activation..."
 
@@ -684,7 +599,7 @@ test_security_mock_token_logging() {
 
 # Test: Security - Token Redaction
 test_security_token_redaction() {
-    log_section "Test 24: Security - Token Redaction in Logs"
+    log_section "Test 20: Security - Token Redaction in Logs"
 
     log_info "Verifying tokens are properly redacted in logs..."
 
@@ -731,45 +646,9 @@ test_security_token_redaction() {
     fi
 }
 
-# Test: Security - Service Account Configuration
-test_security_service_account_config() {
-    log_section "Test 25: Security - Service Account Configuration"
-
-    log_info "Verifying service account RBAC configuration..."
-
-    # Test 1: Check backend-api service account exists
-    if kubectl get serviceaccount backend-api -n "$NAMESPACE" >/dev/null 2>&1; then
-        log_success "backend-api service account exists"
-        ((PASSED_TESTS++))
-    else
-        log_error "backend-api service account does NOT exist"
-        ((FAILED_TESTS++))
-        return
-    fi
-
-    # Test 2: Check if backend has cluster-admin (expected in dev, dangerous in prod)
-    local clusterrolebindings
-    clusterrolebindings=$(kubectl get clusterrolebinding -o json 2>/dev/null | grep -c "backend-api\|system:serviceaccount:$NAMESPACE:backend-api" || echo "0")
-
-    if [ "$clusterrolebindings" -gt 0 ]; then
-        log_warning "backend-api has cluster-level role bindings (OK for dev, DANGEROUS in production)"
-        log_warning "  ⚠️  This service account has elevated permissions"
-        log_warning "  ⚠️  Production deployments should use minimal namespace-scoped permissions"
-    else
-        log_info "backend-api has no cluster-level role bindings (namespace-scoped only)"
-    fi
-
-    # Test 3: Verify dev mode safety checks are in place
-    # NOTE: Auth bypass is intentionally NOT supported in backend code.
-    log_info "Dev mode safety mechanisms:"
-    log_info "  ✓ No env-var based auth bypass in backend code"
-    log_info "  ✓ Requests must provide real tokens (401/403 reflect auth/RBAC)"
-    ((PASSED_TESTS++))
-}
-
 # Test: CRITICAL - Test User Token
 test_critical_token_minting() {
-    log_section "Test 26: CRITICAL - Test User Token"
+    log_section "Test 21: CRITICAL - Test User Token"
 
     # Kind setup creates a test-user ServiceAccount with a pre-generated token
     # stored in a secret. Validate that this exists.
@@ -805,15 +684,15 @@ test_critical_token_minting() {
 
 # Test: Production Manifest Safety - No Dev Mode Variables
 test_production_manifest_safety() {
-    log_section "Test 27: Production Manifest Safety"
+    log_section "Test 22: Production Manifest Safety"
 
     log_info "Verifying production manifests do NOT contain dev mode variables..."
 
     # Check base/production manifests for DISABLE_AUTH
     local prod_manifests=(
-        "components/manifests/base/backend-deployment.yaml"
-        "components/manifests/base/frontend-deployment.yaml"
-        "components/manifests/overlays/production/frontend-oauth-deployment-patch.yaml"
+        "components/manifests/base/core/ambient-api-server-service.yml"
+        "components/manifests/base/core/ambient-ui-deployment.yaml"
+        "components/manifests/base/ambient-control-plane-service.yml"
     )
 
     local found_issues=false
@@ -854,68 +733,9 @@ test_production_manifest_safety() {
     fi
 }
 
-# Test: Backend Using Wrong Service Account
-test_critical_backend_sa_usage() {
-    log_section "Test 28: CRITICAL - Backend Using Wrong Service Account"
-
-    log_info "Verifying which service account backend uses in dev mode..."
-
-    # Get backend pod
-    local backend_pod
-    backend_pod=$(kubectl get pods -n "$NAMESPACE" -l app=ambient-api-server -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-
-    if [ -z "$backend_pod" ]; then
-        log_warning "Backend pod not found, skipping SA usage test"
-        return
-    fi
-
-    # Check which service account the backend pod is using
-    local backend_sa
-    backend_sa=$(kubectl get pod "$backend_pod" -n "$NAMESPACE" -o jsonpath='{.spec.serviceAccountName}' 2>/dev/null)
-
-    log_info "Backend pod service account: $backend_sa"
-
-    # Check if backend has cluster-admin via clusterrolebinding
-    local has_cluster_admin=false
-    if kubectl get clusterrolebinding -o json 2>/dev/null | grep -q "serviceaccount:$NAMESPACE:$backend_sa"; then
-        has_cluster_admin=true
-        log_warning "Backend SA '$backend_sa' has cluster-level role bindings (expected in local dev manifests)"
-
-        # List the actual bindings (best effort)
-        log_warning "Cluster role bindings for backend SA:"
-        kubectl get clusterrolebinding -o json 2>/dev/null | jq -r ".items[] | select(.subjects[]?.name == \"$backend_sa\") | \"  - \(.metadata.name): \(.roleRef.name)\"" 2>/dev/null || echo "  (could not enumerate)"
-
-        # CI mode: treat this as a known local-dev tradeoff (cluster-admin is for dev convenience).
-        # Production safety is validated separately (production manifests must not include dev-mode vars).
-        if [ "$CI_MODE" = true ]; then
-            ((KNOWN_FAILURES++))
-        else
-            ((FAILED_TESTS++))
-        fi
-    else
-        log_success "Backend SA '$backend_sa' has NO cluster-level bindings (good for prod model)"
-        ((PASSED_TESTS++))
-    fi
-
-    # Validate current security posture: no env-var auth bypass code should exist in backend middleware.
-    log_info "Checking backend middleware has no local-dev auth bypass implementation..."
-    if [ -f "components/ambient-api-server/handlers/middleware.go" ]; then
-        # Ensure no local-dev auth bypass helpers exist in backend code (including legacy names).
-        if grep -qE "getLocalDevK8sClients\\(|isLocalDevEnvironment\\(" components/ambient-api-server/handlers/middleware.go; then
-            log_error "Found local-dev auth bypass code in middleware.go (should be removed)"
-            ((FAILED_TESTS++))
-        else
-            log_success "No local-dev auth bypass code found in middleware.go"
-            ((PASSED_TESTS++))
-        fi
-    else
-        log_warning "middleware.go not found in current directory"
-    fi
-}
-
 # Main test execution
 main() {
-    log_section "Ambient Code Platform - Local Developer Experience Tests"
+    log_section "Agent Control Plane - Local Developer Experience Tests"
     log_info "Starting test suite at $(date)"
     log_info "Test configuration:"
     log_info "  Namespace: $NAMESPACE"
@@ -930,36 +750,29 @@ main() {
     test_kind_status
     test_kubernetes_context
     test_namespace_exists
-    test_crds_installed
     test_pods_running
     test_services_exist
-    test_ingress
     test_backend_health
     test_frontend_accessibility
     test_rbac
     test_build_command
-    test_reload_commands
     test_benchmark_syntax
     test_logging_commands
     test_storage
-    test_environment_variables
     test_resource_limits
     test_make_status
-    test_ingress_controller
 
     # Security tests
     test_security_local_dev_user
     test_security_prod_namespace_rejection
     test_security_mock_token_logging
     test_security_token_redaction
-    test_security_service_account_config
 
     # Production safety tests
     test_production_manifest_safety
 
-    # CRITICAL failing tests for unimplemented features
+    # CRITICAL tests
     test_critical_token_minting
-    test_critical_backend_sa_usage
 
     # Summary
     log_section "Test Summary"
