@@ -24,7 +24,6 @@ import (
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/version"
 	_ "github.com/openshift-online/rh-trex-ai/plugins/events"
 	_ "github.com/openshift-online/rh-trex-ai/plugins/generic"
-
 )
 
 func TestMain(m *testing.M) {
