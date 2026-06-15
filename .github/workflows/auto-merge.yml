@@ -3,8 +3,6 @@ name: Auto-Merge Queue
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
-  check_suite:
-    types: [completed]
 
 permissions:
   pull-requests: write
@@ -12,20 +10,32 @@ permissions:
 jobs:
   auto-merge:
     if: >-
-      github.event_name == 'pull_request' &&
       !github.event.pull_request.draft &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      (github.event.pull_request.author_association == 'MEMBER' ||
-       github.event.pull_request.author_association == 'OWNER')
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
+      - name: Check author is org member
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ASSOC=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}" --jq '.author_association' 2>/dev/null || echo "NONE")
+          echo "association=$ASSOC"
+          if [ "$ASSOC" = "MEMBER" ] || [ "$ASSOC" = "OWNER" ]; then
+            echo "eligible=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Add auto-merge-queue label
+        if: steps.check.outputs.eligible == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh pr edit "${{ github.event.pull_request.number }}" --add-label auto-merge-queue --repo "${{ github.repository }}"
 
       - name: Enable auto-merge
+        if: steps.check.outputs.eligible == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh pr merge "${{ github.event.pull_request.number }}" --auto --repo "${{ github.repository }}" || true
