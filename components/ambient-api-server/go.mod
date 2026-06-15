@@ -9,7 +9,8 @@ require (
 	github.com/gorilla/mux v1.7.3
 	github.com/onsi/gomega v1.27.1
 	github.com/openshift-online/ocm-sdk-go v0.1.334
-	github.com/openshift-online/rh-trex-ai v0.0.25
+	github.com/openshift-online/rh-trex-ai v0.0.29
+	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
@@ -91,7 +92,6 @@ require (
 	github.com/shirou/gopsutil/v3 v3.23.12 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/spf13/cobra v1.9.1 // indirect
 	github.com/testcontainers/testcontainers-go v0.33.0 // indirect
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.33.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect

@@ -17,7 +17,6 @@ import (
 )
 
 func TestProjectSettingsGRPCCrud(t *testing.T) {
-	t.Skip("requires gRPC RBAC interceptor — ListProjectSettings returns 0 without AuthResult in context")
 	h, _ := test.RegisterIntegration(t)
 
 	account := h.NewRandAccount()
@@ -77,7 +76,6 @@ func TestProjectSettingsGRPCCrud(t *testing.T) {
 }
 
 func TestProjectSettingsGRPCWatch(t *testing.T) {
-	t.Skip("requires gRPC RBAC interceptor + EventBroker delivers events before poll sees them")
 	h, _ := test.RegisterIntegration(t)
 
 	account := h.NewRandAccount()

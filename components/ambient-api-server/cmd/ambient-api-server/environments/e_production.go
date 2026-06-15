@@ -19,22 +19,22 @@ func (e *ProductionEnvImpl) OverrideDatabase(c *pkgenv.Database) error {
 	return nil
 }
 
-const defaultJwkCertURL = "https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/certs"
+var defaultJwkCertURLs = []string{"https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/certs"}
 
 func (e *ProductionEnvImpl) OverrideConfig(c *config.ApplicationConfig) error {
 	c.Server.CORSAllowedHeaders = []string{"X-Ambient-Project"}
 
 	// Priority: CLI flag > env var > default.
 	// The framework parses --jwk-cert-url before OverrideConfig runs,
-	// so c.Auth.JwkCertURL already holds the flag value (or the flag's
+	// so c.Auth.JwkCertURLs already holds the flag value (or the flag's
 	// built-in default if not explicitly set).
 	switch {
-	case c.Auth.JwkCertURL != "" && c.Auth.JwkCertURL != defaultJwkCertURL:
+	case len(c.Auth.JwkCertURLs) > 0 && c.Auth.JwkCertURLs[0] != defaultJwkCertURLs[0]:
 		// CLI flag was explicitly set to a non-default value; keep it.
 	case os.Getenv("JWK_CERT_URL") != "":
-		c.Auth.JwkCertURL = os.Getenv("JWK_CERT_URL")
+		c.Auth.JwkCertURLs = []string{os.Getenv("JWK_CERT_URL")}
 	default:
-		c.Auth.JwkCertURL = defaultJwkCertURL
+		c.Auth.JwkCertURLs = defaultJwkCertURLs
 	}
 
 	return nil
