@@ -22,7 +22,7 @@ jobs:
         run: |
           ASSOC=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}" --jq '.author_association' 2>/dev/null || echo "NONE")
           echo "association=$ASSOC"
-          if [ "$ASSOC" = "MEMBER" ] || [ "$ASSOC" = "OWNER" ]; then
+          if [ "$ASSOC" = "MEMBER" ] || [ "$ASSOC" = "OWNER" ] || [ "$ASSOC" = "COLLABORATOR" ]; then
             echo "eligible=true" >> "$GITHUB_OUTPUT"
           else
             echo "eligible=false" >> "$GITHUB_OUTPUT"
