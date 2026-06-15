@@ -4,6 +4,8 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
+  merge_group:
+
 permissions:
   pull-requests: write
   contents: read
