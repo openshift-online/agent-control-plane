@@ -79,5 +79,28 @@ PR opened/synced
   ├─ lint.yml → detect-components.sh --outputs → lint changed Go code
   └─ components-build-deploy.yml → dorny → build changed images
 
-All checks pass → auto-merge.yml enqueue → gh pr merge --auto
+All checks pass → auto-merge.yml enqueue → gh pr merge (direct enqueue)
 ```
+
+## Auto-Merge Enqueue
+
+The auto-merge workflow has two jobs:
+
+- **`label-eligible`** (`pull_request`): checks author, adds `auto-merge-pending` label, applies component labels
+- **`enqueue`** (`workflow_run`): fires when Unit Tests, Lint, Build, or CodeQL complete. Finds PRs with `auto-merge-pending`, waits for all 4 gate checks, enqueues.
+
+### Critical: `gh pr merge` vs `gh pr merge --auto`
+
+On a merge-queue-protected branch:
+- `gh pr merge` (no flags) → **enqueues directly** when checks passed
+- `gh pr merge --auto` → only sets auto-merge flag, does NOT enqueue
+
+Always use `gh pr merge` (no `--auto`) in the enqueue step.
+
+### Check polling
+
+Waits for all 4 gate checks by name (`Lint CI Gate`, `Unit Tests CI Gate`, `SDD boundary check`, `Build CI Gate`) to be reported AND passing. Prevents false "all passed" when gates haven't started.
+
+### Merge queue strategy
+
+Uses `ALLGREEN` (every entry gets its own `merge_group` CI). `HEADGREEN` was removed — it skips `merge_group` events for PRs already up-to-date with main.
