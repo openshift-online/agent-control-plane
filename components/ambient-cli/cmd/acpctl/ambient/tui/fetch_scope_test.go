@@ -161,3 +161,7 @@ func (c *scopeTrackingClient) FetchInbox(projectID, agentID string) tea.Cmd {
 	c.lastFetchProject = projectID
 	return func() tea.Msg { return InboxMsg{} }
 }
+
+func (c *scopeTrackingClient) FetchCredentials() tea.Cmd {
+	return func() tea.Msg { return CredentialsMsg{} }
+}

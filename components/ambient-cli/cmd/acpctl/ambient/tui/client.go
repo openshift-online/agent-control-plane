@@ -789,6 +789,217 @@ func (tc *TUIClient) DeleteInboxMessage(projectID, agentID, msgID string) tea.Cm
 }
 
 // ---------------------------------------------------------------------------
+// Credentials (global resource — not project-scoped)
+// ---------------------------------------------------------------------------
+
+// CredentialsMsg carries the result of a credential list fetch.
+type CredentialsMsg struct {
+	Credentials []sdktypes.Credential
+	Err         error
+}
+
+// CredentialBindingsMsg carries the result of a credential binding list fetch.
+type CredentialBindingsMsg struct {
+	Bindings []sdktypes.RoleBinding
+	Err      error
+}
+
+// CreateCredentialMsg carries the result of creating a credential.
+type CreateCredentialMsg struct {
+	Credential *sdktypes.Credential
+	Err        error
+}
+
+// UpdateCredentialMsg carries the result of updating a credential.
+type UpdateCredentialMsg struct {
+	Credential *sdktypes.Credential
+	Err        error
+}
+
+// DeleteCredentialMsg carries the result of deleting a credential.
+type DeleteCredentialMsg struct {
+	Err error
+}
+
+// CreateBindingMsg carries the result of creating a role binding.
+type CreateBindingMsg struct {
+	Binding *sdktypes.RoleBinding
+	Err     error
+}
+
+// DeleteBindingMsg carries the result of deleting a role binding.
+type DeleteBindingMsg struct {
+	Err error
+}
+
+// FetchCredentials returns a tea.Cmd that lists all credentials.
+func (tc *TUIClient) FetchCredentials() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject("_")
+		if err != nil {
+			return CredentialsMsg{Err: err}
+		}
+
+		list, err := client.Credentials().List(ctx, defaultListOpts())
+		if err != nil {
+			return CredentialsMsg{Err: err}
+		}
+		return CredentialsMsg{Credentials: list.Items}
+	}
+}
+
+// FetchAllCredentialBindings returns a tea.Cmd that lists all scope=credential
+// RoleBindings. Used to compute binding counts in the credentials table.
+func (tc *TUIClient) FetchAllCredentialBindings() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject("_")
+		if err != nil {
+			return CredentialBindingsMsg{Err: err}
+		}
+
+		opts := defaultListOpts()
+		opts.Search = "scope = 'credential'"
+		list, err := client.RoleBindings().List(ctx, opts)
+		if err != nil {
+			return CredentialBindingsMsg{Err: err}
+		}
+		return CredentialBindingsMsg{Bindings: list.Items}
+	}
+}
+
+// FetchCredentialBindings returns a tea.Cmd that lists scope=credential
+// RoleBindings for a specific credential ID.
+func (tc *TUIClient) FetchCredentialBindings(credentialID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject("_")
+		if err != nil {
+			return CredentialBindingsMsg{Err: err}
+		}
+
+		opts := defaultListOpts()
+		opts.Search = fmt.Sprintf("credential_id = '%s'", credentialID)
+		list, err := client.RoleBindings().List(ctx, opts)
+		if err != nil {
+			return CredentialBindingsMsg{Err: err}
+		}
+		return CredentialBindingsMsg{Bindings: list.Items}
+	}
+}
+
+// CreateCredential returns a tea.Cmd that creates a new credential.
+func (tc *TUIClient) CreateCredential(cred *sdktypes.Credential) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject("_")
+		if err != nil {
+			return CreateCredentialMsg{Err: err}
+		}
+
+		created, err := client.Credentials().Create(ctx, cred)
+		if err != nil {
+			return CreateCredentialMsg{Err: err}
+		}
+		return CreateCredentialMsg{Credential: created}
+	}
+}
+
+// UpdateCredential returns a tea.Cmd that patches a credential by ID.
+func (tc *TUIClient) UpdateCredential(id string, patch map[string]any) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject("_")
+		if err != nil {
+			return UpdateCredentialMsg{Err: err}
+		}
+
+		updated, err := client.Credentials().Update(ctx, id, patch)
+		if err != nil {
+			return UpdateCredentialMsg{Err: err}
+		}
+		return UpdateCredentialMsg{Credential: updated}
+	}
+}
+
+// DeleteCredential returns a tea.Cmd that deletes a credential by ID.
+func (tc *TUIClient) DeleteCredential(id string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject("_")
+		if err != nil {
+			return DeleteCredentialMsg{Err: err}
+		}
+
+		err = client.Credentials().Delete(ctx, id)
+		return DeleteCredentialMsg{Err: err}
+	}
+}
+
+// CreateBinding returns a tea.Cmd that creates a scope=credential RoleBinding.
+func (tc *TUIClient) CreateBinding(credentialID, projectID, agentID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject("_")
+		if err != nil {
+			return CreateBindingMsg{Err: err}
+		}
+
+		builder := sdktypes.NewRoleBindingBuilder().
+			RoleID("credential:viewer").
+			Scope("credential").
+			CredentialID(credentialID).
+			ProjectID(projectID)
+
+		if agentID != "" {
+			builder = builder.AgentID(agentID)
+		}
+
+		binding, err := builder.Build()
+		if err != nil {
+			return CreateBindingMsg{Err: err}
+		}
+
+		created, err := client.RoleBindings().Create(ctx, binding)
+		if err != nil {
+			return CreateBindingMsg{Err: err}
+		}
+		return CreateBindingMsg{Binding: created}
+	}
+}
+
+// DeleteBinding returns a tea.Cmd that deletes a RoleBinding by ID.
+func (tc *TUIClient) DeleteBinding(id string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject("_")
+		if err != nil {
+			return DeleteBindingMsg{Err: err}
+		}
+
+		err = client.RoleBindings().Delete(ctx, id)
+		return DeleteBindingMsg{Err: err}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Scheduled Sessions (backend-direct — not SDK, as the scheduled session
 // API lives on the old K8s-proxy backend, not the ambient-api-server).
 // ---------------------------------------------------------------------------
