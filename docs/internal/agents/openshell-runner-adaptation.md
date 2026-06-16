@@ -3,7 +3,7 @@
 > Initial analysis: 2026-06-03
 > Implementation completed: 2026-06-04
 > Companion doc: [OpenShell Security Model Analysis](openshell-security-analysis.md)
-> Formal spec: `specs/security.spec.md` § OpenShell Sandbox
+> Formal spec: `specs/security/openshell-sandbox.spec.md`
 > Target components: `components/runners/ambient-runner/`, `components/ambient-control-plane/`
 
 ---

@@ -67,9 +67,28 @@ The system SHALL <observable behavior>.
 ```
 specs/
   index.spec.md          # This file
-  platform.spec.md       # Data model, API, session lifecycle, control plane, runner, MCP
-  security.spec.md       # Identity boundaries, SSO, RBAC, credentials, encryption, sandbox
-  ui.spec.md             # Operations dashboard, session management, agent authoring
+  platform/              # Data model, API, session lifecycle, control plane, runner, MCP
+    index.spec.md        # Bookmarks and brief descriptions
+    data-model.spec.md
+    control-plane.spec.md
+    runner.spec.md
+    runner-constitution.md
+    mcp-server.spec.md
+  security/              # Identity boundaries, SSO, RBAC, credentials, encryption, sandbox
+    index.spec.md
+    identity-boundaries.spec.md
+    sso-authentication.spec.md
+    rbac-enforcement.spec.md
+    credential-binding.spec.md
+    credential-encryption.spec.md
+    openshell-sandbox.spec.md
+    references.spec.md
+  ui/                    # Operations dashboard, session management, agent authoring
+    index.spec.md
+    architecture.spec.md
+    views.spec.md
+    annotations.spec.md
+    live-preview.spec.md
   standards/             # Cross-cutting engineering constraints (TODO: upstream via APM)
     control-plane/
     platform/
@@ -80,7 +99,7 @@ specs/
 
 | Spec | Covers |
 |------|--------|
-| `platform.spec.md` | Data model, API, CLI, control plane, runner, MCP server |
-| `security.spec.md` | Identity boundaries, SSO, RBAC, credential binding/encryption, sandbox |
-| `ui.spec.md` | Operations dashboard, agent authoring, annotations, live preview |
+| [`platform/`](platform/) | Data model, API, CLI, control plane, runner, MCP server |
+| [`security/`](security/) | Identity boundaries, SSO, RBAC, credential binding/encryption, sandbox |
+| [`ui/`](ui/) | Operations dashboard, agent authoring, annotations, live preview |
 | `standards/` | Cross-cutting engineering constraints by component |

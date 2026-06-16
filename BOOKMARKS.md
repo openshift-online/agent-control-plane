@@ -24,9 +24,9 @@ Desired state of the system. Three consolidated specs plus engineering standards
 
 | Spec | Covers |
 |------|--------|
-| [Platform](specs/platform.spec.md) | Data model, API, CLI, control plane, runner, MCP server |
-| [Security](specs/security.spec.md) | Identity boundaries, SSO, RBAC, credential binding/encryption, sandbox |
-| [UI](specs/ui.spec.md) | Operations dashboard, agent authoring, annotations, live preview |
+| [Platform](specs/platform/) | Data model, API, CLI, control plane, runner, MCP server |
+| [Security](specs/security/) | Identity boundaries, SSO, RBAC, credential binding/encryption, sandbox |
+| [UI](specs/ui/) | Operations dashboard, agent authoring, annotations, live preview |
 | [Spec Index](specs/index.spec.md) | How to write and change specs |
 
 ## Standards
@@ -43,7 +43,7 @@ Component-specific conventions loaded by review agents on demand.
 
 | Document | Purpose |
 |----------|---------|
-| Runner Constitution | Version pinning, automated freshness, image discipline, schema sync, bridge modularity (now in [platform.spec.md](specs/platform.spec.md#runner-constitution)) |
+| Runner Constitution | Version pinning, automated freshness, image discipline, schema sync, bridge modularity (now in [platform/runner-constitution.md](specs/platform/runner-constitution.md)) |
 | [SDD Preflight](.github/workflows/sdd-preflight.yml) | CI workflow enforcing constitution compliance on PRs |
 
 ## Architecture Decisions
