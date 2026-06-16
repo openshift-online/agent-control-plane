@@ -1,8 +1,8 @@
-# OpenShell Sandbox Isolation Specification
+# OpenShell Sandbox
 
 **Date:** 2026-06-04
 **Status:** Implemented — validated end-to-end on ROSA OpenShift (kernel 5.14.0-570.99.1.el9_6)
-**Related:** `specs/agents/runner.spec.md` § OpenShell Sandbox Isolation, `specs/control-plane/control-plane.spec.md`
+**Related:** `specs/platform/runner.spec.md` § OpenShell Sandbox Isolation, `specs/platform/control-plane.spec.md`
 
 ---
 
@@ -309,3 +309,5 @@ applications, `ip` command invocations, and certificate processing details.
    namespace-scoped RoleBinding with `system:openshift:scc:openshell-sandbox`
 3. Verify with `oc get pod <pod> -o jsonpath='{.metadata.annotations.openshift\.io/scc}'`
    — it should show `openshell-sandbox`
+
+---

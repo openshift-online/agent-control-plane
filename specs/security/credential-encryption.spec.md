@@ -1,6 +1,4 @@
-# Credential Token Encryption at Rest
-
-## Purpose
+# Credential Encryption
 
 Credential tokens (PATs, kubeconfigs, service account keys) are stored in PostgreSQL. Today they are plaintext. This spec defines encryption at rest using AES-256-GCM with a versioned encryption key stored in a Kubernetes Secret, providing confidentiality if the database is compromised. This is a stepping stone toward Vault-only secret storage — the encryption layer is internal to the API server and invisible to all consumers.
 
@@ -243,3 +241,5 @@ No API, SDK, CLI, sidecar, or runner changes SHALL be required when the storage 
 | No DDL migration required | The `token` column is PostgreSQL `TEXT` (unbounded). Ciphertext with the `enc:v1:...` prefix fits without schema changes. |
 | `--decrypt` rollback supported | The decrypt capability exists inherently (needed for `GET /token`). A `--decrypt` flag on the CLI command reverses encryption if the feature must be rolled back. |
 | Cobra subcommand, not gormigrate | `encrypt-credentials` is a standalone subcommand like `serve` and `migrate`, not a numbered migration. It's re-runnable, idempotent, and supports `--dry-run` and `--decrypt` flags. |
+
+---

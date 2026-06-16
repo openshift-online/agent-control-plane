@@ -18,6 +18,8 @@ const (
 	CmdProject
 	CmdAliases
 	CmdScheduledSessions
+	CmdCredentials
+	CmdCredentialBindings
 	CmdQuit
 	CmdUnknown
 )
@@ -88,6 +90,16 @@ var commandDefs = []commandDef{
 		kind:        CmdScheduledSessions,
 		aliases:     []string{"scheduledsessions", "scheduledsession", "ss"},
 		description: "Switch to scheduled sessions list (current project)",
+	},
+	{
+		kind:        CmdCredentials,
+		aliases:     []string{"credentials", "cred"},
+		description: "Switch to credentials list (global)",
+	},
+	{
+		kind:        CmdCredentialBindings,
+		aliases:     []string{"credentialbindings", "cb"},
+		description: "Switch to credential bindings (requires credential context)",
 	},
 	{
 		kind:        CmdAliases,

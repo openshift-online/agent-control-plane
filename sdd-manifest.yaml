@@ -27,8 +27,8 @@ managed-components:
     paths:
       - components/runners/ambient-runner/**
       - .github/workflows/runner-tool-versions.yml
-    constitution: specs/agents/runner-constitution.md
-    spec: specs/agents/runner.spec.md
+    constitution: specs/platform/runner-constitution.md
+    spec: specs/platform/runner.spec.md
     mode: warn
     added-in-pr: 1091
     # Future: when a GitHub App or bot account is set up for the agent,

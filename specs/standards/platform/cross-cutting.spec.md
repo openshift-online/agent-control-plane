@@ -1,5 +1,7 @@
 # CodeRabbit-Derived Conventions
 
+<!-- TODO: Migrate upstream to OpenShift-Fleet/agentic-sdlc and import via APM -->
+
 Conventions added from analysis of 971 Critical+Major CodeRabbit review comments across 169 PRs (v0.0.22 through v0.2.0). Each convention addresses a recurring pattern that slipped past the AI agent during development.
 
 ## Image references must match across the stack

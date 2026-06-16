@@ -133,6 +133,10 @@ jobs:
   summary:
     name: Lint CI Gate
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
     needs: [detect-changes, go-api-server, go-cli]
     if: always()
     steps:
@@ -153,3 +157,13 @@ jobs:
             exit 1
           fi
           echo "All lint checks passed!"
+
+      - name: Checkout code
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Try enqueue
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_PAT }}
+        run: bash .github/scripts/try-enqueue.sh "${{ github.event.pull_request.number }}" "Lint CI Gate"

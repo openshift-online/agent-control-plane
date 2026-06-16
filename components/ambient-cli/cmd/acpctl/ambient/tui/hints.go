@@ -125,6 +125,33 @@ var viewHintRegistry = map[string]ViewHints{
 			{Key: "q", Action: "Back"},
 		},
 	},
+	"credentials": {
+		Resource: []views.HelpEntry{
+			{Key: "d", Action: "Describe"},
+			{Key: "e", Action: "Edit"},
+			{Key: "n", Action: "New"},
+			{Key: "t", Action: "Rotate Token"},
+			{Key: "y", Action: "JSON"},
+			{Key: "ctrl-d", Action: "Delete"},
+		},
+		Navigation: []views.HelpEntry{
+			{Key: "Enter", Action: "View bindings"},
+			{Key: "Esc", Action: "Back"},
+			{Key: "q", Action: "Back"},
+		},
+	},
+	"credentialbindings": {
+		Resource: []views.HelpEntry{
+			{Key: "d", Action: "Describe"},
+			{Key: "ctrl-d", Action: "Unbind"},
+			{Key: "b", Action: "Bind Project"},
+			{Key: "a", Action: "Bind Agent"},
+		},
+		Navigation: []views.HelpEntry{
+			{Key: "Esc", Action: "Back to credentials"},
+			{Key: "q", Action: "Back"},
+		},
+	},
 	"contexts": {
 		Resource: []views.HelpEntry{},
 		Navigation: []views.HelpEntry{
