@@ -25,8 +25,10 @@ jobs:
         id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          ASSOC=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}" --jq '.author_association' 2>/dev/null || echo "NONE")
+          ASSOC=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq '.author_association' 2>/dev/null || echo "NONE")
           echo "association=$ASSOC"
           if [ "$ASSOC" = "MEMBER" ] || [ "$ASSOC" = "OWNER" ] || [ "$ASSOC" = "COLLABORATOR" ]; then
             echo "eligible=true" >> "$GITHUB_OUTPUT"
@@ -38,15 +40,16 @@ jobs:
         if: steps.check.outputs.eligible == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          # Only add pending if neither label is already set (avoid fighting with enqueue job)
-          LABELS=$(gh pr view "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --json labels --jq '[.labels[].name]' 2>/dev/null)
+          LABELS=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels --jq '[.labels[].name]' 2>/dev/null)
           if echo "$LABELS" | grep -q 'auto-merge-queue'; then
             echo "Already enqueued, skipping"
           elif echo "$LABELS" | grep -q 'auto-merge-pending'; then
             echo "Already pending, skipping"
           else
-            gh pr edit "${{ github.event.pull_request.number }}" --add-label auto-merge-pending --repo "${{ github.repository }}"
+            gh pr edit "$PR_NUMBER" --add-label auto-merge-pending --repo "$REPO"
           fi
 
       - name: Checkout code
@@ -56,7 +59,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_PR: ${{ github.event.pull_request.number }}
-        run: bash .github/scripts/detect-components.sh --label "${{ github.event.pull_request.number }}"
+        run: bash .github/scripts/detect-components.sh --label "$GH_PR"
 
   enqueue:
     if: >-
@@ -71,8 +74,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
+          REPO: ${{ github.repository }}
         run: |
-          PR=$(gh pr list --repo "${{ github.repository }}" --head "$BRANCH" --state open --json number,labels --jq '
+          PR=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number,labels --jq '
             .[] | select(.labels | map(.name) | index("auto-merge-pending")) | .number
           ' 2>/dev/null)
           if [ -n "$PR" ]; then
@@ -87,12 +91,11 @@ jobs:
         id: ready
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.find.outputs.pr }}
+          REPO: ${{ github.repository }}
         run: |
-          PR="${{ steps.find.outputs.pr }}"
-          # Poll up to 60s for stragglers — check_suite fires per suite,
-          # so when this runs the last suite may still be wrapping up.
           for attempt in 1 2 3 4 5 6; do
-            CHECKS=$(gh pr checks "$PR" --repo "${{ github.repository }}" --required 2>/dev/null || true)
+            CHECKS=$(gh pr checks "$PR" --repo "$REPO" --required 2>/dev/null || true)
             FAILED=$(echo "$CHECKS" | grep -c 'fail' || true)
             PENDING=$(echo "$CHECKS" | grep -c 'pending' || true)
             if [ "$FAILED" -gt 0 ]; then
@@ -115,10 +118,11 @@ jobs:
         if: steps.find.outputs.pr != '' && steps.ready.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.find.outputs.pr }}
+          REPO: ${{ github.repository }}
         run: |
-          PR="${{ steps.find.outputs.pr }}"
-          gh pr edit "$PR" --add-label auto-merge-queue --remove-label auto-merge-pending --repo "${{ github.repository }}"
+          gh pr edit "$PR" --add-label auto-merge-queue --remove-label auto-merge-pending --repo "$REPO"
           # Toggle auto-merge off then on to ensure GitHub re-evaluates
           # merge readiness against the current commit SHA.
-          gh pr merge "$PR" --disable-auto --repo "${{ github.repository }}" 2>/dev/null || true
-          gh pr merge "$PR" --auto --repo "${{ github.repository }}"
+          gh pr merge "$PR" --disable-auto --repo "$REPO" 2>/dev/null || true
+          gh pr merge "$PR" --auto --repo "$REPO"
