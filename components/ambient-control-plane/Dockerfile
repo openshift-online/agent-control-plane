@@ -36,3 +36,6 @@ LABEL name="ambient-control-plane" \
       summary="Ambient Control Plane" \
       description="Kubernetes reconciler for the Ambient Code Platform" \
       org.opencontainers.image.revision=$GIT_COMMIT
+
+ARG IMAGE_EXPIRY=
+LABEL quay.expires-after=${IMAGE_EXPIRY}

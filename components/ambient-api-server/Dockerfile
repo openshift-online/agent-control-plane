@@ -44,3 +44,6 @@ LABEL name="ambient-api-server" \
       summary="Ambient API Server" \
       description="REST API server for the Ambient Code Platform" \
       org.opencontainers.image.revision=$GIT_COMMIT
+
+ARG IMAGE_EXPIRY=
+LABEL quay.expires-after=${IMAGE_EXPIRY}

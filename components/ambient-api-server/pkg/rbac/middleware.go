@@ -75,22 +75,12 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 				return
 			}
 			m.autoProvisionServiceAccount(ctx, username)
-			projectIDs, isGlobal, projErr := m.evaluator.AuthorizedProjectIDs(ctx, username)
-			if projErr != nil {
+			var populateErr error
+			ctx, populateErr = m.PopulateAuthResult(ctx, username)
+			if populateErr != nil {
 				http.Error(w, `{"kind":"Error","reason":"Service Unavailable"}`, http.StatusServiceUnavailable)
 				return
 			}
-			credentialIDs, credGlobal, credErr := m.evaluator.AuthorizedCredentialIDs(ctx, username)
-			if credErr != nil {
-				http.Error(w, `{"kind":"Error","reason":"Service Unavailable"}`, http.StatusServiceUnavailable)
-				return
-			}
-			ctx = SetAuthResult(ctx, &AuthResult{
-				Username:      username,
-				IsGlobalAdmin: isGlobal && credGlobal,
-				ProjectIDs:    projectIDs,
-				CredentialIDs: credentialIDs,
-			})
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
@@ -277,24 +267,34 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 			return
 		}
 
-		projectIDs, isGlobal, projErr := m.evaluator.AuthorizedProjectIDs(ctx, username)
-		if projErr != nil {
+		var populateErr error
+		ctx, populateErr = m.PopulateAuthResult(ctx, username)
+		if populateErr != nil {
 			http.Error(w, `{"kind":"Error","reason":"Service Unavailable"}`, http.StatusServiceUnavailable)
 			return
 		}
-		credentialIDs, credGlobal, credErr := m.evaluator.AuthorizedCredentialIDs(ctx, username)
-		if credErr != nil {
-			http.Error(w, `{"kind":"Error","reason":"Service Unavailable"}`, http.StatusServiceUnavailable)
-			return
-		}
-		ctx = SetAuthResult(ctx, &AuthResult{
-			Username:      username,
-			IsGlobalAdmin: isGlobal && credGlobal,
-			ProjectIDs:    projectIDs,
-			CredentialIDs: credentialIDs,
-		})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// PopulateAuthResult queries the evaluator for the caller's authorized project
+// and credential scopes and returns a context enriched with the result.
+// Used by both the HTTP middleware and the gRPC post-auth interceptor.
+func (m *DBAuthorizationMiddleware) PopulateAuthResult(ctx context.Context, username string) (context.Context, error) {
+	projectIDs, isGlobal, projErr := m.evaluator.AuthorizedProjectIDs(ctx, username)
+	if projErr != nil {
+		return ctx, projErr
+	}
+	credentialIDs, credGlobal, credErr := m.evaluator.AuthorizedCredentialIDs(ctx, username)
+	if credErr != nil {
+		return ctx, credErr
+	}
+	return SetAuthResult(ctx, &AuthResult{
+		Username:      username,
+		IsGlobalAdmin: isGlobal && credGlobal,
+		ProjectIDs:    projectIDs,
+		CredentialIDs: credentialIDs,
+	}), nil
 }
 
 func (m *DBAuthorizationMiddleware) autoProvisionUser(ctx context.Context) {

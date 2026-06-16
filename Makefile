@@ -134,7 +134,7 @@ endif
 ##@ General
 
 help: ## Display this help message
-	@echo '$(COLOR_BOLD)Ambient Code Platform - Development Makefile$(COLOR_RESET)'
+	@echo '$(COLOR_BOLD)Agent Control Plane - Development Makefile$(COLOR_RESET)'
 	@echo ''
 	@echo '$(COLOR_BOLD)Quick Start:$(COLOR_RESET)'
 	@echo '  $(COLOR_GREEN)make dev$(COLOR_RESET)                  Start local dev environment (interactive)'
@@ -338,15 +338,15 @@ grafana-dashboard: ## Open Grafana (create route first)
 
 ##@ Local Development
 
-local-down: check-kubectl check-local-context ## Stop Ambient Code Platform (keep cluster running)
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Stopping Ambient Code Platform..."
+local-down: check-kubectl check-local-context ## Stop Agent Control Plane (keep cluster running)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Stopping Agent Control Plane..."
 	@$(MAKE) --no-print-directory local-stop-port-forward
 	@kubectl delete namespace $(NAMESPACE) --ignore-not-found=true --timeout=60s
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Ambient Code Platform stopped (cluster still running)"
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Agent Control Plane stopped (cluster still running)"
 	@echo "  To delete kind cluster: $(COLOR_BOLD)make kind-down$(COLOR_RESET)"
 
 local-status: check-kubectl ## Show status of local deployment
-	@echo "$(COLOR_BOLD)📊 Ambient Code Platform Status$(COLOR_RESET)"
+	@echo "$(COLOR_BOLD)📊 Agent Control Plane Status$(COLOR_RESET)"
 	@echo ""
 	@if $(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$'; then \
 		echo "$(COLOR_BOLD)Kind:$(COLOR_RESET)"; \

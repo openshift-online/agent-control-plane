@@ -63,6 +63,7 @@ func (h *scheduledSessionHandler) Get(w http.ResponseWriter, r *http.Request) {
 // but the handler sources it from the URL path. This struct avoids that
 // strict UnmarshalJSON validation while accepting all valid create fields.
 type scheduledSessionCreateRequest struct {
+	Id                *string `json:"id,omitempty"`
 	Name              string  `json:"name"`
 	Description       *string `json:"description,omitempty"`
 	AgentId           *string `json:"agent_id,omitempty"`
@@ -83,6 +84,12 @@ func (h *scheduledSessionHandler) Create(w http.ResponseWriter, r *http.Request)
 	cfg := &handlers.HandlerConfig{
 		Body: &body,
 		Validators: []handlers.Validate{
+			func() *errors.ServiceError {
+				if body.Id != nil {
+					return errors.Validation("id must not be supplied by client")
+				}
+				return nil
+			},
 			func() *errors.ServiceError {
 				if body.Name == "" {
 					return errors.Validation("name is required")

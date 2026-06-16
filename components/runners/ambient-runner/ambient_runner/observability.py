@@ -146,7 +146,7 @@ class ObservabilityManager:
         try:
             self._turn_propagate_ctx.__exit__(None, None, None)
         except Exception as e:
-            logging.debug(f"Langfuse: turn propagate context detach failed: {e}")
+            logging.debug("Langfuse: turn propagate context detach failed: %s", e)
         finally:
             self._turn_propagate_ctx = None
 
@@ -261,10 +261,10 @@ class ObservabilityManager:
                 or not parsed.netloc
                 or parsed.scheme not in ("http", "https")
             ):
-                logging.warning(f"LANGFUSE_HOST invalid format: {host}")
+                logging.warning("LANGFUSE_HOST invalid format: %s", host)
                 return False
         except Exception as e:
-            logging.warning(f"Failed to parse LANGFUSE_HOST: {e}")
+            logging.warning("Failed to parse LANGFUSE_HOST: %s", e)
             return False
 
         try:
@@ -355,7 +355,7 @@ class ObservabilityManager:
         except Exception as e:
             secrets = {"public_key": public_key, "secret_key": secret_key, "host": host}
             error_msg = sanitize_exception_message(e, secrets)
-            logging.warning(f"Langfuse init failed: {error_msg}")
+            logging.warning("Langfuse init failed: %s", error_msg)
 
             if self._propagate_ctx:
                 try:
@@ -441,7 +441,7 @@ class ObservabilityManager:
                     )
                 else:
                     input_content = [{"role": "user", "content": "User input"}]
-                    logging.info(f"Langfuse: Starting turn trace with model={model}")
+                    logging.info("Langfuse: Starting turn trace with model=%s", model)
 
                 self._current_turn_ctx = (
                     self.langfuse_client.start_as_current_observation(
@@ -463,7 +463,7 @@ class ObservabilityManager:
                 self._current_turn_generation = None
                 self._current_turn_ctx = None
                 self._exit_turn_propagate_ctx()
-                logging.error(f"Langfuse: Failed to start turn: {e}", exc_info=True)
+                logging.error("Langfuse: Failed to start turn: %s", e, exc_info=True)
 
         if self.mlflow_tracing_active:
             try:
@@ -587,7 +587,7 @@ class ObservabilityManager:
                     if self.langfuse_client:
                         try:
                             self.langfuse_client.flush()
-                            logging.info(f"Langfuse: Flushed turn {turn_count} data")
+                            logging.info("Langfuse: Flushed turn %s data", turn_count)
                         except Exception as e:
                             logging.warning(
                                 f"Langfuse: Flush failed after turn {turn_count}: {e}"
@@ -623,7 +623,7 @@ class ObservabilityManager:
                         )
 
                 except Exception as e:
-                    logging.error(f"Langfuse: Failed to end turn: {e}", exc_info=True)
+                    logging.error("Langfuse: Failed to end turn: %s", e, exc_info=True)
                     if self._current_turn_ctx:
                         try:
                             self._current_turn_ctx.__exit__(None, None, None)
@@ -688,7 +688,7 @@ class ObservabilityManager:
                     f"Langfuse: Started orphaned tool span for {tool_name} (id={tool_id})"
                 )
         except Exception as e:
-            logging.debug(f"Langfuse: Failed to track tool use: {e}")
+            logging.debug("Langfuse: Failed to track tool use: %s", e)
 
         if self.mlflow_tracing_active:
             try:
@@ -723,10 +723,10 @@ class ObservabilityManager:
                 tool_span.end()
 
                 del self._tool_spans[tool_use_id]
-                logging.debug(f"Langfuse: Completed tool span for {tool_use_id}")
+                logging.debug("Langfuse: Completed tool span for %s", tool_use_id)
 
             except Exception as e:
-                logging.debug(f"Langfuse: Failed to track tool result: {e}")
+                logging.debug("Langfuse: Failed to track tool result: %s", e)
 
         if self.mlflow_tracing_active:
             try:
@@ -1141,7 +1141,7 @@ class ObservabilityManager:
                 if self.langfuse_client:
                     try:
                         self.langfuse_client.flush()
-                        logging.info(f"Langfuse: Flushed turn {turn_count} data")
+                        logging.info("Langfuse: Flushed turn %s data", turn_count)
                     except Exception as e:
                         logging.warning(
                             f"Langfuse: Flush failed after turn {turn_count}: {e}"
@@ -1161,7 +1161,7 @@ class ObservabilityManager:
                     )
 
             except Exception as e:
-                logging.error(f"Langfuse: Failed to close turn: {e}", exc_info=True)
+                logging.error("Langfuse: Failed to close turn: %s", e, exc_info=True)
                 if self._current_turn_ctx:
                     try:
                         self._current_turn_ctx.__exit__(None, None, None)
@@ -1191,7 +1191,7 @@ class ObservabilityManager:
                             self._current_turn_ctx.__exit__(None, None, None)
                         logging.debug("Langfuse: Closed turn during finalize")
                     except Exception as e:
-                        logging.warning(f"Failed to close turn: {e}")
+                        logging.warning("Failed to close turn: %s", e)
                     finally:
                         self._current_turn_generation = None
                         self._current_turn_ctx = None
@@ -1201,9 +1201,9 @@ class ObservabilityManager:
                 for tool_id, tool_span in list(self._tool_spans.items()):
                     try:
                         tool_span.end()
-                        logging.debug(f"Langfuse: Closed tool span {tool_id}")
+                        logging.debug("Langfuse: Closed tool span %s", tool_id)
                     except Exception as e:
-                        logging.warning(f"Failed to close tool span {tool_id}: {e}")
+                        logging.warning("Failed to close tool span %s: %s", tool_id, e)
                 self._tool_spans.clear()
 
                 if self._propagate_args:
@@ -1231,7 +1231,7 @@ class ObservabilityManager:
                 if success:
                     logging.info("Langfuse: Flush completed")
                 else:
-                    logging.error(f"Langfuse: Flush timed out after {flush_timeout}s")
+                    logging.error("Langfuse: Flush timed out after %ss", flush_timeout)
             else:
                 self._emit_session_summary()
 
@@ -1239,7 +1239,7 @@ class ObservabilityManager:
                 self._mlflow.finalize()
 
         except Exception as e:
-            logging.error(f"Observability: Failed to finalize: {e}", exc_info=True)
+            logging.error("Observability: Failed to finalize: %s", e, exc_info=True)
 
     async def cleanup_on_error(self, error: Exception) -> None:
         """Cleanup on error.
@@ -1259,7 +1259,7 @@ class ObservabilityManager:
                             self._current_turn_ctx.__exit__(None, None, None)
                         logging.debug("Langfuse: Closed turn during error cleanup")
                     except Exception as e:
-                        logging.warning(f"Failed to close turn during error: {e}")
+                        logging.warning("Failed to close turn during error: %s", e)
                     finally:
                         self._current_turn_generation = None
                         self._current_turn_ctx = None

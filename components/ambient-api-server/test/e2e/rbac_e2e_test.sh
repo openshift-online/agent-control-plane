@@ -135,9 +135,9 @@ get_client_secret() {
   clients=$(curl -s -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
     "${KC_URL}/admin/realms/${KC_REALM}/clients?clientId=${KC_CLIENT_ID}")
   local client_uuid
-  client_uuid=$(echo "$clients" | jq -r '.[0].id // empty')
+  client_uuid=$(echo "$clients" | jq -r '.[0].id // empty' 2>/dev/null)
   if [[ -z "$client_uuid" ]]; then
-    echo "WARN: Could not find client ${KC_CLIENT_ID}, trying without secret"
+    echo "WARN: Could not find client ${KC_CLIENT_ID} (response: $(echo "$clients" | head -c 120)), trying without secret"
     return
   fi
   local secret_resp
@@ -496,6 +496,7 @@ echo "  Phase 0.5 complete: JWT + RBAC enforcement enabled"
 echo ""
 echo -e "${BOLD}Phase 1: Setup${NC}"
 
+get_admin_token
 get_client_secret
 
 create_keycloak_user "rbac-user-a" "testpass" "rbac-a@test.dev" "Alice" "TestA"
