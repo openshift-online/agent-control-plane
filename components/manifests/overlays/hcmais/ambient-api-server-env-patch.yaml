@@ -25,7 +25,7 @@ spec:
                   key: version
                   optional: true
             - name: CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT
-              value: "true"
+              value: "false"
             - name: GRPC_SERVICE_ACCOUNT
               value: "ambient-control-plane-hcmais"
               valueFrom: null
