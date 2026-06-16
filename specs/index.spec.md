@@ -87,4 +87,5 @@ specs/
 | `frontend/` | UI rendering, session views, markdown, navigation |
 | `integrations/` | MCP, Gerrit, external services |
 | `security/` | Identity boundaries, credential authorization, per-session isolation |
+| `cli/` | TUI (`acpctl ambient`) views, navigation, interactive workflows |
 | `standards/` | Cross-cutting engineering constraints by component |
