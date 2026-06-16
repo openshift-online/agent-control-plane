@@ -11,28 +11,24 @@ RUN go mod edit -replace github.com/ambient-code/platform/components/ambient-mcp
     CGO_ENABLED=0 go build -o /credential-entrypoint .
 
 # Build github-mcp-server from source at a pinned tag.
-# Go 1.25+ required; UBI go-toolset only ships 1.21, so we bootstrap from the
-# official tarball with SHA-256 verification.
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS mcp-builder
+# Upstream requires Go 1.25+; UBI go-toolset ships 1.24, so we upgrade in-place.
+FROM registry.access.redhat.com/ubi9/go-toolset:1.24 AS mcp-builder
 
 ARG GITHUB_MCP_VERSION=v1.3.0
 ARG GO_VERSION=1.25.11
 ARG GO_SHA256=34f14304e856893f4ba30c2cacfe93906e9de7915c5f6aaaf3a81cdccd7ba30b
 
 USER 0
-RUN microdnf install -y git tar gzip && microdnf clean all
-
-RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tar.gz && \
+RUN rm -rf /usr/local/go && \
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tar.gz && \
     echo "${GO_SHA256}  /tmp/go.tar.gz" | sha256sum -c - && \
     tar -C /usr/local -xzf /tmp/go.tar.gz && \
     rm /tmp/go.tar.gz
 
-ENV PATH="/usr/local/go/bin:${PATH}"
-
 WORKDIR /build
 RUN git clone --depth 1 --branch "${GITHUB_MCP_VERSION}" \
       https://github.com/github/github-mcp-server.git . && \
-    CGO_ENABLED=0 go build \
+    CGO_ENABLED=0 /usr/local/go/bin/go build \
       -ldflags="-s -w -X main.version=${GITHUB_MCP_VERSION}" \
       -o /github-mcp-server ./cmd/github-mcp-server
 
