@@ -3,9 +3,6 @@ name: Auto-Merge Queue
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
-  workflow_run:
-    workflows: ["Unit Tests", "Lint", "Build and Push Component Docker Images", "CodeQL"]
-    types: [completed]
 
 permissions:
   pull-requests: write
@@ -61,70 +58,3 @@ jobs:
           GH_PR: ${{ github.event.pull_request.number }}
         run: bash .github/scripts/detect-components.sh --label "$GH_PR"
 
-  enqueue:
-    if: >-
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch != github.event.repository.default_branch
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
-      - name: Find PR with auto-merge-pending label
-        id: find
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: ${{ github.event.workflow_run.head_branch }}
-          REPO: ${{ github.repository }}
-        run: |
-          PR=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number,labels --jq '
-            .[] | select(.labels | map(.name) | index("auto-merge-pending")) | .number
-          ' 2>/dev/null)
-          if [ -n "$PR" ]; then
-            echo "pr=$PR" >> "$GITHUB_OUTPUT"
-            echo "Found eligible PR: $PR"
-          else
-            echo "No eligible PR on branch $BRANCH"
-          fi
-
-      - name: Wait for all required checks
-        if: steps.find.outputs.pr != ''
-        id: ready
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR: ${{ steps.find.outputs.pr }}
-          REPO: ${{ github.repository }}
-        run: |
-          EXPECTED_CHECKS="Lint CI Gate|Unit Tests CI Gate|SDD boundary check|Build CI Gate"
-          for attempt in $(seq 1 18); do
-            CHECKS=$(gh pr checks "$PR" --repo "$REPO" --required 2>/dev/null || true)
-            FAILED=$(echo "$CHECKS" | grep -c 'fail' || true)
-            PENDING=$(echo "$CHECKS" | grep -c 'pending' || true)
-            REPORTED=$(echo "$CHECKS" | grep -cE "$EXPECTED_CHECKS" || true)
-            if [ "$FAILED" -gt 0 ]; then
-              echo "ready=false" >> "$GITHUB_OUTPUT"
-              echo "Required checks failing"
-              exit 0
-            fi
-            if [ "$REPORTED" -ge 4 ] && [ "$PENDING" -eq 0 ]; then
-              echo "ready=true" >> "$GITHUB_OUTPUT"
-              echo "All $REPORTED required checks passed"
-              exit 0
-            fi
-            echo "Attempt $attempt: $REPORTED/4 checks reported, $PENDING pending, waiting 10s..."
-            sleep 10
-          done
-          echo "ready=false" >> "$GITHUB_OUTPUT"
-          echo "Timed out waiting for checks ($REPORTED/4 reported, $PENDING pending)"
-
-      - name: Enqueue PR
-        if: steps.find.outputs.pr != '' && steps.ready.outputs.ready == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR: ${{ steps.find.outputs.pr }}
-          REPO: ${{ github.repository }}
-        run: |
-          gh pr edit "$PR" --add-label auto-merge-queue --remove-label auto-merge-pending --repo "$REPO"
-          # On a merge-queue-protected branch, gh pr merge (without --auto)
-          # enqueues directly when checks have passed. --auto only sets the
-          # auto-merge flag which doesn't trigger queue enqueue on its own.
-          gh pr merge "$PR" --repo "$REPO"
