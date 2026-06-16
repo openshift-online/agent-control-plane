@@ -478,7 +478,7 @@ func (m *AppModel) openBindAgentPrompt() (tea.Model, tea.Cmd) {
 		return m, m.setInfo("No projects available — fetch projects first")
 	}
 
-	var projectName, agentName string
+	var projectName, agentID string
 	projectOpts := make([]huh.Option[string], 0, len(m.cachedProjects))
 	for _, p := range m.cachedProjects {
 		projectOpts = append(projectOpts, huh.NewOption(p.Name, p.Name))
@@ -486,7 +486,7 @@ func (m *AppModel) openBindAgentPrompt() (tea.Model, tea.Cmd) {
 
 	agentOpts := make([]huh.Option[string], 0, len(m.cachedAgents))
 	for _, a := range m.cachedAgents {
-		agentOpts = append(agentOpts, huh.NewOption(a.Name, a.Name))
+		agentOpts = append(agentOpts, huh.NewOption(a.Name, a.ID))
 	}
 	if len(agentOpts) == 0 {
 		agentOpts = append(agentOpts, huh.NewOption("(no agents loaded)", ""))
@@ -501,7 +501,7 @@ func (m *AppModel) openBindAgentPrompt() (tea.Model, tea.Cmd) {
 			huh.NewSelect[string]().
 				Title("Agent in project").
 				Options(agentOpts...).
-				Value(&agentName),
+				Value(&agentID),
 		),
 	)
 	form.WithWidth(60)
@@ -510,12 +510,19 @@ func (m *AppModel) openBindAgentPrompt() (tea.Model, tea.Cmd) {
 	m.formOverlay = form
 	m.formTitle = "Bind to Agent"
 	m.formOnComplete = func() tea.Cmd {
-		if agentName == "" {
+		if agentID == "" {
 			return m.setInfo("No agent selected")
 		}
+		agentLabel := agentID
+		for _, a := range m.cachedAgents {
+			if a.ID == agentID {
+				agentLabel = a.Name
+				break
+			}
+		}
 		return tea.Batch(
-			m.client.CreateBinding(credID, projectName, agentName),
-			m.setInfo("Binding "+credName+" to agent "+agentName+" in project "+projectName+"..."),
+			m.client.CreateBinding(credID, projectName, agentID),
+			m.setInfo("Binding "+credName+" to agent "+agentLabel+" in project "+projectName+"..."),
 		)
 	}
 	return m, m.formOverlay.Init()
