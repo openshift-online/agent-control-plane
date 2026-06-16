@@ -350,3 +350,134 @@ This section documents API endpoints and capabilities that this spec depends on 
 | Agents as authoring playground | The UI serves as a prototyping workbench for agent definitions. Teams experiment in the UI, then export to YAML for GitOps management via `acpctl apply`. Draft vs GitOps lifecycle badges distinguish prototype from production agents. |
 | Progressive disclosure, not mode switching | The operator and agent author share one navigation structure at different depths of engagement. No modal "Operations Mode" vs "Authoring Mode". Group labels (Operate/Build) provide wayfinding without mode complexity. |
 | Dashboard as default landing | The most frequent question ("what needs my attention?") should be answered without clicking anything. The Dashboard is the project-level entry point, replacing the session list as the default. |
+
+---
+
+## Design System
+
+### Requirement: Typefaces
+
+The Ambient UI SHALL use **Red Hat Text** for body copy and UI labels. Red Hat Text is optimized for readability at small sizes with increased x-height, wider narrow characters, and varied stroke weights.
+
+The Ambient UI SHALL use **Red Hat Mono** for code, terminal output, and machine-readable identifiers (session IDs, KSUIDs, JSON). Each letter occupies the same horizontal space, creating aligned columns for scanning.
+
+### Requirement: Accessibility
+
+All UI elements SHALL meet Red Hat accessibility standards:
+
+- Small text (17pt or smaller): minimum 4.5:1 contrast ratio
+- Large text (18pt or larger) and informative icons: minimum 3:1 contrast ratio
+- Saturated hues of similar intensity SHALL NOT be placed adjacent — combine bright colors with less saturated or neutral colors to avoid visual vibration
+
+### Requirement: Color Palette
+
+The Ambient UI SHALL use the Red Hat color palette organized into three groups: Core, Secondary, and Information. Colors are referenced by name and shade level (e.g. `red-50`, `gray-70`).
+
+#### Core Palette
+
+| Name | HEX | Usage |
+|------|-----|-------|
+| red-05 | `#fef0f0` | Red tint background |
+| red-10 | `#fce3e3` | Red light background |
+| red-20 | `#fbc5c5` | Red accent light |
+| red-30 | `#f9a8a8` | Red accent |
+| red-40 | `#f56e6e` | Red emphasis |
+| red-50 | `#ee0000` | Red Hat brand red — never for negative states |
+| red-60 | `#a60000` | Red dark |
+| red-70 | `#5f0000` | Red darker |
+| red-80 | `#3f0000` | Red darkest |
+| white | `#ffffff` | Background |
+| gray-10 | `#f2f2f2` | Subtle background |
+| gray-20 | `#e0e0e0` | Border, divider |
+| gray-30 | `#c7c7c7` | Disabled border |
+| gray-40 | `#a3a3a3` | Placeholder text |
+| gray-45 | `#8c8c8c` | Muted text |
+| gray-50 | `#707070` | Secondary text |
+| gray-60 | `#4d4d4d` | Body text |
+| gray-70 | `#383838` | Heading text |
+| gray-80 | `#292929` | Primary text |
+| gray-90 | `#1f1f1f` | Dark surface |
+| gray-95 | `#151515` | Darkest surface |
+| black | `#000000` | Maximum contrast |
+
+#### Secondary Palette
+
+| Name | HEX |
+|------|-----|
+| orange-10 | `#ffe8cc` |
+| orange-20 | `#fccb8f` |
+| orange-30 | `#f8ae54` |
+| orange-40 | `#f5921b` |
+| orange-50 | `#ca6c0f` |
+| orange-60 | `#9e4a06` |
+| orange-70 | `#732e00` |
+| orange-80 | `#4d1f00` |
+| yellow-10 | `#fff4cc` |
+| yellow-20 | `#ffe072` |
+| yellow-30 | `#ffcc17` |
+| yellow-40 | `#dca614` |
+| yellow-50 | `#b98412` |
+| yellow-60 | `#96640f` |
+| yellow-70 | `#73480b` |
+| yellow-80 | `#54330b` |
+| teal-10 | `#daf2f2` |
+| teal-20 | `#b9e5e5` |
+| teal-30 | `#9ad8d8` |
+| teal-40 | `#63bdbd` |
+| teal-50 | `#37a3a3` |
+| teal-60 | `#147878` |
+| teal-70 | `#004d4d` |
+| teal-80 | `#003333` |
+| purple-10 | `#ece6ff` |
+| purple-20 | `#d0c5f4` |
+| purple-30 | `#b6a6e9` |
+| purple-40 | `#876fd4` |
+| purple-50 | `#5e40be` |
+| purple-60 | `#3d2785` |
+| purple-70 | `#21134d` |
+| purple-80 | `#1b0d33` |
+
+#### Information Palette
+
+| Name | HEX |
+|------|-----|
+| success-green-10 | `#e9f7df` |
+| success-green-20 | `#d1f1bb` |
+| success-green-30 | `#afdc8f` |
+| success-green-40 | `#87bb62` |
+| success-green-50 | `#63993d` |
+| success-green-60 | `#3d7317` |
+| success-green-70 | `#204d00` |
+| success-green-80 | `#183301` |
+| danger-orange-10 | `#ffe3d9` |
+| danger-orange-20 | `#fbbea8` |
+| danger-orange-30 | `#f89b78` |
+| danger-orange-40 | `#f4784a` |
+| danger-orange-50 | `#f0561d` |
+| danger-orange-60 | `#b1380b` |
+| danger-orange-70 | `#731f00` |
+| danger-orange-80 | `#4c1405` |
+| interaction-blue-10 | `#e0f0ff` |
+| interaction-blue-20 | `#b9dafc` |
+| interaction-blue-30 | `#92c5f9` |
+| interaction-blue-40 | `#4394e5` |
+| interaction-blue-50 | `#0066cc` |
+| interaction-blue-60 | `#004d99` |
+| interaction-blue-70 | `#003366` |
+| interaction-blue-80 | `#032142` |
+
+### Requirement: Color Semantics
+
+Colors SHALL carry consistent semantic meaning across all UI surfaces:
+
+| Color | Semantic | Usage |
+|-------|----------|-------|
+| Red | Red Hat brand | Brand identity only — never for negative states |
+| Success green | Success, increase | Completed sessions, healthy status, positive deltas |
+| Danger orange | Error, failure, decrease | Failed sessions, errors, negative deltas |
+| Orange | Caution | Non-destructive warnings, attention needed |
+| Yellow | Warning | Action needed, approaching limits |
+| Interaction blue | Link, interaction | Clickable elements, focused states |
+| Purple | Info, note, tip | Informational badges, documentation links |
+| Teal | General, neutral | Neutral status, default badges |
+| Gray | Null, unavailable | Disabled states, unimportant metadata |

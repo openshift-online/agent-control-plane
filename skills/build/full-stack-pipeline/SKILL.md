@@ -329,15 +329,13 @@ Run `/unleash-flag` with the flag name and follow its checklist.
 
 ---
 
-## UI Wave Standards (from ambient-ui-workflow)
+## UI Wave Standards
 
 When implementing Wave 6 (Frontend), the ambient-ui component follows additional standards:
 
 ### UI Development Standards
 
 - **Technology:** React/Next.js with shadcn/ui components exclusively
-- **Accessibility:** Red Hat standards -- 4.5:1 contrast for small text, 3:1 for large text and icons
-- **Typefaces:** Red Hat Text (body), Red Hat Mono (code)
 - **Tabs:** Must persist active tab in URL via `?tab=` query parameter
 - **No `any` types** -- use proper types, `unknown`, or generics
 - **React Query** for all data fetching -- no manual `fetch()` in components
@@ -345,18 +343,6 @@ When implementing Wave 6 (Frontend), the ambient-ui component follows additional
 - **Port/adapter pattern** -- React Query hooks consume port interfaces, not raw API calls
 - **Fakes over mocks** in tests
 
-### UI Color Palette
+### UI Design System
 
-The full Red Hat color palette (core, secondary, information) is defined in the
-ambient-ui component's design tokens. Key associations:
-- Red = Red Hat brand (never for negative states)
-- Success green = positive outcomes
-- Danger orange = errors/failures
-- Orange = caution (non-destructive)
-- Yellow = warning (action needed)
-- Interaction blue = links/interactions
-- Purple = info/notes
-- Teal = neutral
-- Gray = unavailable/unimportant
-
-For the complete hex values, see the ambient-ui component source.
+Typefaces, accessibility requirements, color palette (78 hex values), and color semantics are defined in the [UI Architecture spec](../../../specs/ui/architecture.spec.md#design-system).
