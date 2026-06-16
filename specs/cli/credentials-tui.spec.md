@@ -157,7 +157,7 @@ The prompt input SHALL NOT echo characters (password-style input).
 - THEN a prompt appears: "New token for github-pat:"
 - AND the input does not echo typed characters
 - WHEN the user enters a new token and presses Enter
-- THEN `PATCH /credentials/{id}` is called with `{token: "<new value>"}`
+- THEN `PATCH /credentials/{id}` is called with the new secret value
 - AND the info line shows "Token rotated for github-pat"
 
 ### Requirement: Credential JSON Copy
