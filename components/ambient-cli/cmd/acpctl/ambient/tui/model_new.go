@@ -39,12 +39,14 @@ const staleThreshold = 15 * time.Second
 // numberKeyExcludedViews are views where digit keys do NOT trigger project
 // switching (e.g. overlay views, the projects list itself).
 var numberKeyExcludedViews = map[string]bool{
-	"projects": true,
-	"contexts": true,
-	"messages": true,
-	"detail":   true,
-	"inbox":    true,
-	"help":     true,
+	"projects":           true,
+	"contexts":           true,
+	"messages":           true,
+	"detail":             true,
+	"inbox":              true,
+	"help":               true,
+	"credentials":        true,
+	"credentialbindings": true,
 }
 
 // projectShortcutHandledViews are the views explicitly handled in
@@ -122,6 +124,7 @@ type dataFetcher interface {
 	FetchAllSessions() tea.Cmd
 	FetchScheduledSessions(projectID string) tea.Cmd
 	FetchInbox(projectID, agentID string) tea.Cmd
+	FetchCredentials() tea.Cmd
 }
 
 // AppModel is the top-level Bubbletea model for the rewritten TUI.
@@ -143,16 +146,20 @@ type AppModel struct {
 	contextTable  views.ResourceTable
 	messageStream views.MessageStream
 
-	scheduledSessionTable views.ResourceTable
+	scheduledSessionTable  views.ResourceTable
+	credentialTable        views.ResourceTable
+	credentialBindingTable views.ResourceTable
 
 	// Current view determines which table/view is active
-	activeView string // "projects", "agents", "sessions", "messages", "inbox", "contexts", "scheduledsessions"
+	activeView string // "projects", "agents", "sessions", "messages", "inbox", "contexts", "scheduledsessions", "credentials", "credentialbindings"
 
 	// Context for scoped views
-	currentProject string // set when drilling into a project
-	currentAgent   string // set when drilling into an agent (name)
-	currentAgentID string // agent ID for API calls
-	currentSession string // set when drilling into a session
+	currentProject      string // set when drilling into a project
+	currentAgent        string // set when drilling into an agent (name)
+	currentAgentID      string // agent ID for API calls
+	currentSession      string // set when drilling into a session
+	currentCredential   string // set when drilling into a credential (name)
+	currentCredentialID string // credential ID for API calls
 
 	// Command mode
 	commandMode  bool
@@ -178,11 +185,13 @@ type AppModel struct {
 	helpView views.HelpView
 
 	// Cached resource data for CRUD lookups (maps name/ID -> full resource).
-	cachedProjects          []sdktypes.Project
-	cachedAgents            []sdktypes.Agent
-	cachedSessions          []sdktypes.Session
-	cachedInbox             []sdktypes.InboxMessage
-	cachedScheduledSessions []sdktypes.ScheduledSession
+	cachedProjects           []sdktypes.Project
+	cachedAgents             []sdktypes.Agent
+	cachedSessions           []sdktypes.Session
+	cachedInbox              []sdktypes.InboxMessage
+	cachedScheduledSessions  []sdktypes.ScheduledSession
+	cachedCredentials        []sdktypes.Credential
+	cachedCredentialBindings []sdktypes.RoleBinding
 
 	// Message polling state.
 	messagePollActive bool // true when message poll tick is running
@@ -280,6 +289,9 @@ func NewAppModel(factory *connection.ClientFactory) (*AppModel, error) {
 	})
 	it := views.NewInboxTable("all", views.DefaultTableStyle())
 	ct := views.NewContextTable(views.DefaultTableStyle())
+	crt := views.NewCredentialTable("all", views.DefaultTableStyle())
+	cbt := views.NewCredentialBindingTable("all", views.DefaultTableStyle())
+
 	sst := views.NewScheduledSessionTable("all", views.DefaultTableStyle())
 	// Scheduled session rows: SUSPENDED is column index 3
 	// (NAME, SCHEDULE, PROJECT, SUSPENDED, ACTIVE, LAST RUN, AGE)
@@ -297,16 +309,18 @@ func NewAppModel(factory *connection.ClientFactory) (*AppModel, error) {
 		navStack: []NavEntry{
 			{Kind: "projects", Scope: "all"},
 		},
-		activeView:            "projects",
-		projectTable:          pt,
-		agentTable:            at,
-		sessionTable:          st,
-		inboxTable:            it,
-		contextTable:          ct,
-		scheduledSessionTable: sst,
-		commandInput:          ci,
-		filterInput:           fi,
-		promptInput:           pi,
+		activeView:             "projects",
+		projectTable:           pt,
+		agentTable:             at,
+		sessionTable:           st,
+		inboxTable:             it,
+		contextTable:           ct,
+		scheduledSessionTable:  sst,
+		credentialTable:        crt,
+		credentialBindingTable: cbt,
+		commandInput:           ci,
+		filterInput:            fi,
+		promptInput:            pi,
 	}
 
 	return m, nil
@@ -533,6 +547,13 @@ func (m *AppModel) fetchActiveView() tea.Cmd {
 			return f.FetchScheduledSessions(m.currentProject)
 		}
 		return nil
+	case "credentials":
+		return f.FetchCredentials()
+	case "credentialbindings":
+		if m.currentCredentialID != "" {
+			return m.client.FetchCredentialBindings(m.currentCredentialID)
+		}
+		return nil
 	case "messages":
 		return nil
 	default:
@@ -556,6 +577,10 @@ func (m *AppModel) activeTable() *views.ResourceTable {
 		return &m.contextTable
 	case "scheduledsessions":
 		return &m.scheduledSessionTable
+	case "credentials":
+		return &m.credentialTable
+	case "credentialbindings":
+		return &m.credentialBindingTable
 	default:
 		return nil
 	}
@@ -638,6 +663,61 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ScheduledSessionsMsg:
 		return m.handleScheduledSessionsMsg(msg)
+
+	case CredentialsMsg:
+		return m.handleCredentialsMsg(msg)
+
+	case CredentialBindingsMsg:
+		return m.handleCredentialBindingsMsg(msg)
+
+	case CreateCredentialMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Create credential failed: " + msg.Err.Error())
+		}
+		name := ""
+		if msg.Credential != nil {
+			name = msg.Credential.Name
+		}
+		m.pollInFlight = true
+		return m, tea.Batch(m.fetchActiveView(), m.client.FetchAllCredentialBindings(), m.setInfo("Credential created: "+name))
+
+	case UpdateCredentialMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Update credential failed: " + msg.Err.Error())
+		}
+		name := ""
+		if msg.Credential != nil {
+			name = msg.Credential.Name
+		}
+		m.pollInFlight = true
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Credential updated: "+name))
+
+	case DeleteCredentialMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Delete credential failed: " + msg.Err.Error())
+		}
+		m.pollInFlight = true
+		return m, tea.Batch(m.fetchActiveView(), m.client.FetchAllCredentialBindings(), m.setInfo("Credential deleted"))
+
+	case CreateBindingMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Bind failed: " + msg.Err.Error())
+		}
+		m.pollInFlight = true
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Binding created"))
+
+	case DeleteBindingMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Unbind failed: " + msg.Err.Error())
+		}
+		m.pollInFlight = true
+		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Binding removed"))
+
+	case BindAgentFormMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Fetch agents failed: " + msg.Err.Error())
+		}
+		return m.openBindAgentStep2(msg.CredentialID, msg.CredentialName, msg.ProjectName, msg.Agents)
 
 	case CreateScheduledSessionMsg:
 		if msg.Err != nil {
@@ -1110,6 +1190,10 @@ func (m *AppModel) resizeTable() {
 	m.contextTable.SetWidth(m.width)
 	m.scheduledSessionTable.SetHeight(tableHeight)
 	m.scheduledSessionTable.SetWidth(m.width)
+	m.credentialTable.SetHeight(tableHeight)
+	m.credentialTable.SetWidth(m.width)
+	m.credentialBindingTable.SetHeight(tableHeight)
+	m.credentialBindingTable.SetWidth(m.width)
 
 	// Message stream and detail view get the full table area.
 	m.messageStream.SetSize(m.width, tableHeight+2)
@@ -1660,6 +1744,10 @@ func (m *AppModel) updateFormOverlay(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleAgentCountsMsg(typedMsg)
 	case ScheduledSessionsMsg:
 		return m.handleScheduledSessionsMsg(typedMsg)
+	case CredentialsMsg:
+		return m.handleCredentialsMsg(typedMsg)
+	case CredentialBindingsMsg:
+		return m.handleCredentialBindingsMsg(typedMsg)
 	}
 
 	// Esc dismisses the form (huh uses ctrl+c for its own abort).
@@ -1865,6 +1953,9 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 			cmd := m.pushView("detail", msgID, msgID)
 			return m, tea.Batch(cmd, m.setInfo("Inbox message detail"))
 		}
+
+	case "credentials":
+		return m.handleCredentialEnter()
 	}
 
 	return m, nil
@@ -1973,6 +2064,10 @@ func (m *AppModel) handleRuneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleInboxRune(key)
 	case "scheduledsessions":
 		return m.handleScheduledSessionsRune(key)
+	case "credentials":
+		return m.handleCredentialsRune(key)
+	case "credentialbindings":
+		return m.handleCredentialBindingsRune(key)
 	}
 
 	return m, nil
@@ -2481,6 +2576,10 @@ func (m *AppModel) handleCtrlD() (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+	case "credentials":
+		return m.handleCredentialCtrlD()
+	case "credentialbindings":
+		return m.handleCredentialBindingCtrlD()
 	}
 	return m, nil
 }
@@ -2771,6 +2870,36 @@ func (m *AppModel) executeCommand(input string) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(
 			m.client.FetchScheduledSessions(project),
 			m.setInfo("Viewing scheduled sessions in project "+project),
+		)
+
+	case CmdCredentials:
+		m.navStack = []NavEntry{{Kind: "credentials", Scope: "all"}}
+		m.activeView = "credentials"
+		m.currentCredential = ""
+		m.currentCredentialID = ""
+		m.activeFilter = nil
+		m.pollInFlight = true
+		return m, tea.Batch(
+			m.client.FetchCredentials(),
+			m.client.FetchAllCredentialBindings(),
+			m.setInfo("Viewing credentials"),
+		)
+
+	case CmdCredentialBindings:
+		if m.currentCredentialID == "" {
+			return m, m.setInfo("No credential context — drill into a credential first")
+		}
+		m.credentialBindingTable.SetScope(m.currentCredential)
+		m.navStack = []NavEntry{
+			{Kind: "credentials", Scope: "all"},
+			{Kind: "credentialbindings", Scope: m.currentCredential},
+		}
+		m.activeView = "credentialbindings"
+		m.activeFilter = nil
+		m.pollInFlight = true
+		return m, tea.Batch(
+			m.client.FetchCredentialBindings(m.currentCredentialID),
+			m.setInfo("Viewing bindings for "+m.currentCredential),
 		)
 
 	case CmdMessages:
@@ -3276,6 +3405,10 @@ func (m *AppModel) handleEditComplete(msg editCompleteMsg) (tea.Model, tea.Cmd) 
 			"name", "description", "schedule", "timezone",
 			"session_prompt", "agent_id", "enabled",
 		}
+	case "credential":
+		editableFields = []string{
+			"name", "description", "url", "email",
+		}
 	}
 
 	// Build patch with only changed editable fields.
@@ -3339,6 +3472,11 @@ func (m *AppModel) handleEditComplete(msg editCompleteMsg) (tea.Model, tea.Cmd) 
 		return m, tea.Batch(
 			m.client.UpdateScheduledSession(msg.ProjectID, msg.ResourceID, patch),
 			m.setInfo("Updating scheduled session ("+summary+")..."),
+		)
+	case "credential":
+		return m, tea.Batch(
+			m.client.UpdateCredential(msg.ResourceID, patch),
+			m.setInfo("Updating credential ("+summary+")..."),
 		)
 	default:
 		return m, m.setInfo("Unknown resource kind: " + msg.ResourceKind)

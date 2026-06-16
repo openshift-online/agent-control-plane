@@ -306,6 +306,10 @@ func (m *AppModel) viewResourceTable() string {
 		return m.contextTable.View()
 	case "scheduledsessions":
 		return m.scheduledSessionTable.View()
+	case "credentials":
+		return m.credentialTable.View()
+	case "credentialbindings":
+		return m.credentialBindingTable.View()
 	case "messages":
 		return m.messageStream.View()
 	case "detail":

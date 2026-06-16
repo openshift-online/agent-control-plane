@@ -8,7 +8,7 @@ on:
 
 permissions:
   pull-requests: write
-  contents: read
+  contents: write
 
 jobs:
   check-managed-paths:
@@ -174,3 +174,9 @@ jobs:
           echo "::error::SDD boundary violation detected. See PR comment for details."
           echo "::error::Add the 'sdd-exempt' label to bypass this check."
           exit 1
+
+      - name: Try enqueue
+        if: github.event_name == 'pull_request' && steps.check.outputs.violation != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_PAT }}
+        run: bash .github/scripts/try-enqueue.sh "${{ github.event.pull_request.number }}" "SDD boundary check"
