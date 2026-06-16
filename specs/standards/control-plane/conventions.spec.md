@@ -1,5 +1,7 @@
 # Control Plane Development Context
 
+<!-- TODO: Migrate upstream to OpenShift-Fleet/agentic-sdlc and import via APM -->
+
 > Part of [CLAUDE.md Critical Conventions](../../CLAUDE.md#critical-conventions)
 
 **When to load:** Working on the control plane, reconciliation logic, or Job management

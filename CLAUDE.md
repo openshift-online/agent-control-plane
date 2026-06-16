@@ -16,8 +16,8 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 - `components/credential-sidecars/` - Per-provider credential sidecar containers (GitHub, Jira, K8s, Google)
 - `components/manifests/` - Kustomize-based deployment manifests and overlays
 - `docs/` - Astro Starlight documentation site
-- `specs/` - Desired state of the system ([sessions](specs/sessions/), [agents](specs/agents/), [control-plane](specs/control-plane/), [integrations](specs/integrations/), [standards](specs/standards/))
-- `skills/` - Local agent skills organized by SDLC phase (`plan/`, `build/`, `test/`, `review/`, `deploy/`, `tooling/`)
+- `specs/` - Desired state of the system ([platform](specs/platform/), [security](specs/security/), [ui](specs/ui/), [standards](specs/standards/))
+- `skills/` - Agent skills: [spec](skills/plan/spec), [full-stack-pipeline](skills/build/full-stack-pipeline), [dev-cluster](skills/build/dev-cluster), [pr-test](skills/test/pr-test), [deploy-cluster](skills/deploy/deploy-cluster), [review](skills/review/acp-review-guidance), [tooling](skills/tooling/)
 - `apm.yml` - APM manifest declaring upstream skill dependencies (fleet-sdlc)
 - `.claude/skills/` - APM-installed upstream skills (gitignored, run `apm install`)
 - `.claude/commands/` - APM-installed upstream commands (gitignored)
@@ -35,6 +35,24 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 User Creates Session → API Server Persists to DB → Control Plane Spawns Job →
 Pod Runs AI Agent → Results Stream to API Server → UI Displays Progress
 ```
+
+## SDLC Workflow
+
+The development lifecycle follows 5 steps, each backed by a skill:
+
+```
+1. /spec                  — define desired state (plan/spec)
+2. /full-stack-pipeline   — build the feature (build/full-stack-pipeline)
+3. /dev-cluster           — test locally in Kind (build/dev-cluster)
+4. /pr-test               — deploy PR to OpenShift (test/pr-test)
+5. /deploy-cluster        — ship to production (deploy/deploy-cluster)
+```
+
+Support skills available at any point:
+- `/acp-review-guidance` — PR review checklist
+- `/pr-fixer` — auto-fix PR from review comments
+- `/align` — convention health check
+- `/memory` — project memory management
 
 ## Commands
 

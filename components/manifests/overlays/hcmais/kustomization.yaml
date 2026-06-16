@@ -34,6 +34,25 @@ patches:
     apiVersion: v1
     kind: PersistentVolumeClaim
     metadata: { name: minio-data }
+# --- Delete unwanted PostgreSQL (shared instance, not used by hcmais) ---
+- target: { group: apps, version: v1, kind: Deployment, name: postgresql }
+  patch: |
+    $patch: delete
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: { name: postgresql }
+- target: { version: v1, kind: Service, name: postgresql }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: Service
+    metadata: { name: postgresql }
+- target: { version: v1, kind: PersistentVolumeClaim, name: postgresql-data }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata: { name: postgresql-data }
 # --- Delete unwanted misc ---
 - target: { version: v1, kind: LimitRange, name: ambient-default-limits }
   patch: |

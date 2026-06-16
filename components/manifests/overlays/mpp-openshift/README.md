@@ -78,7 +78,7 @@ The api-server must know the static token so it can recognise the runner as a se
 # The token value must match what was set in Step B
 ```
 
-> **Note:** Step C `WatchSessionMessages PERMISSION_DENIED` was resolved — see `specs/control-plane/control-plane.spec.md`.
+> **Note:** Step C `WatchSessionMessages PERMISSION_DENIED` was resolved — see `specs/platform/control-plane.spec.md`.
 
 ## Files in This Overlay
 
