@@ -127,10 +127,13 @@ func (m *AppModel) rebuildCredentialBindingRows() {
 	m.credentialBindingTable.SetRows(rows)
 }
 
+// credentialBindingCount counts only credential:viewer bindings (access grants
+// to projects/agents), excluding credential:owner (auto-created on credential
+// creation) and credential:token-reader (system-internal).
 func credentialBindingCount(credID string, bindings []sdktypes.RoleBinding) int {
 	count := 0
 	for _, b := range bindings {
-		if b.CredentialID != nil && *b.CredentialID == credID {
+		if b.CredentialID != nil && *b.CredentialID == credID && b.RoleID == "credential:viewer" {
 			count++
 		}
 	}
@@ -432,19 +435,36 @@ func (m *AppModel) openBindProjectPrompt() (tea.Model, tea.Cmd) {
 		return m, m.setInfo("No credential context")
 	}
 
-	m.promptMode = true
-	m.promptInput.Prompt = "Bind " + credName + " to project: "
-	m.promptInput.Focus()
-	m.promptCallback = func(projectName string) (tea.Model, tea.Cmd) {
-		if projectName == "" {
-			return m, m.setInfo("Cancelled")
-		}
-		return m, tea.Batch(
+	if len(m.cachedProjects) == 0 {
+		return m, m.setInfo("No projects available — fetch projects first")
+	}
+
+	var projectName string
+	opts := make([]huh.Option[string], 0, len(m.cachedProjects))
+	for _, p := range m.cachedProjects {
+		opts = append(opts, huh.NewOption(p.Name, p.Name))
+	}
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Bind "+credName+" to project").
+				Options(opts...).
+				Value(&projectName),
+		),
+	)
+	form.WithWidth(60)
+	form.WithShowHelp(true)
+
+	m.formOverlay = form
+	m.formTitle = "Bind to Project"
+	m.formOnComplete = func() tea.Cmd {
+		return tea.Batch(
 			m.client.CreateBinding(credID, projectName, ""),
 			m.setInfo("Binding "+credName+" to project "+projectName+"..."),
 		)
 	}
-	return m, nil
+	return m, m.formOverlay.Init()
 }
 
 func (m *AppModel) openBindAgentPrompt() (tea.Model, tea.Cmd) {
@@ -454,29 +474,51 @@ func (m *AppModel) openBindAgentPrompt() (tea.Model, tea.Cmd) {
 		return m, m.setInfo("No credential context")
 	}
 
-	m.promptMode = true
-	m.promptInput.Prompt = "Project for agent binding: "
-	m.promptInput.Focus()
-	m.promptCallback = func(projectName string) (tea.Model, tea.Cmd) {
-		if projectName == "" {
-			return m, m.setInfo("Cancelled")
-		}
-		m.promptMode = true
-		m.promptInput.Prompt = "Agent in " + projectName + ": "
-		m.promptInput.Reset()
-		m.promptInput.Focus()
-		m.promptCallback = func(agentName string) (tea.Model, tea.Cmd) {
-			if agentName == "" {
-				return m, m.setInfo("Cancelled")
-			}
-			return m, tea.Batch(
-				m.client.CreateBinding(credID, projectName, agentName),
-				m.setInfo("Binding "+credName+" to agent "+agentName+" in project "+projectName+"..."),
-			)
-		}
-		return m, nil
+	if len(m.cachedProjects) == 0 {
+		return m, m.setInfo("No projects available — fetch projects first")
 	}
-	return m, nil
+
+	var projectName, agentName string
+	projectOpts := make([]huh.Option[string], 0, len(m.cachedProjects))
+	for _, p := range m.cachedProjects {
+		projectOpts = append(projectOpts, huh.NewOption(p.Name, p.Name))
+	}
+
+	agentOpts := make([]huh.Option[string], 0, len(m.cachedAgents))
+	for _, a := range m.cachedAgents {
+		agentOpts = append(agentOpts, huh.NewOption(a.Name, a.Name))
+	}
+	if len(agentOpts) == 0 {
+		agentOpts = append(agentOpts, huh.NewOption("(no agents loaded)", ""))
+	}
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Project").
+				Options(projectOpts...).
+				Value(&projectName),
+			huh.NewSelect[string]().
+				Title("Agent in project").
+				Options(agentOpts...).
+				Value(&agentName),
+		),
+	)
+	form.WithWidth(60)
+	form.WithShowHelp(true)
+
+	m.formOverlay = form
+	m.formTitle = "Bind to Agent"
+	m.formOnComplete = func() tea.Cmd {
+		if agentName == "" {
+			return m.setInfo("No agent selected")
+		}
+		return tea.Batch(
+			m.client.CreateBinding(credID, projectName, agentName),
+			m.setInfo("Binding "+credName+" to agent "+agentName+" in project "+projectName+"..."),
+		)
+	}
+	return m, m.formOverlay.Init()
 }
 
 // ---------------------------------------------------------------------------
