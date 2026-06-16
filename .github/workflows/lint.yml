@@ -22,25 +22,17 @@ jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      api-server: ${{ steps.filter.outputs.api-server }}
-      cli: ${{ steps.filter.outputs.cli }}
+      api-server: ${{ steps.detect.outputs.api-server }}
+      cli: ${{ steps.detect.outputs.cli }}
     steps:
       - name: Checkout code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Detect changed components
-        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
-        id: filter
-        with:
-          filters: |
-            api-server:
-              - 'components/ambient-api-server/**/*.go'
-              - 'components/ambient-api-server/go.mod'
-              - 'components/ambient-api-server/go.sum'
-            cli:
-              - 'components/ambient-cli/**/*.go'
-              - 'components/ambient-cli/go.mod'
-              - 'components/ambient-cli/go.sum'
+        id: detect
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash .github/scripts/detect-components.sh --outputs
 
   go-api-server:
     runs-on: ubuntu-latest

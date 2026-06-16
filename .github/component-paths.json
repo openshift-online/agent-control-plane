@@ -1,0 +1,50 @@
+{
+  "api-server": {
+    "paths": ["components/ambient-api-server/**"],
+    "label": "component/api-server"
+  },
+  "control-plane": {
+    "paths": ["components/ambient-control-plane/**"],
+    "label": "component/control-plane"
+  },
+  "runner": {
+    "paths": ["components/runners/ambient-runner/**"],
+    "label": "component/runner"
+  },
+  "ui": {
+    "paths": ["components/ambient-ui/**"],
+    "label": "component/ui"
+  },
+  "cli": {
+    "paths": ["components/ambient-cli/**", "components/ambient-sdk/go-sdk/**"],
+    "label": "component/cli"
+  },
+  "mcp": {
+    "paths": ["components/ambient-mcp/**"],
+    "label": "component/mcp"
+  },
+  "sdk": {
+    "paths": ["components/ambient-sdk/**"],
+    "label": "component/sdk"
+  },
+  "credential-sidecars": {
+    "paths": ["components/credential-sidecars/**"],
+    "label": "component/credential-sidecars"
+  },
+  "manifests": {
+    "paths": ["components/manifests/**"],
+    "label": "component/manifests"
+  },
+  "ci": {
+    "paths": [".github/**"],
+    "label": "ci"
+  },
+  "docs": {
+    "paths": ["docs/**"],
+    "label": "docs"
+  },
+  "scripts": {
+    "paths": [".github/scripts/**", "tests/test_model_discovery.py"],
+    "label": "scripts"
+  }
+}

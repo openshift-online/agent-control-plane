@@ -38,6 +38,10 @@ func (h *projectGRPCHandler) GetProject(ctx context.Context, req *pb.GetProjectR
 		return nil, err
 	}
 
+	if err := requireProjectAccess(ctx, req.GetId()); err != nil {
+		return nil, err
+	}
+
 	project, svcErr := h.service.Get(ctx, req.GetId())
 	if svcErr != nil {
 		return nil, grpcutil.ServiceErrorToGRPC(svcErr)
@@ -46,6 +50,8 @@ func (h *projectGRPCHandler) GetProject(ctx context.Context, req *pb.GetProjectR
 	return projectToProto(project), nil
 }
 
+// CreateProject allows all authenticated users (matches HTTP — project
+// creation is auth-exempt for bootstrapping).
 func (h *projectGRPCHandler) CreateProject(ctx context.Context, req *pb.CreateProjectRequest) (*pb.Project, error) {
 	if err := grpcutil.ValidateStringField("name", req.GetName(), true); err != nil {
 		return nil, err
@@ -68,6 +74,10 @@ func (h *projectGRPCHandler) CreateProject(ctx context.Context, req *pb.CreatePr
 
 func (h *projectGRPCHandler) UpdateProject(ctx context.Context, req *pb.UpdateProjectRequest) (*pb.Project, error) {
 	if err := grpcutil.ValidateRequiredID(req.GetId()); err != nil {
+		return nil, err
+	}
+
+	if err := requireProjectAccess(ctx, req.GetId()); err != nil {
 		return nil, err
 	}
 
@@ -102,6 +112,10 @@ func (h *projectGRPCHandler) UpdateProject(ctx context.Context, req *pb.UpdatePr
 
 func (h *projectGRPCHandler) DeleteProject(ctx context.Context, req *pb.DeleteProjectRequest) (*pb.DeleteProjectResponse, error) {
 	if err := grpcutil.ValidateRequiredID(req.GetId()); err != nil {
+		return nil, err
+	}
+
+	if err := requireProjectAccess(ctx, req.GetId()); err != nil {
 		return nil, err
 	}
 
@@ -148,6 +162,10 @@ func (h *projectGRPCHandler) ListProjects(ctx context.Context, req *pb.ListProje
 	}, nil
 }
 
+// AuthResult is captured at stream creation time and not refreshed for the
+// lifetime of the stream. This is a fundamental constraint of gRPC streaming:
+// interceptors run once at stream setup, so permission changes (revoked
+// bindings, new project access) are not reflected until the client reconnects.
 func (h *projectGRPCHandler) WatchProjects(req *pb.WatchProjectsRequest, stream grpc.ServerStreamingServer[pb.ProjectWatchEvent]) error {
 	broker := h.brokerFunc()
 	if broker == nil {
@@ -203,4 +221,23 @@ func (h *projectGRPCHandler) WatchProjects(req *pb.WatchProjectsRequest, stream 
 			}
 		}
 	}
+}
+
+// requireProjectAccess checks that a non-service caller has RBAC access to
+// the given project. Service callers and global admins are always permitted.
+func requireProjectAccess(ctx context.Context, projectID string) error {
+	if middleware.IsServiceCaller(ctx) {
+		return nil
+	}
+	authResult := rbac.GetAuthResult(ctx)
+	if authResult == nil {
+		return status.Error(codes.PermissionDenied, "not authorized")
+	}
+	if authResult.IsGlobalAdmin {
+		return nil
+	}
+	if !rbac.IsProjectAuthorized(authResult, projectID) {
+		return status.Error(codes.PermissionDenied, "not authorized")
+	}
+	return nil
 }

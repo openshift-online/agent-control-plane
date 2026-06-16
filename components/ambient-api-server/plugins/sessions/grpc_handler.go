@@ -47,11 +47,19 @@ func (h *sessionGRPCHandler) GetSession(ctx context.Context, req *pb.GetSessionR
 		return nil, grpcutil.ServiceErrorToGRPC(svcErr)
 	}
 
+	if err := requireProjectAccess(ctx, derefStr(session.ProjectId)); err != nil {
+		return nil, err
+	}
+
 	return sessionToProto(session), nil
 }
 
 func (h *sessionGRPCHandler) CreateSession(ctx context.Context, req *pb.CreateSessionRequest) (*pb.Session, error) {
 	if err := grpcutil.ValidateStringField("name", req.GetName(), true); err != nil {
+		return nil, err
+	}
+
+	if err := requireProjectAccess(ctx, derefStr(req.ProjectId)); err != nil {
 		return nil, err
 	}
 
@@ -98,6 +106,10 @@ func (h *sessionGRPCHandler) UpdateSession(ctx context.Context, req *pb.UpdateSe
 	found, svcErr := h.service.Get(ctx, req.GetId())
 	if svcErr != nil {
 		return nil, grpcutil.ServiceErrorToGRPC(svcErr)
+	}
+
+	if err := requireProjectAccess(ctx, derefStr(found.ProjectId)); err != nil {
+		return nil, err
 	}
 
 	if req.Name != nil {
@@ -165,6 +177,15 @@ func (h *sessionGRPCHandler) UpdateSessionStatus(ctx context.Context, req *pb.Up
 		return nil, err
 	}
 
+	found, svcErr := h.service.Get(ctx, req.GetId())
+	if svcErr != nil {
+		return nil, grpcutil.ServiceErrorToGRPC(svcErr)
+	}
+
+	if err := requireProjectAccess(ctx, derefStr(found.ProjectId)); err != nil {
+		return nil, err
+	}
+
 	patch := &SessionStatusPatchRequest{}
 	if req.Phase != nil {
 		patch.Phase = req.Phase
@@ -212,7 +233,19 @@ func (h *sessionGRPCHandler) DeleteSession(ctx context.Context, req *pb.DeleteSe
 		return nil, err
 	}
 
-	svcErr := h.service.Delete(ctx, req.GetId())
+	found, svcErr := h.service.Get(ctx, req.GetId())
+	if svcErr != nil {
+		if svcErr.Is404() {
+			return &pb.DeleteSessionResponse{}, nil
+		}
+		return nil, grpcutil.ServiceErrorToGRPC(svcErr)
+	}
+
+	if err := requireProjectAccess(ctx, derefStr(found.ProjectId)); err != nil {
+		return nil, err
+	}
+
+	svcErr = h.service.Delete(ctx, req.GetId())
 	if svcErr != nil {
 		return nil, grpcutil.ServiceErrorToGRPC(svcErr)
 	}
@@ -277,6 +310,16 @@ func (h *sessionGRPCHandler) PushSessionMessage(ctx context.Context, req *pb.Pus
 		return nil, status.Error(codes.PermissionDenied, "service token may not push event_type=user")
 	}
 
+	if !middleware.IsServiceCaller(ctx) {
+		session, svcErr := h.service.Get(ctx, req.GetSessionId())
+		if svcErr != nil {
+			return nil, grpcutil.ServiceErrorToGRPC(svcErr)
+		}
+		if err := requireProjectAccess(ctx, derefStr(session.ProjectId)); err != nil {
+			return nil, err
+		}
+	}
+
 	msg, err := h.msgService.Push(ctx, req.GetSessionId(), req.GetEventType(), req.GetPayload())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to push message: %v", err)
@@ -284,6 +327,10 @@ func (h *sessionGRPCHandler) PushSessionMessage(ctx context.Context, req *pb.Pus
 	return sessionMessageToProto(msg), nil
 }
 
+// AuthResult is captured at stream creation time and not refreshed for the
+// lifetime of the stream. This is a fundamental constraint of gRPC streaming:
+// interceptors run once at stream setup, so permission changes (revoked
+// bindings, new project access) are not reflected until the client reconnects.
 func (h *sessionGRPCHandler) WatchSessionMessages(req *pb.WatchSessionMessagesRequest, stream grpc.ServerStreamingServer[pb.SessionMessage]) error {
 	if req.GetSessionId() == "" {
 		return status.Error(codes.InvalidArgument, "session_id is required")
@@ -349,6 +396,7 @@ func (h *sessionGRPCHandler) WatchSessionMessages(req *pb.WatchSessionMessagesRe
 	}
 }
 
+// AuthResult is captured at stream creation time — see WatchSessionMessages comment.
 func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream grpc.ServerStreamingServer[pb.SessionWatchEvent]) error {
 	broker := h.brokerFunc()
 	if broker == nil {
@@ -414,4 +462,30 @@ func (h *sessionGRPCHandler) WatchSessions(req *pb.WatchSessionsRequest, stream 
 			}
 		}
 	}
+}
+
+// requireProjectAccess checks that a non-service caller has RBAC access to
+// the given project. Service callers and global admins are always permitted.
+func requireProjectAccess(ctx context.Context, projectID string) error {
+	if middleware.IsServiceCaller(ctx) {
+		return nil
+	}
+	authResult := rbac.GetAuthResult(ctx)
+	if authResult == nil {
+		return status.Error(codes.PermissionDenied, "not authorized")
+	}
+	if authResult.IsGlobalAdmin {
+		return nil
+	}
+	if !rbac.IsProjectAuthorized(authResult, projectID) {
+		return status.Error(codes.PermissionDenied, "not authorized")
+	}
+	return nil
+}
+
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

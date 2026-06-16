@@ -36,7 +36,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Detect changed components
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: changes
         with:
@@ -82,8 +82,8 @@ jobs:
           if [ -n "$SELECTED" ]; then
             # Manual dispatch: build only selected components
             FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --arg sel "$SELECTED" '[.[] | select(.name as $n | $sel | split(",") | map(gsub("^\\s+|\\s+$";"")) | index($n))]')
-          elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            # PR: build only changed components
+          elif [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event_name }}" = "merge_group" ]; then
+            # PR or merge queue: build only changed components
             FILTERED=$(echo "$ALL_COMPONENTS" | jq -c --argjson changes "$CHANGES_JSON"               '[.[] | select(.name as $n | $changes[$n] == "true")]')
             if [ "$FILTERED" = "[]" ]; then
               echo "No component changes detected, skipping builds"

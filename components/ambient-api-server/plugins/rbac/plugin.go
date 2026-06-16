@@ -8,6 +8,8 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/registry"
 	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 )
@@ -45,7 +47,7 @@ func init() {
 			if mwHolder != nil {
 				return mwHolder.GRPCUnaryInterceptor()(ctx, req, info, handler)
 			}
-			return handler(ctx, req)
+			return nil, status.Error(codes.Unavailable, "authorization not initialized")
 		},
 	)
 	pkgserver.RegisterPostAuthGRPCStreamInterceptor(
@@ -53,7 +55,7 @@ func init() {
 			if mwHolder != nil {
 				return mwHolder.GRPCStreamInterceptor()(srv, ss, info, handler)
 			}
-			return handler(srv, ss)
+			return status.Error(codes.Unavailable, "authorization not initialized")
 		},
 	)
 }

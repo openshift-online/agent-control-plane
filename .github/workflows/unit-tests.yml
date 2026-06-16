@@ -32,32 +32,20 @@ jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      api-server: ${{ steps.filter.outputs.api-server }}
-      runner: ${{ steps.filter.outputs.runner }}
-      cli: ${{ steps.filter.outputs.cli }}
-      ambient-ui: ${{ steps.filter.outputs.ambient-ui }}
-      scripts: ${{ steps.filter.outputs.scripts }}
+      api-server: ${{ steps.detect.outputs.api-server }}
+      runner: ${{ steps.detect.outputs.runner }}
+      cli: ${{ steps.detect.outputs.cli }}
+      ambient-ui: ${{ steps.detect.outputs.ui }}
+      scripts: ${{ steps.detect.outputs.scripts }}
     steps:
       - name: Checkout code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Detect changed components
-        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
-        id: filter
-        with:
-          filters: |
-            api-server:
-              - 'components/ambient-api-server/**'
-            runner:
-              - 'components/runners/ambient-runner/**'
-            cli:
-              - 'components/ambient-cli/**'
-              - 'components/ambient-sdk/go-sdk/**'
-            ambient-ui:
-              - 'components/ambient-ui/**'
-            scripts:
-              - '.github/scripts/**'
-              - 'tests/test_model_discovery.py'
+        id: detect
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash .github/scripts/detect-components.sh --outputs
 
   api-server:
     runs-on: ubuntu-latest

@@ -1,0 +1,26 @@
+[
+  {
+    "input": "I need to add a new component to CI",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "ci-workflows" },
+    "description": "Adding a new component triggers the CI workflows skill"
+  },
+  {
+    "input": "my component's tests aren't running in CI",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "ci-workflows" },
+    "description": "CI test troubleshooting triggers the skill"
+  },
+  {
+    "input": "why doesn't my PR have component labels",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "ci-workflows" },
+    "description": "PR labeling question triggers the skill"
+  },
+  {
+    "input": "how do I add a new container image to the build pipeline",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "ci-workflows" },
+    "description": "Build pipeline question triggers the skill"
+  }
+]

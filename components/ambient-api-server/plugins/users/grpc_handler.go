@@ -13,6 +13,7 @@ import (
 	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/pkg/server/grpcutil"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
@@ -33,6 +34,7 @@ func NewUserGRPCHandler(service UserService, generic services.GenericService, br
 	}
 }
 
+// GetUser allows all authenticated users (matches HTTP behavior).
 func (h *userGRPCHandler) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.User, error) {
 	if err := grpcutil.ValidateRequiredID(req.GetId()); err != nil {
 		return nil, err
@@ -46,6 +48,7 @@ func (h *userGRPCHandler) GetUser(ctx context.Context, req *pb.GetUserRequest) (
 	return userToProto(user), nil
 }
 
+// CreateUser allows all authenticated users (auto-provisioning pattern).
 func (h *userGRPCHandler) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.User, error) {
 	if err := grpcutil.ValidateStringField("username", req.GetUsername(), true); err != nil {
 		return nil, err
@@ -78,6 +81,16 @@ func (h *userGRPCHandler) UpdateUser(ctx context.Context, req *pb.UpdateUserRequ
 		return nil, grpcutil.ServiceErrorToGRPC(svcErr)
 	}
 
+	if !middleware.IsServiceCaller(ctx) {
+		authResult := rbac.GetAuthResult(ctx)
+		if authResult == nil {
+			return nil, status.Error(codes.PermissionDenied, "not authorized")
+		}
+		if !authResult.IsGlobalAdmin && authResult.Username != found.Username {
+			return nil, status.Error(codes.PermissionDenied, "not authorized")
+		}
+	}
+
 	if req.Username != nil {
 		found.Username = *req.Username
 	}
@@ -101,6 +114,13 @@ func (h *userGRPCHandler) DeleteUser(ctx context.Context, req *pb.DeleteUserRequ
 		return nil, err
 	}
 
+	if !middleware.IsServiceCaller(ctx) {
+		authResult := rbac.GetAuthResult(ctx)
+		if authResult == nil || !authResult.IsGlobalAdmin {
+			return nil, status.Error(codes.PermissionDenied, "not authorized")
+		}
+	}
+
 	svcErr := h.service.Delete(ctx, req.GetId())
 	if svcErr != nil {
 		return nil, grpcutil.ServiceErrorToGRPC(svcErr)
@@ -115,6 +135,20 @@ func (h *userGRPCHandler) ListUsers(ctx context.Context, req *pb.ListUsersReques
 	listArgs := services.ListArguments{
 		Page: int(page),
 		Size: int64(size),
+	}
+
+	if !middleware.IsServiceCaller(ctx) {
+		authResult := rbac.GetAuthResult(ctx)
+		if authResult != nil && !authResult.IsGlobalAdmin {
+			username := auth.GetUsernameFromContext(ctx)
+			if username != "" {
+				scopeFilter, err := rbac.TSLEqual("username", username)
+				if err != nil {
+					return nil, status.Error(codes.PermissionDenied, "not authorized")
+				}
+				rbac.AppendTSLFilter(&listArgs, scopeFilter)
+			}
+		}
 	}
 
 	var users []User

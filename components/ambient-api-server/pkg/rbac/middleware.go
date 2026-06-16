@@ -35,6 +35,9 @@ type DBAuthorizationMiddleware struct {
 }
 
 func NewDBAuthorizationMiddleware(sessionFactory *db.SessionFactory, enableAuthz bool) *DBAuthorizationMiddleware {
+	if !enableAuthz {
+		glog.Warning("RBAC authorization is DISABLED — all authenticated users have unrestricted access")
+	}
 	return &DBAuthorizationMiddleware{
 		evaluator:      NewEvaluator(sessionFactory),
 		sessionFactory: sessionFactory,
@@ -64,9 +67,7 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 		if middleware.IsServiceCaller(ctx) {
 			username := auth.GetUsernameFromContext(ctx)
 			if username == "" {
-				// Raw service token (no JWT) — preserve legacy bypass
-				// for backward compatibility with AMBIENT_API_TOKEN callers.
-				// Set a well-defined AuthResult so handlers never see nil.
+				glog.Warningf("legacy service token used — consider migrating to OIDC service account authentication")
 				ctx = SetAuthResult(ctx, &AuthResult{
 					Username:      "service-token",
 					IsGlobalAdmin: true,
