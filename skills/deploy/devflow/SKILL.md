@@ -78,7 +78,7 @@ Every component has a spec file. Load the spec for the component being changed:
 
 | Component | Spec | Guide |
 |-----------|------|-------|
-| Data Model / API / CLI / RBAC | `specs/api/ambient-model.spec.md` | `workflows/sessions/ambient-model.workflow.md` |
+| Data Model / API / CLI / RBAC | `specs/platform.spec.md` | `skills/build/full-stack-pipeline/SKILL.md` |
 
 ### 2b. Modify the Spec
 
@@ -111,7 +111,7 @@ After spec acceptance (or in parallel for human workflow), load the implementati
 
 | Component | Guide | Context |
 |-----------|-------|---------|
-| Data Model / API | `workflows/sessions/ambient-model.workflow.md` | `specs/standards/control-plane/conventions.spec.md` |
+| Data Model / API | `skills/build/full-stack-pipeline/SKILL.md` | `specs/standards/control-plane/conventions.spec.md` |
 | SDK | (workflow section in ambient-model.workflow.md Wave 3) | `specs/standards/control-plane/conventions.spec.md` |
 | CLI | (guide section Wave 5) | `specs/standards/control-plane/conventions.spec.md` |
 | Control Plane | (guide section Wave 4) | `specs/standards/control-plane/conventions.spec.md` |
@@ -354,8 +354,8 @@ But prefer fixing the lint/format issue instead.
 | `specs/standards/control-plane/conventions.spec.md` | SDK generation |
 | `specs/standards/control-plane/conventions.spec.md` | CP fan-out, runner contract |
 | `specs/standards/control-plane/conventions.spec.md` | Frontend build, React Query |
-| `specs/api/ambient-model.spec.md` | Data model spec (source of truth) |
-| `workflows/sessions/ambient-model.workflow.md` | Implementation workflow (wave-based) |
+| `specs/platform.spec.md` | Data model spec (source of truth) |
+| `skills/build/full-stack-pipeline/SKILL.md` | Implementation workflow (wave-based) |
 
 ---
 

@@ -16,7 +16,7 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 - `components/credential-sidecars/` - Per-provider credential sidecar containers (GitHub, Jira, K8s, Google)
 - `components/manifests/` - Kustomize-based deployment manifests and overlays
 - `docs/` - Astro Starlight documentation site
-- `specs/` - Desired state of the system ([sessions](specs/sessions/), [agents](specs/agents/), [control-plane](specs/control-plane/), [integrations](specs/integrations/), [standards](specs/standards/))
+- `specs/` - Desired state of the system ([platform](specs/platform.spec.md), [security](specs/security.spec.md), [ui](specs/ui.spec.md), [standards](specs/standards/))
 - `skills/` - Local agent skills organized by SDLC phase (`plan/`, `build/`, `test/`, `review/`, `deploy/`, `tooling/`)
 - `apm.yml` - APM manifest declaring upstream skill dependencies (fleet-sdlc)
 - `.claude/skills/` - APM-installed upstream skills (gitignored, run `apm install`)

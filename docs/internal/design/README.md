@@ -66,8 +66,8 @@ Guides are **living documents**. Every time the workflow runs and something is d
 
 | Guide | Paired spec |
 |---|---|
-| `skills/build/full-stack-pipeline/SKILL.md` | `specs/api/ambient-model.spec.md` |
-| `skills/build/dev-cluster/SKILL.md` | `specs/control-plane/control-plane.spec.md` |
+| `skills/build/full-stack-pipeline/SKILL.md` | `specs/platform.spec.md` § Data Model |
+| `skills/build/dev-cluster/SKILL.md` | `specs/platform.spec.md` § Control Plane |
 
 ### Component context files (`.claude/context/*-development.md`)
 
@@ -133,6 +133,6 @@ Every time the loop stops because something was wrong, the documents get better.
 ## Reading Order for a New Contributor
 
 1. This README — the why
-2. `specs/api/ambient-model.spec.md` — what the platform is
-3. `workflows/sessions/ambient-model.workflow.md` — how changes are made
+2. `specs/platform.spec.md` — what the platform is
+3. `skills/build/full-stack-pipeline/SKILL.md` — how changes are made
 4. The context file for the component you are working on

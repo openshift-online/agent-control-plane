@@ -111,7 +111,7 @@ The hcmais overlay mounts this as `CREDENTIAL_ENCRYPTION_KEYRING` and `CREDENTIA
 oc exec deploy/ambient-api-server -n $NAMESPACE -- ambient-api-server encrypt-credentials
 ```
 
-To rotate: add new key to keyring JSON, bump version, restart, re-run `encrypt-credentials`. To skip in dev: set `CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT=true`. See `specs/security/credential-encryption.spec.md`.
+To rotate: add new key to keyring JSON, bump version, restart, re-run `encrypt-credentials`. To skip in dev: set `CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT=true`. See `specs/security.spec.md` § Credential Encryption.
 
 ### Anthropic API Key (required for runner pods)
 

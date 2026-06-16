@@ -8,7 +8,7 @@ Specs describe the **desired state** of the system. Code is the actual state. De
 
 2. **Living documents.** Specs are never archived or superseded. They are amended, replaced, or deleted. A spec that no longer reflects desired behavior is removed, not moved to a graveyard.
 
-3. **Behavior contracts, not implementation plans.** Specs describe observable behavior — inputs, outputs, error conditions, constraints. Implementation invariants, such as library choices, etc. (NOTE: NOT IMPLEMENTATION PLANS. THIS IS A DEVELOPMENT CONCERN.) belong in `workflows/`.
+3. **Behavior contracts, not implementation plans.** Specs describe observable behavior — inputs, outputs, error conditions, constraints. Implementation invariants, such as library choices, etc. (NOTE: NOT IMPLEMENTATION PLANS. THIS IS A DEVELOPMENT CONCERN.) belong in `skills/`.
 
 4. **Organized by capability domain.** Add domains when existing ones become too broad, not preemptively.
 
@@ -66,25 +66,21 @@ The system SHALL <observable behavior>.
 
 ```
 specs/
-  index.spec.md                    # This file
-  {capability-domain}/             # One directory per domain
-    *.spec.md                      # Domain specs
-    .agents/skills -> symlink      # Domain-specific skills
-    .claude/skills -> symlink      # Claude Code discovery
-  standards/                       # Cross-cutting engineering constraints
-    {domain}/*.spec.md
+  index.spec.md          # This file
+  platform.spec.md       # Data model, API, session lifecycle, control plane, runner, MCP
+  security.spec.md       # Identity boundaries, SSO, RBAC, credentials, encryption, sandbox
+  ui.spec.md             # Operations dashboard, session management, agent authoring
+  standards/             # Cross-cutting engineering constraints (TODO: upstream via APM)
+    control-plane/
+    platform/
+    security/
 ```
 
-### Current Domains
+### Specs
 
-| Domain | Covers |
-|--------|--------|
-| `api/` | Platform data model: projects, agents, sessions, credentials, RBAC, CLI |
-| `sessions/` | Lifecycle, initialization, status, messages, events |
-| `agents/` | Agent model, runtime registry, prompts, runners |
-| `control-plane/` | Reconciliation, operator, scheduling |
-| `ambient-ui/` | Operations console: fleet monitoring, annotation-driven UI, live preview, credentials |
-| `frontend/` | UI rendering, session views, markdown, navigation |
-| `integrations/` | MCP, Gerrit, external services |
-| `security/` | Identity boundaries, credential authorization, per-session isolation |
+| Spec | Covers |
+|------|--------|
+| `platform.spec.md` | Data model, API, CLI, control plane, runner, MCP server |
+| `security.spec.md` | Identity boundaries, SSO, RBAC, credential binding/encryption, sandbox |
+| `ui.spec.md` | Operations dashboard, agent authoring, annotations, live preview |
 | `standards/` | Cross-cutting engineering constraints by component |
