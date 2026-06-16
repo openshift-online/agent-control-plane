@@ -320,6 +320,8 @@ func (m *AppModel) openCredentialCreateForm() (tea.Model, tea.Cmd) {
 				Title("Token").
 				EchoMode(huh.EchoModePassword).
 				Value(&token),
+		).Title("1/2 · Required"),
+		huh.NewGroup(
 			huh.NewInput().
 				Title("URL").
 				Value(&url),
@@ -329,9 +331,10 @@ func (m *AppModel) openCredentialCreateForm() (tea.Model, tea.Cmd) {
 			huh.NewInput().
 				Title("Description").
 				Value(&description),
-		),
+		).Title("2/2 · Optional"),
 	)
 	form.WithWidth(60)
+	form.WithShowHelp(true)
 
 	m.formOverlay = form
 	m.formTitle = "New Credential"
