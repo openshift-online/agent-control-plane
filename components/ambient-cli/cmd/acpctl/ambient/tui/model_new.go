@@ -1184,6 +1184,10 @@ func (m *AppModel) resizeTable() {
 	m.contextTable.SetWidth(m.width)
 	m.scheduledSessionTable.SetHeight(tableHeight)
 	m.scheduledSessionTable.SetWidth(m.width)
+	m.credentialTable.SetHeight(tableHeight)
+	m.credentialTable.SetWidth(m.width)
+	m.credentialBindingTable.SetHeight(tableHeight)
+	m.credentialBindingTable.SetWidth(m.width)
 
 	// Message stream and detail view get the full table area.
 	m.messageStream.SetSize(m.width, tableHeight+2)
