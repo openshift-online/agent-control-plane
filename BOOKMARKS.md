@@ -27,7 +27,7 @@ Desired state of the system. Three consolidated specs plus engineering standards
 | [Platform](specs/platform/) | Data model, API, CLI, control plane, runner, MCP server |
 | [Security](specs/security/) | Identity boundaries, SSO, RBAC, credential binding/encryption, sandbox |
 | [UI](specs/ui/) | Operations dashboard, agent authoring, annotations, live preview |
-| [Spec Index](specs/index.spec.md) | How to write and change specs |
+| [Spec Index](specs/index.spec.md) | Bookmark page for all spec domains |
 
 ## Standards
 
