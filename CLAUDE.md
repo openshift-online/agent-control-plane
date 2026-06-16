@@ -17,7 +17,6 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 - `components/manifests/` - Kustomize-based deployment manifests and overlays
 - `docs/` - Astro Starlight documentation site
 - `specs/` - Desired state of the system ([sessions](specs/sessions/), [agents](specs/agents/), [control-plane](specs/control-plane/), [integrations](specs/integrations/), [standards](specs/standards/))
-- `workflows/` - Agent-consumable procedures ([sessions](workflows/sessions/), [control-plane](workflows/control-plane/), [integrations](workflows/integrations/))
 - `skills/` - Local agent skills organized by SDLC phase (`plan/`, `build/`, `test/`, `review/`, `deploy/`, `tooling/`)
 - `apm.yml` - APM manifest declaring upstream skill dependencies (fleet-sdlc)
 - `.claude/skills/` - APM-installed upstream skills (gitignored, run `apm install`)
@@ -152,4 +151,3 @@ When both the self-review and the hook pass, apply the `ambient-code:self-review
 - **Runner tests**: `cd components/runners/ambient-runner && python -m pytest tests/`
 
 ## Convention Authority
-

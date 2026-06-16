@@ -528,5 +528,5 @@ toward a single IAM plane.
 - [ADR-0002](../../docs/internal/adr/0002-user-token-authentication.md) — superseded by this spec
 - [OAuth 2.0 for Browser-Based Applications](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-browser-based-apps) — BFF recommendation
 - [K8s User Impersonation](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#user-impersonation)
-- Migration workflow: `workflows/security/sso-migration.workflow.md`
+- Migration workflow: removed (content archived in git history as `workflows/security/sso-migration.workflow.md`)
 - [IAM consolidation proposal](../../docs/internal/proposals/iam-consolidation-plan.md) (PR #1466) — full IAM audit and long-term consolidation plan

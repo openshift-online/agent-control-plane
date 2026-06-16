@@ -20,12 +20,9 @@ $ARGUMENTS
 
 ## Before Anything Else
 
-Read these two files in full before proceeding:
+Read `specs/index.spec.md` in full before proceeding — it defines what a spec is, the required format, naming conventions, and what does and does not belong.
 
-1. `specs/index.spec.md` — what a spec is, the required format, naming conventions, and what does and does not belong
-2. `workflows/specs/spec-change.workflow.md` — the full spec change workflow (framing, grounding, drafting, critic passes, synthesis)
-
-Then follow the workflow phases in order.
+Then follow the phases below in order.
 
 ## Steps
 
@@ -80,3 +77,11 @@ Apply all fixes. Run a second critic pass (Phase 8). Stop when only MINORs remai
 - Filename: `<descriptive-title>.spec.md`
 - If the spec exceeds ~300 words or covers multiple distinct topics, split into a directory with multiple files
 - Place in `specs/{domain}/`
+
+## Heuristics
+
+- **Critics should outnumber reviewers.** Ten parallel critics for 45 minutes beats one sequential review over a day.
+- **The author's time is for design decisions only.** Everything with a right answer should never reach them.
+- **"Desired state" framing eliminates the largest class of false positives** (current code ≠ spec). Establish it before the first critic pass, not after.
+- **The Ambient domain model is a minefield of reserved terms.** A dedicated terminology critic is cheaper than discovering the collision during implementation.
+- **Migration path completeness is the most common gap:** for every existing consumer of what you're changing, the spec must say what happens to it.

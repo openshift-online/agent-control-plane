@@ -1,0 +1,26 @@
+[
+  {
+    "input": "implement the credential kind end-to-end",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "full-stack-pipeline"
+    },
+    "description": "Triggers full-stack pipeline for a new Kind implementation"
+  },
+  {
+    "input": "run gap analysis against the agent spec",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "full-stack-pipeline"
+    },
+    "description": "Triggers gap analysis phase of the pipeline"
+  },
+  {
+    "input": "what waves are needed for the inbox feature?",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "full-stack-pipeline"
+    },
+    "description": "Triggers wave planning for a feature"
+  }
+]

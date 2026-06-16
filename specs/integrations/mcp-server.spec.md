@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-22
 **Status:** Design
-**Workflow:** `../../workflows/integrations/mcp-server.workflow.md` — implementation waves, gap table, build commands, run log
+**Skill:** `skills/build/full-stack-pipeline/` — wave-based implementation pipeline
 
 ---
 

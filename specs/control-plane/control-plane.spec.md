@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-22
 **Status:** Living Document — current state documented; proposed changes marked
-**Workflow:** `../../workflows/control-plane/control-plane.workflow.md` — implementation waves, gap table, build commands
+**Skill:** `skills/build/full-stack-pipeline/` — wave-based implementation pipeline
 
 ---
 

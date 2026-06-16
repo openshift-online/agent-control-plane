@@ -66,9 +66,8 @@ Guides are **living documents**. Every time the workflow runs and something is d
 
 | Guide | Paired spec |
 |---|---|
-| `workflows/sessions/ambient-model.workflow.md` | `specs/api/ambient-model.spec.md` |
-| `workflows/control-plane/control-plane.workflow.md` | `specs/control-plane/control-plane.spec.md` |
-| `workflows/integrations/mcp-server.workflow.md` | `specs/integrations/mcp-server.spec.md` |
+| `skills/build/full-stack-pipeline/SKILL.md` | `specs/api/ambient-model.spec.md` |
+| `skills/build/dev-cluster/SKILL.md` | `specs/control-plane/control-plane.spec.md` |
 
 ### Component context files (`.claude/context/*-development.md`)
 

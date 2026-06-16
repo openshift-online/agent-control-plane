@@ -7,7 +7,7 @@ Guides for deploying the Ambient Code Platform to various environments.
 ### Production Deployment
 - **[OpenShift Deployment](OPENSHIFT_DEPLOY.md)** - Deploy to production OpenShift cluster
 - **[OAuth Configuration](OPENSHIFT_OAUTH.md)** - Set up OpenShift OAuth authentication (legacy; being replaced by SSO/OIDC)
-- **[SSO Migration](../../workflows/security/sso-migration.workflow.md)** - Keycloak SSO/OIDC authentication (recommended over OAuth proxy)
+- **SSO Migration** - Keycloak SSO/OIDC authentication (see `specs/security/sso-authentication.spec.md`)
 
 ### Configuration
 - **[Git Authentication](git-authentication.md)** - Configure Git credentials for runners
@@ -91,7 +91,7 @@ namespace: my-namespace
 ### Authentication
 
 **Production (Recommended):**
-- SSO/OIDC via Keycloak (see [SSO Migration](../../workflows/security/sso-migration.workflow.md))
+- SSO/OIDC via Keycloak (see `specs/security/sso-authentication.spec.md`)
 - Namespace-scoped RBAC
 - No shared credentials
 

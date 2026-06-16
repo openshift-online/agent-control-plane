@@ -66,7 +66,7 @@ After deployment, configure runner secrets through Settings → Runner Secrets i
 ### OpenShift OAuth (Legacy)
 For cluster login via OAuth proxy sidecar, see [OpenShift OAuth Setup](OPENSHIFT_OAUTH.md).
 
-For new deployments, SSO/OIDC via Keycloak is recommended instead. See the [SSO Migration](../../workflows/security/sso-migration.workflow.md) workflow.
+For new deployments, SSO/OIDC via Keycloak is recommended instead. See `specs/security/sso-authentication.spec.md`.
 
 ## Cleanup
 

@@ -34,16 +34,6 @@ Desired state of the system, organized by capability domain.
 
 Feature specs remain in numbered directories under `specs/` (e.g., `specs/001-*/spec.md`).
 
-## Workflows
-
-Agent-consumable procedures — step-by-step implementation workflows.
-
-| Workflow | Domain | Purpose |
-|----------|--------|---------|
-| [Ambient Model](workflows/sessions/ambient-model.workflow.md) | sessions | Spec-driven implementation pipeline for data model changes |
-| [Control Plane](workflows/control-plane/control-plane.workflow.md) | control-plane | CP + Runner implementation workflow |
-| [MCP Server](workflows/integrations/mcp-server.workflow.md) | integrations | MCP server implementation workflow |
-
 ## Standards
 
 Component-specific conventions loaded by review agents on demand.
