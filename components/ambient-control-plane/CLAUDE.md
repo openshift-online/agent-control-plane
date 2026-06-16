@@ -1,11 +1,10 @@
----
-name: grpc-dev
-description: >
-  gRPC streaming, AG-UI event flow, WatchSessionMessages, control plane to runner
-  protocol, and debugging gRPC connectivity. Use when working on gRPC-related code.
+# Ambient Control Plane
+
+Go service that watches the API server via gRPC and reconciles sessions into K8s Jobs.
+
 ---
 
-# Skill: grpc-dev
+## gRPC Development Context (from skills/build/grpc-dev)
 
 **Activates when:** Working on gRPC streaming, AG-UI event flow, WatchSessionMessages, control plane ↔ runner protocol, or debugging gRPC connectivity.
 

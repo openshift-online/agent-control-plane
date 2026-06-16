@@ -1,13 +1,4 @@
----
-name: ci-workflows
-description: >
-  Maintain and troubleshoot CI/CD workflows for the Agent Control Plane.
-  Covers component detection, auto-labeling, job gating, and adding new
-  components to the pipeline. Use when adding components, debugging why
-  tests don't run, fixing label issues, or modifying workflow behavior.
-  Triggers on: "add component to CI", "tests not running", "PR labels",
-  "build pipeline", "CI workflow", "auto-merge", "detect-components".
----
+# GitHub Actions CI/CD
 
 # CI Workflows
 
