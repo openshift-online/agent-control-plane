@@ -154,5 +154,5 @@ components/credential-sidecars/entrypoint/entrypoint
 
 # APM (Agent Package Manager)
 apm_modules/
-apm.lock.yaml
+# apm.lock.yaml is committed — CI needs it for apm audit
 .local/
