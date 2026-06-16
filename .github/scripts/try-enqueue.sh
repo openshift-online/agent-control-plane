@@ -28,7 +28,7 @@ if ! echo "$LABELS" | grep -qE "auto-merge-pending|auto-merge-queue"; then
   exit 0
 fi
 
-GATES=("Lint CI Gate" "Unit Tests CI Gate" "SDD boundary check" "Build CI Gate")
+GATES=("Lint CI Gate" "Unit Tests CI Gate" "SDD boundary check" "Build CI Gate" "APM Audit CI Gate")
 
 CHECKS=$(gh pr checks "$PR_NUMBER" --repo "$REPO" 2>/dev/null || true)
 

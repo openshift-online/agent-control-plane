@@ -1,0 +1,61 @@
+name: APM Audit
+
+on:
+  push:
+    branches: [main]
+
+  pull_request:
+
+  merge_group:
+    branches: [main]
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apm-audit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: APM Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Run APM audit
+        uses: microsoft/apm-action@e5650fb81c4b5965090a17bd1ed1956071e95d17 # v1.9.1
+        with:
+          script: audit --ci --no-cache --no-drift
+
+  summary:
+    name: APM Audit CI Gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
+    needs: [audit]
+    if: always()
+    steps:
+      - name: Check overall status
+        run: |
+          if [ "${{ needs.audit.result }}" == "failure" ] || [ "${{ needs.audit.result }}" == "cancelled" ]; then
+            echo "APM audit failed"
+            exit 1
+          fi
+          echo "APM audit passed!"
+
+      - name: Checkout code
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Try enqueue
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_PAT }}
+        run: bash .github/scripts/try-enqueue.sh "${{ github.event.pull_request.number }}" "APM Audit CI Gate"
