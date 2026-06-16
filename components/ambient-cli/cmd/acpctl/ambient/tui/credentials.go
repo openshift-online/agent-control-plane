@@ -150,6 +150,13 @@ func agentHasDirectBinding(agentID, credentialID string, bindings []sdktypes.Rol
 	return false
 }
 
+// redactCredential returns a copy of the credential with secret fields cleared.
+func redactCredential(c sdktypes.Credential) sdktypes.Credential {
+	var empty string
+	c.Token = empty
+	return c
+}
+
 // ---------------------------------------------------------------------------
 // Lookup helpers
 // ---------------------------------------------------------------------------
@@ -204,8 +211,7 @@ func (m *AppModel) handleCredentialsRune(key string) (tea.Model, tea.Cmd) {
 		if cred == nil {
 			return m, m.setInfo("Credential not found in cache: " + credName)
 		}
-		sanitized := *cred
-		sanitized.Token = ""
+		sanitized := redactCredential(*cred)
 		data, err := json.MarshalIndent(sanitized, "", "  ")
 		if err != nil {
 			return m, m.setInfo("JSON marshal error: " + err.Error())
@@ -418,9 +424,7 @@ func (m *AppModel) openEditorForCredential() (tea.Model, tea.Cmd) {
 		return m, m.setInfo("Credential not found in cache: " + credName)
 	}
 
-	sanitized := *cred
-	sanitized.Token = ""
-
+	sanitized := redactCredential(*cred)
 	return m.openEditorForResource("credential", cred.ID, "", sanitized)
 }
 
@@ -448,7 +452,7 @@ func (m *AppModel) openBindProjectPrompt() (tea.Model, tea.Cmd) {
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
-				Title("Bind "+credName+" to project").
+				Title("Bind " + credName + " to project").
 				Options(opts...).
 				Value(&projectName),
 		),

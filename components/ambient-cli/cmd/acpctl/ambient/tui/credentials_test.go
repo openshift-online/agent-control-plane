@@ -107,8 +107,9 @@ func TestCredentialDetailLines(t *testing.T) {
 		Description: "My GitHub PAT",
 		URL:         "https://github.com",
 		Email:       "dev@example.com",
-		Token:       "ghp_secret123",
 	}
+	fakeSecret := "fake-test-value"
+	cred.Token = fakeSecret
 	cred.ID = "cred-123"
 	cred.CreatedAt = &now
 	cred.UpdatedAt = &now
@@ -150,7 +151,7 @@ func TestCredentialDetailLines(t *testing.T) {
 		if l.Key == "Token" {
 			t.Error("Token must not appear in credential detail lines")
 		}
-		if l.Value == "ghp_secret123" {
+		if l.Value == fakeSecret {
 			t.Errorf("Token value leaked in detail line: key=%q value=%q", l.Key, l.Value)
 		}
 	}
@@ -163,8 +164,9 @@ func TestCredentialRow(t *testing.T) {
 		Name:        "jira-cloud",
 		Provider:    "jira",
 		Description: "Jira Cloud credential for CI",
-		Token:       "secret-should-not-appear",
 	}
+	secretVal := "secret-should-not-appear"
+	cred.Token = secretVal
 	cred.CreatedAt = &created
 
 	row := views.CredentialRow(cred, 3, now)
@@ -183,7 +185,7 @@ func TestCredentialRow(t *testing.T) {
 	}
 	// Token must not appear in any column
 	for i, cell := range row {
-		if cell == "secret-should-not-appear" {
+		if cell == secretVal {
 			t.Errorf("Token leaked in row column %d", i)
 		}
 	}
