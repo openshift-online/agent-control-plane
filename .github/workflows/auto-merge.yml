@@ -94,25 +94,27 @@ jobs:
           PR: ${{ steps.find.outputs.pr }}
           REPO: ${{ github.repository }}
         run: |
-          for attempt in 1 2 3 4 5 6; do
+          EXPECTED_CHECKS="Lint CI Gate|Unit Tests CI Gate|SDD boundary check|Build CI Gate"
+          for attempt in $(seq 1 18); do
             CHECKS=$(gh pr checks "$PR" --repo "$REPO" --required 2>/dev/null || true)
             FAILED=$(echo "$CHECKS" | grep -c 'fail' || true)
             PENDING=$(echo "$CHECKS" | grep -c 'pending' || true)
+            REPORTED=$(echo "$CHECKS" | grep -cE "$EXPECTED_CHECKS" || true)
             if [ "$FAILED" -gt 0 ]; then
               echo "ready=false" >> "$GITHUB_OUTPUT"
               echo "Required checks failing"
               exit 0
             fi
-            if [ "$PENDING" -eq 0 ]; then
+            if [ "$REPORTED" -ge 4 ] && [ "$PENDING" -eq 0 ]; then
               echo "ready=true" >> "$GITHUB_OUTPUT"
-              echo "All required checks passed"
+              echo "All $REPORTED required checks passed"
               exit 0
             fi
-            echo "Attempt $attempt: $PENDING checks still pending, waiting 10s..."
+            echo "Attempt $attempt: $REPORTED/4 checks reported, $PENDING pending, waiting 10s..."
             sleep 10
           done
           echo "ready=false" >> "$GITHUB_OUTPUT"
-          echo "Timed out waiting for checks"
+          echo "Timed out waiting for checks ($REPORTED/4 reported, $PENDING pending)"
 
       - name: Enqueue PR
         if: steps.find.outputs.pr != '' && steps.ready.outputs.ready == 'true'
@@ -122,7 +124,7 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           gh pr edit "$PR" --add-label auto-merge-queue --remove-label auto-merge-pending --repo "$REPO"
-          # Toggle auto-merge off then on to ensure GitHub re-evaluates
-          # merge readiness against the current commit SHA.
-          gh pr merge "$PR" --disable-auto --repo "$REPO" 2>/dev/null || true
-          gh pr merge "$PR" --auto --repo "$REPO"
+          # On a merge-queue-protected branch, gh pr merge (without --auto)
+          # enqueues directly when checks have passed. --auto only sets the
+          # auto-merge flag which doesn't trigger queue enqueue on its own.
+          gh pr merge "$PR" --repo "$REPO"
