@@ -478,18 +478,11 @@ func (m *AppModel) openBindAgentPrompt() (tea.Model, tea.Cmd) {
 		return m, m.setInfo("No projects available — fetch projects first")
 	}
 
-	var projectName, agentID string
+	// Step 1: pick the project.
+	var projectName string
 	projectOpts := make([]huh.Option[string], 0, len(m.cachedProjects))
 	for _, p := range m.cachedProjects {
 		projectOpts = append(projectOpts, huh.NewOption(p.Name, p.Name))
-	}
-
-	agentOpts := make([]huh.Option[string], 0, len(m.cachedAgents))
-	for _, a := range m.cachedAgents {
-		agentOpts = append(agentOpts, huh.NewOption(a.Name, a.ID))
-	}
-	if len(agentOpts) == 0 {
-		agentOpts = append(agentOpts, huh.NewOption("(no agents loaded)", ""))
 	}
 
 	form := huh.NewForm(
@@ -498,8 +491,37 @@ func (m *AppModel) openBindAgentPrompt() (tea.Model, tea.Cmd) {
 				Title("Project").
 				Options(projectOpts...).
 				Value(&projectName),
+		),
+	)
+	form.WithWidth(60)
+	form.WithShowHelp(true)
+
+	m.formOverlay = form
+	m.formTitle = "Bind to Agent (1/2)"
+	m.formOnComplete = func() tea.Cmd {
+		// Step 2: fetch agents for the selected project, then show agent picker.
+		return m.client.FetchAgentsForBindForm(credID, credName, projectName)
+	}
+	return m, m.formOverlay.Init()
+}
+
+// openBindAgentStep2 is called after agents are fetched for the selected
+// project. It shows a second form with the agent list.
+func (m *AppModel) openBindAgentStep2(credID, credName, projectName string, agents []sdktypes.Agent) (tea.Model, tea.Cmd) {
+	if len(agents) == 0 {
+		return m, m.setInfo("No agents in project " + projectName)
+	}
+
+	var agentID string
+	agentOpts := make([]huh.Option[string], 0, len(agents))
+	for _, a := range agents {
+		agentOpts = append(agentOpts, huh.NewOption(a.Name, a.ID))
+	}
+
+	form := huh.NewForm(
+		huh.NewGroup(
 			huh.NewSelect[string]().
-				Title("Agent in project").
+				Title("Agent in " + projectName).
 				Options(agentOpts...).
 				Value(&agentID),
 		),
@@ -508,13 +530,13 @@ func (m *AppModel) openBindAgentPrompt() (tea.Model, tea.Cmd) {
 	form.WithShowHelp(true)
 
 	m.formOverlay = form
-	m.formTitle = "Bind to Agent"
+	m.formTitle = "Bind to Agent (2/2)"
 	m.formOnComplete = func() tea.Cmd {
 		if agentID == "" {
 			return m.setInfo("No agent selected")
 		}
 		agentLabel := agentID
-		for _, a := range m.cachedAgents {
+		for _, a := range agents {
 			if a.ID == agentID {
 				agentLabel = a.Name
 				break

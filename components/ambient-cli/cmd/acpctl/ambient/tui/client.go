@@ -833,6 +833,15 @@ type DeleteBindingMsg struct {
 	Err error
 }
 
+// BindAgentFormMsg carries agents fetched for the bind-to-agent form step 2.
+type BindAgentFormMsg struct {
+	CredentialID   string
+	CredentialName string
+	ProjectName    string
+	Agents         []sdktypes.Agent
+	Err            error
+}
+
 // FetchCredentials returns a tea.Cmd that lists all credentials.
 func (tc *TUIClient) FetchCredentials() tea.Cmd {
 	return func() tea.Msg {
@@ -1004,6 +1013,31 @@ func (tc *TUIClient) DeleteBinding(id string) tea.Cmd {
 
 		err = client.RoleBindings().Delete(ctx, id)
 		return DeleteBindingMsg{Err: err}
+	}
+}
+
+// FetchAgentsForBindForm fetches agents in the given project and returns them
+// wrapped in a BindAgentFormMsg so the TUI can show the agent picker form.
+func (tc *TUIClient) FetchAgentsForBindForm(credID, credName, projectName string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+		defer cancel()
+
+		client, err := tc.factory.ForProject(projectName)
+		if err != nil {
+			return BindAgentFormMsg{Err: err}
+		}
+
+		list, err := client.Agents().List(ctx, defaultListOpts())
+		if err != nil {
+			return BindAgentFormMsg{Err: err}
+		}
+		return BindAgentFormMsg{
+			CredentialID:   credID,
+			CredentialName: credName,
+			ProjectName:    projectName,
+			Agents:         list.Items,
+		}
 	}
 }
 

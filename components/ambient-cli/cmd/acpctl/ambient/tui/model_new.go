@@ -713,6 +713,12 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pollInFlight = true
 		return m, tea.Batch(m.fetchActiveView(), m.setInfo("Binding removed"))
 
+	case BindAgentFormMsg:
+		if msg.Err != nil {
+			return m, m.setInfo("Fetch agents failed: " + msg.Err.Error())
+		}
+		return m.openBindAgentStep2(msg.CredentialID, msg.CredentialName, msg.ProjectName, msg.Agents)
+
 	case CreateScheduledSessionMsg:
 		if msg.Err != nil {
 			return m, m.setInfo("Create scheduled session failed: " + msg.Err.Error())
