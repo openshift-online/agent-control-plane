@@ -1,3 +1,10 @@
+---
+name: api-server
+description: >
+  Go REST and gRPC API server context — endpoints, OpenAPI spec, plugin system.
+  Use when working in components/ambient-api-server/ or on API server functionality.
+---
+
 # Skill: ambient-api-server
 
 **Activates when:** Working in `components/ambient-api-server/` or asked about API server, REST endpoints, gRPC, OpenAPI, or plugins.

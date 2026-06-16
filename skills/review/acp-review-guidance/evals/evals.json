@@ -1,0 +1,27 @@
+[
+  {
+    "input": "review this PR with ACP standards",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "acp-review-guidance"
+    },
+    "description": "Triggers ACP-specific review guidance for PR review"
+  },
+  {
+    "input": "what are the ACP review checklists?",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "acp-review-guidance"
+    },
+    "description": "Loads ACP review checklists for Go, React, and Security"
+  },
+  {
+    "input": "apply project review standards to PR #123",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "acp-review-guidance",
+      "args": "#123"
+    },
+    "description": "Loads ACP review guidance for a specific PR"
+  }
+]

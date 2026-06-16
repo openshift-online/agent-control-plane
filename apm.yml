@@ -1,0 +1,12 @@
+name: acp
+version: 1.0.0
+description: Agent Control Plane — Kubernetes-native AI automation platform
+author: OpenShift Fleet Engineering
+targets:
+- claude
+dependencies:
+  apm:
+  - OpenShift-Fleet/agentic-sdlc
+  mcp: []
+includes: auto
+scripts: {}

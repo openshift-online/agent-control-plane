@@ -89,6 +89,8 @@ dmypy.json
 # Claude Code
 .claude/settings.local.json
 .claude/worktrees/
+.claude/skills/
+.claude/commands/
 
 # Beads issue tracker (local Dolt DB, passive export)
 .beads/issues.jsonl
@@ -148,3 +150,9 @@ hack/
 *.csv
 components/credential-sidecars/entrypoint/credential-entrypoint
 components/credential-sidecars/entrypoint/entrypoint
+
+
+# APM (Agent Package Manager)
+apm_modules/
+apm.lock.yaml
+.local/
