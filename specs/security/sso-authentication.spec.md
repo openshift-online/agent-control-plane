@@ -1,6 +1,4 @@
-# SSO Authentication Specification
-
-## Purpose
+# SSO Authentication
 
 The platform SHALL authenticate all human users via OpenID Connect (OIDC) with Red Hat
 SSO and represent user identity as signed JWTs throughout the stack. This
@@ -520,13 +518,4 @@ toward a single IAM plane.
 | Local Keycloak for dev (not mock mode or static JWKS) | Real OIDC flow in dev catches integration issues early. Same validation code path as production — no dev-only auth logic to maintain. Replaces ad-hoc static JWKS ConfigMap, `DISABLE_AUTH`, and `OC_TOKEN` env vars. |
 | Keycloak Identity Brokering for deployed environments | Federating to RH SSO provides full client management autonomy without requiring realm admin access. Only one client registration needed in RH SSO (the Keycloak instance itself). |
 
-## References
-
-- [Security Specification](security.spec.md) — identity boundaries, token propagation
-- [K8s Client Usage Patterns](../standards/control-plane/conventions.spec.md) — user-scoped vs. SA client patterns
-- [Security Standards](../standards/security/security.spec.md) — token handling, RBAC enforcement
-- [ADR-0002](../../docs/internal/adr/0002-user-token-authentication.md) — superseded by this spec
-- [OAuth 2.0 for Browser-Based Applications](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-browser-based-apps) — BFF recommendation
-- [K8s User Impersonation](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#user-impersonation)
-- Migration workflow: removed (content archived in git history as `workflows/security/sso-migration.workflow.md`)
-- [IAM consolidation proposal](../../docs/internal/proposals/iam-consolidation-plan.md) (PR #1466) — full IAM audit and long-term consolidation plan
+---
