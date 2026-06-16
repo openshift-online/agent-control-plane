@@ -16,10 +16,22 @@ MODE="${1:---outputs}"
 get_changed_files() {
   if [ -n "${CHANGED_FILES:-}" ]; then
     echo "$CHANGED_FILES"
-  elif [ -n "${GH_PR:-}" ]; then
-    gh pr diff "$GH_PR" --repo "${GITHUB_REPOSITORY:-}" --name-only 2>/dev/null || true
+    return
+  fi
+
+  local pr="${GH_PR:-}"
+  if [ -z "$pr" ] && [ -n "${GITHUB_EVENT_NAME:-}" ]; then
+    pr=$(jq -r '.pull_request.number // empty' "${GITHUB_EVENT_PATH:-/dev/null}" 2>/dev/null || true)
+  fi
+
+  if [ -n "$pr" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
+    gh pr diff "$pr" --repo "${GITHUB_REPOSITORY}" --name-only 2>/dev/null || true
+  elif git rev-parse --verify "${BASE_REF:-origin/main}" >/dev/null 2>&1; then
+    git diff --name-only "${BASE_REF:-origin/main}...HEAD"
+  elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+    git diff --name-only HEAD~1
   else
-    git diff --name-only "${BASE_REF:-origin/main}...HEAD" 2>/dev/null || git diff --name-only HEAD~1
+    git diff --name-only --diff-filter=ACMR HEAD
   fi
 }
 
@@ -68,6 +80,10 @@ elif [ "$MODE" = "--label" ]; then
   done < <(jq -r 'to_entries[] | .key' "$CONFIG")
 
   if [ -n "$LABELS" ]; then
+    for lbl in $LABELS; do
+      [ "$lbl" = "--add-label" ] && continue
+      gh label create "$lbl" --repo "${GITHUB_REPOSITORY:-}" 2>/dev/null || true
+    done
     gh pr edit "$PR" --repo "${GITHUB_REPOSITORY:-}" $LABELS
     echo "Applied labels:$LABELS"
   else

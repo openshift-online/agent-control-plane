@@ -43,6 +43,8 @@ jobs:
 
       - name: Detect changed components
         id: detect
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash .github/scripts/detect-components.sh --outputs
 
   api-server:
