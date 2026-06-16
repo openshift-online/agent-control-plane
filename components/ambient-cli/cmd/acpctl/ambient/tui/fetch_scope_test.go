@@ -125,8 +125,9 @@ func TestFetchActiveView_AgentsScopingByProject(t *testing.T) {
 
 // scopeTrackingClient records which fetch method was called and with what scope.
 type scopeTrackingClient struct {
-	lastFetchProject string
-	lastFetchAll     bool
+	lastFetchProject     string
+	lastFetchAll         bool
+	lastFetchCredentials bool
 }
 
 var _ dataFetcher = (*scopeTrackingClient)(nil)
@@ -163,5 +164,6 @@ func (c *scopeTrackingClient) FetchInbox(projectID, agentID string) tea.Cmd {
 }
 
 func (c *scopeTrackingClient) FetchCredentials() tea.Cmd {
+	c.lastFetchCredentials = true
 	return func() tea.Msg { return CredentialsMsg{} }
 }
