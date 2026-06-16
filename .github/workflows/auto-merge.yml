@@ -48,6 +48,15 @@ jobs:
             gh pr edit "${{ github.event.pull_request.number }}" --add-label auto-merge-pending --repo "${{ github.repository }}"
           fi
 
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Apply component labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PR: ${{ github.event.pull_request.number }}
+        run: bash .github/scripts/detect-components.sh --label "${{ github.event.pull_request.number }}"
+
   enqueue:
     if: >-
       github.event_name == 'check_suite' &&
