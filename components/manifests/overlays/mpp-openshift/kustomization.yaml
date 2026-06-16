@@ -14,6 +14,8 @@ resources:
 - ambient-control-plane-sa.yaml
 - tenant-rbac/
 - ambient-tenant-ingress-netpol.yaml
+- ambient-ui.yaml
+- ambient-ui-route.yaml
 
 patches:
 - path: ambient-api-server-args-patch.yaml
@@ -40,4 +42,6 @@ images:
   newName: quay.io/ambient_code/acp_control_plane
   newTag: latest
 - name: quay.io/ambient_code/acp_mcp
+  newTag: latest
+- name: quay.io/ambient_code/acp_ambient_ui
   newTag: latest
