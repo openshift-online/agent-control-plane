@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
+	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -950,6 +951,8 @@ func (tc *TUIClient) DeleteCredential(id string) tea.Cmd {
 }
 
 // CreateBinding returns a tea.Cmd that creates a scope=credential RoleBinding.
+// It resolves the "credential:viewer" role name to its KSUID before creating
+// the binding, since the API requires the role ID, not the name.
 func (tc *TUIClient) CreateBinding(credentialID, projectID, agentID string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
@@ -960,8 +963,13 @@ func (tc *TUIClient) CreateBinding(credentialID, projectID, agentID string) tea.
 			return CreateBindingMsg{Err: err}
 		}
 
+		roleID, err := resolveRoleID(ctx, client, "credential:viewer")
+		if err != nil {
+			return CreateBindingMsg{Err: fmt.Errorf("resolve credential:viewer role: %w", err)}
+		}
+
 		builder := sdktypes.NewRoleBindingBuilder().
-			RoleID("credential:viewer").
+			RoleID(roleID).
 			Scope("credential").
 			CredentialID(credentialID).
 			ProjectID(projectID)
@@ -997,6 +1005,21 @@ func (tc *TUIClient) DeleteBinding(id string) tea.Cmd {
 		err = client.RoleBindings().Delete(ctx, id)
 		return DeleteBindingMsg{Err: err}
 	}
+}
+
+// resolveRoleID looks up a role by name and returns its KSUID. The API
+// requires the role ID (not the name) when creating RoleBindings.
+func resolveRoleID(ctx context.Context, client *sdkclient.Client, roleName string) (string, error) {
+	list, err := client.Roles().List(ctx, defaultListOpts())
+	if err != nil {
+		return "", err
+	}
+	for _, r := range list.Items {
+		if r.Name == roleName {
+			return r.ID, nil
+		}
+	}
+	return "", fmt.Errorf("role %q not found", roleName)
 }
 
 // ---------------------------------------------------------------------------
