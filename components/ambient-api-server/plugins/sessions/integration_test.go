@@ -963,3 +963,109 @@ func TestSessionStreamRunnerEvents(t *testing.T) {
 	Expect(resp5.Header().Get("Content-Type")).To(ContainSubstring("text/event-stream"))
 	Expect(string(resp5.Body())).To(ContainSubstring("TEXT_MESSAGE_CONTENT"))
 }
+
+func TestSessionLastActivityAtNilOnCreation(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+
+	sessionInput := openapi.Session{
+		Name:   "last-activity-nil-test",
+		Prompt: openapi.PtrString("test prompt"),
+	}
+	created, resp, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(sessionInput).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+	Expect(created.LastActivityAt).To(BeNil(), "last_activity_at should be nil on a freshly created session")
+
+	fetched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, *created.Id).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	Expect(fetched.LastActivityAt).To(BeNil(), "last_activity_at should remain nil when fetched")
+}
+
+func TestSessionLastActivityAtUpdatedOnMessagePush(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+	jwtToken := ctx.Value(openapi.ContextAccessToken)
+
+	sessionInput := openapi.Session{
+		Name:   "last-activity-push-test",
+		Prompt: openapi.PtrString("test prompt"),
+	}
+	created, resp, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(sessionInput).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+	Expect(created.LastActivityAt).To(BeNil())
+
+	beforePush := time.Now().UTC().Add(-time.Second)
+
+	// Push a message via REST API
+	restyResp, err := resty.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
+		SetBody(`{"event_type":"assistant","payload":"hello world"}`).
+		Post(h.RestURL(fmt.Sprintf("/sessions/%s/messages", *created.Id)))
+	Expect(err).NotTo(HaveOccurred())
+	Expect(restyResp.StatusCode()).To(Equal(http.StatusCreated))
+
+	// Fetch the session and verify last_activity_at is now set
+	fetched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, *created.Id).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	Expect(fetched.LastActivityAt).NotTo(BeNil(), "last_activity_at should be set after message push")
+	Expect(*fetched.LastActivityAt).To(BeTemporally(">", beforePush), "last_activity_at should be recent")
+	Expect(*fetched.LastActivityAt).To(BeTemporally("~", time.Now().UTC(), 10*time.Second), "last_activity_at should be close to now")
+}
+
+func TestSessionLastActivityAtUpdatesOnSubsequentPush(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+	jwtToken := ctx.Value(openapi.ContextAccessToken)
+
+	sessionInput := openapi.Session{
+		Name:   "last-activity-multi-push-test",
+		Prompt: openapi.PtrString("test prompt"),
+	}
+	created, resp, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(sessionInput).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+	// Push first message
+	restyResp, err := resty.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
+		SetBody(`{"event_type":"system","payload":"first"}`).
+		Post(h.RestURL(fmt.Sprintf("/sessions/%s/messages", *created.Id)))
+	Expect(err).NotTo(HaveOccurred())
+	Expect(restyResp.StatusCode()).To(Equal(http.StatusCreated))
+
+	fetched1, _, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, *created.Id).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(fetched1.LastActivityAt).NotTo(BeNil())
+	firstActivity := *fetched1.LastActivityAt
+
+	// Small delay to ensure timestamps differ
+	time.Sleep(10 * time.Millisecond)
+
+	// Push second message
+	restyResp, err = resty.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
+		SetBody(`{"event_type":"assistant","payload":"second"}`).
+		Post(h.RestURL(fmt.Sprintf("/sessions/%s/messages", *created.Id)))
+	Expect(err).NotTo(HaveOccurred())
+	Expect(restyResp.StatusCode()).To(Equal(http.StatusCreated))
+
+	fetched2, _, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, *created.Id).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(fetched2.LastActivityAt).NotTo(BeNil())
+	Expect(*fetched2.LastActivityAt).To(BeTemporally(">=", firstActivity),
+		"last_activity_at should advance on subsequent message pushes")
+}
