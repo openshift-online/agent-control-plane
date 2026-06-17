@@ -379,7 +379,8 @@ function TimelinePopover({
   )
   const isRunning = session.phase === 'Running'
 
-  const prRef = session.annotations[WORK_GITHUB_PR] ?? null
+  const prRefFull = session.annotations[WORK_GITHUB_PR] ?? null
+  const prRef = prRefFull && prRefFull.includes('/') ? `#${prRefFull.split('#').pop()}` : prRefFull
   const prUrl = session.annotations[WORK_GITHUB_PR_URL] ?? null
   const displayAgent = resolveAgentName(session, agentNames)
 
@@ -443,12 +444,13 @@ function TimelinePopover({
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary"
+                title={prRefFull ?? undefined}
               >
                 <GitPullRequest className="size-3.5" />
                 <span>{prRef}</span>
               </a>
             ) : (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" title={prRefFull ?? undefined}>
                 <GitPullRequest className="size-3.5" />
                 <span>{prRef}</span>
               </span>
