@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { User, Bot, Wrench, Send, ChevronDown, ChevronRight } from 'lucide-react'
+import { User, Bot, Wrench, Send, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -20,6 +20,7 @@ export const CHAT_EVENT_TYPES: ReadonlySet<SessionEventType> = new Set([
   'assistant',
   'tool_use',
   'tool_result',
+  'error',
 ])
 
 // ---- Payload Parsing Helpers ----
@@ -86,6 +87,21 @@ export function tryFormatJson(payload: string): string {
   } catch {
     return payload
   }
+}
+
+// ---- Error Payload Parsing ----
+
+function parseErrorPayload(payload: string): string {
+  try {
+    const parsed: unknown = JSON.parse(payload)
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      const obj = parsed as Record<string, unknown>
+      if (typeof obj.error === 'string') return obj.error
+    }
+  } catch {
+    // plain string payload
+  }
+  return payload
 }
 
 // ---- Message Filtering ----
@@ -198,6 +214,33 @@ export function AssistantMessage({ message }: { message: DomainSessionMessage })
   )
 }
 
+export function ErrorMessage({ message }: { message: DomainSessionMessage }) {
+  const errorText = parseErrorPayload(message.payload)
+  return (
+    <article
+      aria-label={`Error, ${formatRelativeTime(message.createdAt)}`}
+      className="flex gap-3 px-4 py-3"
+    >
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-status-error/20">
+        <AlertTriangle className="h-4 w-4 text-status-error-foreground" aria-hidden="true" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-sm font-medium text-status-error-foreground">Error</span>
+          <span className="text-xs text-muted-foreground">
+            {formatRelativeTime(message.createdAt)}
+          </span>
+        </div>
+        <div className="rounded-lg border border-status-error-foreground/20 bg-status-error/10 px-3 py-2 text-sm text-foreground">
+          <pre className="whitespace-pre-wrap break-words font-mono text-xs">
+            {errorText}
+          </pre>
+        </div>
+      </div>
+    </article>
+  )
+}
+
 export function ToolCallBlock({ group }: { group: ToolCallGroup }) {
   const [expanded, setExpanded] = useState(false)
   const toolPayload = tryParseToolPayload(group.toolUse.payload)
@@ -272,6 +315,8 @@ function SimpleChatMessage({ message }: { message: DomainSessionMessage }) {
       return <UserMessage message={message} />
     case 'assistant':
       return <AssistantMessage message={message} />
+    case 'error':
+      return <ErrorMessage message={message} />
     default:
       return null
   }
