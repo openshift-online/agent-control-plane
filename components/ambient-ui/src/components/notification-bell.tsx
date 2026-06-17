@@ -63,7 +63,7 @@ function TrayItem({
         )}
       />
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium leading-tight">
+        <p className="font-medium leading-tight">
           {item.statusText}
         </p>
         <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">

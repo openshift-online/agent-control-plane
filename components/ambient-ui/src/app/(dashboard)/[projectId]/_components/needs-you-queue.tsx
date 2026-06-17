@@ -1,6 +1,11 @@
 import Link from 'next/link'
 import { XCircle, AlertTriangle, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { formatRelativeTime } from '@/lib/format-timestamp'
 import {
   getWorkItemRef,
@@ -99,12 +104,19 @@ function NeedsYouRow({ item, projectId }: NeedsYouRowProps) {
         <StatusStripe variant={criticality} />
 
         {/* Status cell */}
-        <div className="flex min-w-0 items-center gap-1.5">
-          <Icon
-            className={`size-4 shrink-0 ${CRITICALITY_TEXT_CLASS[criticality]}`}
-          />
-          <span className="truncate text-sm font-medium">{statusText}</span>
-        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <Icon
+                className={`size-4 shrink-0 ${CRITICALITY_TEXT_CLASS[criticality]}`}
+              />
+              <span className="truncate text-sm font-medium">{statusText}</span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-xs">
+            {statusText}
+          </TooltipContent>
+        </Tooltip>
 
         {/* Issue + summary */}
         <div className="flex min-w-0 items-center gap-2">

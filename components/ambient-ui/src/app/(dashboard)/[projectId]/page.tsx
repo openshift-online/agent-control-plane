@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmptyState } from '@/components/empty-state'
 import { useSessions } from '@/queries/use-sessions'
+import { useAgentNames } from '@/queries/use-agents'
 import { getNeedsYouItems, getWorkItemCards, getCompletionItems } from '@/domain/work-annotations'
 import { NeedsYouQueue } from './_components/needs-you-queue'
 import { ActiveWorkSection } from './_components/active-work-section'
@@ -24,6 +25,7 @@ export default function DashboardPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { data, isLoading, error } = useSessions(projectId)
+  const { data: agentNames } = useAgentNames(projectId)
 
   const rawView = searchParams.get('view')
   const view: ViewMode = isViewMode(rawView) ? rawView : 'list'
@@ -143,7 +145,7 @@ export default function DashboardPage() {
           <RecentActivity items={recentItems} projectId={projectId} />
         </>
       ) : (
-        <TimelineView sessions={sessions} projectId={projectId} />
+        <TimelineView sessions={sessions} projectId={projectId} agentNames={agentNames} />
       )}
     </div>
   )

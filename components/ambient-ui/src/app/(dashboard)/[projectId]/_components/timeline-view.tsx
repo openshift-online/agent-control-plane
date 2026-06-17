@@ -37,6 +37,7 @@ import type { DomainSession, SessionPhase, SessionEventType } from '@/domain/typ
 type TimelineViewProps = {
   sessions: DomainSession[]
   projectId: string
+  agentNames?: Map<string, string>
 }
 
 type TimeRange = {
@@ -181,7 +182,13 @@ function buildHourLabels(timeRange: TimeRange): { label: string; pct: number }[]
   return labels
 }
 
-function buildGroups(sessions: DomainSession[]): TimelineGroupData[] {
+function resolveAgentName(session: DomainSession, agentNames?: Map<string, string>): string {
+  if (session.agentName) return session.agentName
+  if (session.agentId && agentNames?.has(session.agentId)) return agentNames.get(session.agentId)!
+  return session.name
+}
+
+function buildGroups(sessions: DomainSession[], agentNames?: Map<string, string>): TimelineGroupData[] {
   const jiraMap = new Map<string, TimelineGroupData>()
   const ungrouped: TimelineGroupData[] = []
 
@@ -215,7 +222,7 @@ function buildGroups(sessions: DomainSession[]): TimelineGroupData[] {
     } else {
       ungrouped.push({
         key: `ungrouped-${session.id}`,
-        label: session.agentName ?? session.name,
+        label: resolveAgentName(session, agentNames),
         jiraUrl: null,
         jiraSummary: null,
         sessions: [session],
@@ -353,12 +360,14 @@ function TimelinePopover({
   jiraKey,
   jiraSummary,
   jiraUrl,
+  agentNames,
 }: {
   session: DomainSession
   projectId: string
   jiraKey: string | null
   jiraSummary: string | null
   jiraUrl: string | null
+  agentNames?: Map<string, string>
 }) {
   const sessionStart = getSessionStart(session)
   const sessionEnd = getSessionEnd(session)
@@ -372,9 +381,7 @@ function TimelinePopover({
 
   const prRef = session.annotations[WORK_GITHUB_PR] ?? null
   const prUrl = session.annotations[WORK_GITHUB_PR_URL] ?? null
-  const title = jiraKey && jiraSummary
-    ? `${jiraKey} - ${jiraSummary}`
-    : jiraKey ?? session.name
+  const displayAgent = resolveAgentName(session, agentNames)
 
   return (
     <div className="w-80 space-y-2">
@@ -399,7 +406,7 @@ function TimelinePopover({
           href={`/${projectId}/sessions/${session.id}`}
           className="text-sm font-bold text-primary hover:underline"
         >
-          {session.agentName ?? session.name}
+          {displayAgent}
         </Link>
       </div>
 
@@ -466,6 +473,7 @@ function TimelineBar({
   jiraKey,
   jiraSummary,
   jiraUrl,
+  agentNames,
 }: {
   session: DomainSession
   projectId: string
@@ -473,6 +481,7 @@ function TimelineBar({
   jiraKey: string | null
   jiraSummary: string | null
   jiraUrl: string | null
+  agentNames?: Map<string, string>
 }) {
   const position = useMemo(
     () => calculateBarPosition(session, timeRange),
@@ -500,7 +509,7 @@ function TimelineBar({
             backgroundColor: barColor,
           }}
           tabIndex={0}
-          aria-label={`${jiraKey ?? session.agentName ?? session.name}: ${session.phase}`}
+          aria-label={`${jiraKey ?? resolveAgentName(session, agentNames)}: ${session.phase}`}
         >
           {isRunning && (
             <span
@@ -525,6 +534,7 @@ function TimelineBar({
           jiraKey={jiraKey}
           jiraSummary={jiraSummary}
           jiraUrl={jiraUrl}
+          agentNames={agentNames}
         />
       </PopoverContent>
     </Popover>
@@ -540,6 +550,7 @@ function TimelineLane({
   jiraUrl,
   label,
   isSub,
+  agentNames,
 }: {
   session: DomainSession
   projectId: string
@@ -549,6 +560,7 @@ function TimelineLane({
   jiraUrl: string | null
   label: string
   isSub: boolean
+  agentNames?: Map<string, string>
 }) {
   return (
     <div className="flex border-b border-border last:border-b-0">
@@ -571,6 +583,7 @@ function TimelineLane({
           jiraKey={jiraKey}
           jiraSummary={jiraSummary}
           jiraUrl={jiraUrl}
+          agentNames={agentNames}
         />
       </div>
     </div>
@@ -581,10 +594,12 @@ function TimelineGroup({
   group,
   projectId,
   timeRange,
+  agentNames,
 }: {
   group: TimelineGroupData
   projectId: string
   timeRange: TimeRange
+  agentNames?: Map<string, string>
 }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -635,6 +650,7 @@ function TimelineGroup({
                 jiraKey={group.key}
                 jiraSummary={group.jiraSummary}
                 jiraUrl={group.jiraUrl}
+                agentNames={agentNames}
               />
             ))}
         </div>
@@ -651,8 +667,9 @@ function TimelineGroup({
             jiraKey={group.key}
             jiraSummary={group.jiraSummary}
             jiraUrl={group.jiraUrl}
-            label={session.agentName ?? session.name}
+            label={resolveAgentName(session, agentNames)}
             isSub
+            agentNames={agentNames}
           />
         ))}
     </div>
@@ -695,10 +712,10 @@ function TimelineGridLines({
 // Main component
 // ---------------------------------------------------------------------------
 
-export function TimelineView({ sessions, projectId }: TimelineViewProps) {
+export function TimelineView({ sessions, projectId, agentNames }: TimelineViewProps) {
   const timeRange = useMemo(() => buildTimeRange(sessions), [sessions])
   const hourLabels = useMemo(() => buildHourLabels(timeRange), [timeRange])
-  const groups = useMemo(() => buildGroups(sessions), [sessions])
+  const groups = useMemo(() => buildGroups(sessions, agentNames), [sessions, agentNames])
 
   if (sessions.length === 0) {
     return (
@@ -732,8 +749,7 @@ export function TimelineView({ sessions, projectId }: TimelineViewProps) {
               </span>
             ))}
             <span
-              className="absolute -translate-x-1/2 select-none font-mono text-xs font-bold text-destructive"
-              style={{ left: '100%' }}
+              className="absolute right-0 translate-x-0 select-none font-mono text-xs font-bold text-destructive"
             >
               Now
             </span>
@@ -747,6 +763,7 @@ export function TimelineView({ sessions, projectId }: TimelineViewProps) {
               group={group}
               projectId={projectId}
               timeRange={timeRange}
+              agentNames={agentNames}
             />
           </div>
         ))}
