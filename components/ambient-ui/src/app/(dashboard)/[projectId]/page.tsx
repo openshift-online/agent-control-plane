@@ -140,7 +140,7 @@ export default function DashboardPage() {
       {/* View content */}
       {view === 'list' ? (
         <>
-          <NeedsYouQueue items={needsYouItems} projectId={projectId} />
+          <NeedsYouQueue items={needsYouItems} projectId={projectId} agentNames={agentNames} />
           <ActiveWorkSection cards={workItemCards} projectId={projectId} />
           <RecentActivity items={recentItems} projectId={projectId} />
         </>

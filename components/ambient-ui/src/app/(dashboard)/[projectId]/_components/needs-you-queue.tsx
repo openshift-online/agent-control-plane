@@ -47,9 +47,10 @@ const CRITICALITY_TEXT_CLASS: Record<Criticality, string> = {
 type NeedsYouQueueProps = {
   items: NeedsYouItem[]
   projectId: string
+  agentNames?: Map<string, string>
 }
 
-export function NeedsYouQueue({ items, projectId }: NeedsYouQueueProps) {
+export function NeedsYouQueue({ items, projectId, agentNames }: NeedsYouQueueProps) {
   return (
     <section className="rounded-lg border bg-card">
       <h2 className="px-4 py-3 text-sm font-semibold">
@@ -70,6 +71,7 @@ export function NeedsYouQueue({ items, projectId }: NeedsYouQueueProps) {
                 key={item.session.id}
                 item={item}
                 projectId={projectId}
+                agentNames={agentNames}
               />
             ))}
           </ul>
@@ -86,16 +88,23 @@ export function NeedsYouQueue({ items, projectId }: NeedsYouQueueProps) {
 type NeedsYouRowProps = {
   item: NeedsYouItem
   projectId: string
+  agentNames?: Map<string, string>
 }
 
-function NeedsYouRow({ item, projectId }: NeedsYouRowProps) {
+function resolveAgentName(session: NeedsYouItem['session'], agentNames?: Map<string, string>): string {
+  if (session.agentName) return session.agentName
+  if (session.agentId && agentNames?.has(session.agentId)) return agentNames.get(session.agentId)!
+  return session.name
+}
+
+function NeedsYouRow({ item, projectId, agentNames }: NeedsYouRowProps) {
   const { session, statusText, criticality, waitingSince } = item
   const Icon = CRITICALITY_ICON[criticality]
   const ref = getWorkItemRef(session.annotations)
   const prRef = session.annotations[WORK_GITHUB_PR] ?? null
   const prUrl = session.annotations[WORK_GITHUB_PR_URL] ?? null
   const jiraUrl = session.annotations[WORK_JIRA_URL] ?? null
-  const agentName = session.agentName ?? session.name
+  const agentName = resolveAgentName(session, agentNames)
 
   return (
     <li>
@@ -106,11 +115,11 @@ function NeedsYouRow({ item, projectId }: NeedsYouRowProps) {
         {/* Status cell */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex min-w-0 items-center gap-1.5">
+            <div className="flex min-w-0 items-start gap-1.5">
               <Icon
-                className={`size-4 shrink-0 ${CRITICALITY_TEXT_CLASS[criticality]}`}
+                className={`mt-0.5 size-4 shrink-0 ${CRITICALITY_TEXT_CLASS[criticality]}`}
               />
-              <span className="truncate text-sm font-medium">{statusText}</span>
+              <span className="line-clamp-2 text-sm font-medium leading-snug">{statusText}</span>
             </div>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-xs">

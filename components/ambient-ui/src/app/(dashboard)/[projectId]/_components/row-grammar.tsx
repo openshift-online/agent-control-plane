@@ -33,7 +33,7 @@ export function RowGrid({ children, className }: RowGridProps) {
   return (
     <div
       className={cn(
-        'grid items-center gap-x-3 px-3 py-2',
+        'grid items-center gap-x-3 px-3 py-3',
         ROW_GRID_TEMPLATE,
         className,
       )}

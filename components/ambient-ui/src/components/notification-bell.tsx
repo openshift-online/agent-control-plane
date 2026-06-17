@@ -63,16 +63,18 @@ function TrayItem({
         )}
       />
       <div className="min-w-0 flex-1">
-        <p className="font-medium leading-tight">
+        <p className="line-clamp-3 font-medium leading-tight">
           {item.statusText}
         </p>
-        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           {jiraKey && (
             <span className="inline-flex items-center gap-0.5 rounded bg-muted px-1 py-px font-mono text-[10px]">
               <Ticket className="size-3" />
               {jiraKey}
             </span>
           )}
+          <span className="text-muted-foreground/70">{item.session.agentName ?? item.session.name}</span>
+          <span>·</span>
           <span>{formatRelativeTime(item.waitingSince)}</span>
         </div>
       </div>
