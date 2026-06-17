@@ -13,6 +13,7 @@ import (
 type MessageDao interface {
 	Insert(ctx context.Context, msg *SessionMessage) error
 	AllBySessionIDAfterSeq(ctx context.Context, sessionID string, afterSeq int64) ([]SessionMessage, error)
+	UpdateSessionLastActivity(ctx context.Context, sessionID string, t time.Time) error
 }
 
 var _ MessageDao = &sqlMessageDao{}
@@ -43,4 +44,13 @@ func (d *sqlMessageDao) AllBySessionIDAfterSeq(ctx context.Context, sessionID st
 		return nil, fmt.Errorf("list session messages: %w", err)
 	}
 	return messages, nil
+}
+
+func (d *sqlMessageDao) UpdateSessionLastActivity(ctx context.Context, sessionID string, t time.Time) error {
+	g2 := (*d.sessionFactory).New(ctx)
+	result := g2.Model(&Session{}).Where("id = ?", sessionID).Update("last_activity_at", t)
+	if result.Error != nil {
+		return fmt.Errorf("update session last_activity_at: %w", result.Error)
+	}
+	return nil
 }

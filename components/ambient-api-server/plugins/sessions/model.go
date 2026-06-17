@@ -41,6 +41,7 @@ type Session struct {
 	KubeCrName         *string    `json:"kube_cr_name"`
 	KubeCrUid          *string    `json:"kube_cr_uid"`
 	KubeNamespace      *string    `json:"kube_namespace"`
+	LastActivityAt     *time.Time `json:"last_activity_at"`
 }
 
 type SessionList []*Session

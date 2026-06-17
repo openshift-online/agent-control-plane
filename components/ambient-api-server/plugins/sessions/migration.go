@@ -130,6 +130,18 @@ func agentIDMigration() *gormigrate.Migration {
 	}
 }
 
+func lastActivityAtMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202606170001",
+		Migrate: func(tx *gorm.DB) error {
+			return tx.Exec(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ`).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return tx.Exec(`ALTER TABLE sessions DROP COLUMN IF EXISTS last_activity_at`).Error
+		},
+	}
+}
+
 func schemaExpansionMigration() *gormigrate.Migration {
 	migrateStatements := []string{
 		`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS repos TEXT`,
