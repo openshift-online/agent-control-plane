@@ -474,7 +474,6 @@ function makeSdkAgent(overrides: Partial<Agent> = {}): Agent {
     llm_temperature: 0.7,
     name: 'test-agent',
     owner_user_id: 'user-42',
-    parent_agent_id: '',
     project_id: 'proj-123',
     prompt: 'You are a helpful agent.',
     repo_url: 'https://github.com/org/repo',

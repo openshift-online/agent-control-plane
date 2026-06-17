@@ -25,7 +25,6 @@ type Agent struct {
 	LlmTemperature       float64 `json:"llm_temperature,omitempty"`
 	Name                 string  `json:"name"`
 	OwnerUserID          string  `json:"owner_user_id,omitempty"`
-	ParentAgentID        string  `json:"parent_agent_id,omitempty"`
 	ProjectID            string  `json:"project_id"`
 	Prompt               string  `json:"prompt,omitempty"`
 	RepoURL              string  `json:"repo_url,omitempty"`
@@ -104,11 +103,6 @@ func (b *AgentBuilder) Name(v string) *AgentBuilder {
 
 func (b *AgentBuilder) OwnerUserID(v string) *AgentBuilder {
 	b.resource.OwnerUserID = v
-	return b
-}
-
-func (b *AgentBuilder) ParentAgentID(v string) *AgentBuilder {
-	b.resource.ParentAgentID = v
 	return b
 }
 

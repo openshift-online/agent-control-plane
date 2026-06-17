@@ -8,7 +8,6 @@ import (
 type Agent struct {
 	api.Meta
 	ProjectId            string  `json:"project_id"             gorm:"not null;index"`
-	ParentAgentId        *string `json:"parent_agent_id"        gorm:"index"`
 	OwnerUserId          string  `json:"owner_user_id"          gorm:"not null"`
 	Name                 string  `json:"name"                   gorm:"not null"`
 	DisplayName          *string `json:"display_name"`

@@ -72,7 +72,6 @@ erDiagram
     Agent {
         string ID PK "KSUID"
         string project_id FK
-        string parent_agent_id FK "nullable — parent agent for sub-agents"
         string owner_user_id FK "user who owns this agent"
         string name "human-readable; unique within project"
         string display_name "nullable — human-friendly display label"
@@ -440,7 +439,6 @@ Agent is scoped to a Project. The stable address is `{project_name}/{agent_name}
 | `display_name` | Nullable. Human-friendly label for UI display; does not affect addressing. |
 | `description` | Nullable. Free-text purpose description. |
 | `prompt` | Defines who the agent is. Mutable via PATCH. Access controlled by RBAC (`agent:editor` or higher). |
-| `parent_agent_id` | Nullable FK. Set when this agent was spawned as a sub-agent by another agent. |
 | `owner_user_id` | FK to the User who owns this agent. Set at creation; matches the authenticated caller. |
 | `repo_url` | Nullable. Primary repository URL cloned into every session the agent starts. Copied to `Session.repo_url` on ignite. |
 | `workflow_id` | Nullable. Default workflow identifier injected into sessions. Copied to `Session.workflow_id` on ignite. |

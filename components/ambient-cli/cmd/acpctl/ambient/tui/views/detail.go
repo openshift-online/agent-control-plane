@@ -514,7 +514,6 @@ func AgentDetail(a sdktypes.Agent) []DetailLine {
 		{Key: "Prompt", Value: a.Prompt},
 		{Key: "Current Session", Value: a.CurrentSessionID},
 		{Key: "Owner User ID", Value: a.OwnerUserID},
-		{Key: "Parent Agent ID", Value: a.ParentAgentID},
 		{Key: "Bot Account", Value: a.BotAccountName},
 		{Key: "LLM Model", Value: a.LlmModel},
 		{Key: "LLM Max Tokens", Value: formatInt32(a.LlmMaxTokens)},

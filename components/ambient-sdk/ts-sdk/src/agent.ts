@@ -18,7 +18,6 @@ export type Agent = ObjectReference & {
   llm_temperature: number;
   name: string;
   owner_user_id: string;
-  parent_agent_id: string;
   project_id: string;
   prompt: string;
   repo_url: string;
@@ -42,7 +41,6 @@ export type AgentCreateRequest = {
   llm_temperature?: number;
   name: string;
   owner_user_id?: string;
-  parent_agent_id?: string;
   project_id: string;
   prompt?: string;
   repo_url?: string;
@@ -119,11 +117,6 @@ export class AgentBuilder {
 
   ownerUserId(value: string): this {
     this.data['owner_user_id'] = value;
-    return this;
-  }
-
-  parentAgentId(value: string): this {
-    this.data['parent_agent_id'] = value;
     return this;
   }
 

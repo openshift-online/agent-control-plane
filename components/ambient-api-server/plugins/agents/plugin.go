@@ -117,4 +117,5 @@ func init() {
 
 	db.RegisterMigration(migration())
 	db.RegisterMigration(agentSchemaExpansionMigration())
+	db.RegisterMigration(dropParentAgentIdMigration())
 }

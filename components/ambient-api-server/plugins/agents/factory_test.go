@@ -64,7 +64,6 @@ func presentAgent(agent *agents.Agent) openapi.Agent {
 		CreatedAt:      openapi.PtrTime(agent.CreatedAt),
 		UpdatedAt:      openapi.PtrTime(agent.UpdatedAt),
 		ProjectId:      agent.ProjectId,
-		ParentAgentId:  agent.ParentAgentId,
 		OwnerUserId:    openapi.PtrString(agent.OwnerUserId),
 		Name:           agent.Name,
 		DisplayName:    agent.DisplayName,

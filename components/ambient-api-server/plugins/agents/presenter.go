@@ -14,7 +14,6 @@ func ConvertAgent(agent openapi.Agent) *Agent {
 		},
 	}
 	c.ProjectId = agent.ProjectId
-	c.ParentAgentId = agent.ParentAgentId
 	c.OwnerUserId = util.NilToEmptyString(agent.OwnerUserId)
 	c.Name = agent.Name
 	c.DisplayName = agent.DisplayName
@@ -60,7 +59,6 @@ func PresentAgent(agent *Agent) openapi.Agent {
 		CreatedAt:            openapi.PtrTime(agent.CreatedAt),
 		UpdatedAt:            openapi.PtrTime(agent.UpdatedAt),
 		ProjectId:            agent.ProjectId,
-		ParentAgentId:        agent.ParentAgentId,
 		OwnerUserId:          openapi.PtrString(agent.OwnerUserId),
 		Name:                 agent.Name,
 		DisplayName:          agent.DisplayName,

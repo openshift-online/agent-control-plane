@@ -31,7 +31,6 @@ class Agent:
     llm_temperature: float = 0.0
     name: str = ""
     owner_user_id: str = ""
-    parent_agent_id: str = ""
     project_id: str = ""
     prompt: str = ""
     repo_url: str = ""
@@ -58,7 +57,6 @@ class Agent:
             llm_temperature=data.get("llm_temperature", 0.0),
             name=data.get("name", ""),
             owner_user_id=data.get("owner_user_id", ""),
-            parent_agent_id=data.get("parent_agent_id", ""),
             project_id=data.get("project_id", ""),
             prompt=data.get("prompt", ""),
             repo_url=data.get("repo_url", ""),
@@ -137,10 +135,6 @@ class AgentBuilder:
 
     def owner_user_id(self, value: str) -> AgentBuilder:
         self._data["owner_user_id"] = value
-        return self
-
-    def parent_agent_id(self, value: str) -> AgentBuilder:
-        self._data["parent_agent_id"] = value
         return self
 
     def project_id(self, value: str) -> AgentBuilder:
