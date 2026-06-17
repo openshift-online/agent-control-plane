@@ -34,7 +34,7 @@ RUN uv tool install mcp-server-fetch==2025.4.7
 
 # OpenShell supervisor binary for sandbox isolation (file mode, no Gateway required)
 # libcap used for setcap to grant NET_ADMIN file capability to non-root binary
-COPY --from=ghcr.io/nvidia/openshell/supervisor:0.0.63 /openshell-sandbox /openshell-sandbox
+COPY --from=ghcr.io/nvidia/openshell/supervisor:0.0.65 /openshell-sandbox /openshell-sandbox
 RUN chmod +x /openshell-sandbox && \
     mkdir -p /var/run/netns && chmod 777 /var/run/netns
 
