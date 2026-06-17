@@ -970,20 +970,49 @@ func TestSessionLastActivityAtNilOnCreation(t *testing.T) {
 	account := h.NewRandAccount()
 	ctx := h.NewAuthenticatedContext(account)
 
+	// Create without a prompt — the Create handler auto-pushes the prompt as a
+	// "user" message when Prompt is non-empty, which would set last_activity_at.
 	sessionInput := openapi.Session{
-		Name:   "last-activity-nil-test",
+		Name: "last-activity-nil-test",
+	}
+	created, resp, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(sessionInput).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+	Expect(created.LastActivityAt).To(BeNil(), "last_activity_at should be nil on a freshly created session without prompt")
+
+	fetched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, *created.Id).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	Expect(fetched.LastActivityAt).To(BeNil(), "last_activity_at should remain nil when fetched")
+}
+
+func TestSessionLastActivityAtSetOnPromptPush(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+
+	// Creating with a prompt triggers an auto-push of the prompt as a "user"
+	// message, which updates last_activity_at in the DB. The create response
+	// is built from the pre-push model, so we verify via a subsequent GET.
+	beforeCreate := time.Now().UTC().Add(-time.Second)
+
+	sessionInput := openapi.Session{
+		Name:   "last-activity-prompt-test",
 		Prompt: openapi.PtrString("test prompt"),
 	}
 	created, resp, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(sessionInput).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 
-	Expect(created.LastActivityAt).To(BeNil(), "last_activity_at should be nil on a freshly created session")
-
+	// Fetch the session to see the DB-persisted last_activity_at
 	fetched, resp, err := client.DefaultAPI.ApiAmbientV1SessionsIdGet(ctx, *created.Id).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
-	Expect(fetched.LastActivityAt).To(BeNil(), "last_activity_at should remain nil when fetched")
+	Expect(fetched.LastActivityAt).NotTo(BeNil(), "last_activity_at should be set after prompt auto-push")
+	Expect(*fetched.LastActivityAt).To(BeTemporally(">", beforeCreate))
+	Expect(*fetched.LastActivityAt).To(BeTemporally("~", time.Now().UTC(), 10*time.Second))
 }
 
 func TestSessionLastActivityAtUpdatedOnMessagePush(t *testing.T) {
@@ -993,9 +1022,9 @@ func TestSessionLastActivityAtUpdatedOnMessagePush(t *testing.T) {
 	ctx := h.NewAuthenticatedContext(account)
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
 
+	// Create without prompt so last_activity_at starts nil
 	sessionInput := openapi.Session{
-		Name:   "last-activity-push-test",
-		Prompt: openapi.PtrString("test prompt"),
+		Name: "last-activity-push-test",
 	}
 	created, resp, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(sessionInput).Execute()
 	Expect(err).NotTo(HaveOccurred())
@@ -1004,11 +1033,11 @@ func TestSessionLastActivityAtUpdatedOnMessagePush(t *testing.T) {
 
 	beforePush := time.Now().UTC().Add(-time.Second)
 
-	// Push a message via REST API
+	// Push a message via REST API — endpoint only allows event_type "user"
 	restyResp, err := resty.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
-		SetBody(`{"event_type":"assistant","payload":"hello world"}`).
+		SetBody(`{"event_type":"user","payload":"hello world"}`).
 		Post(h.RestURL(fmt.Sprintf("/sessions/%s/messages", *created.Id)))
 	Expect(err).NotTo(HaveOccurred())
 	Expect(restyResp.StatusCode()).To(Equal(http.StatusCreated))
@@ -1029,19 +1058,19 @@ func TestSessionLastActivityAtUpdatesOnSubsequentPush(t *testing.T) {
 	ctx := h.NewAuthenticatedContext(account)
 	jwtToken := ctx.Value(openapi.ContextAccessToken)
 
+	// Create without prompt so we control timing precisely
 	sessionInput := openapi.Session{
-		Name:   "last-activity-multi-push-test",
-		Prompt: openapi.PtrString("test prompt"),
+		Name: "last-activity-multi-push-test",
 	}
 	created, resp, err := client.DefaultAPI.ApiAmbientV1SessionsPost(ctx).Session(sessionInput).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 
-	// Push first message
+	// Push first message — REST endpoint only allows event_type "user"
 	restyResp, err := resty.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
-		SetBody(`{"event_type":"system","payload":"first"}`).
+		SetBody(`{"event_type":"user","payload":"first"}`).
 		Post(h.RestURL(fmt.Sprintf("/sessions/%s/messages", *created.Id)))
 	Expect(err).NotTo(HaveOccurred())
 	Expect(restyResp.StatusCode()).To(Equal(http.StatusCreated))
@@ -1058,7 +1087,7 @@ func TestSessionLastActivityAtUpdatesOnSubsequentPush(t *testing.T) {
 	restyResp, err = resty.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
-		SetBody(`{"event_type":"assistant","payload":"second"}`).
+		SetBody(`{"event_type":"user","payload":"second"}`).
 		Post(h.RestURL(fmt.Sprintf("/sessions/%s/messages", *created.Id)))
 	Expect(err).NotTo(HaveOccurred())
 	Expect(restyResp.StatusCode()).To(Equal(http.StatusCreated))
