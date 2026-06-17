@@ -101,5 +101,3 @@ LABEL org.opencontainers.image.revision=$GIT_COMMIT
 
 CMD ["/bin/bash", "-c", "umask 0022 && cd /app/ambient-runner && uvicorn main:app --host 0.0.0.0 --port 8001"]
 
-ARG IMAGE_EXPIRY=
-LABEL quay.expires-after=${IMAGE_EXPIRY}
