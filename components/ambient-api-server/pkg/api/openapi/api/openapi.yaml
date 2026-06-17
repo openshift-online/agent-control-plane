@@ -4857,8 +4857,6 @@ components:
           project_id:
             description: The project this agent belongs to
             type: string
-          parent_agent_id:
-            type: string
           owner_user_id:
             type: string
           name:
@@ -4924,7 +4922,6 @@ components:
         llm_max_tokens: 5
         labels: labels
         environment_variables: environment_variables
-        parent_agent_id: parent_agent_id
         updated_at: 2000-01-23T04:56:07.000+00:00
         project_id: project_id
         bot_account_name: bot_account_name
@@ -4962,7 +4959,6 @@ components:
           llm_max_tokens: 5
           labels: labels
           environment_variables: environment_variables
-          parent_agent_id: parent_agent_id
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
           bot_account_name: bot_account_name
@@ -4985,7 +4981,6 @@ components:
           llm_max_tokens: 5
           labels: labels
           environment_variables: environment_variables
-          parent_agent_id: parent_agent_id
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
           bot_account_name: bot_account_name

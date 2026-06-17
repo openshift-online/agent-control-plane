@@ -10,7 +10,6 @@ Name | Type | Description | Notes
 **CreatedAt** | Pointer to **time.Time** |  | [optional] 
 **UpdatedAt** | Pointer to **time.Time** |  | [optional] 
 **ProjectId** | **string** | The project this agent belongs to | 
-**ParentAgentId** | Pointer to **string** |  | [optional] 
 **OwnerUserId** | Pointer to **string** |  | [optional] 
 **Name** | **string** | Human-readable identifier; unique within the project | 
 **DisplayName** | Pointer to **string** |  | [optional] 
@@ -191,31 +190,6 @@ and a boolean to check if the value has been set.
 
 SetProjectId sets ProjectId field to given value.
 
-
-### GetParentAgentId
-
-`func (o *Agent) GetParentAgentId() string`
-
-GetParentAgentId returns the ParentAgentId field if non-nil, zero value otherwise.
-
-### GetParentAgentIdOk
-
-`func (o *Agent) GetParentAgentIdOk() (*string, bool)`
-
-GetParentAgentIdOk returns a tuple with the ParentAgentId field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetParentAgentId
-
-`func (o *Agent) SetParentAgentId(v string)`
-
-SetParentAgentId sets ParentAgentId field to given value.
-
-### HasParentAgentId
-
-`func (o *Agent) HasParentAgentId() bool`
-
-HasParentAgentId returns a boolean if a field has been set.
 
 ### GetOwnerUserId
 

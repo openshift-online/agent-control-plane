@@ -46,7 +46,6 @@ func agentSchemaExpansionMigration() *gormigrate.Migration {
 		ID: "202604181000",
 		Migrate: func(tx *gorm.DB) error {
 			stmts := []string{
-				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS parent_agent_id TEXT`,
 				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_user_id TEXT NOT NULL DEFAULT ''`,
 				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS display_name TEXT`,
 				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS description TEXT`,
@@ -58,7 +57,6 @@ func agentSchemaExpansionMigration() *gormigrate.Migration {
 				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS bot_account_name TEXT`,
 				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS resource_overrides TEXT`,
 				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS environment_variables TEXT`,
-				`CREATE INDEX IF NOT EXISTS idx_agents_parent_agent_id ON agents(parent_agent_id)`,
 			}
 			for _, s := range stmts {
 				if err := tx.Exec(s).Error; err != nil {
@@ -69,7 +67,7 @@ func agentSchemaExpansionMigration() *gormigrate.Migration {
 		},
 		Rollback: func(tx *gorm.DB) error {
 			cols := []string{
-				"parent_agent_id", "owner_user_id", "display_name", "description",
+				"owner_user_id", "display_name", "description",
 				"repo_url", "workflow_id", "llm_model", "llm_temperature", "llm_max_tokens",
 				"bot_account_name", "resource_overrides", "environment_variables",
 			}
@@ -79,6 +77,27 @@ func agentSchemaExpansionMigration() *gormigrate.Migration {
 				}
 			}
 			return nil
+		},
+	}
+}
+
+func dropParentAgentIdMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202606171000",
+		Migrate: func(tx *gorm.DB) error {
+			stmts := []string{
+				`DROP INDEX IF EXISTS idx_agents_parent_agent_id`,
+				`ALTER TABLE agents DROP COLUMN IF EXISTS parent_agent_id`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return tx.Exec(`ALTER TABLE agents ADD COLUMN IF NOT EXISTS parent_agent_id TEXT`).Error
 		},
 	}
 }

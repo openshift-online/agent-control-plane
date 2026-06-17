@@ -58,7 +58,7 @@
     "@types/react-dom": "^19",
     "@vitest/coverage-istanbul": "^4.0.18",
     "eslint": "^9",
-    "eslint-config-next": "15.5.2",
+    "eslint-config-next": "15.5.19",
     "jsdom": "^28.1.0",
     "tailwindcss": "^4",
     "typescript": "^5",

@@ -29,9 +29,8 @@ type Agent struct {
 	CreatedAt *time.Time `json:"created_at,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	// The project this agent belongs to
-	ProjectId     string  `json:"project_id"`
-	ParentAgentId *string `json:"parent_agent_id,omitempty"`
-	OwnerUserId   *string `json:"owner_user_id,omitempty"`
+	ProjectId   string  `json:"project_id"`
+	OwnerUserId *string `json:"owner_user_id,omitempty"`
 	// Human-readable identifier; unique within the project
 	Name        string  `json:"name"`
 	DisplayName *string `json:"display_name,omitempty"`
@@ -255,38 +254,6 @@ func (o *Agent) GetProjectIdOk() (*string, bool) {
 // SetProjectId sets field value
 func (o *Agent) SetProjectId(v string) {
 	o.ProjectId = v
-}
-
-// GetParentAgentId returns the ParentAgentId field value if set, zero value otherwise.
-func (o *Agent) GetParentAgentId() string {
-	if o == nil || IsNil(o.ParentAgentId) {
-		var ret string
-		return ret
-	}
-	return *o.ParentAgentId
-}
-
-// GetParentAgentIdOk returns a tuple with the ParentAgentId field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *Agent) GetParentAgentIdOk() (*string, bool) {
-	if o == nil || IsNil(o.ParentAgentId) {
-		return nil, false
-	}
-	return o.ParentAgentId, true
-}
-
-// HasParentAgentId returns a boolean if a field has been set.
-func (o *Agent) HasParentAgentId() bool {
-	if o != nil && !IsNil(o.ParentAgentId) {
-		return true
-	}
-
-	return false
-}
-
-// SetParentAgentId gets a reference to the given string and assigns it to the ParentAgentId field.
-func (o *Agent) SetParentAgentId(v string) {
-	o.ParentAgentId = &v
 }
 
 // GetOwnerUserId returns the OwnerUserId field value if set, zero value otherwise.
@@ -819,9 +786,6 @@ func (o Agent) ToMap() (map[string]interface{}, error) {
 		toSerialize["updated_at"] = o.UpdatedAt
 	}
 	toSerialize["project_id"] = o.ProjectId
-	if !IsNil(o.ParentAgentId) {
-		toSerialize["parent_agent_id"] = o.ParentAgentId
-	}
 	if !IsNil(o.OwnerUserId) {
 		toSerialize["owner_user_id"] = o.OwnerUserId
 	}

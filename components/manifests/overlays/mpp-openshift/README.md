@@ -17,6 +17,7 @@ kubectl apply -k components/manifests/overlays/mpp-openshift/
 - Mounts `tenantaccess-ambient-control-plane-token` for the CP's project kube client
 - Mounts `ambient-runner-api-token` for runner pods to authenticate as service callers on gRPC
 - Adds `allow-ambient-tenant-ingress` NetworkPolicy (ports 8000/9000 from all `ambient-code` tenant namespaces)
+- Deploys `ambient-ui` BFF with native SSO authentication (reads `sso-credentials` secret)
 
 ## ⚠️ One-Time Manual Bootstrap
 
@@ -95,6 +96,20 @@ The api-server must know the static token so it can recognise the runner as a se
 | `ambient-control-plane-rbac.yaml` | RBAC for the CP SA |
 | `ambient-tenant-ingress-netpol.yaml` | NetworkPolicy allowing runner→api-server traffic |
 | `ambient-cp-tenant-sa.yaml` | TenantServiceAccount CR (applied manually — see Step A) |
+| `ambient-ui.yaml` | ambient-ui Deployment, ServiceAccount, Service (BFF with native SSO) |
+| `ambient-ui-route.yaml` | OpenShift Route for ambient-ui (TLS edge termination) |
+
+### Step D — SSO Credentials for ambient-ui
+
+The ambient-ui BFF requires an OIDC confidential client. Create the `sso-credentials` secret:
+
+```bash
+kubectl create secret generic sso-credentials -n <namespace> \
+  --from-literal=SSO_ISSUER_URL=<issuer-url> \
+  --from-literal=SSO_CLIENT_ID=<client-id> \
+  --from-literal=SSO_CLIENT_SECRET=<client-secret> \
+  --from-literal=SESSION_SECRET="$(openssl rand -base64 32)"
+```
 
 ## Re-Bootstrap Required?
 

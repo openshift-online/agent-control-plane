@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi10/ubi@sha256:f573194e8e5231f1c9340c497e1f8d9aa9dbb42b2849e60341e34f50eec9477e
+FROM registry.access.redhat.com/ubi10/ubi@sha256:0e04460ccf1ad68374b2f1ca28f8539f817fe8bb6107478df445e05dccb1995e
 
 ARG GIT_COMMIT=unknown
 
@@ -34,7 +34,7 @@ RUN uv tool install mcp-server-fetch==2025.4.7
 
 # OpenShell supervisor binary for sandbox isolation (file mode, no Gateway required)
 # libcap used for setcap to grant NET_ADMIN file capability to non-root binary
-COPY --from=ghcr.io/nvidia/openshell/supervisor:0.0.56 /openshell-sandbox /openshell-sandbox
+COPY --from=ghcr.io/nvidia/openshell/supervisor:0.0.63 /openshell-sandbox /openshell-sandbox
 RUN chmod +x /openshell-sandbox && \
     mkdir -p /var/run/netns && chmod 777 /var/run/netns
 
