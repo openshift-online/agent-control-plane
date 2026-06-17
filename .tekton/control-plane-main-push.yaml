@@ -8,7 +8,8 @@ metadata:
     pipelinesascode.tekton.dev/cancel-in-progress: "false"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
-      == "main" && ( "components/ambient-control-plane/***".pathChanged() || ".tekton/control-plane-main-push.yaml".pathChanged()
+      == "main" && ( "components/ambient-control-plane/***".pathChanged() || "components/ambient-api-server/***".pathChanged()
+      || "components/ambient-sdk/go-sdk/***".pathChanged() || ".tekton/control-plane-main-push.yaml".pathChanged()
       )
   labels:
     appstudio.openshift.io/application: agent-control-plane-main
@@ -25,9 +26,9 @@ spec:
   - name: output-image
     value: quay.io/redhat-user-workloads/hcm-eng-prod-tenant/agent-control-plane-main/control-plane-main:{{revision}}
   - name: dockerfile
-    value: Dockerfile
+    value: ambient-control-plane/Dockerfile
   - name: path-context
-    value: components/ambient-control-plane
+    value: components
   pipelineSpec:
     description: |
       This pipeline is ideal for building container images from a Containerfile while reducing network traffic.
