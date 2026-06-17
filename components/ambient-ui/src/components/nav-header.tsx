@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useCurrentUser } from '@/hooks/use-current-user'
+import { NotificationBell } from '@/components/notification-bell'
 
 type NavHeaderProps = {
   projectId?: string | null
@@ -166,6 +167,7 @@ export function NavHeader({ projectId, projectName, pageName, sessionName, detai
 
       <div className="ml-auto flex items-center gap-2">
         <SearchTrigger />
+        {projectId && <NotificationBell projectId={projectId} />}
         <UserMenu />
       </div>
     </header>

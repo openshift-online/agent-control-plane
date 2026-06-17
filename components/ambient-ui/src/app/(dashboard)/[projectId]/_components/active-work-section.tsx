@@ -1,101 +1,230 @@
-import Link from 'next/link'
-import { Ticket, GitPullRequest, Monitor } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { PhaseBadge, PhaseDotOnly } from '../sessions/_components/phase-badge'
-import type { DomainSession } from '@/domain/types'
-import type { WorkItemGroup } from './dashboard-helpers'
+import { formatRelativeTime } from '@/lib/format-timestamp'
+import type { WorkItemCard } from '@/domain/work-annotations'
 
 type ActiveWorkSectionProps = {
-  grouped: WorkItemGroup[]
-  ungrouped: DomainSession[]
+  cards: WorkItemCard[]
   projectId: string
 }
 
-const REF_TYPE_CONFIG = {
-  jira: { icon: Ticket, label: 'Jira' },
-  'github-pr': { icon: GitPullRequest, label: 'PR' },
-} as const
+/* ---------- Jira status badge ---------- */
 
-function WorkItemCard({
-  group,
+const JIRA_STATUS_CLASSES: Record<string, string> = {
+  'in progress': 'border-primary bg-primary/10 text-primary',
+  'done': 'border-status-success-border bg-status-success text-status-success-foreground',
+  'blocked': 'border-status-error-border bg-status-error text-status-error-foreground',
+  'to do': 'border-border bg-muted text-muted-foreground',
+  'in review': 'border-status-info-border bg-status-info text-status-info-foreground',
+}
+
+function JiraStatusBadge({ status }: { status: string }) {
+  const cls = JIRA_STATUS_CLASSES[status.toLowerCase()] ?? ''
+  return (
+    <Badge variant="outline" className={cls}>
+      {status}
+    </Badge>
+  )
+}
+
+/* ---------- PR status badge ---------- */
+
+const PR_STATUS_CLASSES: Record<string, string> = {
+  open: 'border-status-success-border text-status-success-foreground',
+  draft: 'border-border bg-muted text-muted-foreground',
+  merged: 'border-status-info-border bg-status-info text-status-info-foreground',
+  closed: 'border-destructive bg-destructive/10 text-destructive',
+}
+
+const PR_STATUS_LABELS: Record<string, string> = {
+  open: 'Open',
+  draft: 'Draft',
+  merged: 'Merged',
+  closed: 'Closed',
+}
+
+function PrStatusBadge({ status }: { status: string }) {
+  const cls = PR_STATUS_CLASSES[status.toLowerCase()] ?? ''
+  const label = PR_STATUS_LABELS[status.toLowerCase()] ?? status
+  return (
+    <Badge variant="outline" className={cls}>
+      {label}
+    </Badge>
+  )
+}
+
+/* ---------- CI checks badge ---------- */
+
+const CI_CLASSES: Record<string, string> = {
+  passing: 'border-status-success-border bg-status-success text-status-success-foreground',
+  failing: 'border-destructive bg-destructive/10 text-destructive',
+  pending: 'border-status-warning-border bg-status-warning text-status-warning-foreground',
+}
+
+const CI_LABELS: Record<string, string> = {
+  passing: 'CI Passing',
+  failing: 'CI Failing',
+  pending: 'CI Pending',
+}
+
+function CiChecksBadge({ checks }: { checks: string }) {
+  const cls = CI_CLASSES[checks.toLowerCase()] ?? ''
+  const label = CI_LABELS[checks.toLowerCase()] ?? checks
+  return (
+    <Badge variant="outline" className={cls}>
+      {label}
+    </Badge>
+  )
+}
+
+/* ---------- PR review badge ---------- */
+
+const REVIEW_CLASSES: Record<string, string> = {
+  approved: 'border-status-success-border bg-status-success text-status-success-foreground',
+  'changes-requested': 'border-destructive bg-destructive/10 text-destructive',
+  pending: 'border-status-warning-border bg-status-warning text-status-warning-foreground',
+}
+
+const REVIEW_LABELS: Record<string, string> = {
+  approved: 'Approved',
+  'changes-requested': 'Changes Requested',
+  pending: 'Review Pending',
+}
+
+function PrReviewBadge({ review }: { review: string }) {
+  if (review.toLowerCase() === 'none') return null
+  const cls = REVIEW_CLASSES[review.toLowerCase()] ?? ''
+  const label = REVIEW_LABELS[review.toLowerCase()] ?? review
+  return (
+    <Badge variant="outline" className={cls}>
+      {label}
+    </Badge>
+  )
+}
+
+/* ---------- Clickable reference helper ---------- */
+
+function ClickableRef({
+  label,
+  url,
+  className,
+}: {
+  label: string
+  url: string | null
+  className?: string
+}) {
+  if (url) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={className ?? 'truncate font-medium text-link hover:text-link-hover'}
+      >
+        {label}
+      </a>
+    )
+  }
+  return <span className={className ?? 'truncate font-medium'}>{label}</span>
+}
+
+/* ---------- Format PR display label ---------- */
+
+function formatPrLabel(prRef: string): string {
+  const hashIdx = prRef.indexOf('#')
+  if (hashIdx !== -1) {
+    return `PR #${prRef.slice(hashIdx + 1)}`
+  }
+  return prRef
+}
+
+/* ---------- Work Item Card (with Jira and/or PR) ---------- */
+
+function InFlightCard({
+  card,
   projectId,
 }: {
-  group: WorkItemGroup
+  card: WorkItemCard
   projectId: string
 }) {
-  const config = REF_TYPE_CONFIG[group.ref.type]
-  const Icon = config.icon
+  const isJiraPrimary = card.ref.type === 'jira'
+  const agents = card.sessions
+    .map((s) => s.agentName ?? s.name)
+    .filter(Boolean)
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="pb-2">
         <CardTitle className="flex min-w-0 items-center gap-2 text-sm">
-          <Icon className="size-4 shrink-0 text-muted-foreground" />
-          <span className="truncate">{group.ref.key}</span>
-          <Badge variant="outline" className="ml-auto shrink-0 text-xs">
-            {config.label}
-          </Badge>
+          <ClickableRef
+            label={isJiraPrimary ? card.ref.key : formatPrLabel(card.ref.key)}
+            url={card.ref.url}
+          />
+          {isJiraPrimary && card.jiraStatus && (
+            <span className="ml-auto shrink-0">
+              <JiraStatusBadge status={card.jiraStatus} />
+            </span>
+          )}
+          {!isJiraPrimary && card.prStatus && (
+            <span className="ml-auto shrink-0">
+              <PrStatusBadge status={card.prStatus} />
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <ul className="space-y-1.5">
-          {group.sessions.map(session => (
-            <li key={session.id}>
-              <Link
-                href={`/${projectId}/sessions/${session.id}`}
-                className="flex min-w-0 items-center gap-2 text-sm"
-              >
-                <span className="hidden @md:inline"><PhaseBadge phase={session.phase} /></span>
-                <span className="@md:hidden"><PhaseDotOnly phase={session.phase} /></span>
-                <span className="truncate text-link hover:text-link-hover">
-                  {session.name}
-                </span>
-                <span className="ml-auto shrink-0 hidden @md:inline text-xs text-muted-foreground">
-                  {session.agentName}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+      <CardContent className="space-y-2">
+        {/* Summary */}
+        {card.jiraSummary && (
+          <p className="truncate text-xs text-muted-foreground">{card.jiraSummary}</p>
+        )}
+
+        {/* PR row — only for Jira-primary cards that also have a PR */}
+        {isJiraPrimary && card.prRef && (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <ClickableRef
+              label={formatPrLabel(card.prRef)}
+              url={card.prUrl}
+              className="shrink-0 text-xs font-medium font-mono text-link hover:text-link-hover"
+            />
+            {card.prStatus && <PrStatusBadge status={card.prStatus} />}
+            {card.prChecks && <CiChecksBadge checks={card.prChecks} />}
+            {card.prReview && <PrReviewBadge review={card.prReview} />}
+          </div>
+        )}
+
+        {/* PR badges row for PR-primary cards */}
+        {!isJiraPrimary && (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {card.prChecks && <CiChecksBadge checks={card.prChecks} />}
+            {card.prReview && <PrReviewBadge review={card.prReview} />}
+          </div>
+        )}
+
+        {/* Agent row */}
+        {agents.length > 0 && (
+          <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="truncate">{agents.join(', ')}</span>
+          </div>
+        )}
+
+        {/* Footer — relative time */}
+        <p className="text-xs text-muted-foreground">
+          Updated {formatRelativeTime(card.lastUpdated)}
+        </p>
       </CardContent>
     </Card>
   )
 }
 
-function SessionCard({
-  session,
-  projectId,
-}: {
-  session: DomainSession
-  projectId: string
-}) {
-  return (
-    <Card className="py-4">
-      <CardContent className="flex items-center gap-3 overflow-hidden">
-        <Monitor className="size-4 shrink-0 text-muted-foreground" />
-        <Link
-          href={`/${projectId}/sessions/${session.id}`}
-          className="min-w-0 truncate text-sm font-medium text-link hover:text-link-hover"
-        >
-          {session.name}
-        </Link>
-        <span className="ml-auto shrink-0 hidden @md:block"><PhaseBadge phase={session.phase} /></span>
-        <span className="ml-auto shrink-0 @md:hidden"><PhaseDotOnly phase={session.phase} /></span>
-      </CardContent>
-    </Card>
-  )
-}
+/* ---------- Exported section ---------- */
 
-export function ActiveWorkSection({ grouped, ungrouped, projectId }: ActiveWorkSectionProps) {
-  const hasWork = grouped.length > 0 || ungrouped.length > 0
-
-  if (!hasWork) {
+export function ActiveWorkSection({ cards, projectId }: ActiveWorkSectionProps) {
+  if (cards.length === 0) {
     return (
       <div>
-        <h2 className="mb-3 text-sm font-semibold">Active work</h2>
-        <p className="text-sm text-muted-foreground">
-          No sessions are currently running.
+        <h2 className="mb-3 text-sm font-semibold">In-flight work</h2>
+        <p className="text-center text-sm text-muted-foreground">
+          No active work items
         </p>
       </div>
     )
@@ -103,17 +232,14 @@ export function ActiveWorkSection({ grouped, ungrouped, projectId }: ActiveWorkS
 
   return (
     <div>
-      <h2 className="mb-3 text-sm font-semibold">Active work</h2>
+      <h2 className="mb-3 text-sm font-semibold">In-flight work</h2>
       <div className="grid gap-3 @md:grid-cols-2 @2xl:grid-cols-3">
-        {grouped.map(group => (
-          <WorkItemCard
-            key={`${group.ref.type}:${group.ref.key}`}
-            group={group}
+        {cards.map((card) => (
+          <InFlightCard
+            key={`${card.ref.type}:${card.ref.key}`}
+            card={card}
             projectId={projectId}
           />
-        ))}
-        {ungrouped.map(session => (
-          <SessionCard key={session.id} session={session} projectId={projectId} />
         ))}
       </div>
     </div>

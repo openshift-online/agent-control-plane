@@ -1,22 +1,63 @@
 'use client'
 
-import { useParams } from 'next/navigation'
-import { LayoutDashboard } from 'lucide-react'
+import { useParams, useSearchParams, useRouter } from 'next/navigation'
+import { useCallback, useMemo } from 'react'
+import { LayoutDashboard, List, GanttChart } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmptyState } from '@/components/empty-state'
 import { useSessions } from '@/queries/use-sessions'
-import { AttentionBanner } from './_components/attention-banner'
+import { getNeedsYouItems, getWorkItemCards, getCompletionItems } from '@/domain/work-annotations'
+import { NeedsYouQueue } from './_components/needs-you-queue'
 import { ActiveWorkSection } from './_components/active-work-section'
 import { RecentActivity } from './_components/recent-activity'
-import {
-  getAttentionItems,
-  getActiveWorkItems,
-  getRecentActivity,
-} from './_components/dashboard-helpers'
+import { TimelineView } from './_components/timeline-view'
+
+type ViewMode = 'list' | 'timeline'
+
+function isViewMode(value: string | null): value is ViewMode {
+  return value === 'list' || value === 'timeline'
+}
 
 export default function DashboardPage() {
   const { projectId } = useParams<{ projectId: string }>()
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const { data, isLoading, error } = useSessions(projectId)
+
+  const rawView = searchParams.get('view')
+  const view: ViewMode = isViewMode(rawView) ? rawView : 'list'
+
+  const setView = useCallback(
+    (next: string) => {
+      const params = new URLSearchParams(searchParams.toString())
+      if (next === 'list') {
+        params.delete('view')
+      } else {
+        params.set('view', next)
+      }
+      const qs = params.toString()
+      router.replace(`/${projectId}${qs ? `?${qs}` : ''}`, { scroll: false })
+    },
+    [projectId, router, searchParams],
+  )
+
+  const sessions = data?.items ?? []
+
+  const needsYouItems = useMemo(
+    () => getNeedsYouItems(sessions),
+    [sessions],
+  )
+
+  const workItemCards = useMemo(
+    () => getWorkItemCards(sessions),
+    [sessions],
+  )
+
+  const recentItems = useMemo(
+    () => getCompletionItems(sessions),
+    [sessions],
+  )
 
   if (error) {
     return (
@@ -40,8 +81,6 @@ export default function DashboardPage() {
     )
   }
 
-  const sessions = data?.items ?? []
-
   if (sessions.length === 0) {
     return (
       <div className="space-y-6">
@@ -55,20 +94,57 @@ export default function DashboardPage() {
     )
   }
 
-  const attentionItems = getAttentionItems(sessions)
-  const { grouped, ungrouped } = getActiveWorkItems(sessions)
-  const recentItems = getRecentActivity(sessions)
+  const needsCount = needsYouItems.length
+  const inFlightCount = workItemCards.length
+  const completedCount = recentItems.length
 
   return (
     <div className="@container space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-      <AttentionBanner items={attentionItems} projectId={projectId} />
-      <ActiveWorkSection
-        grouped={grouped}
-        ungrouped={ungrouped}
-        projectId={projectId}
-      />
-      <RecentActivity items={recentItems} projectId={projectId} />
+      {/* Heading row with view toggle */}
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        <Tabs value={view} onValueChange={setView}>
+          <TabsList>
+            <TabsTrigger value="list">
+              <List className="mr-1.5 size-4" />
+              List
+            </TabsTrigger>
+            <TabsTrigger value="timeline">
+              <GanttChart className="mr-1.5 size-4" />
+              Timeline
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {/* Summary bar */}
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <span>
+          <span className="font-medium text-foreground">{needsCount}</span>{' '}
+          need{needsCount === 1 ? 's' : ''} attention
+        </span>
+        <span aria-hidden="true">&middot;</span>
+        <span>
+          <span className="font-medium text-foreground">{inFlightCount}</span>{' '}
+          in flight
+        </span>
+        <span aria-hidden="true">&middot;</span>
+        <span>
+          <span className="font-medium text-foreground">{completedCount}</span>{' '}
+          completed today
+        </span>
+      </div>
+
+      {/* View content */}
+      {view === 'list' ? (
+        <>
+          <NeedsYouQueue items={needsYouItems} projectId={projectId} />
+          <ActiveWorkSection cards={workItemCards} projectId={projectId} />
+          <RecentActivity items={recentItems} projectId={projectId} />
+        </>
+      ) : (
+        <TimelineView sessions={sessions} projectId={projectId} />
+      )}
     </div>
   )
 }
