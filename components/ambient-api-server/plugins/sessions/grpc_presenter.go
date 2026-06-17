@@ -57,8 +57,9 @@ func sessionToProto(s *Session) *pb.Session {
 	if s.CompletionTime != nil {
 		proto.CompletionTime = timestamppb.New(*s.CompletionTime)
 	}
-	// LastActivityAt: set after running `make generate` to regenerate gRPC stubs
-	// from proto/ambient/v1/sessions.proto (field 33 added).
+	if s.LastActivityAt != nil {
+		proto.LastActivityAt = timestamppb.New(*s.LastActivityAt)
+	}
 
 	return proto
 }
