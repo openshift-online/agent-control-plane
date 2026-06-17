@@ -823,34 +823,6 @@
       );
     }
 
-    /* ── Attention indicators on failed/blocked bars ── */
-    .timeline-bar-attention {
-      position: absolute;
-      right: 4px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 10px;
-      font-weight: 800;
-      color: #fff;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      animation: attention-pulse 1.5s ease-in-out infinite;
-      z-index: 2;
-    }
-    .timeline-bar-attention--failed {
-      background: var(--danger);
-    }
-    .timeline-bar-attention--blocked {
-      background: var(--status-warning-fg);
-    }
-    @keyframes attention-pulse {
-      0%, 100% { opacity: 0.6; transform: translateY(-50%) scale(0.9); }
-      50% { opacity: 1; transform: translateY(-50%) scale(1); }
-    }
 
     /* ── Timeline Popover ── */
     .timeline-popover {
@@ -1085,6 +1057,118 @@
     .typing-dot:nth-child(3) { animation-delay: 0.4s; }
     @keyframes typing-pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
 
+    /* ── Notification Bell ── */
+    .notification-bell {
+      position: relative;
+    }
+    .bell-button {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--foreground);
+      cursor: pointer;
+      transition: background 120ms;
+    }
+    .bell-button:hover {
+      background: var(--muted);
+    }
+    .bell-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      border-radius: 8px;
+      background: var(--danger);
+      color: #fff;
+      font-size: 0.625rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+    @keyframes bell-shake {
+      0%, 100% { transform: rotate(0); }
+      15% { transform: rotate(8deg); }
+      30% { transform: rotate(-8deg); }
+      45% { transform: rotate(4deg); }
+      60% { transform: rotate(-4deg); }
+      75% { transform: rotate(0); }
+    }
+    .bell-button--has-items {
+      animation: bell-shake 0.6s ease-in-out 1s 1;
+    }
+    .bell-tray {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 8px;
+      width: 360px;
+      max-height: 400px;
+      overflow-y: auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 8px 24px rgba(21,21,21,0.12);
+      z-index: 50;
+    }
+    .bell-tray-header {
+      padding: 12px 16px 8px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted-foreground);
+      border-bottom: 1px solid var(--border);
+    }
+    .bell-tray-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--border);
+      border-left: 3px solid transparent;
+      cursor: pointer;
+      font-size: 0.75rem;
+    }
+    .bell-tray-item:hover {
+      background: #fafafa;
+    }
+    .bell-tray-item:last-child {
+      border-bottom: none;
+    }
+    .bell-tray-item--critical {
+      border-left-color: var(--danger);
+    }
+    .bell-tray-item--warning {
+      border-left-color: var(--status-warning-border);
+    }
+    .bell-tray-item-status {
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .bell-tray-item-issue {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--muted-foreground);
+    }
+    .bell-tray-item-time {
+      font-family: "Red Hat Mono", monospace;
+      color: var(--muted-foreground);
+      white-space: nowrap;
+    }
+
     /* ── Responsive: unified .row reflow ── */
     @media (max-width: 900px) {
       .row-header {
@@ -1168,11 +1252,47 @@
   <div class="app-shell">
     <header class="topbar">
       <h1>Agent Command Center</h1>
+      <div class="notification-bell">
+        <button class="bell-button bell-button--has-items" id="bell-button" aria-label="5 items need attention" aria-haspopup="true" aria-expanded="false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          <span class="bell-badge" id="bell-badge">5</span>
+        </button>
+        <div class="bell-tray" id="bell-tray" hidden>
+          <div class="bell-tray-header">Needs Attention</div>
+          <div class="bell-tray-items">
+            <div class="bell-tray-item bell-tray-item--critical" data-bell-session="s12">
+              <span class="bell-tray-item-status" style="color:var(--status-error-fg);">Blocked: Upstream PR not merged</span>
+              <span class="bell-tray-item-issue">AIHCM-138 — Implement Ingestion Context Walking Skeleton</span>
+              <span class="bell-tray-item-time">4h 00m</span>
+            </div>
+            <div class="bell-tray-item bell-tray-item--critical" data-bell-session="s13">
+              <span class="bell-tray-item-status" style="color:var(--status-error-fg);">CI failing on ARM builds</span>
+              <span class="bell-tray-item-issue">AIHCM-174 — Spike: Validate AI extraction pipeline with synthetic data</span>
+              <span class="bell-tray-item-time">3h 30m</span>
+            </div>
+            <div class="bell-tray-item bell-tray-item--critical" data-bell-session="s6">
+              <span class="bell-tray-item-status" style="color:var(--status-error-fg);">Session failed</span>
+              <span class="bell-tray-item-issue">AIHCM-89 — Pre-Development Research &amp; Compliance</span>
+              <span class="bell-tray-item-time">2h 15m</span>
+            </div>
+            <div class="bell-tray-item bell-tray-item--warning" data-bell-session="s7">
+              <span class="bell-tray-item-status" style="color:var(--status-warning-fg);">Waiting for approval</span>
+              <span class="bell-tray-item-issue">AIHCM-141 — Enable Ambient in Hyperfleet</span>
+              <span class="bell-tray-item-time">18m</span>
+            </div>
+            <div class="bell-tray-item bell-tray-item--warning" data-bell-session="AIHCM-137">
+              <span class="bell-tray-item-status" style="color:var(--status-warning-fg);">PR review changes requested</span>
+              <span class="bell-tray-item-issue">AIHCM-137 — Complete ESS</span>
+              <span class="bell-tray-item-time">11m</span>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="sync" aria-label="Sync status">
-        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#63993d;box-shadow:0 0 0 3px rgba(99,153,61,0.16);"></span>
+        <span class="sync-dot" id="sync-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#63993d;box-shadow:0 0 0 3px rgba(99,153,61,0.16);transition:transform 0.2s ease;"></span>
         <span>Live</span>
         <span aria-hidden="true">·</span>
-        <span>Synced 2m ago</span>
+        <span id="sync-text">Synced 2m ago</span>
       </div>
     </header>
 
@@ -1513,19 +1633,19 @@
             </div>
             <div class="timeline-legend">
               <div class="timeline-legend-item" role="listitem">
-                <span class="timeline-legend-swatch--wide" style="background: #0066cc;"></span>
+                <span class="timeline-legend-swatch--wide" style="display:flex;overflow:hidden;border-radius:2px;"><span style="flex:3;background:#0066cc;"></span><span style="flex:1;background:#6753ac;"></span><span style="flex:1;background:#63993d;"></span></span>
                 <span>Completed</span>
               </div>
               <div class="timeline-legend-item" role="listitem">
-                <span class="timeline-legend-swatch--wide" style="background: linear-gradient(to right, #0066cc 75%, rgba(0,102,204,0.2));"></span>
+                <span class="timeline-legend-swatch--wide" style="background: linear-gradient(to right, #0066cc 75%, rgba(0,102,204,0.15)); border-radius: 2px 0 0 2px;"></span>
                 <span>Running</span>
               </div>
               <div class="timeline-legend-item" role="listitem">
-                <span class="timeline-legend-swatch--wide" style="background: repeating-linear-gradient(45deg, #0066cc, #0066cc 3px, rgba(255,255,255,0.35) 3px, rgba(255,255,255,0.35) 6px); border: 1px dashed rgba(0,0,0,0.25);"></span>
+                <span class="timeline-legend-swatch--wide" style="background: repeating-linear-gradient(45deg, var(--status-warning-fg), var(--status-warning-fg) 3px, rgba(255,255,255,0.35) 3px, rgba(255,255,255,0.35) 6px); border: 1px dashed rgba(0,0,0,0.2); border-radius: 2px;"></span>
                 <span>Blocked</span>
               </div>
               <div class="timeline-legend-item" role="listitem">
-                <span class="timeline-legend-swatch--wide" style="background: #0066cc; border-right: 3px solid #f0561d;"></span>
+                <span class="timeline-legend-swatch--wide" style="background: var(--danger); border-radius: 2px;"></span>
                 <span>Failed</span>
               </div>
             </div>
@@ -1556,9 +1676,9 @@
   <script>
     /* ── Timeline Renderer ── */
     (() => {
-      const NOW_HOUR = 14;
-      const NOW_MIN = 45;
-      const NOW_PCT = 98; // "now" sits at 98% to leave a tiny right margin
+      var NOW_HOUR = 14;
+      var NOW_MIN = 45;
+      var NOW_PCT = 98; // "now" sits at 98% to leave a tiny right margin
 
       const PHASE_COLORS = {
         implementing: 'var(--phase-implementing)',
@@ -1715,7 +1835,7 @@
         return h + ':' + String(min).padStart(2, '0') + ' ' + suffix;
       }
 
-      const nowMin = NOW_HOUR * 60 + NOW_MIN;
+      var nowMin = NOW_HOUR * 60 + NOW_MIN;
 
       // Auto-scale time axis to fit 100% width
       let earliestMin = nowMin;
@@ -1998,6 +2118,8 @@
         });
       }
 
+      var barElements = {};
+
       function createBar(session) {
         const startMin = parseTime(session.start);
         const endMin = session.end ? parseTime(session.end) : nowMin;
@@ -2026,6 +2148,8 @@
         bar.setAttribute('role', 'button');
         bar.setAttribute('aria-haspopup', 'dialog');
         bar.setAttribute('aria-label', session.jira + ', ' + session.agent + ', ' + phaseNameForLabel + statusDesc);
+
+        bar.setAttribute('data-session-id', session.id);
 
         if (session.status === 'running') bar.classList.add('is-running');
         if (session.status === 'failed') bar.classList.add('is-failed');
@@ -2056,16 +2180,9 @@
           bar.style.background = PHASE_COLORS[lastPhase.name] || 'var(--phase-implementing)';
         }
 
-        // Fix 4: attention indicators for failed/blocked bars
-        if (session.status === 'failed' || session.status === 'blocked') {
-          var indicator = document.createElement('span');
-          indicator.className = 'timeline-bar-attention';
-          indicator.classList.add(session.status === 'failed' ? 'timeline-bar-attention--failed' : 'timeline-bar-attention--blocked');
-          indicator.innerHTML = session.status === 'failed' ? '&#x2715;' : '&#x23F8;';
-          bar.appendChild(indicator);
-        }
 
         wireBarEvents(bar, session);
+        barElements[session.id] = bar;
         return bar;
       }
 
@@ -2119,7 +2236,7 @@
 
       groupOrder.forEach(function(group) {
         var isMulti = group.isGroup && group.sessions.length > 1;
-        var defaultCollapsed = group.isGroup && group.sessions.length === 1;
+        var defaultCollapsed = group.isGroup; // all groups start collapsed
 
         if (group.isGroup) {
           // Wrap entire group in a timeline-group div for hover highlighting
@@ -2133,7 +2250,7 @@
           headerLabelContent.style.gap = '4px';
           var chevron = document.createElement('span');
           chevron.className = 'timeline-group-chevron';
-          chevron.textContent = (defaultCollapsed) ? '▸' : '▾';
+          chevron.textContent = '▸'; // all groups start collapsed
           headerLabelContent.appendChild(chevron);
           var keySpan = document.createElement('span');
           keySpan.textContent = group.key;
@@ -2142,9 +2259,8 @@
           var headerRow = createTimelineRow(headerLabelContent, group.sessions, { extraClass: 'timeline-row--group-header' });
 
           // The group lane (header lane) is shown when collapsed, hidden when expanded
-          if (isMulti) {
-            headerRow.querySelector('.timeline-row-lane').style.display = 'none';
-          }
+          // All groups start collapsed — header lane visible, sub-rows hidden
+          // (sub-rows get timeline-row-collapsed below)
 
           headerRow.style.cursor = 'pointer';
           groupWrapper.appendChild(headerRow);
@@ -2210,6 +2326,24 @@
       window.addEventListener('scroll', function() { popover.hidden = true; }, { passive: true });
       window.addEventListener('resize', function() { popover.hidden = true; });
       container.addEventListener('scroll', function() { popover.hidden = true; }, { passive: true });
+
+      // Expose state for live simulation
+      window._timeline = {
+        nowMin: function() { return nowMin; },
+        setNowMin: function(v) { nowMin = v; },
+        NOW_PCT: NOW_PCT,
+        sessions: sessions,
+        SESSION_MESSAGES: SESSION_MESSAGES,
+        barElements: barElements,
+        pctOf: pctOf,
+        parseTime: parseTime,
+        formatTime12: formatTime12,
+        rangeStartMin: rangeStartMin,
+        totalMinutes: totalMinutes,
+        showPopover: showPopover,
+        popover: popover,
+        popoverOriginBar: function() { return popoverOriginBar; },
+      };
     })();
   </script>
 
@@ -2302,6 +2436,10 @@
       const listView = document.querySelector('.list-view');
       const timelineView = document.querySelector('.timeline-view');
 
+      window._isTimelineVisible = function() {
+        return timelineView.style.display === 'block';
+      };
+
       viewBtns.forEach(btn => {
         btn.addEventListener('click', () => {
           viewBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
@@ -2317,6 +2455,216 @@
           }
         });
       });
+    })();
+  </script>
+
+  <script>
+    /* ── Notification Bell ── */
+    (() => {
+      var bellBtn = document.getElementById('bell-button');
+      var bellTray = document.getElementById('bell-tray');
+      var tooltip = document.getElementById('interaction-tooltip');
+
+      function toggleTray() {
+        var isOpen = !bellTray.hidden;
+        bellTray.hidden = isOpen;
+        bellBtn.setAttribute('aria-expanded', String(!isOpen));
+      }
+
+      function closeTray() {
+        bellTray.hidden = true;
+        bellBtn.setAttribute('aria-expanded', 'false');
+      }
+
+      bellBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        toggleTray();
+      });
+
+      document.addEventListener('click', function(e) {
+        if (!bellTray.hidden && !bellTray.contains(e.target) && e.target !== bellBtn) {
+          closeTray();
+        }
+      });
+
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && !bellTray.hidden) {
+          closeTray();
+          bellBtn.focus();
+        }
+      });
+
+      // Tray item clicks
+      bellTray.querySelectorAll('.bell-tray-item').forEach(function(item) {
+        item.addEventListener('click', function(e) {
+          e.stopPropagation();
+          tooltip.textContent = 'Would navigate to session';
+          tooltip.hidden = false;
+          var r = item.getBoundingClientRect();
+          var tr = tooltip.getBoundingClientRect();
+          tooltip.style.left = Math.min(Math.max(8, r.left + r.width / 2 - tr.width / 2), window.innerWidth - tr.width - 8) + 'px';
+          tooltip.style.top = (r.top > tr.height + 16 ? r.top - tr.height - 8 : r.bottom + 8) + 'px';
+          setTimeout(function() { tooltip.hidden = true; }, 1800);
+        });
+      });
+    })();
+  </script>
+
+  <script>
+    /* ── Auto-updating Timeline Simulation ── */
+    (() => {
+      var tl = window._timeline;
+      if (!tl) return;
+
+      var tickCount = 0;
+      var syncAgoMinutes = 0;
+
+      var liveMessages = [
+        { badge: 'tool', text: 'Read file: src/reconciler.go' },
+        { badge: 'tool', text: 'Bash: go test ./...' },
+        { badge: 'text', text: 'Analyzing test results...' },
+        { badge: 'tool', text: 'Edit file: internal/config/config.go' },
+        { badge: 'text', text: 'Refactoring error handling path' },
+        { badge: 'tool', text: 'Bash: make lint' },
+        { badge: 'text', text: 'Updating documentation' },
+        { badge: 'tool', text: 'Read file: specs/platform/session-activity-tracking.spec.md' },
+      ];
+
+      var syncTextEl = document.getElementById('sync-text');
+      var syncDot = document.getElementById('sync-dot');
+
+      function flashSyncDot() {
+        syncDot.style.transform = 'scale(1.6)';
+        syncDot.style.background = '#63993d';
+        setTimeout(function() {
+          syncDot.style.transform = 'scale(1)';
+        }, 300);
+      }
+
+      function updateSyncText() {
+        if (syncAgoMinutes === 0) {
+          syncTextEl.textContent = 'Synced just now';
+        } else {
+          syncTextEl.textContent = 'Synced ' + syncAgoMinutes + 'm ago';
+        }
+      }
+
+      function getRunningSessionIds() {
+        var ids = [];
+        tl.sessions.forEach(function(s) {
+          if (s.status === 'running' || s.status === 'blocked') {
+            ids.push(s.id);
+          }
+        });
+        return ids;
+      }
+
+      function pctOfLive(minuteVal) {
+        var currentNow = tl.nowMin();
+        var totalMin = currentNow - tl.rangeStartMin;
+        return ((minuteVal - tl.rangeStartMin) / totalMin) * tl.NOW_PCT;
+      }
+
+      var intervalId = setInterval(function() {
+        // Stop if timeline is not visible
+        if (!window._isTimelineVisible || !window._isTimelineVisible()) {
+          return;
+        }
+
+        tickCount++;
+
+        // 1. Advance "now" by 1 minute every 3 ticks
+        if (tickCount % 3 === 0) {
+          var currentNow = tl.nowMin();
+          tl.setNowMin(currentNow + 1);
+
+          // Update sync text cycling
+          syncAgoMinutes = (syncAgoMinutes + 1) % 3;
+          updateSyncText();
+        }
+
+        // Flash the sync dot on every tick
+        flashSyncDot();
+
+        // 2. Update now-line positions and bar widths
+        var currentNow = tl.nowMin();
+
+        // Update all now-lines
+        document.querySelectorAll('.timeline-now-line').forEach(function(nl) {
+          nl.style.left = tl.NOW_PCT + '%';
+        });
+
+        // Update the "now" axis label position (it stays at NOW_PCT)
+        // The axis labels use percentage positions relative to the range, which doesn't change
+
+        // 3. Grow running/blocked bars
+        var runningIds = getRunningSessionIds();
+        runningIds.forEach(function(sid) {
+          var bar = tl.barElements[sid];
+          if (!bar) return;
+
+          // Find the session
+          var session = null;
+          tl.sessions.forEach(function(s) { if (s.id === sid) session = s; });
+          if (!session) return;
+
+          var startMin = tl.parseTime(session.start);
+          var leftPct = pctOfLive(startMin);
+          var widthPct = tl.NOW_PCT - leftPct;
+
+          bar.style.left = leftPct + '%';
+          bar.style.width = 'max(' + widthPct + '%, 8px)';
+        });
+
+        // 4. Occasionally add a message (every 5th tick)
+        if (tickCount % 5 === 0) {
+          var runningSessions = [];
+          tl.sessions.forEach(function(s) {
+            if (s.status === 'running') runningSessions.push(s);
+          });
+          if (runningSessions.length > 0) {
+            var randomSession = runningSessions[Math.floor(Math.random() * runningSessions.length)];
+            var randomMsg = liveMessages[Math.floor(Math.random() * liveMessages.length)];
+
+            // Generate time string from current simulated time
+            var timeStr = tl.formatTime12(currentNow);
+
+            var newMessage = { time: timeStr, badge: randomMsg.badge, text: randomMsg.text };
+
+            // Prepend to SESSION_MESSAGES
+            if (!tl.SESSION_MESSAGES[randomSession.id]) {
+              tl.SESSION_MESSAGES[randomSession.id] = [];
+            }
+            tl.SESSION_MESSAGES[randomSession.id].unshift(newMessage);
+
+            // If popover is open for this session, update live
+            var popover = tl.popover;
+            if (!popover.hidden) {
+              var originBar = tl.popoverOriginBar();
+              if (originBar && originBar.getAttribute('data-session-id') === randomSession.id) {
+                var messagesContainer = popover.querySelector('.popover-messages');
+                if (messagesContainer) {
+                  var badgeLabels = { tool: 'tool_call', text: 'text', error: 'error' };
+                  var msgDiv = document.createElement('div');
+                  msgDiv.className = 'popover-msg';
+                  msgDiv.innerHTML =
+                    '<span class="popover-msg-time mono">' + newMessage.time + '</span>' +
+                    '<span class="popover-msg-badge ' + newMessage.badge + '">' + (badgeLabels[newMessage.badge] || newMessage.badge) + '</span>' +
+                    '<span class="popover-msg-text">' + newMessage.text + '</span>';
+
+                  // Insert before typing indicator if present, otherwise prepend
+                  var typingIndicator = messagesContainer.querySelector('.typing-indicator');
+                  if (typingIndicator) {
+                    messagesContainer.insertBefore(msgDiv, typingIndicator);
+                  } else {
+                    messagesContainer.insertBefore(msgDiv, messagesContainer.firstChild);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }, 3000);
     })();
   </script>
 </body>
