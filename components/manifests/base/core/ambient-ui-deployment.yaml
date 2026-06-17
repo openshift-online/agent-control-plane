@@ -46,6 +46,16 @@ spec:
             secretKeyRef:
               name: sso-credentials
               key: SESSION_SECRET
+        - name: SSO_REDIRECT_URI
+          valueFrom:
+            secretKeyRef:
+              name: sso-credentials
+              key: SSO_REDIRECT_URI
+        - name: SSO_FRONTEND_ISSUER_URL
+          valueFrom:
+            secretKeyRef:
+              name: sso-credentials
+              key: SSO_FRONTEND_ISSUER_URL
         resources:
           requests:
             cpu: 100m

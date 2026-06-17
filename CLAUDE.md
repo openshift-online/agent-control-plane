@@ -103,6 +103,31 @@ Benchmark notes:
 - `warm` measures rebuild proxies, not browser-observed hot reload latency
 - See `scripts/benchmarks/README.md` for semantics and caveats
 
+## Local Development SSO
+
+`make kind-up` automatically configures Keycloak with OpenID Connect authentication:
+
+**Default users:**
+- Developer: `developer` / `developer` (ambient-users group)
+- Admin: `admin` / `admin` (ambient-users, ambient-admins groups)
+
+**Access URLs** (ports assigned per worktree/branch via `CLUSTER_SLUG`):
+- Frontend: `http://localhost:$KIND_FWD_AMBIENT_UI_PORT`
+- Keycloak admin: `http://localhost:$KIND_FWD_KEYCLOAK_PORT` (admin/admin)
+- API Server: `http://localhost:$KIND_FWD_API_SERVER_PORT`
+
+Run `make kind-status` to see your assigned ports.
+
+**How it works:**
+- `scripts/setup-kind-sso.sh` runs during `kind-up` to patch `sso-credentials` secret with port-specific URLs
+- UI uses **dual-issuer pattern**: fetches OIDC from backend (cluster DNS), rewrites browser URLs to frontend (localhost)
+- Each worktree gets deterministic unique ports to avoid conflicts
+
+**Troubleshooting:**
+- Login redirects fail → Verify port forwards: `make kind-port-forward`
+- Token exchange fails → Check UI logs: `kubectl logs -l app=ambient-ui -n ambient-code`
+- Realm not found → Wait for Keycloak: `kubectl get pods -l app=keycloak -n ambient-code`
+
 ## Critical Conventions
 
 Cross-cutting rules that apply across ALL components. Component-specific conventions live in

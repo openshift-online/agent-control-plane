@@ -11,6 +11,8 @@ async function getOIDCConfig(): Promise<client.Configuration> {
     return cachedConfig
   }
 
+  // Always fetch discovery from the backend issuer (cluster-internal DNS)
+  // The pod can't reach SSO_FRONTEND_ISSUER_URL (localhost:18856)
   const issuerURL = env.SSO_ISSUER_URL
   const clientId = env.SSO_CLIENT_ID
   const clientSecret = env.SSO_CLIENT_SECRET
@@ -33,18 +35,42 @@ async function getOIDCConfig(): Promise<client.Configuration> {
   }
   const metadata: unknown = await resp.json()
 
-  cachedConfig = new client.Configuration(
+  // If SSO_FRONTEND_ISSUER_URL is set, rewrite ONLY browser-facing endpoints
+  // to use the frontend issuer. Keep server-to-server endpoints (token, introspection,
+  // userinfo, jwks) pointing to the backend issuer.
+  if (env.SSO_FRONTEND_ISSUER_URL && env.SSO_ISSUER_URL) {
+    const backendIssuer = env.SSO_ISSUER_URL
+    const frontendIssuer = env.SSO_FRONTEND_ISSUER_URL
+    const metadataObj = metadata as Record<string, unknown>
+
+    // Only rewrite browser-facing endpoints
+    const browserEndpoints = [
+      'issuer',
+      'authorization_endpoint',
+      'end_session_endpoint',
+      'check_session_iframe',
+    ]
+
+    browserEndpoints.forEach((key) => {
+      if (typeof metadataObj[key] === 'string' && (metadataObj[key] as string).startsWith(backendIssuer)) {
+        metadataObj[key] = (metadataObj[key] as string).replace(backendIssuer, frontendIssuer)
+      }
+    })
+  }
+
+  const config = new client.Configuration(
     metadata as client.ServerMetadata,
     clientId,
     clientSecret,
   )
 
   if (useInsecure) {
-    client.allowInsecureRequests(cachedConfig)
+    client.allowInsecureRequests(config)
   }
 
+  cachedConfig = config
   cachedAt = Date.now()
-  return cachedConfig
+  return config
 }
 
 export async function buildAuthorizationUrl(redirectUri: string): Promise<{
@@ -52,6 +78,7 @@ export async function buildAuthorizationUrl(redirectUri: string): Promise<{
   codeVerifier: string
   state: string
 }> {
+  // Fetch config with rewritten URLs (backend fetch, frontend URLs)
   const config = await getOIDCConfig()
   const codeVerifier = client.randomPKCECodeVerifier()
   const codeChallenge = await client.calculatePKCECodeChallenge(codeVerifier)
@@ -110,6 +137,7 @@ export async function refreshOIDCTokens(refreshToken: string): Promise<{
 }
 
 export async function getEndSessionUrl(postLogoutRedirectUri: string, idTokenHint?: string): Promise<string> {
+  // Config already has frontend URLs due to rewriting
   const config = await getOIDCConfig()
   const metadata = config.serverMetadata()
   const endSessionEndpoint = metadata.end_session_endpoint
