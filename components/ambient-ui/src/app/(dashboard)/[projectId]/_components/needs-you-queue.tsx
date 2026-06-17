@@ -141,12 +141,12 @@ function NeedsYouRow({ item, projectId, agentNames }: NeedsYouRowProps) {
         </div>
 
         {/* PR */}
-        <div className="hidden md:block">
+        <div className="hidden min-w-0 overflow-hidden md:block">
           {prRef ? <PrChip prRef={prRef} url={prUrl} /> : null}
         </div>
 
         {/* Agent */}
-        <div className="hidden lg:block">
+        <div className="hidden min-w-0 overflow-hidden lg:block">
           <AgentLink
             agentName={agentName}
             projectId={projectId}
@@ -162,7 +162,7 @@ function NeedsYouRow({ item, projectId, agentNames }: NeedsYouRowProps) {
         {/* Action */}
         <div>
           <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
-            <Link href={`/${projectId}/sessions/${session.id}`}>View</Link>
+            <Link href={`/${projectId}/sessions/${session.id}`}>View session</Link>
           </Button>
         </div>
 

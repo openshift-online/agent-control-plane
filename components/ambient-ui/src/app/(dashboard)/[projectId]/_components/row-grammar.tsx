@@ -129,11 +129,17 @@ type PrChipProps = {
 }
 
 export function PrChip({ prRef, url }: PrChipProps) {
+  const short = prRef.includes('/') ? `#${prRef.split('#').pop()}` : prRef
   const content = (
-    <Badge variant="outline" className="gap-1 font-mono text-xs">
-      <GitPullRequest className="size-3 shrink-0" />
-      {prRef}
-    </Badge>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge variant="outline" className="max-w-full gap-1 font-mono text-xs">
+          <GitPullRequest className="size-3 shrink-0" />
+          <span className="truncate">{short}</span>
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>{prRef}</TooltipContent>
+    </Tooltip>
   )
 
   if (url) {
