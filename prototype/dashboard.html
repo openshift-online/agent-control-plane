@@ -596,27 +596,30 @@
     }
 
     .timeline-inner {
-      display: grid;
-      grid-template-columns: 130px 1fr;
       width: 100%;
     }
 
-    .timeline-corner {
+    .timeline-header-row {
+      display: flex;
       position: sticky;
       top: 0;
       z-index: 4;
       background: var(--card);
       border-bottom: 1px solid var(--border);
+      min-height: 28px;
+    }
+
+    .timeline-corner {
+      flex: 0 0 130px;
+      background: var(--card);
       border-right: 1px solid var(--border);
       min-height: 28px;
     }
 
     .timeline-axis {
-      position: sticky;
-      top: 0;
-      z-index: 3;
+      flex: 1;
+      position: relative;
       background: var(--card);
-      border-bottom: 1px solid var(--border);
       min-height: 28px;
       display: flex;
       align-items: flex-end;
@@ -633,12 +636,18 @@
       user-select: none;
     }
 
-    .timeline-agent-col {
-      border-right: 1px solid var(--border);
+    /* ── Timeline Row (label + lane side by side) ── */
+    .timeline-row {
+      display: flex;
+      border-bottom: 1px solid var(--border);
     }
 
-    .timeline-agent-name {
-      height: 32px;
+    .timeline-row:last-child {
+      border-bottom: none;
+    }
+
+    .timeline-row-label {
+      flex: 0 0 130px;
       display: flex;
       align-items: center;
       padding: 0 12px;
@@ -648,33 +657,29 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .timeline-agent-name:last-child {
-      border-bottom: none;
+      border-right: 1px solid var(--border);
+      min-height: 32px;
     }
 
     /* ── Timeline Jira Grouping ── */
-    .timeline-group-header {
-      height: 32px;
-      display: flex;
-      align-items: center;
+    .timeline-group {
+      /* wrapper for group hover highlight */
+    }
+
+    .timeline-group:hover > .timeline-row {
+      background: rgba(0, 102, 204, 0.04);
+    }
+
+    .timeline-row--group-header .timeline-row-label {
       padding: 0 8px;
-      font-family: "Red Hat Mono", monospace;
-      font-size: 0.75rem;
       font-weight: 700;
-      color: var(--foreground);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      border-bottom: 1px solid var(--border);
       cursor: pointer;
       user-select: none;
       gap: 4px;
+      min-height: 32px;
     }
 
-    .timeline-group-header:hover {
+    .timeline-row--group-header:hover {
       background: #fafafa;
     }
 
@@ -686,65 +691,34 @@
       text-align: center;
     }
 
-    .timeline-sub-label {
-      height: 28px;
-      display: flex;
-      align-items: center;
+    .timeline-row--sub .timeline-row-label {
       padding: 0 12px 0 28px;
-      font-family: "Red Hat Mono", monospace;
       font-size: 0.6875rem;
       color: var(--muted-foreground);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      border-bottom: 1px solid var(--border);
+      min-height: 28px;
     }
 
-    .timeline-sub-label:last-child {
-      border-bottom: none;
+    .timeline-row--sub .timeline-row-lane {
+      min-height: 28px;
     }
 
-    .timeline-group-collapsed .timeline-sub-label {
-      display: none;
-    }
-
-    .timeline-group-collapsed {
-      display: none;
-    }
-
-    .timeline-lane--group {
-      position: relative;
-      height: 32px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .timeline-lane--sub {
-      position: relative;
-      height: 28px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .timeline-lane--sub .timeline-bar {
+    .timeline-row--sub .timeline-bar {
       height: 18px;
       top: 5px;
     }
 
-    .timeline-group-collapsed .timeline-lane--sub {
+    .timeline-row--sub.timeline-row-collapsed {
       display: none;
     }
 
-    .timeline-lanes {
-      position: relative;
+    .timeline-row--group-lane.timeline-row-collapsed {
+      display: none;
     }
 
-    .timeline-lane {
+    .timeline-row-lane {
+      flex: 1;
       position: relative;
-      height: 32px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .timeline-lane:last-child {
-      border-bottom: none;
+      min-height: 32px;
     }
 
     .timeline-gridline {
@@ -847,6 +821,35 @@
         rgba(255,255,255,0.35) 3px,
         rgba(255,255,255,0.35) 6px
       );
+    }
+
+    /* ── Attention indicators on failed/blocked bars ── */
+    .timeline-bar-attention {
+      position: absolute;
+      right: 4px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 10px;
+      font-weight: 800;
+      color: #fff;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: attention-pulse 1.5s ease-in-out infinite;
+      z-index: 2;
+    }
+    .timeline-bar-attention--failed {
+      background: var(--danger);
+    }
+    .timeline-bar-attention--blocked {
+      background: var(--status-warning-fg);
+    }
+    @keyframes attention-pulse {
+      0%, 100% { opacity: 0.6; transform: translateY(-50%) scale(0.9); }
+      50% { opacity: 1; transform: translateY(-50%) scale(1); }
     }
 
     /* ── Timeline Popover ── */
@@ -1528,7 +1531,7 @@
             </div>
           </div>
           <div class="timeline-container" id="timeline-container" role="region" aria-label="Gantt-style timeline of today's sessions">
-            <span class="sr-only">Timeline showing 13 sessions from 9:00 AM to 2:45 PM grouped by Jira issue</span>
+            <span class="sr-only">Timeline showing 20 sessions from 9:00 AM to 2:45 PM grouped by Jira issue</span>
           </div>
         </section>
 
@@ -1606,6 +1609,9 @@
         { id: 's11b',jira: 'AIHCM-94',  jiraSummary: 'Explore KG-extraction techniques with ROSA Ask-SRE data-sources', pr: '#314', agent: 'test-runner',    start: '13:00', end: null,    phases: [{name:'testing',pct:100}], status: 'running' },
         { id: 's12', jira: 'AIHCM-138', jiraSummary: 'Implement Ingestion Context Walking Skeleton', pr: null, agent: 'implementer', start: '10:45', end: null,    phases: [{name:'implementing',pct:100}], status: 'blocked' },
         { id: 's13', jira: 'AIHCM-174', jiraSummary: 'Spike: Validate AI extraction pipeline with synthetic data', pr: null, agent: 'test-runner',      start: '11:15', end: null,    phases: [{name:'implementing',pct:60},{name:'testing',pct:40}], status: 'blocked' },
+        { id: 's14', jira: null, jiraSummary: null, pr: null, agent: 'nightly-benchmarks', start: '9:00', end: '9:35', phases: [{name:'testing',pct:100}], status: 'merged' },
+        { id: 's15', jira: null, jiraSummary: null, pr: null, agent: 'dependency-updater', start: '10:00', end: '10:15', phases: [{name:'implementing',pct:100}], status: 'merged' },
+        { id: 's16', jira: null, jiraSummary: null, pr: '#330', agent: 'security-scanner', start: '13:45', end: null, phases: [{name:'testing',pct:100}], status: 'running' },
       ];
 
       // Mocked message feed data per session
@@ -1681,6 +1687,18 @@
         's13': [
           { time: '1:45 PM', badge: 'text', text: 'CI failing on ARM builds, synthetic data pipeline blocked' },
         ],
+        's14': [
+          { time: '9:33 AM', badge: 'text', text: 'All benchmark targets within threshold' },
+          { time: '9:15 AM', badge: 'tool', text: 'Bash: make benchmark FORMAT=tsv' },
+        ],
+        's15': [
+          { time: '10:13 AM', badge: 'text', text: 'Updated 3 Go dependencies to latest patch versions' },
+          { time: '10:05 AM', badge: 'tool', text: 'Bash: go get -u ./...' },
+        ],
+        's16': [
+          { time: '2:40 PM', badge: 'tool', text: 'Bash: trivy image --severity HIGH,CRITICAL ambient-api-server:latest' },
+          { time: '2:38 PM', badge: 'text', text: 'Scanning container images for CVEs' },
+        ],
       };
 
       function parseTime(str) {
@@ -1750,9 +1768,13 @@
       const inner = document.createElement('div');
       inner.className = 'timeline-inner';
 
+      // Header row: corner label + time axis, using same flex layout as data rows
+      const headerRow = document.createElement('div');
+      headerRow.className = 'timeline-header-row';
+
       const corner = document.createElement('div');
       corner.className = 'timeline-corner';
-      inner.appendChild(corner);
+      headerRow.appendChild(corner);
 
       const axis = document.createElement('div');
       axis.className = 'timeline-axis';
@@ -1779,29 +1801,8 @@
       nowAxisLabel.textContent = 'now';
       axis.appendChild(nowAxisLabel);
 
-      inner.appendChild(axis);
-
-      const agentCol = document.createElement('div');
-      agentCol.className = 'timeline-agent-col';
-
-      const lanesArea = document.createElement('div');
-      lanesArea.className = 'timeline-lanes';
-      lanesArea.style.position = 'relative';
-      lanesArea.style.width = '100%';
-
-      hourMarkers.forEach(function(hr) {
-        const pct = pctOf(hr * 60);
-        if (pct < 0 || pct > NOW_PCT + 1) return;
-        const gl = document.createElement('div');
-        gl.className = 'timeline-gridline';
-        gl.style.left = pct + '%';
-        lanesArea.appendChild(gl);
-      });
-
-      const nowLine = document.createElement('div');
-      nowLine.className = 'timeline-now-line';
-      nowLine.style.left = NOW_PCT + '%';
-      lanesArea.appendChild(nowLine);
+      headerRow.appendChild(axis);
+      inner.appendChild(headerRow);
 
       const popover = document.getElementById('timeline-popover');
       let popoverHideTimer = 0;
@@ -2055,99 +2056,135 @@
           bar.style.background = PHASE_COLORS[lastPhase.name] || 'var(--phase-implementing)';
         }
 
+        // Fix 4: attention indicators for failed/blocked bars
+        if (session.status === 'failed' || session.status === 'blocked') {
+          var indicator = document.createElement('span');
+          indicator.className = 'timeline-bar-attention';
+          indicator.classList.add(session.status === 'failed' ? 'timeline-bar-attention--failed' : 'timeline-bar-attention--blocked');
+          indicator.innerHTML = session.status === 'failed' ? '&#x2715;' : '&#x23F8;';
+          bar.appendChild(indicator);
+        }
+
         wireBarEvents(bar, session);
         return bar;
       }
 
-      // Build grouped rows
+      // Helper: create a timeline-row with label + lane side by side
+      function createTimelineRow(labelContent, sessions, options) {
+        var row = document.createElement('div');
+        row.className = 'timeline-row';
+        if (options && options.extraClass) row.classList.add(options.extraClass);
+
+        var label = document.createElement('div');
+        label.className = 'timeline-row-label';
+        if (typeof labelContent === 'string') {
+          label.textContent = labelContent;
+          label.title = labelContent;
+        } else {
+          label.appendChild(labelContent);
+        }
+
+        var lane = document.createElement('div');
+        lane.className = 'timeline-row-lane';
+
+        // Add gridlines and now-line to each lane
+        hourMarkers.forEach(function(hr) {
+          var pct = pctOf(hr * 60);
+          if (pct < 0 || pct > NOW_PCT + 1) return;
+          var gl = document.createElement('div');
+          gl.className = 'timeline-gridline';
+          gl.style.left = pct + '%';
+          lane.appendChild(gl);
+        });
+
+        var nl = document.createElement('div');
+        nl.className = 'timeline-now-line';
+        nl.style.left = NOW_PCT + '%';
+        lane.appendChild(nl);
+
+        if (sessions) {
+          sessions.forEach(function(s) {
+            lane.appendChild(createBar(s));
+          });
+        }
+
+        row.appendChild(label);
+        row.appendChild(lane);
+        return row;
+      }
+
+      // Build grouped rows using per-row structure
+      var rowsContainer = document.createElement('div');
+      rowsContainer.className = 'timeline-rows';
+
       groupOrder.forEach(function(group) {
         var isMulti = group.isGroup && group.sessions.length > 1;
         var defaultCollapsed = group.isGroup && group.sessions.length === 1;
 
         if (group.isGroup) {
-          var headerLabel = document.createElement('div');
-          headerLabel.className = 'timeline-group-header';
-          if (defaultCollapsed) headerLabel.classList.add('timeline-group-collapsed-state');
+          // Wrap entire group in a timeline-group div for hover highlighting
+          var groupWrapper = document.createElement('div');
+          groupWrapper.className = 'timeline-group';
+
+          // Group header row (Jira key + chevron as label, all session bars in lane)
+          var headerLabelContent = document.createElement('span');
+          headerLabelContent.style.display = 'flex';
+          headerLabelContent.style.alignItems = 'center';
+          headerLabelContent.style.gap = '4px';
           var chevron = document.createElement('span');
           chevron.className = 'timeline-group-chevron';
           chevron.textContent = (defaultCollapsed) ? '▸' : '▾';
-          headerLabel.appendChild(chevron);
+          headerLabelContent.appendChild(chevron);
           var keySpan = document.createElement('span');
           keySpan.textContent = group.key;
-          headerLabel.appendChild(keySpan);
-          headerLabel.title = group.key;
-          agentCol.appendChild(headerLabel);
+          headerLabelContent.appendChild(keySpan);
 
-          var groupLane = document.createElement('div');
-          groupLane.className = 'timeline-lane--group';
+          var headerRow = createTimelineRow(headerLabelContent, group.sessions, { extraClass: 'timeline-row--group-header' });
+
+          // The group lane (header lane) is shown when collapsed, hidden when expanded
+          if (isMulti) {
+            headerRow.querySelector('.timeline-row-lane').style.display = 'none';
+          }
+
+          headerRow.style.cursor = 'pointer';
+          groupWrapper.appendChild(headerRow);
+
+          // Sub-rows for each session in the group
+          var subRows = [];
           group.sessions.forEach(function(s) {
-            var bar = createBar(s);
-            groupLane.appendChild(bar);
-          });
-          lanesArea.appendChild(groupLane);
-
-          var subLabelContainer = document.createElement('div');
-          subLabelContainer.className = defaultCollapsed ? 'timeline-group-collapsed' : '';
-          subLabelContainer.setAttribute('data-group-key', group.key);
-
-          var subLaneContainer = document.createElement('div');
-          subLaneContainer.className = defaultCollapsed ? 'timeline-group-collapsed' : '';
-          subLaneContainer.setAttribute('data-group-key', group.key);
-
-          group.sessions.forEach(function(s) {
-            var subLabel = document.createElement('div');
-            subLabel.className = 'timeline-sub-label';
-            subLabel.textContent = s.agent;
-            subLabel.title = s.agent;
-            subLabelContainer.appendChild(subLabel);
-
-            var subLane = document.createElement('div');
-            subLane.className = 'timeline-lane--sub';
-            var subBar = createBar(s);
-            subLane.appendChild(subBar);
-            subLaneContainer.appendChild(subLane);
+            var subRow = createTimelineRow(s.agent, [s], { extraClass: 'timeline-row--sub' });
+            if (defaultCollapsed) {
+              subRow.classList.add('timeline-row-collapsed');
+            }
+            subRows.push(subRow);
+            groupWrapper.appendChild(subRow);
           });
 
-          agentCol.appendChild(subLabelContainer);
-          lanesArea.appendChild(subLaneContainer);
-
-          headerLabel.addEventListener('click', function() {
-            var isCollapsed = subLabelContainer.classList.contains('timeline-group-collapsed');
+          // Toggle expand/collapse
+          headerRow.addEventListener('click', function() {
+            var isCollapsed = subRows[0].classList.contains('timeline-row-collapsed');
+            var headerLane = headerRow.querySelector('.timeline-row-lane');
             if (isCollapsed) {
-              subLabelContainer.classList.remove('timeline-group-collapsed');
-              subLaneContainer.classList.remove('timeline-group-collapsed');
+              subRows.forEach(function(r) { r.classList.remove('timeline-row-collapsed'); });
               chevron.textContent = '▾';
-              groupLane.style.display = 'none';
+              headerLane.style.display = 'none';
             } else {
-              subLabelContainer.classList.add('timeline-group-collapsed');
-              subLaneContainer.classList.add('timeline-group-collapsed');
+              subRows.forEach(function(r) { r.classList.add('timeline-row-collapsed'); });
               chevron.textContent = '▸';
-              groupLane.style.display = '';
+              headerLane.style.display = '';
             }
           });
 
-          if (isMulti) {
-            groupLane.style.display = 'none';
-          }
-
+          rowsContainer.appendChild(groupWrapper);
         } else {
+          // Ungrouped session: single row, no chevron, labeled by agent name
           var s = group.sessions[0];
-          var nameEl = document.createElement('div');
-          nameEl.className = 'timeline-agent-name';
-          nameEl.textContent = s.agent;
-          nameEl.title = s.agent;
-          agentCol.appendChild(nameEl);
-
-          var lane = document.createElement('div');
-          lane.className = 'timeline-lane';
-          var bar = createBar(s);
-          lane.appendChild(bar);
-          lanesArea.appendChild(lane);
+          var row = createTimelineRow(s.agent, [s]);
+          rowsContainer.appendChild(row);
         }
       });
 
-      inner.appendChild(agentCol);
-      inner.appendChild(lanesArea);
+      inner.appendChild(rowsContainer);
       container.appendChild(inner);
 
       document.addEventListener('keydown', function(e) {
