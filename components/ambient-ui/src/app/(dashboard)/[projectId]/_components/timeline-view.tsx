@@ -15,12 +15,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { Badge } from '@/components/ui/badge'
 import { PhaseBadge } from '../sessions/_components/phase-badge'
 import { cn } from '@/lib/utils'
 import { formatPreciseDuration } from '@/lib/format-timestamp'
-import { getPhaseStyle } from '@/lib/status-colors'
+import { useSessionMessages } from '@/queries/use-session-messages'
 import {
-  getWorkItemRef,
   WORK_JIRA_ISSUE,
   WORK_JIRA_URL,
   WORK_JIRA_SUMMARY,
@@ -28,7 +28,7 @@ import {
   WORK_GITHUB_PR_URL,
   LEGACY_JIRA_ISSUE,
 } from '@/domain/work-annotations'
-import type { DomainSession, SessionPhase } from '@/domain/types'
+import type { DomainSession, SessionPhase, SessionEventType } from '@/domain/types'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -233,6 +233,117 @@ function buildGroups(sessions: DomainSession[]): TimelineGroupData[] {
 }
 
 // ---------------------------------------------------------------------------
+// Legend
+// ---------------------------------------------------------------------------
+
+const LEGEND_PHASES = [
+  { label: 'Running', color: 'rgb(34 197 94)' },
+  { label: 'Completed', color: 'rgb(59 130 246)' },
+  { label: 'Failed', color: 'rgb(239 68 68)' },
+  { label: 'Pending', color: 'rgb(245 158 11)' },
+  { label: 'Stopped', color: 'rgb(115 115 115)' },
+] as const
+
+const LEGEND_PATTERNS = [
+  { label: 'Running (pulse)', style: { background: 'linear-gradient(to right, rgb(34 197 94) 75%, rgba(34,197,94,0.15))', borderRadius: '2px 0 0 2px' } },
+  { label: 'Failed', style: { background: 'rgb(239 68 68)', borderRadius: '2px' } },
+] as const
+
+function TimelineLegend() {
+  return (
+    <div className="mb-2 space-y-1">
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {LEGEND_PHASES.map((p) => (
+          <div key={p.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="inline-block h-3 w-3 shrink-0 rounded-sm" style={{ background: p.color }} />
+            <span>{p.label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {LEGEND_PATTERNS.map((p) => (
+          <div key={p.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="inline-block h-3 w-6 shrink-0" style={p.style} />
+            <span>{p.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Live message feed in popover
+// ---------------------------------------------------------------------------
+
+const EVENT_BADGE_STYLES: Record<string, { className: string; label: string }> = {
+  tool_use: { className: 'bg-blue-100 text-blue-800', label: 'tool_call' },
+  tool_result: { className: 'bg-blue-100 text-blue-800', label: 'tool_result' },
+  assistant: { className: 'bg-violet-100 text-violet-800', label: 'text' },
+  text: { className: 'bg-violet-100 text-violet-800', label: 'text' },
+  error: { className: 'bg-red-100 text-red-800', label: 'error' },
+  user: { className: 'bg-gray-100 text-gray-800', label: 'user' },
+  lifecycle: { className: 'bg-gray-100 text-gray-600', label: 'lifecycle' },
+}
+
+function PopoverMessages({ sessionId, isRunning }: { sessionId: string; isRunning: boolean }) {
+  const { data } = useSessionMessages(sessionId)
+  const messages = useMemo(() => {
+    if (!data?.items) return []
+    return data.items
+      .filter((m) => m.eventType !== 'system' && m.eventType !== 'user_feedback')
+      .slice(-5)
+      .reverse()
+  }, [data])
+
+  if (messages.length === 0 && !isRunning) return null
+
+  return (
+    <div className="mt-2 border-t pt-2">
+      <p className="mb-1 text-[0.625rem] font-bold uppercase tracking-wider text-muted-foreground">
+        Recent Activity
+      </p>
+      <div className="flex max-h-[120px] flex-col gap-1 overflow-y-auto">
+        {messages.map((msg) => {
+          const badge = EVENT_BADGE_STYLES[msg.eventType] ?? EVENT_BADGE_STYLES.text
+          const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+          const payload = truncatePayload(msg.payload)
+          return (
+            <div key={msg.id} className="flex items-baseline gap-2 text-xs leading-snug">
+              <span className="shrink-0 font-mono text-muted-foreground">{time}</span>
+              <span className={cn('shrink-0 rounded px-1 py-px text-[0.625rem] font-bold', badge.className)}>
+                {badge.label}
+              </span>
+              <span className="min-w-0 truncate">{payload}</span>
+            </div>
+          )
+        })}
+        {isRunning && (
+          <div className="flex items-center gap-1 py-1">
+            <span className="h-1 w-1 animate-pulse rounded-full bg-muted-foreground" />
+            <span className="h-1 w-1 animate-pulse rounded-full bg-muted-foreground [animation-delay:200ms]" />
+            <span className="h-1 w-1 animate-pulse rounded-full bg-muted-foreground [animation-delay:400ms]" />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function truncatePayload(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw)
+    if (typeof parsed === 'string') return parsed.slice(0, 120)
+    if (parsed.text) return String(parsed.text).slice(0, 120)
+    if (parsed.content) return String(parsed.content).slice(0, 120)
+    if (parsed.name) return String(parsed.name)
+    return raw.slice(0, 120)
+  } catch {
+    return raw.slice(0, 120)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
@@ -242,14 +353,12 @@ function TimelinePopover({
   jiraKey,
   jiraSummary,
   jiraUrl,
-  timeRange,
 }: {
   session: DomainSession
   projectId: string
   jiraKey: string | null
   jiraSummary: string | null
   jiraUrl: string | null
-  timeRange: TimeRange
 }) {
   const sessionStart = getSessionStart(session)
   const sessionEnd = getSessionEnd(session)
@@ -259,6 +368,7 @@ function TimelinePopover({
     sessionStart.toISOString(),
     sessionEnd?.toISOString() ?? null,
   )
+  const isRunning = session.phase === 'Running'
 
   const prRef = session.annotations[WORK_GITHUB_PR] ?? null
   const prUrl = session.annotations[WORK_GITHUB_PR_URL] ?? null
@@ -267,10 +377,17 @@ function TimelinePopover({
     : jiraKey ?? session.name
 
   return (
-    <div className="w-72 space-y-2">
+    <div className="w-80 space-y-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-semibold leading-snug">{title}</p>
+          {jiraKey && (
+            <span className="mb-0.5 block font-mono text-xs font-semibold text-muted-foreground">
+              {jiraKey}
+            </span>
+          )}
+          <p className="text-sm font-bold leading-snug">
+            {jiraSummary ?? session.name}
+          </p>
         </div>
         <div className="shrink-0">
           <PhaseBadge phase={session.phase} />
@@ -280,7 +397,7 @@ function TimelinePopover({
       <div>
         <Link
           href={`/${projectId}/sessions/${session.id}`}
-          className="text-sm font-semibold text-primary hover:underline"
+          className="text-sm font-bold text-primary hover:underline"
         >
           {session.agentName ?? session.name}
         </Link>
@@ -290,6 +407,8 @@ function TimelinePopover({
         {startLabel} – {endLabel} ({duration})
       </div>
 
+      <PopoverMessages sessionId={session.id} isRunning={isRunning} />
+
       <div className="flex items-center justify-between gap-2 border-t pt-2">
         <div className="flex items-center gap-3">
           {jiraKey && (
@@ -298,7 +417,7 @@ function TimelinePopover({
                 href={jiraUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary"
               >
                 <Ticket className="size-3.5" />
                 <span>{jiraKey}</span>
@@ -316,7 +435,7 @@ function TimelinePopover({
                 href={prUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary"
               >
                 <GitPullRequest className="size-3.5" />
                 <span>{prRef}</span>
@@ -331,10 +450,9 @@ function TimelinePopover({
         </div>
         <Link
           href={`/${projectId}/sessions/${session.id}`}
-          className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-primary hover:underline"
+          className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-primary hover:underline"
         >
-          View Session
-          <ExternalLink className="size-3" />
+          View Session →
         </Link>
       </div>
     </div>
@@ -407,7 +525,6 @@ function TimelineBar({
           jiraKey={jiraKey}
           jiraSummary={jiraSummary}
           jiraUrl={jiraUrl}
-          timeRange={timeRange}
         />
       </PopoverContent>
     </Popover>
@@ -592,13 +709,15 @@ export function TimelineView({ sessions, projectId }: TimelineViewProps) {
   }
 
   return (
-    <div
-      className="overflow-hidden rounded-lg border bg-card"
-      role="region"
-      aria-label="Gantt-style timeline of sessions"
-    >
-      {/* Scrollable content */}
-      <div className="max-h-[420px] overflow-y-auto">
+    <div>
+      <TimelineLegend />
+      <div
+        className="overflow-hidden rounded-lg border bg-card"
+        role="region"
+        aria-label="Gantt-style timeline of sessions"
+      >
+      {/* Vertical scroll only — no horizontal scroll; bars scale to fit */}
+      <div className="max-h-[420px] overflow-y-auto overflow-x-hidden">
         {/* Sticky time-axis header */}
         <div className="sticky top-0 z-10 flex border-b border-border bg-card">
           <div className="w-[130px] shrink-0 border-r border-border" />
@@ -624,8 +743,6 @@ export function TimelineView({ sessions, projectId }: TimelineViewProps) {
         {/* Swim lanes */}
         {groups.map((group) => (
           <div key={group.key} className="relative">
-            {/* Grid lines rendered in each lane's flex-1 area would be complex,
-                so we draw them once in an overlay per-group */}
             <TimelineGroup
               group={group}
               projectId={projectId}
@@ -633,6 +750,7 @@ export function TimelineView({ sessions, projectId }: TimelineViewProps) {
             />
           </div>
         ))}
+      </div>
       </div>
     </div>
   )
