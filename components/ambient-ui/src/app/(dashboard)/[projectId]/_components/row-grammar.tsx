@@ -236,4 +236,3 @@ export function AgentLink({ agentName, projectId, agentId }: AgentLinkProps) {
     </Link>
   )
 }
-

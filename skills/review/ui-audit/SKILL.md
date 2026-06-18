@@ -14,7 +14,7 @@ Follow this workflow precisely and exactly.
 Launch 15 subagents with the following personas to perform
 a comprehensive audit from their perspectives. They should
 look wholistically at the ui/ux/user journey, but you should
-point out which changes were recently done so that they can 
+point out which changes were recently done so that they can
 provide specific feedback about new changes, but in the context
 of the app as a whole.
 
@@ -48,7 +48,7 @@ using subagents. Parallelize where possible to maximize throughput and quality.
 
 Surface any design decisions after kicking off the subagents.
 
-After design decisions have been provided, proceed with implementation. 
+After design decisions have been provided, proceed with implementation.
 
 FOR ANY AND ALL CHANGES, ensure that the relevant UI specs are updated, if needed.
 
@@ -60,4 +60,4 @@ Loop to step 1. Perform the loop 3 times, even if feedback becomes sparse.
 
 ## Step 4: Present for Review
 
-Commit changes atomically, and present the result for review. 
+Commit changes atomically, and present the result for review.
