@@ -16,6 +16,7 @@ import {
   SidebarProvider,
 } from '@/components/ui/sidebar'
 import { useRecentVisits } from '@/hooks/use-recent-visits'
+import { useLastActiveProject } from '@/hooks/use-last-active-project'
 
 const GLOBAL_ROUTES = new Set(['credentials', 'settings'])
 
@@ -47,6 +48,15 @@ export default function DashboardLayout({
   const { data: session } = useSession(sessionId ?? '', undefined)
   const { data: agent } = useAgent(projectId ?? '', agentId ?? '')
   const { recordVisit } = useRecentVisits()
+  const { lastProject, setLastProject } = useLastActiveProject()
+
+  const effectiveProjectId = projectId ?? lastProject?.id ?? null
+
+  useEffect(() => {
+    if (projectId && project?.name) {
+      setLastProject(projectId, project.name)
+    }
+  }, [projectId, project?.name, setLastProject])
 
   useEffect(() => {
     if (sessionId && session && projectId) {
@@ -82,10 +92,11 @@ export default function DashboardLayout({
   return (
     <ChatSidebarProvider>
       <SidebarProvider>
-        <AppSidebar projectId={projectId} />
+        <AppSidebar projectId={projectId} effectiveProjectId={effectiveProjectId} />
         <SidebarInset className="min-w-0 flex-1 overflow-x-clip">
           <NavHeader
             projectId={projectId}
+            effectiveProjectId={effectiveProjectId}
             projectName={project?.name ?? null}
             pageName={pageName}
             sessionName={sessionId ? (session?.name ?? sessionId) : null}

@@ -1,121 +1,146 @@
 import Link from 'next/link'
-import { Ticket, GitPullRequest, Monitor } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { PhaseBadge, PhaseDotOnly } from '../sessions/_components/phase-badge'
-import type { DomainSession } from '@/domain/types'
-import type { WorkItemGroup } from './dashboard-helpers'
+import { Button } from '@/components/ui/button'
+import { PhaseBadge } from '../sessions/_components/phase-badge'
+import { RowGrid, RowHeader, JiraChip, PrChip, AgentLink } from './row-grammar'
+import { formatRelativeTime } from '@/lib/format-timestamp'
+import { resolveAgentName } from '@/domain/work-annotations'
+import type { WorkItemCard } from '@/domain/work-annotations'
 
 type ActiveWorkSectionProps = {
-  grouped: WorkItemGroup[]
-  ungrouped: DomainSession[]
+  cards: WorkItemCard[]
   projectId: string
+  agentNames?: Map<string, string>
 }
 
-const REF_TYPE_CONFIG = {
-  jira: { icon: Ticket, label: 'Jira' },
-  'github-pr': { icon: GitPullRequest, label: 'PR' },
+/* ---------- Phase mapping for Jira status ---------- */
+
+const JIRA_STATUS_TO_PHASE = {
+  'in progress': 'Running',
+  'in review': 'Running',
+  'to do': 'Pending',
+  'blocked': 'Failed',
+  'done': 'Completed',
 } as const
 
-function WorkItemCard({
-  group,
-  projectId,
-}: {
-  group: WorkItemGroup
+function jiraStatusToPhase(status: string | null): 'Running' | 'Pending' | 'Failed' | 'Completed' {
+  if (!status) return 'Running'
+  return JIRA_STATUS_TO_PHASE[status.toLowerCase() as keyof typeof JIRA_STATUS_TO_PHASE] ?? 'Running'
+}
+
+/* ---------- Row ---------- */
+
+type ActiveWorkRowProps = {
+  card: WorkItemCard
   projectId: string
-}) {
-  const config = REF_TYPE_CONFIG[group.ref.type]
-  const Icon = config.icon
+  agentNames?: Map<string, string>
+}
+
+function ActiveWorkRow({ card, projectId, agentNames }: ActiveWorkRowProps) {
+  const phase = jiraStatusToPhase(card.jiraStatus)
+  const firstSession = card.sessions[0]
+  const agentDisplay = card.sessions
+    .map((s) => resolveAgentName(s, agentNames))
+    .filter((name, idx, arr) => arr.indexOf(name) === idx)
+    .join(', ')
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex min-w-0 items-center gap-2 text-sm">
-          <Icon className="size-4 shrink-0 text-muted-foreground" />
-          <span className="truncate">{group.ref.key}</span>
-          <Badge variant="outline" className="ml-auto shrink-0 text-xs">
-            {config.label}
-          </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ul className="space-y-1.5">
-          {group.sessions.map(session => (
-            <li key={session.id}>
-              <Link
-                href={`/${projectId}/sessions/${session.id}`}
-                className="flex min-w-0 items-center gap-2 text-sm"
-              >
-                <span className="hidden @md:inline"><PhaseBadge phase={session.phase} /></span>
-                <span className="@md:hidden"><PhaseDotOnly phase={session.phase} /></span>
-                <span className="truncate text-link hover:text-link-hover">
-                  {session.name}
-                </span>
-                <span className="ml-auto shrink-0 hidden @md:inline text-xs text-muted-foreground">
-                  {session.agentName}
-                </span>
+    <li>
+      <RowGrid className="hover:bg-accent/50">
+        {/* spacer */}
+        <div />
+
+        {/* Phase pill */}
+        <div>
+          <PhaseBadge phase={phase} />
+        </div>
+
+        {/* Issue + summary */}
+        <div className="flex min-w-0 items-center gap-2">
+          {card.ref.type === 'jira' && (
+            <span className="shrink-0">
+              <JiraChip
+                issueKey={card.ref.key}
+                url={card.ref.url}
+                annotations={firstSession?.annotations}
+              />
+            </span>
+          )}
+          <span className="min-w-0 truncate text-sm text-muted-foreground">
+            {card.jiraSummary ?? ''}
+          </span>
+        </div>
+
+        {/* PR */}
+        <div className="hidden min-w-0 overflow-hidden @md:block">
+          {card.prRef ? (
+            <PrChip prRef={card.prRef} url={card.prUrl} />
+          ) : null}
+        </div>
+
+        {/* Agent */}
+        <div className="hidden min-w-0 overflow-hidden @lg:block">
+          {firstSession ? (
+            <AgentLink
+              agentName={agentDisplay}
+              projectId={projectId}
+              agentId={card.sessions.length === 1 ? firstSession.agentId : null}
+            />
+          ) : (
+            <span className="truncate text-sm text-muted-foreground">&mdash;</span>
+          )}
+        </div>
+
+        {/* Meta: last updated */}
+        <div className="text-xs text-muted-foreground">
+          {formatRelativeTime(card.lastUpdated)}
+        </div>
+
+        {/* Action */}
+        <div>
+          {firstSession && (
+            <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
+              <Link href={`/${projectId}/sessions/${firstSession.id}`}>
+                View session
               </Link>
-            </li>
-          ))}
-        </ul>
-      </CardContent>
-    </Card>
+            </Button>
+          )}
+        </div>
+      </RowGrid>
+    </li>
   )
 }
 
-function SessionCard({
-  session,
-  projectId,
-}: {
-  session: DomainSession
-  projectId: string
-}) {
+/* ---------- Exported section ---------- */
+
+export function ActiveWorkSection({ cards, projectId, agentNames }: ActiveWorkSectionProps) {
   return (
-    <Card className="py-4">
-      <CardContent className="flex items-center gap-3 overflow-hidden">
-        <Monitor className="size-4 shrink-0 text-muted-foreground" />
-        <Link
-          href={`/${projectId}/sessions/${session.id}`}
-          className="min-w-0 truncate text-sm font-medium text-link hover:text-link-hover"
-        >
-          {session.name}
-        </Link>
-        <span className="ml-auto shrink-0 hidden @md:block"><PhaseBadge phase={session.phase} /></span>
-        <span className="ml-auto shrink-0 @md:hidden"><PhaseDotOnly phase={session.phase} /></span>
-      </CardContent>
-    </Card>
-  )
-}
+    <section className="rounded-lg border bg-card">
+      <h2 className="px-4 py-3 text-sm font-semibold">
+        In-flight work{' '}
+        {cards.length > 0 && (
+          <span className="text-muted-foreground">({cards.length})</span>
+        )}
+      </h2>
 
-export function ActiveWorkSection({ grouped, ungrouped, projectId }: ActiveWorkSectionProps) {
-  const hasWork = grouped.length > 0 || ungrouped.length > 0
-
-  if (!hasWork) {
-    return (
-      <div>
-        <h2 className="mb-3 text-sm font-semibold">Active work</h2>
-        <p className="text-sm text-muted-foreground">
-          No sessions are currently running.
+      {cards.length === 0 ? (
+        <p className="px-4 pb-4 text-center text-sm text-muted-foreground">
+          No active work
         </p>
-      </div>
-    )
-  }
-
-  return (
-    <div>
-      <h2 className="mb-3 text-sm font-semibold">Active work</h2>
-      <div className="grid gap-3 @md:grid-cols-2 @2xl:grid-cols-3">
-        {grouped.map(group => (
-          <WorkItemCard
-            key={`${group.ref.type}:${group.ref.key}`}
-            group={group}
-            projectId={projectId}
-          />
-        ))}
-        {ungrouped.map(session => (
-          <SessionCard key={session.id} session={session} projectId={projectId} />
-        ))}
-      </div>
-    </div>
+      ) : (
+        <div>
+          <RowHeader metaLabel="Updated" />
+          <ul className="divide-y">
+            {cards.map((card) => (
+              <ActiveWorkRow
+                key={`${card.ref.type}:${card.ref.key}`}
+                card={card}
+                projectId={projectId}
+                agentNames={agentNames}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   )
 }

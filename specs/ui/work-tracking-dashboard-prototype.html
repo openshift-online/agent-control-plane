@@ -1,0 +1,2671 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Text:wght@400;500;600;700;800&family=Red+Hat+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agent Command Center</title>
+  <style>
+    :root {
+      --background: #ffffff;
+      --foreground: #151515;
+      --card: #ffffff;
+      --border: #e0e0e0;
+      --brand-red: #ee0000; /* Brand identity ONLY -- never for status, errors, or interactive elements */
+      --primary: #0066cc;
+      --danger: #f0561d;
+      --danger-light: #f89b78;
+      --muted: #f2f2f2;
+      --muted-foreground: #707070;
+      --status-error-bg: #ffe3d9;
+      --status-error-fg: #731f00;
+      --status-error-border: #f89b78;
+      --status-warning-bg: #fff4cc;
+      --status-warning-fg: #73480b;
+      --status-warning-border: #ffe072;
+      --link: #0066cc;
+      --radius: 0.625rem;
+      --focus-ring: 0 0 0 3px rgba(0, 102, 204, 0.22);
+      --phase-implementing: #0066cc;
+      --phase-reviewing: #6753ac;
+      --phase-testing: #009596;
+      --phase-deploying: #63993d;
+      --phase-failed: #f0561d;
+      color-scheme: light;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-width: 320px;
+      background: var(--background);
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: "Red Hat Text", system-ui, sans-serif;
+      font-size: 0.875rem;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: var(--link);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    a:focus-visible,
+    button:focus-visible,
+    [tabindex]:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .app-shell {
+      min-height: 100vh;
+      background: var(--background);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 52px;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--background);
+    }
+
+    .topbar h1 {
+      margin: 0;
+      color: var(--foreground);
+      font-size: 1rem;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    /* ── Tier 3: 0.75rem/12px, 400, muted ── */
+    .sync {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      color: var(--muted-foreground);
+      font-size: 0.75rem;
+      white-space: nowrap;
+    }
+
+    .dashboard {
+      width: min(100%, 1500px);
+      margin: 0 auto;
+      padding: 16px 24px 24px;
+      display: grid;
+      gap: 24px;
+    }
+
+    /* ── Tier 2: 0.875rem/14px ── */
+    .summary-bar {
+      display: flex;
+      align-items: center;
+      min-height: 40px;
+      padding: 0 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      color: var(--muted-foreground);
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .summary-bar strong {
+      font-weight: 800;
+    }
+
+    .summary-action {
+      color: var(--status-error-fg);
+    }
+
+    .summary-blocked {
+      color: var(--status-warning-fg);
+    }
+
+    .section {
+      min-width: 0;
+    }
+
+    /* ── Tier 1: Section headers -- 0.75rem/12px, 800, uppercase, letter-spacing 0.04em ── */
+    .section-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 8px;
+    }
+
+    .section-title {
+      margin: 0;
+      color: #3c3c3c;
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+
+    /* ── Tier 3 ── */
+    .section-count,
+    .muted {
+      color: var(--muted-foreground);
+      font-size: 0.75rem;
+    }
+
+    /* ── Row container (replaces .queue, .running-list, .completed-detail) ── */
+    .row-container {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      overflow: hidden;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       UNIFIED ROW GRAMMAR — one grid for ALL three sections
+       ═══════════════════════════════════════════════════════════════════ */
+    .row {
+      display: grid;
+      grid-template-columns: 4px minmax(120px, 148px) minmax(280px, 1fr) 72px minmax(110px, 0.3fr) 80px 88px 52px;
+      align-items: center;
+      min-height: 44px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+      border-left: 4px solid transparent;
+      background: var(--card);
+    }
+
+    .row:last-child {
+      border-bottom: 0;
+    }
+
+    .row:hover {
+      background: #fafafa;
+    }
+
+    /* Border stripe modifiers — criticality-driven (annotation model) */
+    .row--critical {
+      border-left-color: var(--danger);
+    }
+
+    .row--warning {
+      border-left-color: var(--status-warning-border);
+    }
+
+    .row--info {
+      border-left-color: var(--primary);
+    }
+
+    /* Legacy alias for non-annotation rows (completed failed, stale running) */
+    .row--danger {
+      border-left-color: var(--status-error-border);
+    }
+
+    /* ── Row cells — consistent position across ALL sections ── */
+    .row-stripe {
+      /* 4px column — visual spacer only */
+    }
+
+    .row-status {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .row-issue {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.875rem;
+    }
+
+    .row-pr {
+      min-width: 0;
+      white-space: nowrap;
+    }
+
+    .row-agent {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .row-meta {
+      min-width: 0;
+      white-space: nowrap;
+      text-align: right;
+      font-size: 0.75rem;
+    }
+
+    .row-action {
+      min-width: 0;
+    }
+
+    .row-links {
+      min-width: 0;
+    }
+
+    /* ── Row header (column labels) ── */
+    .row-header {
+      display: grid;
+      grid-template-columns: 4px minmax(120px, 148px) minmax(280px, 1fr) 72px minmax(110px, 0.3fr) 80px 88px 52px;
+      align-items: center;
+      padding: 4px 12px;
+      gap: 12px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--muted-foreground);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .mono {
+      font-family: "Red Hat Mono", monospace;
+    }
+
+    /* ── Tier 2 text: issue links, agent links ── */
+    .issue-link {
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .issue-summary {
+      color: var(--foreground);
+      font-size: 0.875rem;
+      font-weight: 400;
+    }
+
+    .agent-link {
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    /* ── Tier 3: PR links ── */
+    .pr-link {
+      color: var(--muted-foreground);
+      font-size: 0.75rem;
+      white-space: nowrap;
+    }
+
+    .pr-link:hover {
+      color: var(--link);
+    }
+
+    /* ── Severity labels (Tier 2 — primary info in status cell) ── */
+    .severity-label {
+      font-size: 0.875rem;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .tone-danger {
+      color: var(--status-error-fg);
+    }
+
+    .tone-amber {
+      color: var(--status-warning-fg);
+    }
+
+    /* Criticality-driven severity label colors (annotation model) */
+    .criticality-critical {
+      color: var(--status-error-fg);
+    }
+
+    .criticality-warning {
+      color: var(--status-warning-fg);
+    }
+
+    .criticality-info {
+      color: var(--primary);
+    }
+
+    /* ── Phase pills — tinted badges (Tier 3 size, 600 weight) ── */
+    .phase-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      font-style: normal;
+    }
+
+    .phase-pill--implementing { background: #e0f0ff; color: #003366; }
+    .phase-pill--reviewing { background: #ece6ff; color: #21134d; }
+    .phase-pill--testing { background: #daf2f2; color: #004d4d; }
+    .phase-pill--deploying { background: #e9f7df; color: #204d00; }
+
+    /* ── Result badges (Completed rows) ── */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .badge--merged {
+      background: #e9f7df;
+      color: #204d00;
+    }
+
+    .badge--failed {
+      background: #ffe3d9;
+      color: #731f00;
+    }
+
+    /* ── Wait time (Tier 3) ── */
+    .wait-time {
+      color: var(--foreground);
+      font-size: 0.75rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    /* ── Status dots ── */
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+    .status-dot--fresh { background: #63993d; }
+    .status-dot--stale { background: var(--status-warning-fg); }
+
+    /* ── Stale activity text ── */
+    .activity-stale {
+      color: var(--status-warning-fg);
+      font-weight: 800;
+      font-size: 0.75rem;
+    }
+
+    /* ── Action button (Tier 3 size) ── */
+    .action-button {
+      justify-self: start;
+      min-height: 28px;
+      min-width: 88px;
+      text-align: center;
+      padding: 4px 8px;
+      border: 1px solid #c7c7c7;
+      border-radius: 0.375rem;
+      background: transparent;
+      color: var(--foreground);
+      font-size: 0.75rem;
+      font-weight: 700;
+      line-height: 1.2;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .action-button:hover {
+      background: var(--muted);
+    }
+
+    /* ── External links (icon column) ── */
+    .external-links {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    .icon-link {
+      display: inline-grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      color: var(--muted-foreground);
+      border-radius: 0.25rem;
+    }
+
+    .icon-link:hover {
+      background: var(--muted);
+      color: var(--foreground);
+    }
+
+    .icon-link svg {
+      width: 18px;
+      height: 18px;
+      display: block;
+      stroke: currentColor;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       COMPLETED SUMMARY CARD — ratio bar INSIDE the card
+       ═══════════════════════════════════════════════════════════════════ */
+    .completed {
+      display: grid;
+      gap: 8px;
+    }
+
+    .completed-summary {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      min-height: 40px;
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+    }
+
+    .completed-summary-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .completed-summary-top p {
+      margin: 0;
+      color: var(--muted-foreground);
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .completed-summary-top strong {
+      color: var(--foreground);
+      font-weight: 800;
+    }
+
+    .failed-link {
+      color: var(--status-error-fg);
+      font-weight: 800;
+    }
+
+    .details-toggle {
+      border: 0;
+      background: transparent;
+      color: var(--link);
+      font-size: 0.75rem;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .details-toggle:hover {
+      text-decoration: underline;
+    }
+
+    .ratio-bar {
+      display: flex;
+      height: 6px;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .ratio-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+    }
+
+    .completed-detail[hidden] {
+      display: none;
+    }
+
+    .empty-state {
+      padding: 1.5rem;
+      text-align: center;
+      color: var(--muted-foreground);
+      font-size: 0.875rem;
+    }
+
+    /* ── Timeline Legend ── */
+    .timeline-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 16px;
+      padding: 8px 0;
+      margin-bottom: 8px;
+    }
+
+    .timeline-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.75rem;
+      color: var(--muted-foreground);
+    }
+
+    .timeline-legend-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .timeline-legend-swatch--wide {
+      width: 24px;
+      height: 12px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    /* ── Timeline ── */
+    .timeline-container {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      max-height: 360px;
+      overflow-y: auto;
+    }
+
+    .timeline-inner {
+      width: 100%;
+    }
+
+    .timeline-header-row {
+      display: flex;
+      position: sticky;
+      top: 0;
+      z-index: 4;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      min-height: 28px;
+    }
+
+    .timeline-corner {
+      flex: 0 0 130px;
+      background: var(--card);
+      border-right: 1px solid var(--border);
+      min-height: 28px;
+    }
+
+    .timeline-axis {
+      flex: 1;
+      position: relative;
+      background: var(--card);
+      min-height: 28px;
+      display: flex;
+      align-items: flex-end;
+      padding-bottom: 4px;
+    }
+
+    .timeline-axis-label {
+      position: absolute;
+      transform: translateX(-50%);
+      font-family: "Red Hat Mono", monospace;
+      font-size: 0.75rem;
+      color: var(--muted-foreground);
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    /* ── Timeline Row (label + lane side by side) ── */
+    .timeline-row {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .timeline-row:last-child {
+      border-bottom: none;
+    }
+
+    .timeline-row-label {
+      flex: 0 0 130px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      font-family: "Red Hat Mono", monospace;
+      font-size: 0.75rem;
+      color: var(--foreground);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      border-right: 1px solid var(--border);
+      min-height: 32px;
+    }
+
+    /* ── Timeline Jira Grouping ── */
+    .timeline-group {
+      /* wrapper for group hover highlight */
+    }
+
+    .timeline-group:hover > .timeline-row {
+      background: rgba(0, 102, 204, 0.04);
+    }
+
+    .timeline-row--group-header .timeline-row-label {
+      padding: 0 8px;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+      gap: 4px;
+      min-height: 32px;
+    }
+
+    .timeline-row--group-header:hover {
+      background: #fafafa;
+    }
+
+    .timeline-group-chevron {
+      flex-shrink: 0;
+      font-size: 0.75rem;
+      color: var(--muted-foreground);
+      width: 12px;
+      text-align: center;
+    }
+
+    .timeline-row--sub .timeline-row-label {
+      padding: 0 12px 0 28px;
+      font-size: 0.6875rem;
+      color: var(--muted-foreground);
+      min-height: 28px;
+    }
+
+    .timeline-row--sub .timeline-row-lane {
+      min-height: 28px;
+    }
+
+    .timeline-row--sub .timeline-bar {
+      height: 18px;
+      top: 5px;
+    }
+
+    .timeline-row--sub.timeline-row-collapsed {
+      display: none;
+    }
+
+    .timeline-row--group-lane.timeline-row-collapsed {
+      display: none;
+    }
+
+    .timeline-row-lane {
+      flex: 1;
+      position: relative;
+      min-height: 32px;
+    }
+
+    .timeline-gridline {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 0;
+      border-left: 1px dashed var(--border);
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .timeline-now-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 0;
+      border-left: 2px solid var(--danger);
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .timeline-now-label {
+      position: absolute;
+      top: -24px;
+      transform: translateX(-50%);
+      font-family: "Red Hat Mono", monospace;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--danger);
+      white-space: nowrap;
+    }
+
+    .timeline-bar {
+      position: absolute;
+      height: 22px;
+      top: 5px;
+      display: flex;
+      gap: 1px;
+      background: #fff;
+      border-radius: 3px;
+      overflow: hidden;
+      cursor: pointer;
+      z-index: 2;
+      min-width: 8px;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .timeline-bar:hover,
+    .timeline-bar:focus-visible {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.13);
+      outline: none;
+    }
+
+    .timeline-bar:focus-visible {
+      box-shadow: var(--focus-ring), 0 2px 8px rgba(0,0,0,0.13);
+    }
+
+    .timeline-bar-segment {
+      height: 100%;
+      min-width: 0;
+    }
+
+    .timeline-bar.is-running {
+      border-top-right-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+
+    .timeline-bar.is-failed {
+      border-right: 3px solid var(--danger);
+    }
+
+    .timeline-bar.is-blocked {
+      border: 1px dashed rgba(0,0,0,0.25);
+    }
+
+    @keyframes timeline-pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+
+    .timeline-bar.is-running::after {
+      content: '';
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 6px;
+      background: inherit;
+      animation: timeline-pulse 1.2s ease-in-out infinite;
+    }
+
+    /* blocked hatching */
+    .timeline-bar.is-blocked .timeline-bar-segment {
+      background-image: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 3px,
+        rgba(255,255,255,0.35) 3px,
+        rgba(255,255,255,0.35) 6px
+      );
+    }
+
+
+    /* ── Timeline Popover ── */
+    .timeline-popover {
+      position: fixed;
+      z-index: 200;
+      width: 320px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+      font-size: 0.75rem;
+      line-height: 1.45;
+      pointer-events: auto;
+    }
+
+    .timeline-popover[hidden] {
+      display: none;
+    }
+
+    .timeline-popover-agent {
+      margin-bottom: 4px;
+    }
+
+    .timeline-popover-agent-link {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: var(--link);
+    }
+
+    .timeline-popover-time {
+      font-size: 0.75rem;
+      font-family: "Red Hat Mono", monospace;
+      color: var(--muted-foreground);
+      margin-bottom: 8px;
+    }
+
+    .timeline-popover-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    .timeline-popover-footer-links {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .timeline-popover-ctx-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--muted-foreground);
+      text-decoration: none;
+    }
+
+    .timeline-popover-ctx-link:hover {
+      color: var(--link);
+    }
+
+    .timeline-popover-ctx-link svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    .timeline-popover-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .timeline-popover-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .timeline-popover-muted {
+      color: var(--muted-foreground);
+      font-family: "Red Hat Mono", monospace;
+      font-size: 0.75rem;
+    }
+
+    .timeline-popover-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: var(--foreground);
+      line-height: 1.3;
+      border-top: 5px solid transparent;
+      margin: -12px -12px 8px -12px;
+      padding: 12px 12px 8px 12px;
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+
+    .timeline-popover-title-left {
+      min-width: 0;
+    }
+
+    .timeline-popover-title-key {
+      font-family: "Red Hat Mono", monospace;
+      color: var(--muted-foreground);
+      font-size: 0.75rem;
+      font-weight: 600;
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .timeline-popover-phase {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      border-top: 5px solid transparent;
+    }
+
+    .timeline-popover-action {
+      color: var(--primary);
+      font-weight: 700;
+      font-size: 0.75rem;
+      text-decoration: none;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .timeline-popover-action:hover {
+      text-decoration: underline;
+    }
+
+    .section-focus {
+      outline: 2px solid #0066cc;
+      outline-offset: 3px;
+    }
+
+    .tooltip {
+      position: fixed;
+      z-index: 100;
+      max-width: min(320px, calc(100vw - 16px));
+      padding: 8px;
+      border-radius: 0.375rem;
+      background: var(--foreground);
+      color: #ffffff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      line-height: 1.25;
+      pointer-events: none;
+    }
+
+    .tooltip[hidden] {
+      display: none;
+    }
+
+    /* ── View Toggle ── */
+    .view-toggle {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: 0.375rem;
+      padding: 2px;
+      background: var(--muted);
+      margin-bottom: 0;
+    }
+    .view-toggle-btn {
+      padding: 4px 12px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      border: none;
+      border-radius: 0.25rem;
+      background: transparent;
+      color: var(--muted-foreground);
+      cursor: pointer;
+      transition: background 120ms, color 120ms;
+    }
+    .view-toggle-btn.active {
+      background: var(--card);
+      color: var(--foreground);
+      box-shadow: 0 1px 2px rgba(21,21,21,0.06);
+    }
+
+    /* ── Timeline View (toggle) ── */
+    .timeline-view { display: none; }
+
+    .timeline-needs-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      margin-top: 16px;
+      font-size: 0.75rem;
+      color: var(--muted-foreground);
+    }
+    .timeline-needs-bar strong {
+      color: var(--foreground);
+      font-weight: 800;
+    }
+    .timeline-needs-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .timeline-needs-item .tone-danger { color: var(--status-error-fg); font-weight: 700; }
+    .timeline-needs-item .tone-amber { color: var(--status-warning-fg); font-weight: 700; }
+
+    /* ── Popover Activity Feed ── */
+    .popover-activity { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
+    .popover-activity-header { font-size: 0.75rem; font-weight: 700; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+    .popover-messages { display: flex; flex-direction: column; gap: 4px; max-height: 120px; overflow-y: auto; }
+    .popover-msg { display: flex; align-items: baseline; gap: 8px; font-size: 0.75rem; line-height: 1.3; }
+    .popover-msg-time { color: var(--muted-foreground); font-size: 0.75rem; flex-shrink: 0; }
+    .popover-msg-badge { font-size: 0.625rem; font-weight: 700; padding: 1px 4px; border-radius: 4px; flex-shrink: 0; }
+    .popover-msg-badge.tool { background: #e0f0ff; color: #003366; }
+    .popover-msg-badge.text { background: #ece6ff; color: #21134d; }
+    .popover-msg-badge.error { background: #ffe3d9; color: #731f00; }
+    .popover-msg-text { color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .typing-indicator { display: inline-flex; gap: 4px; align-items: center; padding: 4px 0; }
+    .typing-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--muted-foreground); animation: typing-pulse 1.2s ease-in-out infinite; }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typing-pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+    /* ── Notification Bell ── */
+    .notification-bell {
+      position: relative;
+    }
+    .bell-button {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--foreground);
+      cursor: pointer;
+      transition: background 120ms;
+    }
+    .bell-button:hover {
+      background: var(--muted);
+    }
+    .bell-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      border-radius: 8px;
+      background: var(--danger);
+      color: #fff;
+      font-size: 0.625rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+    @keyframes bell-shake {
+      0%, 100% { transform: rotate(0); }
+      15% { transform: rotate(8deg); }
+      30% { transform: rotate(-8deg); }
+      45% { transform: rotate(4deg); }
+      60% { transform: rotate(-4deg); }
+      75% { transform: rotate(0); }
+    }
+    .bell-button--has-items {
+      animation: bell-shake 0.6s ease-in-out 1s 1;
+    }
+    .bell-tray {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 8px;
+      width: 360px;
+      max-height: 400px;
+      overflow-y: auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 8px 24px rgba(21,21,21,0.12);
+      z-index: 50;
+    }
+    .bell-tray-header {
+      padding: 12px 16px 8px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted-foreground);
+      border-bottom: 1px solid var(--border);
+    }
+    .bell-tray-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--border);
+      border-left: 3px solid transparent;
+      cursor: pointer;
+      font-size: 0.75rem;
+    }
+    .bell-tray-item:hover {
+      background: #fafafa;
+    }
+    .bell-tray-item:last-child {
+      border-bottom: none;
+    }
+    .bell-tray-item--critical {
+      border-left-color: var(--danger);
+    }
+    .bell-tray-item--warning {
+      border-left-color: var(--status-warning-border);
+    }
+    .bell-tray-item-status {
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .bell-tray-item-issue {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--muted-foreground);
+    }
+    .bell-tray-item-time {
+      font-family: "Red Hat Mono", monospace;
+      color: var(--muted-foreground);
+      white-space: nowrap;
+    }
+
+    /* ── Responsive: unified .row reflow ── */
+    @media (max-width: 900px) {
+      .row-header {
+        display: none;
+      }
+
+      .topbar {
+        padding: 0 16px;
+      }
+
+      .dashboard {
+        padding: 12px 16px 24px;
+      }
+
+      .row {
+        grid-template-columns: 4px minmax(0, auto) minmax(0, 1fr) auto;
+        gap: 4px 12px;
+        padding: 8px 12px;
+      }
+
+      .row-status {
+        grid-column: 2;
+        grid-row: 1;
+      }
+
+      .row-issue {
+        grid-column: 2 / -1;
+        grid-row: 2;
+      }
+
+      .row-pr {
+        grid-column: 3;
+        grid-row: 1;
+      }
+
+      .row-agent {
+        grid-column: 2;
+        grid-row: 3;
+      }
+
+      .row-meta {
+        grid-column: 3;
+        grid-row: 3;
+        text-align: left;
+      }
+
+      .row-action {
+        grid-column: 2;
+        grid-row: 4;
+      }
+
+      .row-links {
+        grid-column: 4;
+        grid-row: 1;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .topbar,
+      .completed-summary {
+        align-items: flex-start;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .topbar {
+        min-height: auto;
+        padding-top: 12px;
+        padding-bottom: 12px;
+        gap: 4px;
+      }
+
+      .summary-bar {
+        align-items: flex-start;
+        line-height: 1.55;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <h1>Agent Command Center</h1>
+      <div class="notification-bell">
+        <button class="bell-button bell-button--has-items" id="bell-button" aria-label="5 items need attention" aria-haspopup="true" aria-expanded="false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          <span class="bell-badge" id="bell-badge">5</span>
+        </button>
+        <div class="bell-tray" id="bell-tray" hidden>
+          <div class="bell-tray-header">Needs Attention</div>
+          <div class="bell-tray-items">
+            <div class="bell-tray-item bell-tray-item--critical" data-bell-session="s12">
+              <span class="bell-tray-item-status" style="color:var(--status-error-fg);">Blocked: Upstream PR not merged</span>
+              <span class="bell-tray-item-issue">AIHCM-138 — Implement Ingestion Context Walking Skeleton</span>
+              <span class="bell-tray-item-time">4h 00m</span>
+            </div>
+            <div class="bell-tray-item bell-tray-item--critical" data-bell-session="s13">
+              <span class="bell-tray-item-status" style="color:var(--status-error-fg);">CI failing on ARM builds</span>
+              <span class="bell-tray-item-issue">AIHCM-174 — Spike: Validate AI extraction pipeline with synthetic data</span>
+              <span class="bell-tray-item-time">3h 30m</span>
+            </div>
+            <div class="bell-tray-item bell-tray-item--critical" data-bell-session="s6">
+              <span class="bell-tray-item-status" style="color:var(--status-error-fg);">Session failed</span>
+              <span class="bell-tray-item-issue">AIHCM-89 — Pre-Development Research &amp; Compliance</span>
+              <span class="bell-tray-item-time">2h 15m</span>
+            </div>
+            <div class="bell-tray-item bell-tray-item--warning" data-bell-session="s7">
+              <span class="bell-tray-item-status" style="color:var(--status-warning-fg);">Waiting for approval</span>
+              <span class="bell-tray-item-issue">AIHCM-141 — Enable Ambient in Hyperfleet</span>
+              <span class="bell-tray-item-time">18m</span>
+            </div>
+            <div class="bell-tray-item bell-tray-item--warning" data-bell-session="AIHCM-137">
+              <span class="bell-tray-item-status" style="color:var(--status-warning-fg);">PR review changes requested</span>
+              <span class="bell-tray-item-issue">AIHCM-137 — Complete ESS</span>
+              <span class="bell-tray-item-time">11m</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="sync" aria-label="Sync status">
+        <span class="sync-dot" id="sync-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#63993d;box-shadow:0 0 0 3px rgba(99,153,61,0.16);transition:transform 0.2s ease;"></span>
+        <span>Live</span>
+        <span aria-hidden="true">·</span>
+        <span id="sync-text">Synced 2m ago</span>
+      </div>
+    </header>
+
+    <nav aria-label="Breadcrumb" style="font-size:0.75rem;color:var(--muted-foreground);padding:4px 24px;"><ol style="list-style:none;margin:0;padding:0;display:flex;gap:4px;align-items:center;"><li><a href="#" style="color:var(--link);">platform</a></li><li aria-hidden="true" style="margin:0 4px;">&#x203A;</li><li aria-current="page">Agent Command Center</li></ol></nav>
+
+    <main class="dashboard">
+      <div class="summary-bar" aria-label="5 need you. 4 running. 5 completed today.">
+        <span>
+          <a href="#needs-you" class="summary-action" style="font-weight:800;color:var(--danger);text-decoration:underline;" data-scroll-target="needs-you">5 need you</a>
+          <span aria-hidden="true"> · </span>
+          <span>4 running</span>
+          <span aria-hidden="true"> · </span>
+          <span>5 completed today</span>
+        </span>
+      </div>
+
+      <div class="view-toggle" role="tablist" aria-label="Dashboard view">
+        <button class="view-toggle-btn active" role="tab" aria-selected="true" data-view="list">List</button>
+        <button class="view-toggle-btn" role="tab" aria-selected="false" data-view="timeline">Timeline</button>
+      </div>
+
+      <div class="list-view">
+      <!-- ════════════════════════════════════════════════════════════════ -->
+      <!-- NEEDS YOU                                                      -->
+      <!-- ════════════════════════════════════════════════════════════════ -->
+      <section class="section" id="needs-you" aria-labelledby="needs-you-heading">
+        <div class="section-header">
+          <h2 class="section-title" id="needs-you-heading">Needs You</h2>
+          <span class="section-count">5 waiting</span>
+        </div>
+
+        <div class="row-container" role="list" aria-label="Items needing action">
+          <div class="row-header" role="row" aria-hidden="false">
+            <div></div>
+            <div>Status</div>
+            <div>Issue</div>
+            <div>PR</div>
+            <div>Agent</div>
+            <div>Wait</div>
+            <div></div>
+            <div></div>
+          </div>
+          <div class="row row--critical" role="listitem">
+            <div class="row-stripe"></div>
+            <div class="row-status"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" style="vertical-align:middle;flex-shrink:0" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke-width="1.5"/><line x1="5.5" y1="5.5" x2="10.5" y2="10.5" stroke-width="1.5" stroke-linecap="round"/><line x1="10.5" y1="5.5" x2="5.5" y2="10.5" stroke-width="1.5" stroke-linecap="round"/></svg> <span class="severity-label criticality-critical">Blocked: Upstream PR not merged</span></div>
+            <div class="row-issue"><a class="issue-link mono js-tip" href="#" data-tip="Would open Jira: AIHCM-138">AIHCM-138</a> <span aria-hidden="true"> — </span> <span class="issue-summary">Implement Ingestion Context Walking Skeleton</span></div>
+            <div class="row-pr"></div>
+            <div class="row-agent"><a class="agent-link js-tip" href="#" data-tip="Would open session for implementer">implementer</a></div>
+            <div class="row-meta"><span class="wait-time mono">4h 00m</span></div>
+            <div class="row-action"><button class="action-button js-tip" type="button" data-tip="Would view logs">View Logs</button></div>
+            <div class="row-links external-links" aria-label="External links for AIHCM-138">
+              <a class="icon-link js-tip" href="#" data-tip="Would open Jira: AIHCM-138" aria-label="Open Jira AIHCM-138" title="Open in Jira">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M8 1.75 14.25 8 8 14.25 1.75 8 8 1.75Z" stroke-width="1.6" />
+                  <path d="M6.2 8.1h3.1c1 0 1.8-.8 1.8-1.8V4.8" stroke-width="1.6" stroke-linecap="round" />
+                  <path d="M9.8 7.9H6.7c-1 0-1.8.8-1.8 1.8v1.5" stroke-width="1.6" stroke-linecap="round" />
+                </svg>
+              </a>
+            </div>
+          </div>
+
+          <div class="row row--critical" role="listitem">
+            <div class="row-stripe"></div>
+            <div class="row-status"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" style="vertical-align:middle;flex-shrink:0" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke-width="1.5"/><line x1="5.5" y1="5.5" x2="10.5" y2="10.5" stroke-width="1.5" stroke-linecap="round"/><line x1="10.5" y1="5.5" x2="5.5" y2="10.5" stroke-width="1.5" stroke-linecap="round"/></svg> <span class="severity-label criticality-critical">CI failing on ARM builds</span></div>
+            <div class="row-issue"><a class="issue-link mono js-tip" href="#" data-tip="Would open Jira: AIHCM-174">AIHCM-174</a> <span aria-hidden="true"> — </span> <span class="issue-summary">Spike: Validate AI extraction pipeline with synthetic data</span></div>
+            <div class="row-pr"></div>
+            <div class="row-agent"><a class="agent-link js-tip" href="#" data-tip="Would open session for test-runner">test-runner</a></div>
+            <div class="row-meta"><span class="wait-time mono">3h 30m</span></div>
+            <div class="row-action"><button class="action-button js-tip" type="button" data-tip="Would view logs">View Logs</button></div>
+            <div class="row-links external-links" aria-label="External links for AIHCM-174">
+              <a class="icon-link js-tip" href="#" data-tip="Would open Jira: AIHCM-174" aria-label="Open Jira AIHCM-174" title="Open in Jira">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M8 1.75 14.25 8 8 14.25 1.75 8 8 1.75Z" stroke-width="1.6" />
+                  <path d="M6.2 8.1h3.1c1 0 1.8-.8 1.8-1.8V4.8" stroke-width="1.6" stroke-linecap="round" />
+                  <path d="M9.8 7.9H6.7c-1 0-1.8.8-1.8 1.8v1.5" stroke-width="1.6" stroke-linecap="round" />
+                </svg>
+              </a>
+            </div>
+          </div>
+
+          <div class="row row--critical" role="listitem">
+            <div class="row-stripe"></div>
+            <div class="row-status"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" style="vertical-align:middle;flex-shrink:0" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke-width="1.5"/><line x1="5.5" y1="5.5" x2="10.5" y2="10.5" stroke-width="1.5" stroke-linecap="round"/><line x1="10.5" y1="5.5" x2="5.5" y2="10.5" stroke-width="1.5" stroke-linecap="round"/></svg> <span class="severity-label criticality-critical">Session failed</span></div>
+            <div class="row-issue"><a class="issue-link mono js-tip" href="#" data-tip="Would open Jira: AIHCM-89">AIHCM-89</a> <span aria-hidden="true"> — </span> <span class="issue-summary">Pre-Development Research &amp; Compliance</span></div>
+            <div class="row-pr"></div>
+            <div class="row-agent"><a class="agent-link js-tip" href="#" data-tip="Would open session for pr-reviewer">pr-reviewer</a></div>
+            <div class="row-meta"><span class="wait-time mono">2h 15m</span></div>
+            <div class="row-action"><button class="action-button js-tip" type="button" data-tip="Would retry">Retry</button></div>
+            <div class="row-links external-links" aria-label="External links for AIHCM-89">
+              <a class="icon-link js-tip" href="#" data-tip="Would open Jira: AIHCM-89" aria-label="Open Jira AIHCM-89" title="Open in Jira">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M8 1.75 14.25 8 8 14.25 1.75 8 8 1.75Z" stroke-width="1.6" />
+                  <path d="M6.2 8.1h3.1c1 0 1.8-.8 1.8-1.8V4.8" stroke-width="1.6" stroke-linecap="round" />
+                  <path d="M9.8 7.9H6.7c-1 0-1.8.8-1.8 1.8v1.5" stroke-width="1.6" stroke-linecap="round" />
+                </svg>
+              </a>
+            </div>
+          </div>
+
+          <div class="row row--warning" role="listitem">
+            <div class="row-stripe"></div>
+            <div class="row-status"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" style="vertical-align:middle;flex-shrink:0" aria-hidden="true"><path d="M8 1.5l6.5 11.5H1.5L8 1.5z" stroke-width="1.5" stroke-linejoin="round"/><line x1="8" y1="6" x2="8" y2="9" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11" r="0.75" fill="currentColor" stroke="none"/></svg> <span class="severity-label criticality-warning">Waiting for approval</span></div>
+            <div class="row-issue"><a class="issue-link mono js-tip" href="#" data-tip="Would open Jira: AIHCM-141">AIHCM-141</a> <span aria-hidden="true"> — </span> <span class="issue-summary">Enable Ambient in Hyperfleet</span></div>
+            <div class="row-pr"></div>
+            <div class="row-agent"><a class="agent-link js-tip" href="#" data-tip="Would open session for bug-fixer">bug-fixer</a></div>
+            <div class="row-meta"><span class="wait-time mono">18m</span></div>
+            <div class="row-action"><button class="action-button js-tip" type="button" data-tip="Would respond">Respond</button></div>
+            <div class="row-links external-links" aria-label="External links for AIHCM-141">
+              <a class="icon-link js-tip" href="#" data-tip="Would open Jira: AIHCM-141" aria-label="Open Jira AIHCM-141" title="Open in Jira">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M8 1.75 14.25 8 8 14.25 1.75 8 8 1.75Z" stroke-width="1.6" />
+                  <path d="M6.2 8.1h3.1c1 0 1.8-.8 1.8-1.8V4.8" stroke-width="1.6" stroke-linecap="round" />
+                  <path d="M9.8 7.9H6.7c-1 0-1.8.8-1.8 1.8v1.5" stroke-width="1.6" stroke-linecap="round" />
+                </svg>
+              </a>
+            </div>
+          </div>
+
+          <div class="row row--warning" role="listitem">
+            <div class="row-stripe"></div>
+            <div class="row-status"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" style="vertical-align:middle;flex-shrink:0" aria-hidden="true"><path d="M8 1.5l6.5 11.5H1.5L8 1.5z" stroke-width="1.5" stroke-linejoin="round"/><line x1="8" y1="6" x2="8" y2="9" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11" r="0.75" fill="currentColor" stroke="none"/></svg> <span class="severity-label criticality-warning">PR review changes requested</span></div>
+            <div class="row-issue"><a class="issue-link mono js-tip" href="#" data-tip="Would open Jira: AIHCM-137">AIHCM-137</a> <span aria-hidden="true"> — </span> <span class="issue-summary">Complete ESS</span></div>
+            <div class="row-pr"><a class="pr-link mono js-tip" href="#" data-tip="Would open PR: #325">PR #325</a></div>
+            <div class="row-agent"><a class="agent-link js-tip" href="#" data-tip="Would open session for codex-api">codex-api</a></div>
+            <div class="row-meta"><span class="wait-time mono">11m</span></div>
+            <div class="row-action"><button class="action-button js-tip" type="button" data-tip="Would review PR">Review PR</button></div>
+            <div class="row-links external-links" aria-label="External links for AIHCM-137">
+              <a class="icon-link js-tip" href="#" data-tip="Would open Jira: AIHCM-137" aria-label="Open Jira AIHCM-137" title="Open in Jira">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M8 1.75 14.25 8 8 14.25 1.75 8 8 1.75Z" stroke-width="1.6" />
+                  <path d="M6.2 8.1h3.1c1 0 1.8-.8 1.8-1.8V4.8" stroke-width="1.6" stroke-linecap="round" />
+                  <path d="M9.8 7.9H6.7c-1 0-1.8.8-1.8 1.8v1.5" stroke-width="1.6" stroke-linecap="round" />
+                </svg>
+              </a>
+              <a class="icon-link js-tip" href="#" data-tip="Would open PR: #325" aria-label="Open PR 325" title="View pull request">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M5 4.5a2 2 0 1 1-2-2 2 2 0 0 1 2 2ZM13 11.5a2 2 0 1 1-2-2 2 2 0 0 1 2 2ZM5 11.5a2 2 0 1 1-2-2 2 2 0 0 1 2 2Z" stroke-width="1.4" />
+                  <path d="M3 6.5v3M5 4.5h2.5A3.5 3.5 0 0 1 11 8v1.5" stroke-width="1.4" stroke-linecap="round" />
+                </svg>
+              </a>
+            </div>
+          </div>
+          <div class="empty-state" style="display:none">All clear — no sessions need your attention</div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════ -->
+      <!-- RUNNING                                                        -->
+      <!-- ════════════════════════════════════════════════════════════════ -->
+      <section class="section" aria-labelledby="running-heading">
+        <div class="section-header">
+          <h2 class="section-title" id="running-heading">Running</h2>
+          <span class="section-count">4</span>
+        </div>
+
+        <div class="row-container" role="list" aria-label="Running sessions">
+          <div class="row-header" role="row" aria-hidden="false">
+            <div></div>
+            <div>Status</div>
+            <div>Issue</div>
+            <div>PR</div>
+            <div>Agent</div>
+            <div>Activity</div>
+            <div></div>
+            <div></div>
+          </div>
+          <div class="row" role="listitem">
+            <div class="row-stripe"></div>
+            <div class="row-status"><span class="phase-pill phase-pill--implementing">implementing</span></div>
+            <div class="row-issue"><a class="issue-link mono js-tip" href="#" data-tip="Would open session for implementer">AIHCM-177</a> <span aria-hidden="true"> — </span> <span class="issue-summary">dlt infrastructure integration and GitHub adapter</span></div>
+            <div class="row-pr"><a class="pr-link mono js-tip" href="#" data-tip="Would open PR: #328">PR #328</a></div>
+            <div class="row-agent"><a class="agent-link js-tip" href="#" data-tip="Would open session for implementer">implementer</a></div>
+            <div class="row-meta"><span class="status-dot status-dot--fresh"></span> <span class="mono">4m ago</span></div>
+            <div class="row-action"></div>
+            <div class="row-links"></div>
+          </div>
+
+          <div class="row" role="listitem">
+            <div class="row-stripe"></div>
+            <div class="row-status"><span class="phase-pill phase-pill--reviewing">reviewing</span></div>
+            <div class="row-issue"><a class="issue-link mono js-tip" href="#" data-tip="Would open session for reviewer">AIHCM-193</a> <span aria-hidden="true"> — </span> <span class="issue-summary">Comparative eval: Kartograph vs Ask-SRE RAG (k-eval)</span></div>
+            <div class="row-pr"><a class="pr-link mono js-tip" href="#" data-tip="Would open PR: #321">PR #321</a></div>
+            <div class="row-agent"><a class="agent-link js-tip" href="#" data-tip="Would open session for reviewer">reviewer</a></div>
+            <div class="row-meta"><span class="status-dot status-dot--fresh"></span> <span class="mono">11m ago</span></div>
+            <div class="row-action"></div>
+            <div class="row-links"></div>
+          </div>
+
+          <div class="row row--warning" role="listitem">
+            <div class="row-stripe"></div>
+            <div class="row-status"><span class="phase-pill phase-pill--deploying">deploying</span></div>
+            <div class="row-issue"><a class="issue-link mono js-tip" href="#" data-tip="Would open session for implementer">AIHCM-139</a> <span aria-hidden="true"> — </span> <span class="issue-summary">Implement Extraction Context Walking Skeleton</span></div>
+            <div class="row-pr"><a class="pr-link mono js-tip" href="#" data-tip="Would open PR: #319">PR #319</a></div>
+            <div class="row-agent"><a class="agent-link js-tip" href="#" data-tip="Would open session for implementer">implementer</a></div>
+            <div class="row-meta"><span class="activity-stale" title="No activity reported for over 15 minutes"><span class="status-dot status-dot--stale"></span> Stale · 18m ago</span></div>
+            <div class="row-action"></div>
+            <div class="row-links"></div>
+          </div>
+
+          <div class="row row--warning" role="listitem">
+            <div class="row-stripe"></div>
+            <div class="row-status"><span class="phase-pill phase-pill--testing">testing</span></div>
+            <div class="row-issue"><a class="issue-link mono js-tip" href="#" data-tip="Would open session for implementer">AIHCM-94</a> <span aria-hidden="true"> — </span> <span class="issue-summary">Explore KG-extraction techniques with ROSA Ask-SRE data-sources</span></div>
+            <div class="row-pr"><a class="pr-link mono js-tip" href="#" data-tip="Would open PR: #314">PR #314</a></div>
+            <div class="row-agent"><a class="agent-link js-tip" href="#" data-tip="Would open session for implementer">implementer</a></div>
+            <div class="row-meta"><span class="activity-stale" title="No activity reported for over 15 minutes"><span class="status-dot status-dot--stale"></span> Stale · 27m ago</span></div>
+            <div class="row-action"></div>
+            <div class="row-links"></div>
+          </div>
+          <div class="empty-state" style="display:none">No active sessions</div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════ -->
+      <!-- COMPLETED TODAY                                                -->
+      <!-- ════════════════════════════════════════════════════════════════ -->
+      <section class="section completed" aria-labelledby="completed-heading">
+        <div class="section-header">
+          <h2 class="section-title" id="completed-heading">Completed Today</h2>
+        </div>
+
+        <div class="completed-summary">
+          <div class="completed-summary-top">
+            <p>
+              <strong>5 completed today</strong>
+              <span aria-hidden="true"> — </span>
+              <span>4 merged, </span>
+              <a class="failed-link" href="#failed-row" data-scroll-target="failed-row">1 failed</a>
+            </p>
+            <button class="details-toggle" id="completed-toggle" type="button" aria-expanded="false" aria-controls="completed-detail">
+              Show details
+            </button>
+          </div>
+          <div class="ratio-bar" aria-label="4 of 5 succeeded">
+            <div style="flex:4;background:#63993d"></div>
+            <div style="flex:1;background:#f0561d"></div>
+          </div>
+          <div class="ratio-labels">
+            <span style="color:#63993d;font-weight:600;">4 merged</span>
+            <span style="color:var(--status-error-fg);font-weight:600;">1 failed</span>
+          </div>
+        </div>
+
+        <div class="row-container completed-detail" id="completed-detail" hidden>
+          <div class="row-header" role="row" aria-hidden="false">
+            <div></div>
+            <div>Status</div>
+            <div>Issue</div>
+            <div>PR</div>
+            <div>Agent</div>
+            <div>Duration</div>
+            <div></div>
+            <div></div>
+          </div>
+          <div class="row" role="listitem">
+            <div class="row-stripe"></div>
+            <div class="row-status"><span class="badge badge--merged">Merged</span></div>
+            <div class="row-issue"><a class="issue-link mono js-tip" href="#" data-tip="Would open Jira: AIHCM-179">AIHCM-179</a> <span aria-hidden="true"> — </span> <span class="issue-summary">Shared kernel additions for Management context</span></div>
+            <div class="row-pr"></div>
+            <div class="row-agent"><a class="agent-link js-tip" href="#" data-tip="Would open session for implementer">implementer</a></div>
+            <div class="row-meta"><span class="mono">42m</span> <span class="muted">12:31 PM</span></div>
+            <div class="row-action"></div>
+            <div class="row-links"></div>
+          </div>
+
+          <div class="row" role="listitem">
+            <div class="row-stripe"></div>
+            <div class="row-status"><span class="badge badge--merged">Merged</span></div>
+            <div class="row-issue"><a class="issue-link mono js-tip" href="#" data-tip="Would open Jira: AIHCM-180">AIHCM-180</a> <span aria-hidden="true"> — </span> <span class="issue-summary">Management domain model and business logic</span></div>
+            <div class="row-pr"></div>
+            <div class="row-agent"><a class="agent-link js-tip" href="#" data-tip="Would open session for implementer">implementer</a></div>
+            <div class="row-meta"><span class="mono">1h 08m</span> <span class="muted">11:54 AM</span></div>
+            <div class="row-action"></div>
+            <div class="row-links"></div>
+          </div>
+
+          <div class="row" role="listitem">
+            <div class="row-stripe"></div>
+            <div class="row-status"><span class="badge badge--merged">Merged</span></div>
+            <div class="row-issue"><a class="issue-link mono js-tip" href="#" data-tip="Would open Jira: AIHCM-181">AIHCM-181</a> <span aria-hidden="true"> — </span> <span class="issue-summary">Management PostgreSQL persistence layer</span></div>
+            <div class="row-pr"></div>
+            <div class="row-agent"><a class="agent-link js-tip" href="#" data-tip="Would open session for implementer">implementer</a></div>
+            <div class="row-meta"><span class="mono">36m</span> <span class="muted">11:22 AM</span></div>
+            <div class="row-action"></div>
+            <div class="row-links"></div>
+          </div>
+
+          <div class="row row--danger" role="listitem" id="failed-row">
+            <div class="row-stripe"></div>
+            <div class="row-status"><span class="badge badge--failed">Failed</span></div>
+            <div class="row-issue"><a class="issue-link mono js-tip" href="#" data-tip="Would open Jira: AIHCM-182">AIHCM-182</a> <span aria-hidden="true"> — </span> <span class="issue-summary">Fernet encrypted credential storage</span></div>
+            <div class="row-pr"></div>
+            <div class="row-agent"><a class="agent-link js-tip" href="#" data-tip="Would open session for implementer">implementer</a></div>
+            <div class="row-meta"><span class="mono">15m</span> <span class="muted">10:45 AM</span></div>
+            <div class="row-action"></div>
+            <div class="row-links"></div>
+          </div>
+
+          <div class="row" role="listitem">
+            <div class="row-stripe"></div>
+            <div class="row-status"><span class="badge badge--merged">Merged</span></div>
+            <div class="row-issue"><a class="issue-link mono js-tip" href="#" data-tip="Would open Jira: AIHCM-183">AIHCM-183</a> <span aria-hidden="true"> — </span> <span class="issue-summary">Management application services with SpiceDB authorization</span></div>
+            <div class="row-pr"></div>
+            <div class="row-agent"><a class="agent-link js-tip" href="#" data-tip="Would open session for implementer">implementer</a></div>
+            <div class="row-meta"><span class="mono">52m</span> <span class="muted">10:12 AM</span></div>
+            <div class="row-action"></div>
+            <div class="row-links"></div>
+          </div>
+        </div>
+
+        <div class="empty-state" style="display:none">No completions today</div>
+      </section>
+      </div><!-- /.list-view -->
+
+      <div class="timeline-view">
+        <section class="section" aria-labelledby="timeline-heading">
+          <div class="section-header">
+            <h2 class="section-title" id="timeline-heading">Today's Timeline</h2>
+          </div>
+          <div role="list" aria-label="Timeline legend">
+            <div class="timeline-legend">
+              <div class="timeline-legend-item" role="listitem">
+                <span class="timeline-legend-swatch" style="background: #0066cc;"></span>
+                <span>Implementing</span>
+              </div>
+              <div class="timeline-legend-item" role="listitem">
+                <span class="timeline-legend-swatch" style="background: #6753ac;"></span>
+                <span>Reviewing</span>
+              </div>
+              <div class="timeline-legend-item" role="listitem">
+                <span class="timeline-legend-swatch" style="background: #009596;"></span>
+                <span>Testing</span>
+              </div>
+              <div class="timeline-legend-item" role="listitem">
+                <span class="timeline-legend-swatch" style="background: #63993d;"></span>
+                <span>Deploying</span>
+              </div>
+            </div>
+            <div class="timeline-legend">
+              <div class="timeline-legend-item" role="listitem">
+                <span class="timeline-legend-swatch--wide" style="display:flex;overflow:hidden;border-radius:2px;"><span style="flex:3;background:#0066cc;"></span><span style="flex:1;background:#6753ac;"></span><span style="flex:1;background:#63993d;"></span></span>
+                <span>Completed</span>
+              </div>
+              <div class="timeline-legend-item" role="listitem">
+                <span class="timeline-legend-swatch--wide" style="background: linear-gradient(to right, #0066cc 75%, rgba(0,102,204,0.15)); border-radius: 2px 0 0 2px;"></span>
+                <span>Running</span>
+              </div>
+              <div class="timeline-legend-item" role="listitem">
+                <span class="timeline-legend-swatch--wide" style="background: repeating-linear-gradient(45deg, var(--status-warning-fg), var(--status-warning-fg) 3px, rgba(255,255,255,0.35) 3px, rgba(255,255,255,0.35) 6px); border: 1px dashed rgba(0,0,0,0.2); border-radius: 2px;"></span>
+                <span>Blocked</span>
+              </div>
+              <div class="timeline-legend-item" role="listitem">
+                <span class="timeline-legend-swatch--wide" style="background: var(--danger); border-radius: 2px;"></span>
+                <span>Failed</span>
+              </div>
+            </div>
+          </div>
+          <div class="timeline-container" id="timeline-container" role="region" aria-label="Gantt-style timeline of today's sessions">
+            <span class="sr-only">Timeline showing 20 sessions from 9:00 AM to 2:45 PM grouped by Jira issue</span>
+          </div>
+        </section>
+
+        <div class="timeline-needs-bar" aria-label="Items needing attention">
+          <strong>5 need you:</strong>
+          <span class="timeline-needs-item"><span class="tone-danger">2 blocked</span></span>
+          <span aria-hidden="true">·</span>
+          <span class="timeline-needs-item"><span class="tone-danger">1 failed</span></span>
+          <span aria-hidden="true">·</span>
+          <span class="timeline-needs-item"><span class="tone-amber">1 needs input</span></span>
+          <span aria-hidden="true">·</span>
+          <span class="timeline-needs-item"><span class="tone-amber">1 changes requested</span></span>
+        </div>
+      </div><!-- /.timeline-view -->
+
+    </main>
+  </div>
+
+  <div class="tooltip" id="interaction-tooltip" role="tooltip" hidden></div>
+  <div class="timeline-popover" id="timeline-popover" role="dialog" aria-label="Session details" hidden></div>
+
+  <script>
+    /* ── Timeline Renderer ── */
+    (() => {
+      var NOW_HOUR = 14;
+      var NOW_MIN = 45;
+      var NOW_PCT = 98; // "now" sits at 98% to leave a tiny right margin
+
+      const PHASE_COLORS = {
+        implementing: 'var(--phase-implementing)',
+        reviewing: 'var(--phase-reviewing)',
+        testing: 'var(--phase-testing)',
+        deploying: 'var(--phase-deploying)',
+        merged: 'var(--phase-deploying)',
+      };
+
+      // Tinted popover badge colors (high contrast)
+      const PHASE_BADGE_STYLES = {
+        implementing: { bg: '#e0f0ff', color: '#003366' },
+        reviewing:    { bg: '#ece6ff', color: '#21134d' },
+        testing:      { bg: '#daf2f2', color: '#004d4d' },
+        deploying:    { bg: '#e9f7df', color: '#204d00' },
+        merged:       { bg: '#e9f7df', color: '#204d00' },
+        failed:       { bg: '#ffe3d9', color: '#731f00' },
+        blocked:      { bg: '#fff4cc', color: '#73480b' },
+      };
+
+      // Colorblind-safe phase patterns
+      const PHASE_PATTERNS = {
+        implementing: 'none',
+        reviewing:    'repeating-linear-gradient(135deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 5px)',
+        testing:      'radial-gradient(circle, rgba(255,255,255,0.35) 1px, transparent 1px)',
+        deploying:    'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.25) 3px, rgba(255,255,255,0.25) 5px)',
+      };
+
+      const PHASE_PATTERN_SIZES = {
+        testing: '5px 5px',
+      };
+
+      const sessions = [
+        { id: 's1',  jira: 'AIHCM-183', jiraSummary: 'Management application services with SpiceDB authorization', pr: null, agent: 'implementer',   start: '9:15',  end: '10:07', phases: [{name:'implementing',pct:70},{name:'reviewing',pct:20},{name:'deploying',pct:10}], status: 'merged' },
+        { id: 's2',  jira: 'AIHCM-181', jiraSummary: 'Management PostgreSQL persistence layer', pr: null, agent: 'implementer',   start: '9:45',  end: '10:21', phases: [{name:'implementing',pct:60},{name:'testing',pct:30},{name:'deploying',pct:10}], status: 'merged' },
+        { id: 's3',  jira: 'AIHCM-182', jiraSummary: 'Fernet encrypted credential storage', pr: null, agent: 'implementer',   start: '10:10', end: '10:25', phases: [{name:'implementing',pct:80},{name:'testing',pct:20}], status: 'failed' },
+        { id: 's4',  jira: 'AIHCM-180', jiraSummary: 'Management domain model and business logic', pr: null, agent: 'implementer',   start: '10:00', end: '11:08', phases: [{name:'implementing',pct:50},{name:'reviewing',pct:30},{name:'testing',pct:20}], status: 'merged' },
+        { id: 's5',  jira: 'AIHCM-179', jiraSummary: 'Shared kernel additions for Management context', pr: null, agent: 'implementer',   start: '10:30', end: '11:12', phases: [{name:'implementing',pct:60},{name:'reviewing',pct:25},{name:'deploying',pct:15}], status: 'merged' },
+        { id: 's6',  jira: 'AIHCM-89',  jiraSummary: 'Pre-Development Research & Compliance', pr: null,   agent: 'pr-reviewer',      start: '11:00', end: '12:30', phases: [{name:'implementing',pct:65},{name:'testing',pct:35}], status: 'failed' },
+        { id: 's7',  jira: 'AIHCM-141', jiraSummary: 'Enable Ambient in Hyperfleet', pr: null,   agent: 'bug-fixer',        start: '11:30', end: null,    phases: [{name:'implementing',pct:60},{name:'reviewing',pct:40}], status: 'running' },
+        { id: 's8',  jira: 'AIHCM-177', jiraSummary: 'dlt infrastructure integration and GitHub adapter', pr: '#328', agent: 'implementer',    start: '12:15', end: null,    phases: [{name:'implementing',pct:100}], status: 'running' },
+        { id: 's8b', jira: 'AIHCM-177', jiraSummary: 'dlt infrastructure integration and GitHub adapter', pr: '#328', agent: 'reviewer',       start: '13:30', end: null,    phases: [{name:'reviewing',pct:100}], status: 'running' },
+        { id: 's8c', jira: 'AIHCM-177', jiraSummary: 'dlt infrastructure integration and GitHub adapter', pr: null,   agent: 'jira-refiner',   start: '11:45', end: '12:10', phases: [{name:'implementing',pct:100}], status: 'merged' },
+        { id: 's9',  jira: 'AIHCM-193', jiraSummary: 'Comparative eval: Kartograph vs Ask-SRE RAG (k-eval)', pr: '#321', agent: 'implementer',      start: '11:45', end: '13:00', phases: [{name:'implementing',pct:70},{name:'testing',pct:30}], status: 'merged' },
+        { id: 's9b', jira: 'AIHCM-193', jiraSummary: 'Comparative eval: Kartograph vs Ask-SRE RAG (k-eval)', pr: '#321', agent: 'reviewer',         start: '13:05', end: null,    phases: [{name:'reviewing',pct:100}], status: 'running' },
+        { id: 's10', jira: 'AIHCM-139', jiraSummary: 'Implement Extraction Context Walking Skeleton', pr: '#319', agent: 'implementer',       start: '12:00', end: null,    phases: [{name:'implementing',pct:70},{name:'deploying',pct:30}], status: 'running' },
+        { id: 's11', jira: 'AIHCM-94',  jiraSummary: 'Explore KG-extraction techniques with ROSA Ask-SRE data-sources', pr: '#314', agent: 'implementer',    start: '12:30', end: null,    phases: [{name:'implementing',pct:40},{name:'testing',pct:60}], status: 'running' },
+        { id: 's11b',jira: 'AIHCM-94',  jiraSummary: 'Explore KG-extraction techniques with ROSA Ask-SRE data-sources', pr: '#314', agent: 'test-runner',    start: '13:00', end: null,    phases: [{name:'testing',pct:100}], status: 'running' },
+        { id: 's12', jira: 'AIHCM-138', jiraSummary: 'Implement Ingestion Context Walking Skeleton', pr: null, agent: 'implementer', start: '10:45', end: null,    phases: [{name:'implementing',pct:100}], status: 'blocked' },
+        { id: 's13', jira: 'AIHCM-174', jiraSummary: 'Spike: Validate AI extraction pipeline with synthetic data', pr: null, agent: 'test-runner',      start: '11:15', end: null,    phases: [{name:'implementing',pct:60},{name:'testing',pct:40}], status: 'blocked' },
+        { id: 's14', jira: null, jiraSummary: null, pr: null, agent: 'nightly-benchmarks', start: '9:00', end: '9:35', phases: [{name:'testing',pct:100}], status: 'merged' },
+        { id: 's15', jira: null, jiraSummary: null, pr: null, agent: 'dependency-updater', start: '10:00', end: '10:15', phases: [{name:'implementing',pct:100}], status: 'merged' },
+        { id: 's16', jira: null, jiraSummary: null, pr: '#330', agent: 'security-scanner', start: '13:45', end: null, phases: [{name:'testing',pct:100}], status: 'running' },
+      ];
+
+      // Mocked message feed data per session
+      const SESSION_MESSAGES = {
+        's8': [
+          { time: '2:43 PM', badge: 'tool', text: 'Edit file: components/ingestion/dlt_adapter.py' },
+          { time: '2:42 PM', badge: 'text', text: 'Wiring GitHub adapter into dlt source configuration' },
+          { time: '2:41 PM', badge: 'tool', text: 'Bash: Running dlt pipeline validation' },
+        ],
+        's9': [
+          { time: '2:40 PM', badge: 'tool', text: 'Bash: python -m pytest tests/eval/ -v' },
+          { time: '2:38 PM', badge: 'text', text: 'Comparing RAG precision scores: Kartograph 0.87 vs Ask-SRE 0.72' },
+          { time: '2:36 PM', badge: 'tool', text: 'Read file: components/eval/kartograph_benchmark.py' },
+        ],
+        's10': [
+          { time: '2:35 PM', badge: 'tool', text: 'Bash: kubectl apply -f manifests/extraction/' },
+          { time: '2:33 PM', badge: 'text', text: 'Deploying extraction service, 2/3 replicas ready' },
+          { time: '2:31 PM', badge: 'tool', text: 'Bash: make kind-rebuild' },
+        ],
+        's11': [
+          { time: '2:30 PM', badge: 'tool', text: 'Bash: python -m pytest tests/kg_extraction/ -v' },
+          { time: '2:28 PM', badge: 'text', text: 'Running KG extraction tests against ROSA Ask-SRE data' },
+          { time: '2:25 PM', badge: 'tool', text: 'Read file: components/extraction/kg_extractor.py' },
+        ],
+        's7': [
+          { time: '2:15 PM', badge: 'tool', text: 'Read file: components/manifests/hyperfleet/ambient-config.yaml' },
+          { time: '2:13 PM', badge: 'text', text: 'Investigating Hyperfleet integration requirements for Ambient' },
+          { time: '2:10 PM', badge: 'tool', text: 'Bash: kubectl get namespaces --context hyperfleet' },
+        ],
+        's1': [
+          { time: '10:05 AM', badge: 'text', text: 'SpiceDB authorization service integrated with management API' },
+          { time: '10:03 AM', badge: 'tool', text: 'Bash: go test ./internal/services/management/...' },
+        ],
+        's2': [
+          { time: '10:19 AM', badge: 'text', text: 'PostgreSQL persistence layer tests passing for management context' },
+          { time: '10:17 AM', badge: 'tool', text: 'Bash: go test ./internal/persistence/management/...' },
+        ],
+        's3': [
+          { time: '10:24 AM', badge: 'error', text: 'Fernet key rotation test failed: cipher mismatch on re-encryption' },
+          { time: '10:22 AM', badge: 'tool', text: 'Bash: go test ./internal/crypto/fernet/...' },
+        ],
+        's4': [
+          { time: '11:06 AM', badge: 'text', text: 'Domain model validated, aggregate boundaries confirmed' },
+          { time: '11:04 AM', badge: 'tool', text: 'Bash: go test ./internal/domain/management/...' },
+        ],
+        's5': [
+          { time: '11:10 AM', badge: 'text', text: 'Shared kernel value objects added for Management bounded context' },
+          { time: '11:08 AM', badge: 'tool', text: 'Edit file: internal/shared/kernel/management_types.go' },
+        ],
+        's6': [
+          { time: '12:28 PM', badge: 'error', text: 'Compliance check failed: missing GDPR data retention policy' },
+          { time: '12:25 PM', badge: 'tool', text: 'Read file: docs/compliance/data-retention-policy.md' },
+        ],
+        's8b': [
+          { time: '2:42 PM', badge: 'tool', text: 'Read file: components/ingestion/dlt_adapter.py' },
+          { time: '2:40 PM', badge: 'text', text: 'Reviewing dlt adapter implementation and GitHub webhook handler' },
+        ],
+        's8c': [
+          { time: '12:08 PM', badge: 'text', text: 'Refined acceptance criteria and updated Jira description' },
+          { time: '12:05 PM', badge: 'tool', text: 'Bash: acli jira update AIHCM-177 --description ...' },
+        ],
+        's9b': [
+          { time: '2:38 PM', badge: 'tool', text: 'Read file: components/eval/rag_comparison_report.md' },
+          { time: '2:35 PM', badge: 'text', text: 'Reviewing Kartograph vs Ask-SRE evaluation methodology' },
+        ],
+        's11b': [
+          { time: '2:32 PM', badge: 'tool', text: 'Bash: python -m pytest tests/kg_extraction/test_rosa_sources.py -v' },
+          { time: '2:30 PM', badge: 'text', text: 'Running KG extraction tests against ROSA Ask-SRE data sources' },
+        ],
+        's12': [
+          { time: '1:30 PM', badge: 'text', text: 'Blocked: Upstream PR not merged, ingestion context depends on it' },
+        ],
+        's13': [
+          { time: '1:45 PM', badge: 'text', text: 'CI failing on ARM builds, synthetic data pipeline blocked' },
+        ],
+        's14': [
+          { time: '9:33 AM', badge: 'text', text: 'All benchmark targets within threshold' },
+          { time: '9:15 AM', badge: 'tool', text: 'Bash: make benchmark FORMAT=tsv' },
+        ],
+        's15': [
+          { time: '10:13 AM', badge: 'text', text: 'Updated 3 Go dependencies to latest patch versions' },
+          { time: '10:05 AM', badge: 'tool', text: 'Bash: go get -u ./...' },
+        ],
+        's16': [
+          { time: '2:40 PM', badge: 'tool', text: 'Bash: trivy image --severity HIGH,CRITICAL ambient-api-server:latest' },
+          { time: '2:38 PM', badge: 'text', text: 'Scanning container images for CVEs' },
+        ],
+      };
+
+      function parseTime(str) {
+        const parts = str.split(':');
+        return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+      }
+
+      function formatTime12(m) {
+        let h = Math.floor(m / 60);
+        const min = m % 60;
+        const suffix = h >= 12 ? 'PM' : 'AM';
+        if (h === 0) h = 12;
+        else if (h > 12) h -= 12;
+        return h + ':' + String(min).padStart(2, '0') + ' ' + suffix;
+      }
+
+      var nowMin = NOW_HOUR * 60 + NOW_MIN;
+
+      // Auto-scale time axis to fit 100% width
+      let earliestMin = nowMin;
+      sessions.forEach(function(s) {
+        const sm = parseTime(s.start);
+        if (sm < earliestMin) earliestMin = sm;
+      });
+      const rangeStartMin = Math.floor(earliestMin / 60) * 60;
+      const totalMinutes = nowMin - rangeStartMin;
+
+      function pctOf(minuteVal) {
+        return ((minuteVal - rangeStartMin) / totalMinutes) * NOW_PCT;
+      }
+
+      // Group sessions by Jira issue
+      const groupOrder = [];
+      const jiraGroupMap = {};
+      sessions.forEach(function(s) {
+        if (s.jira) {
+          if (!jiraGroupMap[s.jira]) {
+            var group = { key: s.jira, sessions: [s], isGroup: true };
+            jiraGroupMap[s.jira] = group;
+            groupOrder.push(group);
+          } else {
+            jiraGroupMap[s.jira].sessions.push(s);
+          }
+        } else {
+          groupOrder.push({ key: s.agent, sessions: [s], isGroup: false });
+        }
+      });
+
+      // Sort groups: most recent activity on top (latest start time descending)
+      groupOrder.sort(function(a, b) {
+        var aLatest = Math.max.apply(null, a.sessions.map(function(s) {
+          var p = s.start.split(':'); return parseInt(p[0]) * 60 + parseInt(p[1]);
+        }));
+        var bLatest = Math.max.apply(null, b.sessions.map(function(s) {
+          var p = s.start.split(':'); return parseInt(p[0]) * 60 + parseInt(p[1]);
+        }));
+        return bLatest - aLatest;
+      });
+
+      const RANGE_START_H = Math.floor(rangeStartMin / 60);
+      const hourMarkers = [];
+      for (let h = RANGE_START_H; h <= NOW_HOUR; h++) {
+        hourMarkers.push(h);
+      }
+
+      const container = document.getElementById('timeline-container');
+      const inner = document.createElement('div');
+      inner.className = 'timeline-inner';
+
+      // Header row: corner label + time axis, using same flex layout as data rows
+      const headerRow = document.createElement('div');
+      headerRow.className = 'timeline-header-row';
+
+      const corner = document.createElement('div');
+      corner.className = 'timeline-corner';
+      headerRow.appendChild(corner);
+
+      const axis = document.createElement('div');
+      axis.className = 'timeline-axis';
+      axis.style.position = 'relative';
+      axis.setAttribute('aria-hidden', 'true');
+
+      hourMarkers.forEach(function(hr) {
+        const pct = pctOf(hr * 60);
+        if (pct < 0 || pct > NOW_PCT + 1) return;
+        const label = document.createElement('span');
+        label.className = 'timeline-axis-label';
+        label.style.left = pct + '%';
+        let h12 = hr > 12 ? hr - 12 : hr;
+        if (hr === 0) h12 = 12;
+        label.textContent = h12 + ' ' + (hr >= 12 ? 'PM' : 'AM');
+        axis.appendChild(label);
+      });
+
+      const nowAxisLabel = document.createElement('span');
+      nowAxisLabel.className = 'timeline-axis-label';
+      nowAxisLabel.style.left = NOW_PCT + '%';
+      nowAxisLabel.style.fontWeight = '700';
+      nowAxisLabel.style.color = 'var(--danger)';
+      nowAxisLabel.textContent = 'now';
+      axis.appendChild(nowAxisLabel);
+
+      headerRow.appendChild(axis);
+      inner.appendChild(headerRow);
+
+      const popover = document.getElementById('timeline-popover');
+      let popoverHideTimer = 0;
+
+      const jiraIconSvg = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" style="width:14px;height:14px;display:block;"><path d="M8 1.75 14.25 8 8 14.25 1.75 8 8 1.75Z" stroke-width="1.6"/></svg>';
+      const prIconSvg = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" style="width:14px;height:14px;display:block;"><path d="M5 4.5a2 2 0 1 1-2-2 2 2 0 0 1 2 2ZM13 11.5a2 2 0 1 1-2-2 2 2 0 0 1 2 2ZM5 11.5a2 2 0 1 1-2-2 2 2 0 0 1 2 2Z" stroke-width="1.4"/><path d="M3 6.5v3M5 4.5h2.5A3.5 3.5 0 0 1 11 8v1.5" stroke-width="1.4" stroke-linecap="round"/></svg>';
+
+      function getCurrentPhase(session) {
+        if (session.status === 'failed') return 'failed';
+        if (session.status === 'merged') return 'merged';
+        if (session.status === 'blocked') return 'blocked';
+        return session.phases[session.phases.length - 1].name;
+      }
+
+      function showPopover(barEl, session) {
+        clearTimeout(popoverHideTimer);
+
+        const startMinTotal = parseTime(session.start);
+        const endMinTotal = session.end ? parseTime(session.end) : nowMin;
+        const currentPhase = getCurrentPhase(session);
+
+        const phaseLabel = session.status === 'blocked' ? 'Blocked' :
+                           session.status === 'failed' ? 'Failed' :
+                           session.status === 'merged' ? 'Merged' :
+                           currentPhase.charAt(0).toUpperCase() + currentPhase.slice(1);
+
+        const badgeKey = session.status === 'failed' ? 'failed' :
+                         session.status === 'blocked' ? 'blocked' :
+                         currentPhase;
+        const badgeStyle = PHASE_BADGE_STYLES[badgeKey] || { bg: '#f2f2f2', color: '#3c3c3c' };
+
+        var msgFeedHtml = '';
+        var messages = SESSION_MESSAGES[session.id];
+        if (messages && messages.length > 0) {
+          var isRunning = session.status === 'running';
+          var isBlocked = session.status === 'blocked';
+          var headerLabel = isBlocked ? 'Status' : 'Recent Activity';
+          msgFeedHtml = '<div class="popover-activity">' +
+            '<div class="popover-activity-header">' + headerLabel + '</div>' +
+            '<div class="popover-messages">';
+          var badgeLabels = { tool: 'tool_call', text: 'text', error: 'error' };
+          messages.forEach(function(msg) {
+            msgFeedHtml += '<div class="popover-msg">' +
+              '<span class="popover-msg-time mono">' + msg.time + '</span>' +
+              '<span class="popover-msg-badge ' + msg.badge + '">' + (badgeLabels[msg.badge] || msg.badge) + '</span>' +
+              '<span class="popover-msg-text">' + msg.text + '</span>' +
+            '</div>';
+          });
+          if (isRunning) {
+            msgFeedHtml += '<div class="typing-indicator">' +
+              '<span class="typing-dot"></span>' +
+              '<span class="typing-dot"></span>' +
+              '<span class="typing-dot"></span>' +
+            '</div>';
+          }
+          if (isBlocked) {
+            msgFeedHtml += '<div class="popover-msg" style="margin-top:4px;">' +
+              '<span class="popover-msg-badge text" style="background:var(--status-warning-bg);color:var(--status-warning-fg);">waiting</span>' +
+              '<span class="popover-msg-text" style="color:var(--status-warning-fg);font-style:italic;">Waiting for external dependency...</span>' +
+            '</div>';
+          }
+          msgFeedHtml += '</div></div>';
+        }
+
+        // Build top border color from the current phase
+        var topBorderColor = PHASE_COLORS[currentPhase] || PHASE_COLORS[session.status] || 'var(--muted-foreground)';
+        var topBorderPattern = PHASE_PATTERNS[currentPhase] || 'none';
+
+        // Phase badge with matching top border
+        var phaseBadgeBorder = PHASE_COLORS[currentPhase] || PHASE_COLORS[session.status] || 'transparent';
+
+        // Duration text
+        var durationMin = endMinTotal - startMinTotal;
+        var durationText = durationMin >= 60 ? Math.floor(durationMin / 60) + 'h ' + (durationMin % 60) + 'm' : durationMin + 'm';
+
+        // Footer: context links (left) + View Session (right)
+        var footerLinksHtml = '';
+        if (session.jira) {
+          footerLinksHtml += '<a href="#" class="timeline-popover-ctx-link js-pop-tip" tabindex="0" data-tip="Would open Jira: ' + session.jira + '">' + jiraIconSvg + ' ' + session.jira + '</a>';
+        }
+        if (session.pr) {
+          footerLinksHtml += '<a href="#" class="timeline-popover-ctx-link js-pop-tip" tabindex="0" data-tip="Would open PR: ' + session.pr + '">' + prIconSvg + ' PR ' + session.pr + '</a>';
+        }
+
+        popover.innerHTML =
+          '<div class="timeline-popover-title" style="border-top-color:' + topBorderColor + ';' + (topBorderPattern !== 'none' ? 'background-image:' + topBorderPattern + ';background-size:' + (PHASE_PATTERN_SIZES[currentPhase] || 'auto') + ';' : '') + '">' +
+            '<div class="timeline-popover-title-left">' +
+              '<span class="timeline-popover-title-key">' + (session.jira || session.agent) + '</span>' +
+              (session.jiraSummary || session.agent) +
+            '</div>' +
+            '<span class="timeline-popover-phase" style="background:' + badgeStyle.bg + ';color:' + badgeStyle.color + ';border-top-color:' + phaseBadgeBorder + '">' + phaseLabel + '</span>' +
+          '</div>' +
+          '<div class="timeline-popover-agent">' +
+            '<a href="#" class="timeline-popover-agent-link js-pop-tip" tabindex="0" data-tip="Would open session for ' + session.agent + '">' + session.agent + '</a>' +
+          '</div>' +
+          '<div class="timeline-popover-time">' +
+            formatTime12(startMinTotal) + ' – ' + (session.end ? formatTime12(endMinTotal) : 'now') + ' · ' + durationText +
+          '</div>' +
+          msgFeedHtml +
+          '<div class="timeline-popover-footer">' +
+            '<div class="timeline-popover-footer-links">' + footerLinksHtml + '</div>' +
+            '<a href="#" class="timeline-popover-action js-pop-tip" tabindex="0" data-tip="Would open session for ' + session.agent + '">View Session →</a>' +
+          '</div>';
+
+        popover.hidden = false;
+
+        const barRect = barEl.getBoundingClientRect();
+        const popRect = popover.getBoundingClientRect();
+        let left = barRect.left + barRect.width / 2 - popRect.width / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - popRect.width - 8));
+
+        let top;
+        if (barRect.top > popRect.height + 12) {
+          top = barRect.top - popRect.height - 6;
+        } else {
+          top = barRect.bottom + 6;
+        }
+        top = Math.max(8, top);
+
+        popover.style.left = left + 'px';
+        popover.style.top = top + 'px';
+
+        popover.querySelectorAll('.js-pop-tip').forEach(function(el) {
+          el.onclick = function(e) {
+            e.preventDefault();
+            const tip = document.getElementById('interaction-tooltip');
+            tip.textContent = el.getAttribute('data-tip');
+            tip.hidden = false;
+            const r = el.getBoundingClientRect();
+            const tr = tip.getBoundingClientRect();
+            tip.style.left = Math.min(Math.max(8, r.left + r.width/2 - tr.width/2), window.innerWidth - tr.width - 8) + 'px';
+            tip.style.top = (r.top > tr.height + 16 ? r.top - tr.height - 8 : r.bottom + 8) + 'px';
+            setTimeout(function() { tip.hidden = true; }, 1800);
+          };
+        });
+      }
+
+      function hidePopover() {
+        popoverHideTimer = setTimeout(function() {
+          popover.hidden = true;
+        }, 200);
+      }
+
+      popover.addEventListener('mouseenter', function() {
+        clearTimeout(popoverHideTimer);
+      });
+      popover.addEventListener('mouseleave', function() {
+        hidePopover();
+      });
+
+      let popoverOriginBar = null;
+
+      function wireBarEvents(bar, session) {
+        let hoverTimer = 0;
+        bar.addEventListener('mouseenter', function() {
+          clearTimeout(popoverHideTimer);
+          hoverTimer = setTimeout(function() { showPopover(bar, session); popoverOriginBar = bar; }, 120);
+        });
+        bar.addEventListener('mouseleave', function() {
+          clearTimeout(hoverTimer);
+          hidePopover();
+        });
+        bar.addEventListener('focus', function() {
+          popoverOriginBar = bar;
+          showPopover(bar, session);
+          setTimeout(function() {
+            var firstLink = popover.querySelector('a[tabindex="0"], a.timeline-popover-link, a.timeline-popover-action');
+            if (firstLink) firstLink.focus();
+          }, 50);
+        });
+        bar.addEventListener('blur', function() {
+          setTimeout(function() {
+            if (!popover.contains(document.activeElement)) {
+              popover.hidden = true;
+            }
+          }, 100);
+        });
+        bar.addEventListener('click', function(e) {
+          e.preventDefault();
+          popoverOriginBar = bar;
+          showPopover(bar, session);
+        });
+        bar.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            popoverOriginBar = bar;
+            showPopover(bar, session);
+            setTimeout(function() {
+              var firstLink = popover.querySelector('a[tabindex="0"], a.timeline-popover-link, a.timeline-popover-action');
+              if (firstLink) firstLink.focus();
+            }, 50);
+          }
+        });
+      }
+
+      var barElements = {};
+
+      function createBar(session) {
+        const startMin = parseTime(session.start);
+        const endMin = session.end ? parseTime(session.end) : nowMin;
+        const leftPct = pctOf(startMin);
+        const rightPct = session.end ? pctOf(endMin) : NOW_PCT;
+        const widthPct = rightPct - leftPct;
+        const durationMin = endMin - startMin;
+        const durationH = Math.floor(durationMin / 60);
+        const durationM = durationMin % 60;
+        const durationStr = durationH > 0
+          ? durationH + ' hour' + (durationH > 1 ? 's' : '') + (durationM > 0 ? ' ' + durationM + ' minute' + (durationM > 1 ? 's' : '') : '')
+          : durationM + ' minute' + (durationM > 1 ? 's' : '');
+
+        const currentPhaseForLabel = getCurrentPhase(session);
+        const phaseNameForLabel = session.status === 'blocked' ? 'blocked' :
+                                  session.status === 'failed' ? 'failed' :
+                                  session.status === 'merged' ? 'merged' :
+                                  currentPhaseForLabel;
+        const statusDesc = session.status === 'running' ? ', running since ' + formatTime12(startMin) + ', ' + durationStr :
+                           session.status === 'blocked' ? ', blocked since ' + formatTime12(startMin) + ', ' + durationStr :
+                           ', ' + session.status + ', ' + durationStr;
+
+        const bar = document.createElement('div');
+        bar.className = 'timeline-bar';
+        bar.setAttribute('tabindex', '0');
+        bar.setAttribute('role', 'button');
+        bar.setAttribute('aria-haspopup', 'dialog');
+        bar.setAttribute('aria-label', session.jira + ', ' + session.agent + ', ' + phaseNameForLabel + statusDesc);
+
+        bar.setAttribute('data-session-id', session.id);
+
+        if (session.status === 'running') bar.classList.add('is-running');
+        if (session.status === 'failed') bar.classList.add('is-failed');
+        if (session.status === 'blocked') bar.classList.add('is-blocked');
+
+        bar.style.left = leftPct + '%';
+        bar.style.width = 'max(' + widthPct + '%, 8px)';
+
+        session.phases.forEach(function(phase) {
+          const seg = document.createElement('div');
+          seg.className = 'timeline-bar-segment';
+          seg.style.flex = String(phase.pct);
+          seg.style.backgroundColor = PHASE_COLORS[phase.name] || 'var(--muted-foreground)';
+
+          var pattern = PHASE_PATTERNS[phase.name];
+          if (pattern && pattern !== 'none') {
+            seg.style.backgroundImage = pattern;
+            var patSize = PHASE_PATTERN_SIZES[phase.name];
+            if (patSize) {
+              seg.style.backgroundSize = patSize;
+            }
+          }
+          bar.appendChild(seg);
+        });
+
+        if (session.status === 'running') {
+          const lastPhase = session.phases[session.phases.length - 1];
+          bar.style.background = PHASE_COLORS[lastPhase.name] || 'var(--phase-implementing)';
+        }
+
+
+        wireBarEvents(bar, session);
+        barElements[session.id] = bar;
+        return bar;
+      }
+
+      // Helper: create a timeline-row with label + lane side by side
+      function createTimelineRow(labelContent, sessions, options) {
+        var row = document.createElement('div');
+        row.className = 'timeline-row';
+        if (options && options.extraClass) row.classList.add(options.extraClass);
+
+        var label = document.createElement('div');
+        label.className = 'timeline-row-label';
+        if (typeof labelContent === 'string') {
+          label.textContent = labelContent;
+          label.title = labelContent;
+        } else {
+          label.appendChild(labelContent);
+        }
+
+        var lane = document.createElement('div');
+        lane.className = 'timeline-row-lane';
+
+        // Add gridlines and now-line to each lane
+        hourMarkers.forEach(function(hr) {
+          var pct = pctOf(hr * 60);
+          if (pct < 0 || pct > NOW_PCT + 1) return;
+          var gl = document.createElement('div');
+          gl.className = 'timeline-gridline';
+          gl.style.left = pct + '%';
+          lane.appendChild(gl);
+        });
+
+        var nl = document.createElement('div');
+        nl.className = 'timeline-now-line';
+        nl.style.left = NOW_PCT + '%';
+        lane.appendChild(nl);
+
+        if (sessions) {
+          sessions.forEach(function(s) {
+            lane.appendChild(createBar(s));
+          });
+        }
+
+        row.appendChild(label);
+        row.appendChild(lane);
+        return row;
+      }
+
+      // Build grouped rows using per-row structure
+      var rowsContainer = document.createElement('div');
+      rowsContainer.className = 'timeline-rows';
+
+      groupOrder.forEach(function(group) {
+        var isMulti = group.isGroup && group.sessions.length > 1;
+        var defaultCollapsed = group.isGroup; // all groups start collapsed
+
+        if (group.isGroup) {
+          // Wrap entire group in a timeline-group div for hover highlighting
+          var groupWrapper = document.createElement('div');
+          groupWrapper.className = 'timeline-group';
+
+          // Group header row (Jira key + chevron as label, all session bars in lane)
+          var headerLabelContent = document.createElement('span');
+          headerLabelContent.style.display = 'flex';
+          headerLabelContent.style.alignItems = 'center';
+          headerLabelContent.style.gap = '4px';
+          var chevron = document.createElement('span');
+          chevron.className = 'timeline-group-chevron';
+          chevron.textContent = '▸'; // all groups start collapsed
+          headerLabelContent.appendChild(chevron);
+          var keySpan = document.createElement('span');
+          keySpan.textContent = group.key;
+          headerLabelContent.appendChild(keySpan);
+
+          var headerRow = createTimelineRow(headerLabelContent, group.sessions, { extraClass: 'timeline-row--group-header' });
+
+          // The group lane (header lane) is shown when collapsed, hidden when expanded
+          // All groups start collapsed — header lane visible, sub-rows hidden
+          // (sub-rows get timeline-row-collapsed below)
+
+          headerRow.style.cursor = 'pointer';
+          groupWrapper.appendChild(headerRow);
+
+          // Sub-rows for each session in the group
+          var subRows = [];
+          group.sessions.forEach(function(s) {
+            var subRow = createTimelineRow(s.agent, [s], { extraClass: 'timeline-row--sub' });
+            if (defaultCollapsed) {
+              subRow.classList.add('timeline-row-collapsed');
+            }
+            subRows.push(subRow);
+            groupWrapper.appendChild(subRow);
+          });
+
+          // Toggle expand/collapse
+          headerRow.addEventListener('click', function() {
+            var isCollapsed = subRows[0].classList.contains('timeline-row-collapsed');
+            var headerLane = headerRow.querySelector('.timeline-row-lane');
+            if (isCollapsed) {
+              subRows.forEach(function(r) { r.classList.remove('timeline-row-collapsed'); });
+              chevron.textContent = '▾';
+              headerLane.style.display = 'none';
+            } else {
+              subRows.forEach(function(r) { r.classList.add('timeline-row-collapsed'); });
+              chevron.textContent = '▸';
+              headerLane.style.display = '';
+            }
+          });
+
+          rowsContainer.appendChild(groupWrapper);
+        } else {
+          // Ungrouped session: single row, no chevron, labeled by agent name
+          var s = group.sessions[0];
+          var row = createTimelineRow(s.agent, [s]);
+          rowsContainer.appendChild(row);
+        }
+      });
+
+      inner.appendChild(rowsContainer);
+      container.appendChild(inner);
+
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && !popover.hidden) {
+          e.stopPropagation();
+          clearTimeout(popoverHideTimer);
+          popover.hidden = true;
+          if (popoverOriginBar) {
+            popoverOriginBar.focus();
+            popoverOriginBar = null;
+          }
+        }
+      });
+
+      popover.addEventListener('focusout', function() {
+        setTimeout(function() {
+          if (!popover.contains(document.activeElement) && document.activeElement !== popoverOriginBar) {
+            popover.hidden = true;
+          }
+        }, 100);
+      });
+
+      window.addEventListener('scroll', function() { popover.hidden = true; }, { passive: true });
+      window.addEventListener('resize', function() { popover.hidden = true; });
+      container.addEventListener('scroll', function() { popover.hidden = true; }, { passive: true });
+
+      // Expose state for live simulation
+      window._timeline = {
+        nowMin: function() { return nowMin; },
+        setNowMin: function(v) { nowMin = v; },
+        NOW_PCT: NOW_PCT,
+        sessions: sessions,
+        SESSION_MESSAGES: SESSION_MESSAGES,
+        barElements: barElements,
+        pctOf: pctOf,
+        parseTime: parseTime,
+        formatTime12: formatTime12,
+        rangeStartMin: rangeStartMin,
+        totalMinutes: totalMinutes,
+        showPopover: showPopover,
+        popover: popover,
+        popoverOriginBar: function() { return popoverOriginBar; },
+      };
+    })();
+  </script>
+
+  <script>
+    (() => {
+      const tooltip = document.getElementById("interaction-tooltip");
+      const tipTargets = document.querySelectorAll(".js-tip");
+      const completedToggle = document.getElementById("completed-toggle");
+      const completedDetail = document.getElementById("completed-detail");
+      const scrollLinks = document.querySelectorAll("[data-scroll-target]");
+      let hideTimer = 0;
+
+      function showTooltip(target, message) {
+        window.clearTimeout(hideTimer);
+        tooltip.textContent = message;
+        tooltip.hidden = false;
+
+        const targetRect = target.getBoundingClientRect();
+        const tooltipRect = tooltip.getBoundingClientRect();
+        const left = Math.min(
+          Math.max(8, targetRect.left + targetRect.width / 2 - tooltipRect.width / 2),
+          window.innerWidth - tooltipRect.width - 8
+        );
+        const top =
+          targetRect.top > tooltipRect.height + 16
+            ? targetRect.top - tooltipRect.height - 8
+            : targetRect.bottom + 8;
+
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${Math.max(8, top)}px`;
+        hideTimer = window.setTimeout(hideTooltip, 1800);
+      }
+
+      function hideTooltip() {
+        window.clearTimeout(hideTimer);
+        tooltip.hidden = true;
+      }
+
+      tipTargets.forEach((target) => {
+        target.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          showTooltip(target, target.getAttribute("data-tip"));
+        });
+      });
+
+      scrollLinks.forEach((link) => {
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          const targetId = link.getAttribute("data-scroll-target");
+          const target = document.getElementById(targetId);
+          if (!target) {
+            return;
+          }
+
+          if (completedDetail.contains(target) && completedDetail.hidden) {
+            completedDetail.hidden = false;
+            completedToggle.setAttribute("aria-expanded", "true");
+            completedToggle.textContent = "Hide details";
+          }
+
+          target.scrollIntoView({ block: "start", behavior: "smooth" });
+          target.classList.add("section-focus");
+          window.setTimeout(() => target.classList.remove("section-focus"), 1400);
+        });
+      });
+
+      completedToggle.addEventListener("click", () => {
+        const expanded = completedToggle.getAttribute("aria-expanded") === "true";
+        completedToggle.setAttribute("aria-expanded", String(!expanded));
+        completedToggle.textContent = expanded ? "Show details" : "Hide details";
+        completedDetail.hidden = expanded;
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          hideTooltip();
+        }
+      });
+
+      window.addEventListener("resize", hideTooltip);
+      window.addEventListener("scroll", hideTooltip, { passive: true });
+    })();
+  </script>
+
+  <script>
+    /* ── View Toggle (List / Timeline) ── */
+    (() => {
+      const viewBtns = document.querySelectorAll('.view-toggle-btn');
+      const listView = document.querySelector('.list-view');
+      const timelineView = document.querySelector('.timeline-view');
+
+      window._isTimelineVisible = function() {
+        return timelineView.style.display === 'block';
+      };
+
+      viewBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          viewBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
+          btn.classList.add('active');
+          btn.setAttribute('aria-selected', 'true');
+
+          if (btn.dataset.view === 'timeline') {
+            listView.style.display = 'none';
+            timelineView.style.display = 'block';
+          } else {
+            listView.style.display = 'block';
+            timelineView.style.display = 'none';
+          }
+        });
+      });
+    })();
+  </script>
+
+  <script>
+    /* ── Notification Bell ── */
+    (() => {
+      var bellBtn = document.getElementById('bell-button');
+      var bellTray = document.getElementById('bell-tray');
+      var tooltip = document.getElementById('interaction-tooltip');
+
+      function toggleTray() {
+        var isOpen = !bellTray.hidden;
+        bellTray.hidden = isOpen;
+        bellBtn.setAttribute('aria-expanded', String(!isOpen));
+      }
+
+      function closeTray() {
+        bellTray.hidden = true;
+        bellBtn.setAttribute('aria-expanded', 'false');
+      }
+
+      bellBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        toggleTray();
+      });
+
+      document.addEventListener('click', function(e) {
+        if (!bellTray.hidden && !bellTray.contains(e.target) && e.target !== bellBtn) {
+          closeTray();
+        }
+      });
+
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && !bellTray.hidden) {
+          closeTray();
+          bellBtn.focus();
+        }
+      });
+
+      // Tray item clicks
+      bellTray.querySelectorAll('.bell-tray-item').forEach(function(item) {
+        item.addEventListener('click', function(e) {
+          e.stopPropagation();
+          tooltip.textContent = 'Would navigate to session';
+          tooltip.hidden = false;
+          var r = item.getBoundingClientRect();
+          var tr = tooltip.getBoundingClientRect();
+          tooltip.style.left = Math.min(Math.max(8, r.left + r.width / 2 - tr.width / 2), window.innerWidth - tr.width - 8) + 'px';
+          tooltip.style.top = (r.top > tr.height + 16 ? r.top - tr.height - 8 : r.bottom + 8) + 'px';
+          setTimeout(function() { tooltip.hidden = true; }, 1800);
+        });
+      });
+    })();
+  </script>
+
+  <script>
+    /* ── Auto-updating Timeline Simulation ── */
+    (() => {
+      var tl = window._timeline;
+      if (!tl) return;
+
+      var tickCount = 0;
+      var syncAgoMinutes = 0;
+
+      var liveMessages = [
+        { badge: 'tool', text: 'Read file: src/reconciler.go' },
+        { badge: 'tool', text: 'Bash: go test ./...' },
+        { badge: 'text', text: 'Analyzing test results...' },
+        { badge: 'tool', text: 'Edit file: internal/config/config.go' },
+        { badge: 'text', text: 'Refactoring error handling path' },
+        { badge: 'tool', text: 'Bash: make lint' },
+        { badge: 'text', text: 'Updating documentation' },
+        { badge: 'tool', text: 'Read file: specs/platform/session-activity-tracking.spec.md' },
+      ];
+
+      var syncTextEl = document.getElementById('sync-text');
+      var syncDot = document.getElementById('sync-dot');
+
+      function flashSyncDot() {
+        syncDot.style.transform = 'scale(1.6)';
+        syncDot.style.background = '#63993d';
+        setTimeout(function() {
+          syncDot.style.transform = 'scale(1)';
+        }, 300);
+      }
+
+      function updateSyncText() {
+        if (syncAgoMinutes === 0) {
+          syncTextEl.textContent = 'Synced just now';
+        } else {
+          syncTextEl.textContent = 'Synced ' + syncAgoMinutes + 'm ago';
+        }
+      }
+
+      function getRunningSessionIds() {
+        var ids = [];
+        tl.sessions.forEach(function(s) {
+          if (s.status === 'running' || s.status === 'blocked') {
+            ids.push(s.id);
+          }
+        });
+        return ids;
+      }
+
+      function pctOfLive(minuteVal) {
+        var currentNow = tl.nowMin();
+        var totalMin = currentNow - tl.rangeStartMin;
+        return ((minuteVal - tl.rangeStartMin) / totalMin) * tl.NOW_PCT;
+      }
+
+      var intervalId = setInterval(function() {
+        // Stop if timeline is not visible
+        if (!window._isTimelineVisible || !window._isTimelineVisible()) {
+          return;
+        }
+
+        tickCount++;
+
+        // 1. Advance "now" by 1 minute every 3 ticks
+        if (tickCount % 3 === 0) {
+          var currentNow = tl.nowMin();
+          tl.setNowMin(currentNow + 1);
+
+          // Update sync text cycling
+          syncAgoMinutes = (syncAgoMinutes + 1) % 3;
+          updateSyncText();
+        }
+
+        // Flash the sync dot on every tick
+        flashSyncDot();
+
+        // 2. Update now-line positions and bar widths
+        var currentNow = tl.nowMin();
+
+        // Update all now-lines
+        document.querySelectorAll('.timeline-now-line').forEach(function(nl) {
+          nl.style.left = tl.NOW_PCT + '%';
+        });
+
+        // Update the "now" axis label position (it stays at NOW_PCT)
+        // The axis labels use percentage positions relative to the range, which doesn't change
+
+        // 3. Grow running/blocked bars
+        var runningIds = getRunningSessionIds();
+        runningIds.forEach(function(sid) {
+          var bar = tl.barElements[sid];
+          if (!bar) return;
+
+          // Find the session
+          var session = null;
+          tl.sessions.forEach(function(s) { if (s.id === sid) session = s; });
+          if (!session) return;
+
+          var startMin = tl.parseTime(session.start);
+          var leftPct = pctOfLive(startMin);
+          var widthPct = tl.NOW_PCT - leftPct;
+
+          bar.style.left = leftPct + '%';
+          bar.style.width = 'max(' + widthPct + '%, 8px)';
+        });
+
+        // 4. Occasionally add a message (every 5th tick)
+        if (tickCount % 5 === 0) {
+          var runningSessions = [];
+          tl.sessions.forEach(function(s) {
+            if (s.status === 'running') runningSessions.push(s);
+          });
+          if (runningSessions.length > 0) {
+            var randomSession = runningSessions[Math.floor(Math.random() * runningSessions.length)];
+            var randomMsg = liveMessages[Math.floor(Math.random() * liveMessages.length)];
+
+            // Generate time string from current simulated time
+            var timeStr = tl.formatTime12(currentNow);
+
+            var newMessage = { time: timeStr, badge: randomMsg.badge, text: randomMsg.text };
+
+            // Prepend to SESSION_MESSAGES
+            if (!tl.SESSION_MESSAGES[randomSession.id]) {
+              tl.SESSION_MESSAGES[randomSession.id] = [];
+            }
+            tl.SESSION_MESSAGES[randomSession.id].unshift(newMessage);
+
+            // If popover is open for this session, update live
+            var popover = tl.popover;
+            if (!popover.hidden) {
+              var originBar = tl.popoverOriginBar();
+              if (originBar && originBar.getAttribute('data-session-id') === randomSession.id) {
+                var messagesContainer = popover.querySelector('.popover-messages');
+                if (messagesContainer) {
+                  var badgeLabels = { tool: 'tool_call', text: 'text', error: 'error' };
+                  var msgDiv = document.createElement('div');
+                  msgDiv.className = 'popover-msg';
+                  msgDiv.innerHTML =
+                    '<span class="popover-msg-time mono">' + newMessage.time + '</span>' +
+                    '<span class="popover-msg-badge ' + newMessage.badge + '">' + (badgeLabels[newMessage.badge] || newMessage.badge) + '</span>' +
+                    '<span class="popover-msg-text">' + newMessage.text + '</span>';
+
+                  // Insert before typing indicator if present, otherwise prepend
+                  var typingIndicator = messagesContainer.querySelector('.typing-indicator');
+                  if (typingIndicator) {
+                    messagesContainer.insertBefore(msgDiv, typingIndicator);
+                  } else {
+                    messagesContainer.insertBefore(msgDiv, messagesContainer.firstChild);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }, 3000);
+    })();
+  </script>
+</body>
+</html>
