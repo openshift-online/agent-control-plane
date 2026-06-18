@@ -12,6 +12,7 @@ export const WORK_GITHUB_PR_REVIEW = 'work.acp.io/github/pr-review'
 export const AGENT_STATUS = 'agent.acp.io/status'
 export const AGENT_STATUS_CRITICALITY = 'agent.acp.io/status-criticality'
 export const AGENT_NEEDS_INPUT = 'agent.acp.io/needs-input'
+export const WORK_PHASES = 'work.acp.io/phases'
 
 export const LEGACY_JIRA_ISSUE = 'ambient-code.io/jira/issue'
 export const LEGACY_GITHUB_PR = 'ambient-code.io/github/pr'
@@ -22,6 +23,41 @@ export const LEGACY_REVIEW_STATUS = 'ambient-code.io/review/status'
 export const LEGACY_COST = 'ambient-code.io/cost/estimate'
 
 export type Criticality = 'critical' | 'warning' | 'info'
+
+export type WorkPhase = 'implementing' | 'reviewing' | 'testing' | 'deploying'
+
+export type WorkPhaseEntry = {
+  phase: WorkPhase
+  start: string
+}
+
+const VALID_WORK_PHASES: ReadonlySet<string> = new Set([
+  'implementing',
+  'reviewing',
+  'testing',
+  'deploying',
+])
+
+export function parseWorkPhases(annotations: Record<string, string>): WorkPhaseEntry[] {
+  const raw = annotations[WORK_PHASES]
+  if (!raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter(
+        (entry): entry is WorkPhaseEntry =>
+          typeof entry === 'object' &&
+          entry !== null &&
+          typeof entry.phase === 'string' &&
+          VALID_WORK_PHASES.has(entry.phase) &&
+          typeof entry.start === 'string',
+      )
+      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+  } catch {
+    return []
+  }
+}
 
 export type NeedsYouItem = {
   session: DomainSession

@@ -98,6 +98,7 @@ describe('annotation registry', () => {
         'work.acp.io/github/pr-status',
         'work.acp.io/github/pr-checks',
         'work.acp.io/github/pr-review',
+        'work.acp.io/phases',
       ]
 
       for (const key of expectedKeys) {

@@ -27,8 +27,10 @@ import {
   WORK_GITHUB_PR,
   WORK_GITHUB_PR_URL,
   LEGACY_JIRA_ISSUE,
+  parseWorkPhases,
 } from '@/domain/work-annotations'
-import type { DomainSession, SessionPhase, SessionEventType } from '@/domain/types'
+import type { WorkPhase } from '@/domain/work-annotations'
+import type { DomainSession, SessionPhase } from '@/domain/types'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -61,20 +63,29 @@ type TimelineGroupData = {
 }
 
 // ---------------------------------------------------------------------------
-// Phase color mapping
+// Work lifecycle phase colors (from prototype)
 // ---------------------------------------------------------------------------
 
-const PHASE_BAR_COLORS: Record<SessionPhase, string> = {
-  Running: 'bg-green-500',
-  Completed: 'bg-blue-500',
-  Failed: 'bg-red-500',
-  Creating: 'bg-amber-500',
-  Pending: 'bg-amber-500',
-  Stopping: 'bg-muted-foreground',
-  Stopped: 'bg-muted-foreground',
+const WORK_PHASE_COLORS: Record<WorkPhase, string> = {
+  implementing: '#0066cc',
+  reviewing: '#6753ac',
+  testing: '#009596',
+  deploying: '#63993d',
 }
 
-const PHASE_BAR_CSS_COLORS: Record<SessionPhase, string> = {
+const WORK_PHASE_PATTERNS: Record<WorkPhase, string | null> = {
+  implementing: null,
+  reviewing: 'repeating-linear-gradient(135deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 5px)',
+  testing: 'radial-gradient(circle, rgba(255,255,255,0.35) 1px, transparent 1px)',
+  deploying: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.25) 3px, rgba(255,255,255,0.25) 5px)',
+}
+
+const WORK_PHASE_PATTERN_SIZES: Partial<Record<WorkPhase, string>> = {
+  testing: '5px 5px',
+}
+
+// Fallback colors for sessions without work.acp.io/phases
+const SESSION_PHASE_COLORS: Record<SessionPhase, string> = {
   Running: 'rgb(34 197 94)',
   Completed: 'rgb(59 130 246)',
   Failed: 'rgb(239 68 68)',
@@ -243,32 +254,61 @@ function buildGroups(sessions: DomainSession[], agentNames?: Map<string, string>
 // Legend
 // ---------------------------------------------------------------------------
 
-const LEGEND_PHASES = [
-  { label: 'Running', color: 'rgb(34 197 94)' },
-  { label: 'Completed', color: 'rgb(59 130 246)' },
-  { label: 'Failed', color: 'rgb(239 68 68)' },
-  { label: 'Pending', color: 'rgb(245 158 11)' },
-  { label: 'Stopped', color: 'rgb(115 115 115)' },
-] as const
+const LEGEND_WORK_PHASES: { label: string; color: string; pattern: string | null; patternSize?: string }[] = [
+  { label: 'Implementing', color: WORK_PHASE_COLORS.implementing, pattern: null },
+  { label: 'Reviewing', color: WORK_PHASE_COLORS.reviewing, pattern: WORK_PHASE_PATTERNS.reviewing },
+  { label: 'Testing', color: WORK_PHASE_COLORS.testing, pattern: WORK_PHASE_PATTERNS.testing, patternSize: '5px 5px' },
+  { label: 'Deploying', color: WORK_PHASE_COLORS.deploying, pattern: WORK_PHASE_PATTERNS.deploying },
+]
 
-const LEGEND_PATTERNS = [
-  { label: 'Running (pulse)', style: { background: 'linear-gradient(to right, rgb(34 197 94) 75%, rgba(34,197,94,0.15))', borderRadius: '2px 0 0 2px' } },
-  { label: 'Failed', style: { background: 'rgb(239 68 68)', borderRadius: '2px' } },
-] as const
+const LEGEND_BAR_STYLES: { label: string; style: React.CSSProperties }[] = [
+  {
+    label: 'Completed',
+    style: {
+      display: 'flex', overflow: 'hidden', borderRadius: '2px',
+      background: `linear-gradient(to right, ${WORK_PHASE_COLORS.implementing} 60%, ${WORK_PHASE_COLORS.reviewing} 60% 80%, ${WORK_PHASE_COLORS.deploying} 80%)`,
+    },
+  },
+  {
+    label: 'Running',
+    style: {
+      background: `linear-gradient(to right, ${WORK_PHASE_COLORS.implementing} 75%, rgba(0,102,204,0.15))`,
+      borderRadius: '2px 0 0 2px',
+    },
+  },
+  {
+    label: 'Failed',
+    style: { background: 'rgb(239 68 68)', borderRadius: '2px' },
+  },
+  {
+    label: 'Blocked',
+    style: {
+      background: `repeating-linear-gradient(45deg, rgb(245 158 11), rgb(245 158 11) 3px, rgba(255,255,255,0.35) 3px, rgba(255,255,255,0.35) 6px)`,
+      border: '1px dashed rgba(0,0,0,0.2)',
+      borderRadius: '2px',
+    },
+  },
+]
 
 function TimelineLegend() {
   return (
-    <div className="mb-2 space-y-1">
+    <div className="mb-2 space-y-1.5">
       <div className="flex flex-wrap gap-x-4 gap-y-1">
-        {LEGEND_PHASES.map((p) => (
+        {LEGEND_WORK_PHASES.map((p) => (
           <div key={p.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="inline-block h-3 w-3 shrink-0 rounded-sm" style={{ background: p.color }} />
+            <span
+              className="inline-block h-3 w-3 shrink-0 rounded-sm"
+              style={{
+                backgroundColor: p.color,
+                ...(p.pattern ? { backgroundImage: p.pattern, backgroundSize: p.patternSize ?? 'auto' } : {}),
+              }}
+            />
             <span>{p.label}</span>
           </div>
         ))}
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1">
-        {LEGEND_PATTERNS.map((p) => (
+        {LEGEND_BAR_STYLES.map((p) => (
           <div key={p.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="inline-block h-3 w-6 shrink-0" style={p.style} />
             <span>{p.label}</span>
@@ -468,6 +508,27 @@ function TimelinePopover({
   )
 }
 
+function computeSegments(
+  session: DomainSession,
+): { phase: WorkPhase; flex: number }[] | null {
+  const entries = parseWorkPhases(session.annotations)
+  if (entries.length === 0) return null
+
+  const sessionStart = getSessionStart(session)
+  const sessionEnd = getSessionEnd(session) ?? new Date()
+  const totalMs = sessionEnd.getTime() - sessionStart.getTime()
+  if (totalMs <= 0) return [{ phase: entries[0].phase, flex: 1 }]
+
+  const segments: { phase: WorkPhase; flex: number }[] = []
+  for (let i = 0; i < entries.length; i++) {
+    const start = new Date(entries[i].start)
+    const end = i + 1 < entries.length ? new Date(entries[i + 1].start) : sessionEnd
+    const durationMs = Math.max(0, end.getTime() - start.getTime())
+    segments.push({ phase: entries[i].phase, flex: durationMs / totalMs })
+  }
+  return segments
+}
+
 function TimelineBar({
   session,
   projectId,
@@ -490,9 +551,14 @@ function TimelineBar({
     [session, timeRange],
   )
 
+  const segments = useMemo(() => computeSegments(session), [session])
+
   const isRunning = session.phase === 'Running'
   const isFailed = session.phase === 'Failed'
-  const barColor = PHASE_BAR_CSS_COLORS[session.phase] ?? PHASE_BAR_CSS_COLORS.Pending
+  const isBlocked = session.annotations['agent.acp.io/status-criticality'] === 'critical' &&
+    !!session.annotations['agent.acp.io/status']
+  const fallbackColor = SESSION_PHASE_COLORS[session.phase] ?? SESSION_PHASE_COLORS.Pending
+  const hasSegments = segments !== null && segments.length > 0
 
   return (
     <Popover>
@@ -500,27 +566,47 @@ function TimelineBar({
         <button
           type="button"
           className={cn(
-            'absolute top-1 bottom-1 flex items-center rounded-sm transition-shadow',
+            'absolute top-1 bottom-1 flex overflow-hidden rounded-sm transition-shadow',
             'hover:shadow-md focus-visible:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
             isRunning && 'rounded-r-none',
+            isBlocked && 'border border-dashed border-black/25',
           )}
           style={{
             left: position.left,
             width: position.width,
-            minWidth: '4px',
-            backgroundColor: barColor,
+            minWidth: '8px',
+            gap: hasSegments ? '1px' : undefined,
+            backgroundColor: hasSegments ? '#fff' : fallbackColor,
           }}
           tabIndex={0}
           aria-label={`${jiraKey ?? resolveAgentName(session, agentNames)}: ${session.phase}`}
         >
+          {hasSegments ? (
+            segments.map((seg, i) => {
+              const pattern = WORK_PHASE_PATTERNS[seg.phase]
+              const patternSize = WORK_PHASE_PATTERN_SIZES[seg.phase]
+              return (
+                <div
+                  key={i}
+                  className={cn(isBlocked && 'opacity-70')}
+                  style={{
+                    flex: seg.flex,
+                    height: '100%',
+                    backgroundColor: WORK_PHASE_COLORS[seg.phase],
+                    ...(pattern ? { backgroundImage: pattern, backgroundSize: patternSize ?? 'auto' } : {}),
+                  }}
+                />
+              )
+            })
+          ) : null}
           {isRunning && (
             <span
               className="absolute right-0 top-0 bottom-0 w-1.5 animate-pulse"
-              style={{ backgroundColor: barColor, opacity: 0.5 }}
+              style={{ backgroundColor: hasSegments ? WORK_PHASE_COLORS[segments![segments!.length - 1].phase] : fallbackColor, opacity: 0.5 }}
             />
           )}
           {isFailed && (
-            <X className="ml-auto size-3 shrink-0 text-white" />
+            <span className="absolute right-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: 'rgb(239 68 68)' }} />
           )}
         </button>
       </PopoverTrigger>

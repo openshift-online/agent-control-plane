@@ -62,6 +62,7 @@ const ANNOTATION_REGISTRY: readonly RegisteredAnnotation[] = [
   { key: 'work.acp.io/github/pr-status', category: 'work', label: 'PR Status', icon: 'git-pull-request' },
   { key: 'work.acp.io/github/pr-checks', category: 'work', label: 'CI Checks', icon: 'check-circle' },
   { key: 'work.acp.io/github/pr-review', category: 'work', label: 'PR Review', icon: 'message-circle' },
+  { key: 'work.acp.io/phases', category: 'work', label: 'Work Phases', icon: 'layers' },
 ] as const
 
 const registryByKey = new Map<string, RegisteredAnnotation>(

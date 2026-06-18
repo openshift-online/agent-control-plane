@@ -31,6 +31,7 @@ Agents SHALL report work item status by writing annotations to their own session
 | `work.acp.io/github/pr-status` | `"open"` | PR state: `open`, `closed`, `merged`, `draft` |
 | `work.acp.io/github/pr-checks` | `"passing"` | CI check rollup: `passing`, `failing`, `pending` |
 | `work.acp.io/github/pr-review` | `"approved"` | Review state: `approved`, `changes-requested`, `pending`, `none` |
+| `work.acp.io/phases` | `[{"phase":"implementing","start":"..."}]` | JSON array of work lifecycle phase transitions. Valid phases: `implementing`, `reviewing`, `testing`, `deploying`. Agents append entries; the UI renders multi-segment timeline bars from this data. |
 | `agent.acp.io/status` | `"Blocked: Upstream PR not merged"` | Free-text status label for the Needs You queue |
 | `agent.acp.io/status-criticality` | `"critical"` | Criticality: `critical`, `warning`, `info`. Drives sort, color, icon |
 
