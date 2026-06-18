@@ -15,10 +15,10 @@ import {
   Clock,
 } from 'lucide-react'
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from '@/components/ui/hover-card'
 import {
   Select,
   SelectContent,
@@ -442,6 +442,9 @@ function TimelinePopover({
   const prUrl = session.annotations[WORK_GITHUB_PR_URL] ?? null
   const displayAgent = resolveAgentName(session, agentNames)
 
+  const workPhases = parseWorkPhases(session.annotations)
+  const currentWorkPhase = workPhases.length > 0 ? workPhases[workPhases.length - 1].phase : null
+
   return (
     <div className="w-80 space-y-2">
       <div className="flex items-start justify-between gap-2">
@@ -455,8 +458,16 @@ function TimelinePopover({
             {jiraSummary ?? session.name}
           </p>
         </div>
-        <div className="shrink-0">
+        <div className="flex shrink-0 flex-col items-end gap-1">
           <PhaseBadge phase={session.phase} />
+          {currentWorkPhase && (
+            <span
+              className="inline-block rounded px-1.5 py-0.5 text-[0.625rem] font-bold capitalize text-white"
+              style={{ backgroundColor: WORK_PHASE_COLORS[currentWorkPhase] }}
+            >
+              {currentWorkPhase}
+            </span>
+          )}
         </div>
       </div>
 
@@ -579,8 +590,8 @@ function TimelineBar({
   const hasSegments = segments !== null && segments.length > 0
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
+    <HoverCard openDelay={120} closeDelay={200}>
+      <HoverCardTrigger asChild>
         <button
           type="button"
           className={cn(
@@ -627,12 +638,11 @@ function TimelineBar({
             <span className="absolute right-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: 'rgb(239 68 68)' }} />
           )}
         </button>
-      </PopoverTrigger>
-      <PopoverContent
+      </HoverCardTrigger>
+      <HoverCardContent
         className="w-auto p-3"
         side="top"
         sideOffset={8}
-        onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <TimelinePopover
           session={session}
@@ -642,8 +652,8 @@ function TimelineBar({
           jiraUrl={jiraUrl}
           agentNames={agentNames}
         />
-      </PopoverContent>
-    </Popover>
+      </HoverCardContent>
+    </HoverCard>
   )
 }
 
