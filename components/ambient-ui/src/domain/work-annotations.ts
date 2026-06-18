@@ -118,6 +118,8 @@ const CRITICALITY_SORT_ORDER: Record<Criticality, number> = {
   info: 3,
 }
 
+export const ACTIONABLE_CRITICALITIES: ReadonlySet<Criticality> = new Set<Criticality>(['critical', 'warning'])
+
 const STALE_THRESHOLD_MS = 15 * 60 * 1000
 
 const RECENT_COMPLETIONS_LIMIT = 10

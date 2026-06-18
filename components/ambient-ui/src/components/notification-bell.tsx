@@ -16,7 +16,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { useSessions } from '@/queries/use-sessions'
-import { getNeedsYouItems } from '@/domain/work-annotations'
+import { getNeedsYouItems, ACTIONABLE_CRITICALITIES } from '@/domain/work-annotations'
 import type { Criticality, NeedsYouItem } from '@/domain/work-annotations'
 import { WORK_JIRA_ISSUE } from '@/domain/work-annotations'
 import { formatRelativeTime } from '@/lib/format-timestamp'
@@ -84,7 +84,8 @@ function TrayItem({
 
 export function NotificationBell({ projectId }: NotificationBellProps) {
   const { data } = useSessions(projectId)
-  const items = getNeedsYouItems(data?.items ?? [])
+  const allItems = getNeedsYouItems(data?.items ?? [])
+  const items = allItems.filter((item) => ACTIONABLE_CRITICALITIES.has(item.criticality))
   const count = items.length
 
   return (

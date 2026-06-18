@@ -657,7 +657,7 @@ function TimelineBar({
           onFocus={() => setPopoverOpen(true)}
           type="button"
           className={cn(
-            'absolute top-1 bottom-1 flex overflow-hidden rounded-sm transition-shadow',
+            'absolute top-1 bottom-1 flex overflow-hidden rounded-sm transition-[width,left,shadow] duration-300 ease-out',
             'hover:shadow-md focus-visible:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
             isRunning && 'rounded-r-none',
             isBlocked && 'border border-dashed border-black/25',
