@@ -28,7 +28,7 @@ export type JiraStatus = 'To Do' | 'In Progress' | 'In Review' | 'Done' | 'Block
 
 export const JIRA_TERMINAL_STATUSES: ReadonlySet<string> = new Set<JiraStatus>(['Done'])
 
-export type WorkPhase = 'implementing' | 'reviewing' | 'testing' | 'deploying'
+export type WorkPhase = 'implementing' | 'reviewing' | 'testing' | 'deploying' | 'complete'
 
 export type WorkPhaseEntry = {
   phase: WorkPhase
@@ -40,6 +40,7 @@ const VALID_WORK_PHASES: ReadonlySet<string> = new Set([
   'reviewing',
   'testing',
   'deploying',
+  'complete',
 ])
 
 export function parseWorkPhases(annotations: Record<string, string>): WorkPhaseEntry[] {

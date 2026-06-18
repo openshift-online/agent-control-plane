@@ -89,6 +89,7 @@ const WORK_PHASE_COLORS: Record<WorkPhase, string> = {
   reviewing: '#6753ac',
   testing: '#009596',
   deploying: '#63993d',
+  complete: '#3d8c40',
 }
 
 const WORK_PHASE_PATTERNS: Record<WorkPhase, string | null> = {
@@ -96,6 +97,7 @@ const WORK_PHASE_PATTERNS: Record<WorkPhase, string | null> = {
   reviewing: 'repeating-linear-gradient(135deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 5px)',
   testing: 'radial-gradient(circle, rgba(255,255,255,0.35) 1px, transparent 1px)',
   deploying: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.25) 3px, rgba(255,255,255,0.25) 5px)',
+  complete: null,
 }
 
 const WORK_PHASE_PATTERN_SIZES: Partial<Record<WorkPhase, string>> = {
@@ -309,6 +311,7 @@ const LEGEND_WORK_PHASES: { label: string; color: string; pattern: string | null
   { label: 'Reviewing', color: WORK_PHASE_COLORS.reviewing, pattern: WORK_PHASE_PATTERNS.reviewing },
   { label: 'Testing', color: WORK_PHASE_COLORS.testing, pattern: WORK_PHASE_PATTERNS.testing, patternSize: '5px 5px' },
   { label: 'Deploying', color: WORK_PHASE_COLORS.deploying, pattern: WORK_PHASE_PATTERNS.deploying },
+  { label: 'Complete', color: WORK_PHASE_COLORS.complete, pattern: null },
 ]
 
 const LEGEND_BAR_STYLES: { label: string; style: React.CSSProperties }[] = [
