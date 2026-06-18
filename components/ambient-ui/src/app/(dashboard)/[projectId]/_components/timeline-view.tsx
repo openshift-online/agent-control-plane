@@ -457,12 +457,8 @@ function TimelinePopover({
   const blockedCriticality = session.annotations[AGENT_STATUS_CRITICALITY] ?? null
   const isBlocked = blockedCriticality === 'critical' && !!blockedStatus
 
-  const phaseLabel = currentWorkPhase
-    ? `${currentWorkPhase.charAt(0).toUpperCase() + currentWorkPhase.slice(1)} · ${duration}`
-    : `${session.phase} · ${duration}`
-
   return (
-    <div className="w-80 overflow-hidden rounded-md" style={{ borderTop: `5px solid ${topBorderColor}` }}>
+    <div className="w-80">
       {/* Title row */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -470,7 +466,21 @@ function TimelinePopover({
             {jiraSummary ?? session.name}
           </p>
         </div>
-        <PhaseBadge phase={session.phase} />
+        <div className="flex shrink-0 items-center gap-1.5">
+          {currentWorkPhase && (
+            <span
+              className="inline-block rounded px-2 py-0.5 text-[0.6875rem] font-bold capitalize"
+              style={{
+                backgroundColor: `${topBorderColor}18`,
+                color: topBorderColor,
+                borderTop: `3px solid ${topBorderColor}`,
+              }}
+            >
+              {currentWorkPhase}
+            </span>
+          )}
+          <PhaseBadge phase={session.phase} />
+        </div>
       </div>
 
       {/* Blocked/attention banner */}
@@ -481,18 +491,15 @@ function TimelinePopover({
         </div>
       )}
 
-      {/* Agent + phase status line */}
+      {/* Agent */}
       <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
         <Bot className="size-3.5 shrink-0" />
         <span className="font-medium text-foreground">{displayAgent}</span>
       </div>
 
-      {/* Phase + time */}
-      <div className="mt-1 font-mono text-xs" style={{ color: topBorderColor }}>
-        {phaseLabel}
-      </div>
-      <div className="font-mono text-[0.625rem] text-muted-foreground">
-        {startLabel} – {endLabel}
+      {/* Time */}
+      <div className="mt-1 font-mono text-xs text-muted-foreground">
+        {startLabel} – {endLabel} · {duration}
       </div>
 
       {/* Activity feed (only for running sessions) */}
@@ -618,6 +625,12 @@ function TimelineBar({
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
   }, [])
 
+  const workPhases = parseWorkPhases(session.annotations)
+  const currentWorkPhase = workPhases.length > 0 ? workPhases[workPhases.length - 1].phase : null
+  const popoverBorderColor = currentWorkPhase
+    ? WORK_PHASE_COLORS[currentWorkPhase]
+    : SESSION_PHASE_COLORS[session.phase] ?? SESSION_PHASE_COLORS.Pending
+
   return (
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
       <PopoverTrigger asChild>
@@ -672,7 +685,7 @@ function TimelineBar({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-auto p-3"
+        className="w-auto overflow-hidden p-0"
         side="top"
         sideOffset={8}
         collisionPadding={16}
@@ -680,8 +693,10 @@ function TimelineBar({
         onMouseLeave={closePopover}
         onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
+        style={{ borderTop: `5px solid ${popoverBorderColor}` }}
       >
         <PopoverArrow className="fill-popover" />
+        <div className="p-3">
         <TimelinePopover
           session={session}
           projectId={projectId}
@@ -690,6 +705,7 @@ function TimelineBar({
           jiraUrl={jiraUrl}
           agentNames={agentNames}
         />
+        </div>
       </PopoverContent>
     </Popover>
   )
