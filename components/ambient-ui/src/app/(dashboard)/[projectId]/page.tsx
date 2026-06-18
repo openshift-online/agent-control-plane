@@ -254,10 +254,6 @@ export default function DashboardPage() {
     )
   }
 
-  const needsCount = needsYouItems.length
-  const inFlightCount = workItemCards.length
-  const completedCount = recentItems.length
-
   return (
     <div className="@container space-y-6">
       {/* Heading row with view toggle */}
@@ -275,24 +271,6 @@ export default function DashboardPage() {
             </TabsTrigger>
           </TabsList>
         </Tabs>
-      </div>
-
-      {/* Summary bar -- current state only, no sparklines */}
-      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-        <div className="flex items-center gap-1.5">
-          <span className="font-medium text-foreground">{needsCount}</span>
-          <span>need{needsCount === 1 ? 's' : ''} attention</span>
-        </div>
-        <span aria-hidden="true">&middot;</span>
-        <div className="flex items-center gap-1.5">
-          <span className="font-medium text-foreground">{inFlightCount}</span>
-          <span>in flight</span>
-        </div>
-        <span aria-hidden="true">&middot;</span>
-        <div className="flex items-center gap-1.5">
-          <span className="font-medium text-foreground">{completedCount}</span>
-          <span>completed today</span>
-        </div>
       </div>
 
       {/* Trends -- 6-hour sparklines in their own visual group */}

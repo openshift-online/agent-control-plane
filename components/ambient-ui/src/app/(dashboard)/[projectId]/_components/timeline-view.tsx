@@ -668,7 +668,7 @@ function TimelineBar({
             minWidth: '8px',
             gap: 0,
             backgroundColor: hasSegments ? WORK_PHASE_COLORS[segments[0].phase] : fallbackColor,
-            borderBottom: `2px solid ${SESSION_STATUS_BORDER[session.phase] ?? SESSION_STATUS_BORDER.Pending}`,
+            borderBottom: `4px solid ${SESSION_STATUS_BORDER[session.phase] ?? SESSION_STATUS_BORDER.Pending}`,
           }}
           tabIndex={0}
           aria-label={`${jiraKey ?? resolveAgentName(session, agentNames)}: ${session.phase}`}
