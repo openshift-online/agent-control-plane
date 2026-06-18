@@ -35,27 +35,29 @@ async function getOIDCConfig(): Promise<client.Configuration> {
   }
   const metadata: unknown = await resp.json()
 
-  // If SSO_FRONTEND_ISSUER_URL is set, rewrite ONLY browser-facing endpoints
-  // to use the frontend issuer. Keep server-to-server endpoints (token, introspection,
-  // userinfo, jwks) pointing to the backend issuer.
-  if (env.SSO_FRONTEND_ISSUER_URL && env.SSO_ISSUER_URL) {
-    const backendIssuer = env.SSO_ISSUER_URL
-    const frontendIssuer = env.SSO_FRONTEND_ISSUER_URL
+  // Keycloak returns browser-facing URLs using KC_HOSTNAME (e.g. http://localhost/sso).
+  // When port-forwarding the service for local development, the browser needs to reach Keycloak on
+  // a port-forwarded URL instead of the internal service URL.
+  // Rewrite the discovered issuer prefix to SSO_FRONTEND_ISSUER_URL for browser endpoints.
+  if (env.SSO_FRONTEND_ISSUER_URL) {
     const metadataObj = metadata as Record<string, unknown>
+    const discoveredIssuer = typeof metadataObj.issuer === 'string' ? metadataObj.issuer : ''
+    const frontendIssuer = env.SSO_FRONTEND_ISSUER_URL
 
-    // Only rewrite browser-facing endpoints
-    const browserEndpoints = [
-      'issuer',
-      'authorization_endpoint',
-      'end_session_endpoint',
-      'check_session_iframe',
-    ]
+    if (discoveredIssuer && discoveredIssuer !== frontendIssuer) {
+      const browserEndpoints = [
+        'issuer',
+        'authorization_endpoint',
+        'end_session_endpoint',
+        'check_session_iframe',
+      ]
 
-    browserEndpoints.forEach((key) => {
-      if (typeof metadataObj[key] === 'string' && (metadataObj[key] as string).startsWith(backendIssuer)) {
-        metadataObj[key] = (metadataObj[key] as string).replace(backendIssuer, frontendIssuer)
-      }
-    })
+      browserEndpoints.forEach((key) => {
+        if (typeof metadataObj[key] === 'string') {
+          metadataObj[key] = (metadataObj[key] as string).replace(discoveredIssuer, frontendIssuer)
+        }
+      })
+    }
   }
 
   const config = new client.Configuration(
