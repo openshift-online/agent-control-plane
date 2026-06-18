@@ -273,10 +273,18 @@ export function getWorkItemCards(sessions: DomainSession[]): WorkItemCard[] {
   return Array.from(groupMap.values())
 }
 
+const RESULT_SORT_ORDER: Record<string, number> = {
+  Failed: 1,
+  Stopped: 2,
+  Completed: 3,
+}
+
 export function getCompletionItems(sessions: DomainSession[]): CompletionItem[] {
   return sessions
     .filter((s) => TERMINAL_PHASES.has(s.phase))
     .sort((a, b) => {
+      const resultDiff = (RESULT_SORT_ORDER[a.phase] ?? 4) - (RESULT_SORT_ORDER[b.phase] ?? 4)
+      if (resultDiff !== 0) return resultDiff
       const aTime = a.completionTime ?? a.updatedAt
       const bTime = b.completionTime ?? b.updatedAt
       return new Date(bTime).getTime() - new Date(aTime).getTime()
@@ -327,4 +335,4 @@ export function getStaleMinutes(session: DomainSession): number | null {
   return Math.floor((Date.now() - new Date(session.updatedAt).getTime()) / 60000)
 }
 
-export const ROW_GRID_TEMPLATE = 'grid-cols-[4px_minmax(160px,240px)_1fr_72px_110px_80px_88px_52px]'
+export const ROW_GRID_TEMPLATE = 'grid-cols-[4px_minmax(160px,240px)_1fr_72px_110px_80px_88px]'

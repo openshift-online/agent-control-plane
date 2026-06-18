@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { PhaseBadge } from '../sessions/_components/phase-badge'
-import { JiraChip, PrChip, ExternalLinks } from './row-grammar'
+import { JiraChip, PrChip } from './row-grammar'
 import { formatPreciseDuration, formatRelativeTime } from '@/lib/format-timestamp'
 import {
   ROW_GRID_TEMPLATE,
@@ -20,12 +20,6 @@ const RESULT_CONFIG = {
   failed: { label: 'Failed', phase: 'Failed' as const },
   stopped: { label: 'Stopped', phase: 'Stopped' as const },
 } as const
-
-const STATUS_STRIPE_COLOR: Record<CompletionItem['result'], string> = {
-  completed: 'bg-green-500',
-  failed: 'bg-red-500',
-  stopped: 'bg-muted-foreground',
-}
 
 export function RecentActivity({ items, projectId, agentNames }: RecentActivityProps) {
   if (items.length === 0) {
@@ -56,7 +50,6 @@ export function RecentActivity({ items, projectId, agentNames }: RecentActivityP
           <div>Duration</div>
           {/* Action (reserved) */}
           <div />
-          <div className="hidden @md:block" />
         </div>
 
         {/* Rows */}
@@ -75,10 +68,8 @@ export function RecentActivity({ items, projectId, agentNames }: RecentActivityP
                 key={session.id}
                 className={`grid ${ROW_GRID_TEMPLATE} items-center px-3 py-2.5 transition-colors hover:bg-accent/50`}
               >
-                {/* Status stripe */}
-                <div
-                  className={`h-full w-1 rounded-full ${STATUS_STRIPE_COLOR[result]}`}
-                />
+                {/* spacer */}
+                <div />
 
                 {/* Result badge */}
                 <div>
@@ -132,9 +123,6 @@ export function RecentActivity({ items, projectId, agentNames }: RecentActivityP
 
                 {/* Action (reserved) */}
                 <div />
-
-                {/* Links */}
-                <ExternalLinks jiraUrl={ref?.url} prUrl={prUrl} />
               </li>
             )
           })}

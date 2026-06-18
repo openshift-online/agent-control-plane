@@ -12,17 +12,14 @@ import {
   resolveAgentName,
   WORK_GITHUB_PR,
   WORK_GITHUB_PR_URL,
-  WORK_JIRA_URL,
 } from '@/domain/work-annotations'
 import type { NeedsYouItem, Criticality } from '@/domain/work-annotations'
 import {
   RowGrid,
   RowHeader,
-  StatusStripe,
   JiraChip,
   PrChip,
   AgentLink,
-  ExternalLinks,
 } from './row-grammar'
 
 /* ------------------------------------------------------------------ */
@@ -52,12 +49,18 @@ type NeedsYouQueueProps = {
 }
 
 export function NeedsYouQueue({ items, projectId, agentNames }: NeedsYouQueueProps) {
+  const hasCritical = items.some((item) => item.criticality === 'critical')
+
   return (
-    <section className="rounded-lg border bg-card">
+    <section
+      className={`rounded-lg border bg-card ${hasCritical ? 'border-destructive/50 bg-destructive/5' : ''}`}
+    >
       <h2 className="px-4 py-3 text-sm font-semibold">
         Needs attention{' '}
         {items.length > 0 && (
-          <span className="text-muted-foreground">({items.length})</span>
+          <span className={hasCritical ? 'text-destructive font-bold' : 'text-muted-foreground'}>
+            ({items.length})
+          </span>
         )}
       </h2>
 
@@ -65,7 +68,7 @@ export function NeedsYouQueue({ items, projectId, agentNames }: NeedsYouQueuePro
         <p className="px-4 pb-4 text-sm text-muted-foreground">All clear</p>
       ) : (
         <div>
-          <RowHeader metaLabel="Waiting" />
+          <RowHeader metaLabel="Since" />
           <ul className="divide-y">
             {items.map((item) => (
               <NeedsYouRow
@@ -98,14 +101,13 @@ function NeedsYouRow({ item, projectId, agentNames }: NeedsYouRowProps) {
   const ref = getWorkItemRef(session.annotations)
   const prRef = session.annotations[WORK_GITHUB_PR] ?? null
   const prUrl = session.annotations[WORK_GITHUB_PR_URL] ?? null
-  const jiraUrl = session.annotations[WORK_JIRA_URL] ?? null
   const agentName = resolveAgentName(session, agentNames)
 
   return (
     <li>
       <RowGrid className="hover:bg-accent/50">
-        {/* Status stripe */}
-        <StatusStripe variant={criticality} />
+        {/* spacer */}
+        <div />
 
         {/* Status cell */}
         <Tooltip>
@@ -160,9 +162,6 @@ function NeedsYouRow({ item, projectId, agentNames }: NeedsYouRowProps) {
             <Link href={`/${projectId}/sessions/${session.id}`}>View session</Link>
           </Button>
         </div>
-
-        {/* External links */}
-        <ExternalLinks jiraUrl={jiraUrl} prUrl={prUrl} />
       </RowGrid>
     </li>
   )

@@ -93,18 +93,6 @@ const WORK_PHASE_COLORS: Record<WorkPhase, string> = {
   complete: '#3d8c40',
 }
 
-const WORK_PHASE_PATTERNS: Record<WorkPhase, string | null> = {
-  implementing: null,
-  reviewing: 'repeating-linear-gradient(135deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 5px)',
-  testing: 'radial-gradient(circle, rgba(255,255,255,0.35) 1px, transparent 1px)',
-  deploying: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.25) 3px, rgba(255,255,255,0.25) 5px)',
-  complete: null,
-}
-
-const WORK_PHASE_PATTERN_SIZES: Partial<Record<WorkPhase, string>> = {
-  testing: '5px 5px',
-}
-
 // Fallback colors for sessions without work.acp.io/phases
 const SESSION_PHASE_COLORS: Record<SessionPhase, string> = {
   Running: 'rgb(34 197 94)',
@@ -301,68 +289,26 @@ function buildGroups(sessions: DomainSession[], agentNames?: Map<string, string>
 // Legend
 // ---------------------------------------------------------------------------
 
-const LEGEND_WORK_PHASES: { label: string; color: string; pattern: string | null; patternSize?: string }[] = [
-  { label: 'Implementing', color: WORK_PHASE_COLORS.implementing, pattern: null },
-  { label: 'Reviewing', color: WORK_PHASE_COLORS.reviewing, pattern: WORK_PHASE_PATTERNS.reviewing },
-  { label: 'Testing', color: WORK_PHASE_COLORS.testing, pattern: WORK_PHASE_PATTERNS.testing, patternSize: '5px 5px' },
-  { label: 'Deploying', color: WORK_PHASE_COLORS.deploying, pattern: WORK_PHASE_PATTERNS.deploying },
-  { label: 'Complete', color: WORK_PHASE_COLORS.complete, pattern: null },
-]
-
-const LEGEND_BAR_STYLES: { label: string; style: React.CSSProperties }[] = [
-  {
-    label: 'Completed',
-    style: {
-      display: 'flex', overflow: 'hidden', borderRadius: '2px',
-      background: `linear-gradient(to right, ${WORK_PHASE_COLORS.implementing} 60%, ${WORK_PHASE_COLORS.reviewing} 60% 80%, ${WORK_PHASE_COLORS.deploying} 80%)`,
-    },
-  },
-  {
-    label: 'Running',
-    style: {
-      background: `linear-gradient(to right, ${WORK_PHASE_COLORS.implementing} 75%, rgba(0,102,204,0.15))`,
-      borderRadius: '2px 0 0 2px',
-    },
-  },
-  {
-    label: 'Failed',
-    style: { background: 'rgb(239 68 68)', borderRadius: '2px' },
-  },
-  {
-    label: 'Blocked',
-    style: {
-      background: `repeating-linear-gradient(45deg, rgb(245 158 11), rgb(245 158 11) 3px, rgba(255,255,255,0.35) 3px, rgba(255,255,255,0.35) 6px)`,
-      border: '1px dashed hsl(var(--border))',
-      borderRadius: '2px',
-    },
-  },
+const LEGEND_WORK_PHASES: { label: string; color: string }[] = [
+  { label: 'Implementing', color: WORK_PHASE_COLORS.implementing },
+  { label: 'Reviewing', color: WORK_PHASE_COLORS.reviewing },
+  { label: 'Testing', color: WORK_PHASE_COLORS.testing },
+  { label: 'Deploying', color: WORK_PHASE_COLORS.deploying },
+  { label: 'Complete', color: WORK_PHASE_COLORS.complete },
 ]
 
 function TimelineLegend() {
   return (
-    <div className="space-y-1.5">
-      <div className="flex flex-wrap gap-x-4 gap-y-1">
-        {LEGEND_WORK_PHASES.map((p) => (
-          <div key={p.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span
-              className="inline-block h-3 w-3 shrink-0 rounded-sm"
-              style={{
-                backgroundColor: p.color,
-                ...(p.pattern ? { backgroundImage: p.pattern, backgroundSize: p.patternSize ?? 'auto' } : {}),
-              }}
-            />
-            <span>{p.label}</span>
-          </div>
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1">
-        {LEGEND_BAR_STYLES.map((p) => (
-          <div key={p.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="inline-block h-3 w-6 shrink-0" style={p.style} />
-            <span>{p.label}</span>
-          </div>
-        ))}
-      </div>
+    <div className="flex flex-wrap gap-x-4 gap-y-1">
+      {LEGEND_WORK_PHASES.map((p) => (
+        <div key={p.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span
+            className="inline-block h-3 w-3 shrink-0 rounded-sm"
+            style={{ backgroundColor: p.color }}
+          />
+          <span>{p.label}</span>
+        </div>
+      ))}
     </div>
   )
 }
@@ -454,7 +400,7 @@ function ChatSidebarButton({ sessionId, sessionName }: { sessionId: string; sess
       className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 px-2 py-1 text-xs font-bold text-primary hover:bg-primary/20"
     >
       <MessageSquare className="size-3" />
-      View Session
+      Chat Log
     </button>
   )
 }
@@ -710,17 +656,14 @@ function TimelineBar({
             left: position.left,
             width: position.width,
             minWidth: '8px',
-            gap: hasSegments ? '1px' : undefined,
-            backgroundColor: hasSegments ? 'hsl(var(--border))' : fallbackColor,
+            gap: 0,
+            backgroundColor: hasSegments ? WORK_PHASE_COLORS[segments[0].phase] : fallbackColor,
           }}
           tabIndex={0}
           aria-label={`${jiraKey ?? resolveAgentName(session, agentNames)}: ${session.phase}`}
         >
           {hasSegments ? (
-            segments.map((seg, i) => {
-              const pattern = WORK_PHASE_PATTERNS[seg.phase]
-              const patternSize = WORK_PHASE_PATTERN_SIZES[seg.phase]
-              return (
+            segments.map((seg, i) => (
                 <div
                   key={i}
                   className={cn(isBlocked && 'opacity-70')}
@@ -728,11 +671,9 @@ function TimelineBar({
                     flex: seg.flex,
                     height: '100%',
                     backgroundColor: WORK_PHASE_COLORS[seg.phase],
-                    ...(pattern ? { backgroundImage: pattern, backgroundSize: patternSize ?? 'auto' } : {}),
                   }}
                 />
-              )
-            })
+              ))
           ) : null}
           {isRunning && (
             <span

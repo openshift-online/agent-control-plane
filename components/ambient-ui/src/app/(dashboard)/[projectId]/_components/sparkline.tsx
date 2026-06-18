@@ -1,37 +1,41 @@
 type SparklineProps = {
   data: number[]
-  width?: number
   height?: number
   color?: string
   className?: string
 }
 
+const VIEWBOX_WIDTH = 200
+const VIEWBOX_HEIGHT = 28
+const STROKE_WIDTH = 1.5
+const MIN_RANGE = 2 // avoid flat-line spikes when all values are nearly equal
+
 export function Sparkline({
   data,
-  width = 64,
-  height = 20,
+  height = 28,
   color = 'currentColor',
   className,
 }: SparklineProps) {
-  const padding = 1.5 // half stroke width to avoid clipping
+  const padding = STROKE_WIDTH // avoid clipping at edges
 
   if (data.length < 2 || data.every((v) => v === 0)) {
-    const midY = height / 2
+    const midY = VIEWBOX_HEIGHT / 2
     return (
       <svg
-        width={width}
+        width="100%"
         height={height}
-        viewBox={`0 0 ${width} ${height}`}
+        viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
+        preserveAspectRatio="none"
         className={className}
         aria-hidden="true"
       >
         <line
           x1={padding}
           y1={midY}
-          x2={width - padding}
+          x2={VIEWBOX_WIDTH - padding}
           y2={midY}
           stroke={color}
-          strokeWidth={1.5}
+          strokeWidth={STROKE_WIDTH}
           strokeLinecap="round"
           opacity={0.3}
         />
@@ -41,32 +45,45 @@ export function Sparkline({
 
   const min = Math.min(...data)
   const max = Math.max(...data)
-  const range = max - min || 1
+  const range = Math.max(max - min, MIN_RANGE)
 
-  const innerWidth = width - padding * 2
-  const innerHeight = height - padding * 2
+  const innerWidth = VIEWBOX_WIDTH - padding * 2
+  const innerHeight = VIEWBOX_HEIGHT - padding * 2
 
-  const points = data
-    .map((value, i) => {
-      const x = padding + (i / (data.length - 1)) * innerWidth
-      const y = padding + innerHeight - ((value - min) / range) * innerHeight
-      return `${x},${y}`
-    })
-    .join(' ')
+  const coords = data.map((value, i) => {
+    const x = padding + (i / (data.length - 1)) * innerWidth
+    const y = padding + innerHeight - ((value - min) / range) * innerHeight
+    return { x, y }
+  })
+
+  const linePoints = coords.map(({ x, y }) => `${x},${y}`).join(' ')
+
+  // Build a closed polygon for the area fill: line points + bottom-right + bottom-left
+  const areaPath = [
+    ...coords.map(({ x, y }) => `${x},${y}`),
+    `${coords[coords.length - 1].x},${VIEWBOX_HEIGHT}`,
+    `${coords[0].x},${VIEWBOX_HEIGHT}`,
+  ].join(' ')
 
   return (
     <svg
-      width={width}
+      width="100%"
       height={height}
-      viewBox={`0 0 ${width} ${height}`}
+      viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
+      preserveAspectRatio="none"
       className={className}
       aria-hidden="true"
     >
+      <polygon
+        points={areaPath}
+        fill={color}
+        opacity={0.1}
+      />
       <polyline
-        points={points}
+        points={linePoints}
         fill="none"
         stroke={color}
-        strokeWidth={1.5}
+        strokeWidth={STROKE_WIDTH}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
