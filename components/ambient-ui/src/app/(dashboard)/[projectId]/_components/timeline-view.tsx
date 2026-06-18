@@ -12,12 +12,20 @@ import {
   Plus,
   Minus,
   RotateCcw,
+  Clock,
 } from 'lucide-react'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { PhaseBadge } from '../sessions/_components/phase-badge'
 import { cn } from '@/lib/utils'
@@ -646,6 +654,56 @@ function TimelineBar({
 // Main component
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Time window presets
+// ---------------------------------------------------------------------------
+
+const TIME_WINDOW_OPTIONS = [
+  { value: 'auto', label: 'Auto' },
+  { value: '5m', label: 'Last 5m', ms: 5 * 60_000 },
+  { value: '15m', label: 'Last 15m', ms: 15 * 60_000 },
+  { value: '30m', label: 'Last 30m', ms: 30 * 60_000 },
+  { value: '1h', label: 'Last 1h', ms: 60 * 60_000 },
+  { value: '6h', label: 'Last 6h', ms: 6 * 60 * 60_000 },
+  { value: '12h', label: 'Last 12h', ms: 12 * 60 * 60_000 },
+  { value: '24h', label: 'Last 24h', ms: 24 * 60 * 60_000 },
+] as const
+
+type TimeWindowValue = (typeof TIME_WINDOW_OPTIONS)[number]['value']
+
+function getTimeWindowMs(value: TimeWindowValue): number | null {
+  const opt = TIME_WINDOW_OPTIONS.find((o) => o.value === value)
+  return opt && 'ms' in opt ? opt.ms : null
+}
+
+function TimeWindowSelect({
+  value,
+  onChange,
+}: {
+  value: TimeWindowValue
+  onChange: (v: TimeWindowValue) => void
+}) {
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v as TimeWindowValue)}>
+      <SelectTrigger className="h-7 w-[110px] gap-1 text-xs">
+        <Clock className="size-3 shrink-0 text-muted-foreground" />
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {TIME_WINDOW_OPTIONS.map((opt) => (
+          <SelectItem key={opt.value} value={opt.value} className="text-xs">
+            {opt.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Zoom controls
+// ---------------------------------------------------------------------------
+
 const MIN_ZOOM = 1
 const MAX_ZOOM = 20
 const ZOOM_STEP = 1.15
@@ -699,10 +757,18 @@ function ZoomControls({
 
 export function TimelineView({ sessions, projectId, agentNames }: TimelineViewProps) {
   const [zoom, setZoom] = useState(1)
+  const [timeWindow, setTimeWindow] = useState<TimeWindowValue>('auto')
   const scrollRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const timeRange = useMemo(() => buildTimeRange(sessions), [sessions])
+  const timeRange = useMemo(() => {
+    const windowMs = getTimeWindowMs(timeWindow)
+    if (windowMs) {
+      const now = new Date()
+      return { start: new Date(now.getTime() - windowMs), end: now }
+    }
+    return buildTimeRange(sessions)
+  }, [sessions, timeWindow])
   const hourLabels = useMemo(() => buildHourLabels(timeRange, zoom), [timeRange, zoom])
   const groups = useMemo(() => buildGroups(sessions, agentNames), [sessions, agentNames])
 
@@ -763,7 +829,10 @@ export function TimelineView({ sessions, projectId, agentNames }: TimelineViewPr
     <div>
       <div className="mb-2 flex items-center justify-between">
         <TimelineLegend />
-        <ZoomControls zoom={zoom} onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onReset={handleReset} />
+        <div className="flex items-center gap-2">
+          <TimeWindowSelect value={timeWindow} onChange={setTimeWindow} />
+          <ZoomControls zoom={zoom} onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onReset={handleReset} />
+        </div>
       </div>
       <div
         ref={containerRef}
