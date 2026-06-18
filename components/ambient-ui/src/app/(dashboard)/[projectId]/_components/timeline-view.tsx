@@ -812,7 +812,7 @@ function TimeWindowSelect({
 }) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as TimeWindowValue)}>
-      <SelectTrigger className="h-7 w-[110px] gap-1 text-xs">
+      <SelectTrigger size="sm" className="!h-7 w-[110px] gap-1 text-xs">
         <Clock className="size-3 shrink-0 text-muted-foreground" />
         <SelectValue />
       </SelectTrigger>
