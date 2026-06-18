@@ -15,6 +15,7 @@ import {
   Clock,
   Bot,
   AlertCircle,
+  MessageSquare,
 } from 'lucide-react'
 import {
   Popover,
@@ -34,6 +35,7 @@ import { PhaseBadge } from '../sessions/_components/phase-badge'
 import { cn } from '@/lib/utils'
 import { formatPreciseDuration } from '@/lib/format-timestamp'
 import { useSessionMessages } from '@/queries/use-session-messages'
+import { useChatSidebar } from '@/components/chat-sidebar-context'
 import {
   WORK_JIRA_ISSUE,
   WORK_JIRA_URL,
@@ -414,6 +416,27 @@ function truncatePayload(raw: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Chat sidebar button
+// ---------------------------------------------------------------------------
+
+function ChatSidebarButton({ sessionId, sessionName }: { sessionId: string; sessionName: string }) {
+  const { openSidebar } = useChatSidebar()
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation()
+        openSidebar(sessionId, sessionName)
+      }}
+      className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 px-2 py-1 text-xs font-bold text-primary hover:bg-primary/20"
+    >
+      <MessageSquare className="size-3" />
+      View Session
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
@@ -494,7 +517,16 @@ function TimelinePopover({
       {/* Agent */}
       <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
         <Bot className="size-3.5 shrink-0" />
-        <span className="font-medium text-foreground">{displayAgent}</span>
+        {session.agentId ? (
+          <Link
+            href={`/${projectId}/agents/${session.agentId}`}
+            className="font-medium text-foreground underline-offset-2 hover:underline"
+          >
+            {displayAgent}
+          </Link>
+        ) : (
+          <span className="font-medium text-foreground">{displayAgent}</span>
+        )}
       </div>
 
       {/* Time */}
@@ -546,12 +578,7 @@ function TimelinePopover({
             )
           )}
         </div>
-        <Link
-          href={`/${projectId}/sessions/${session.id}`}
-          className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 px-2 py-1 text-xs font-bold text-primary hover:bg-primary/20"
-        >
-          View Session →
-        </Link>
+        <ChatSidebarButton sessionId={session.id} sessionName={session.name} />
       </div>
     </div>
   )
