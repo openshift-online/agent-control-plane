@@ -125,7 +125,7 @@ function NeedsYouRow({ item, projectId, agentNames }: NeedsYouRowProps) {
         {/* Issue + summary */}
         <div className="flex min-w-0 items-center gap-2">
           {ref?.type === 'jira' && (
-            <JiraChip issueKey={ref.key} url={ref.url} />
+            <JiraChip issueKey={ref.key} url={ref.url} annotations={session.annotations} />
           )}
           {ref?.type === 'github-pr' && !prRef && (
             <PrChip prRef={ref.key} url={ref.url} />

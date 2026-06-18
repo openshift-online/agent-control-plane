@@ -89,7 +89,7 @@ export function RecentActivity({ items, projectId, agentNames }: RecentActivityP
                 <div className="flex min-w-0 items-center gap-2">
                   {ref ? (
                     <span className="shrink-0">
-                      <JiraChip issueKey={ref.key} url={ref.url} />
+                      <JiraChip issueKey={ref.key} url={ref.url} annotations={session.annotations} />
                     </span>
                   ) : null}
                   <Link

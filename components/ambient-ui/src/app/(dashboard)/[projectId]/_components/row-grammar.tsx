@@ -2,8 +2,19 @@ import Link from 'next/link'
 import { ExternalLink, GitPullRequest, Ticket } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from '@/components/ui/hover-card'
 import { cn } from '@/lib/utils'
-import { ROW_GRID_TEMPLATE } from '@/domain/work-annotations'
+import {
+  ROW_GRID_TEMPLATE,
+  WORK_JIRA_STATUS,
+  WORK_JIRA_SUMMARY,
+  WORK_GITHUB_PR,
+  WORK_GITHUB_PR_URL,
+} from '@/domain/work-annotations'
 import type { Criticality } from '@/domain/work-annotations'
 
 /* ------------------------------------------------------------------ */
@@ -93,30 +104,105 @@ export function StatusStripe({ variant }: StatusStripeProps) {
 type JiraChipProps = {
   issueKey: string
   url?: string | null
+  annotations?: Record<string, string>
 }
 
-export function JiraChip({ issueKey, url }: JiraChipProps) {
-  const content = (
+const JIRA_STATUS_CLASSES: Record<string, string> = {
+  'In Progress': 'border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-400',
+  'Done': 'border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400',
+  'Blocked': 'border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-400',
+  'To Do': 'border-muted-foreground/40 bg-muted text-muted-foreground',
+  'In Review': 'border-purple-500/40 bg-purple-500/10 text-purple-700 dark:text-purple-400',
+}
+
+function JiraDetailCard({ issueKey, annotations }: { issueKey: string; annotations: Record<string, string> }) {
+  const summary = annotations[WORK_JIRA_SUMMARY] ?? null
+  const status = annotations[WORK_JIRA_STATUS] ?? null
+  const prRef = annotations[WORK_GITHUB_PR] ?? null
+  const prUrl = annotations[WORK_GITHUB_PR_URL] ?? null
+
+  return (
+    <div className="flex max-w-[320px] flex-col gap-2">
+      {/* Title: issue key + summary */}
+      <div className="flex flex-col gap-0.5">
+        <span className="font-mono text-xs text-muted-foreground">{issueKey}</span>
+        {summary && (
+          <span className="text-sm font-semibold leading-snug">{summary}</span>
+        )}
+      </div>
+
+      {/* Status badge */}
+      {status && (
+        <div>
+          <Badge
+            variant="outline"
+            className={cn('text-xs', JIRA_STATUS_CLASSES[status] ?? JIRA_STATUS_CLASSES['To Do'])}
+          >
+            {status}
+          </Badge>
+        </div>
+      )}
+
+      {/* PR reference */}
+      {prRef && (
+        <div className="flex items-center gap-1.5">
+          {prUrl ? (
+            <a
+              href={prUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex hover:opacity-80"
+            >
+              <Badge variant="outline" className="gap-1 font-mono text-xs">
+                <GitPullRequest className="size-3 shrink-0" />
+                {prRef}
+              </Badge>
+            </a>
+          ) : (
+            <Badge variant="outline" className="gap-1 font-mono text-xs">
+              <GitPullRequest className="size-3 shrink-0" />
+              {prRef}
+            </Badge>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function JiraChip({ issueKey, url, annotations }: JiraChipProps) {
+  const chip = (
     <Badge variant="outline" className="gap-1 font-mono text-xs">
       <Ticket className="size-3 shrink-0" />
       {issueKey}
     </Badge>
   )
 
-  if (url) {
-    return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex hover:opacity-80"
-      >
-        {content}
-      </a>
-    )
+  const linked = url ? (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex hover:opacity-80"
+    >
+      {chip}
+    </a>
+  ) : (
+    chip
+  )
+
+  if (!annotations) {
+    return linked
   }
 
-  return content
+  return (
+    <HoverCard>
+      <HoverCardTrigger asChild>{linked}</HoverCardTrigger>
+      <HoverCardContent className="w-auto max-w-[320px]">
+        <JiraDetailCard issueKey={issueKey} annotations={annotations} />
+      </HoverCardContent>
+    </HoverCard>
+  )
 }
 
 /* ------------------------------------------------------------------ */

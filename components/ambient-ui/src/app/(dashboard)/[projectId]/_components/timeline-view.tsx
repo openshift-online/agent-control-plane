@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { PhaseBadge } from '../sessions/_components/phase-badge'
 import { cn } from '@/lib/utils'
 import { formatPreciseDuration } from '@/lib/format-timestamp'
@@ -848,33 +849,48 @@ function ZoomControls({
 }) {
   return (
     <div className="flex items-center gap-1">
-      <button
-        type="button"
-        onClick={onZoomOut}
-        disabled={zoom <= MIN_ZOOM}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
-        aria-label="Zoom out"
-      >
-        <Minus className="size-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={onReset}
-        disabled={zoom === 1}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
-        aria-label="Reset zoom"
-      >
-        <RotateCcw className="size-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={onZoomIn}
-        disabled={zoom >= MAX_ZOOM}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
-        aria-label="Zoom in"
-      >
-        <Plus className="size-3.5" />
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onZoomOut}
+            disabled={zoom <= MIN_ZOOM}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
+            aria-label="Zoom out"
+          >
+            <Minus className="size-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Zoom out</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onReset}
+            disabled={zoom === 1}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
+            aria-label="Reset zoom"
+          >
+            <RotateCcw className="size-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Reset zoom</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onZoomIn}
+            disabled={zoom >= MAX_ZOOM}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
+            aria-label="Zoom in"
+          >
+            <Plus className="size-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Zoom in</TooltipContent>
+      </Tooltip>
       <span className={cn('ml-1 font-mono text-xs text-muted-foreground', zoom <= 1 && 'invisible')}>{Math.round(zoom * 100)}%</span>
     </div>
   )
