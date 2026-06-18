@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import {
   ChevronRight,
@@ -170,15 +170,22 @@ function buildTimeRange(sessions: DomainSession[]): TimeRange {
   return { start: startDate, end: now }
 }
 
-function buildHourLabels(timeRange: TimeRange): { label: string; pct: number }[] {
+function buildHourLabels(timeRange: TimeRange, zoom = 1): { label: string; pct: number }[] {
   const labels: { label: string; pct: number }[] = []
   const totalMs = timeRange.end.getTime() - timeRange.start.getTime()
   if (totalMs <= 0) return labels
 
+  const visibleMs = totalMs / zoom
+  let intervalMin: number
+  if (visibleMs <= 30 * 60_000) intervalMin = 5
+  else if (visibleMs <= 2 * 3600_000) intervalMin = 15
+  else if (visibleMs <= 6 * 3600_000) intervalMin = 30
+  else intervalMin = 60
+
   const cursor = new Date(timeRange.start)
   cursor.setMinutes(0, 0, 0)
   if (cursor < timeRange.start) {
-    cursor.setHours(cursor.getHours() + 1)
+    cursor.setTime(cursor.getTime() + intervalMin * 60_000)
   }
 
   while (cursor.getTime() <= timeRange.end.getTime()) {
@@ -187,7 +194,7 @@ function buildHourLabels(timeRange: TimeRange): { label: string; pct: number }[]
       label: cursor.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
       pct,
     })
-    cursor.setHours(cursor.getHours() + 1)
+    cursor.setTime(cursor.getTime() + intervalMin * 60_000)
   }
 
   return labels
@@ -800,10 +807,46 @@ function TimelineGridLines({
 // Main component
 // ---------------------------------------------------------------------------
 
+const MIN_ZOOM = 1
+const MAX_ZOOM = 20
+const ZOOM_STEP = 1.15
+
 export function TimelineView({ sessions, projectId, agentNames }: TimelineViewProps) {
+  const [zoom, setZoom] = useState(1)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
   const timeRange = useMemo(() => buildTimeRange(sessions), [sessions])
-  const hourLabels = useMemo(() => buildHourLabels(timeRange), [timeRange])
+  const hourLabels = useMemo(() => buildHourLabels(timeRange, zoom), [timeRange, zoom])
   const groups = useMemo(() => buildGroups(sessions, agentNames), [sessions, agentNames])
+
+  const handleWheel = useCallback(
+    (e: React.WheelEvent<HTMLDivElement>) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      const container = scrollRef.current
+      if (!container) return
+
+      const rect = container.getBoundingClientRect()
+      const labelWidth = 130
+      const cursorX = e.clientX - rect.left - labelWidth
+      const laneWidth = rect.width - labelWidth
+      if (laneWidth <= 0) return
+
+      const scrollLeftBefore = container.scrollLeft
+      const cursorFrac = (scrollLeftBefore + cursorX) / (laneWidth * zoom)
+
+      const direction = e.deltaY < 0 ? 1 : -1
+      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * (direction > 0 ? ZOOM_STEP : 1 / ZOOM_STEP)))
+      setZoom(newZoom)
+
+      requestAnimationFrame(() => {
+        if (!container) return
+        const newScrollLeft = cursorFrac * laneWidth * newZoom - cursorX
+        container.scrollLeft = Math.max(0, newScrollLeft)
+      })
+    },
+    [zoom],
+  )
 
   if (sessions.length === 0) {
     return (
@@ -813,16 +856,39 @@ export function TimelineView({ sessions, projectId, agentNames }: TimelineViewPr
     )
   }
 
+  const isZoomed = zoom > 1
+
   return (
     <div>
-      <TimelineLegend />
+      <div className="mb-2 flex items-center justify-between">
+        <TimelineLegend />
+        {isZoomed && (
+          <button
+            type="button"
+            onClick={() => setZoom(1)}
+            className="shrink-0 rounded-md border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            Reset zoom
+          </button>
+        )}
+      </div>
+      {!isZoomed && (
+        <p className="mb-1 text-[0.625rem] text-muted-foreground">
+          Hold {typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform) ? '⌘' : 'Ctrl'} + scroll to zoom
+        </p>
+      )}
       <div
         className="overflow-hidden rounded-lg border bg-card"
         role="region"
         aria-label="Gantt-style timeline of sessions"
       >
-      {/* Vertical scroll only — no horizontal scroll; bars scale to fit */}
-      <div className="max-h-[420px] overflow-y-auto overflow-x-hidden">
+      <div
+        ref={scrollRef}
+        className={cn('max-h-[420px] overflow-y-auto', isZoomed ? 'overflow-x-auto' : 'overflow-x-hidden')}
+        onWheel={handleWheel}
+      >
+        {/* Inner content stretches horizontally with zoom */}
+        <div style={{ width: `${zoom * 100}%`, minWidth: '100%' }}>
         {/* Sticky time-axis header */}
         <div className="sticky top-0 z-10 flex border-b border-border bg-card">
           <div className="w-[130px] shrink-0 border-r border-border" />
@@ -855,6 +921,7 @@ export function TimelineView({ sessions, projectId, agentNames }: TimelineViewPr
             />
           </div>
         ))}
+        </div>
       </div>
       </div>
     </div>
