@@ -13,12 +13,15 @@ import {
   Minus,
   RotateCcw,
   Clock,
+  Bot,
+  AlertCircle,
 } from 'lucide-react'
 import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from '@/components/ui/hover-card'
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  PopoverArrow,
+} from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -38,6 +41,8 @@ import {
   WORK_GITHUB_PR,
   WORK_GITHUB_PR_URL,
   LEGACY_JIRA_ISSUE,
+  AGENT_STATUS,
+  AGENT_STATUS_CRITICALITY,
   parseWorkPhases,
 } from '@/domain/work-annotations'
 import type { WorkPhase } from '@/domain/work-annotations'
@@ -357,7 +362,7 @@ function PopoverMessages({ sessionId, isRunning }: { sessionId: string; isRunnin
     if (!data?.items) return []
     return data.items
       .filter((m) => m.eventType !== 'system' && m.eventType !== 'user_feedback')
-      .slice(-5)
+      .slice(-3)
       .reverse()
   }, [data])
 
@@ -368,7 +373,7 @@ function PopoverMessages({ sessionId, isRunning }: { sessionId: string; isRunnin
       <p className="mb-1 text-[0.625rem] font-bold uppercase tracking-wider text-muted-foreground">
         Recent Activity
       </p>
-      <div className="flex max-h-[120px] flex-col gap-1 overflow-y-auto">
+      <div className="flex max-h-[100px] flex-col gap-1 overflow-y-auto">
         {messages.map((msg) => {
           const badge = EVENT_BADGE_STYLES[msg.eventType] ?? EVENT_BADGE_STYLES.text
           const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -444,49 +449,57 @@ function TimelinePopover({
 
   const workPhases = parseWorkPhases(session.annotations)
   const currentWorkPhase = workPhases.length > 0 ? workPhases[workPhases.length - 1].phase : null
+  const topBorderColor = currentWorkPhase
+    ? WORK_PHASE_COLORS[currentWorkPhase]
+    : SESSION_PHASE_COLORS[session.phase] ?? SESSION_PHASE_COLORS.Pending
+
+  const blockedStatus = session.annotations[AGENT_STATUS] ?? null
+  const blockedCriticality = session.annotations[AGENT_STATUS_CRITICALITY] ?? null
+  const isBlocked = blockedCriticality === 'critical' && !!blockedStatus
+
+  const phaseLabel = currentWorkPhase
+    ? `${currentWorkPhase.charAt(0).toUpperCase() + currentWorkPhase.slice(1)} · ${duration}`
+    : `${session.phase} · ${duration}`
 
   return (
-    <div className="w-80 space-y-2">
+    <div className="w-80 overflow-hidden rounded-md" style={{ borderTop: `5px solid ${topBorderColor}` }}>
+      {/* Title row */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          {jiraKey && (
-            <span className="mb-0.5 block font-mono text-xs font-semibold text-muted-foreground">
-              {jiraKey}
-            </span>
-          )}
           <p className="text-sm font-bold leading-snug">
             {jiraSummary ?? session.name}
           </p>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <PhaseBadge phase={session.phase} />
-          {currentWorkPhase && (
-            <span
-              className="inline-block rounded px-1.5 py-0.5 text-[0.625rem] font-bold capitalize text-white"
-              style={{ backgroundColor: WORK_PHASE_COLORS[currentWorkPhase] }}
-            >
-              {currentWorkPhase}
-            </span>
-          )}
+        <PhaseBadge phase={session.phase} />
+      </div>
+
+      {/* Blocked/attention banner */}
+      {isBlocked && (
+        <div className="mt-1.5 flex items-start gap-1.5 rounded bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+          <span className="font-medium">{blockedStatus}</span>
         </div>
+      )}
+
+      {/* Agent + phase status line */}
+      <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Bot className="size-3.5 shrink-0" />
+        <span className="font-medium text-foreground">{displayAgent}</span>
       </div>
 
-      <div>
-        <Link
-          href={`/${projectId}/sessions/${session.id}`}
-          className="text-sm font-bold text-primary hover:underline"
-        >
-          {displayAgent}
-        </Link>
+      {/* Phase + time */}
+      <div className="mt-1 font-mono text-xs" style={{ color: topBorderColor }}>
+        {phaseLabel}
+      </div>
+      <div className="font-mono text-[0.625rem] text-muted-foreground">
+        {startLabel} – {endLabel}
       </div>
 
-      <div className="font-mono text-xs text-muted-foreground">
-        {startLabel} – {endLabel} ({duration})
-      </div>
+      {/* Activity feed (only for running sessions) */}
+      {isRunning && <PopoverMessages sessionId={session.id} isRunning />}
 
-      <PopoverMessages sessionId={session.id} isRunning={isRunning} />
-
-      <div className="flex items-center justify-between gap-2 border-t pt-2">
+      {/* Footer */}
+      <div className="mt-2 flex items-center justify-between gap-2 border-t pt-2">
         <div className="flex items-center gap-3">
           {jiraKey && (
             jiraUrl ? (
@@ -528,7 +541,7 @@ function TimelinePopover({
         </div>
         <Link
           href={`/${projectId}/sessions/${session.id}`}
-          className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-primary hover:underline"
+          className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 px-2 py-1 text-xs font-bold text-primary hover:bg-primary/20"
         >
           View Session →
         </Link>
@@ -589,10 +602,29 @@ function TimelineBar({
   const fallbackColor = SESSION_PHASE_COLORS[session.phase] ?? SESSION_PHASE_COLORS.Pending
   const hasSegments = segments !== null && segments.length > 0
 
+  const [popoverOpen, setPopoverOpen] = useState(false)
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const openPopover = useCallback(() => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    hoverTimerRef.current = setTimeout(() => setPopoverOpen(true), 120)
+  }, [])
+  const closePopover = useCallback(() => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+    closeTimerRef.current = setTimeout(() => setPopoverOpen(false), 250)
+  }, [])
+  const keepOpen = useCallback(() => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+  }, [])
+
   return (
-    <HoverCard openDelay={120} closeDelay={200}>
-      <HoverCardTrigger asChild>
+    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+      <PopoverTrigger asChild>
         <button
+          onMouseEnter={openPopover}
+          onMouseLeave={closePopover}
+          onFocus={() => setPopoverOpen(true)}
           type="button"
           className={cn(
             'absolute top-1 bottom-1 flex overflow-hidden rounded-sm transition-shadow',
@@ -638,12 +670,18 @@ function TimelineBar({
             <span className="absolute right-0 top-0 bottom-0 w-[3px]" style={{ backgroundColor: 'rgb(239 68 68)' }} />
           )}
         </button>
-      </HoverCardTrigger>
-      <HoverCardContent
+      </PopoverTrigger>
+      <PopoverContent
         className="w-auto p-3"
         side="top"
         sideOffset={8}
+        collisionPadding={16}
+        onMouseEnter={keepOpen}
+        onMouseLeave={closePopover}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => e.preventDefault()}
       >
+        <PopoverArrow className="fill-popover" />
         <TimelinePopover
           session={session}
           projectId={projectId}
@@ -652,8 +690,8 @@ function TimelineBar({
           jiraUrl={jiraUrl}
           agentNames={agentNames}
         />
-      </HoverCardContent>
-    </HoverCard>
+      </PopoverContent>
+    </Popover>
   )
 }
 
