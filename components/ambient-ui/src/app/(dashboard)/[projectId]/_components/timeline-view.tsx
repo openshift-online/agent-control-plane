@@ -226,8 +226,9 @@ function buildHourLabels(timeRange: TimeRange, zoom = 1): { label: string; pct: 
 
   while (cursor.getTime() <= timeRange.end.getTime() && labels.length < maxLabels * zoom) {
     const pct = ((cursor.getTime() - timeRange.start.getTime()) / totalMs) * 100
+    const raw = cursor.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     labels.push({
-      label: cursor.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+      label: raw.replace(/\s?(AM|PM)/i, '$1'),
       pct,
     })
     cursor.setTime(cursor.getTime() + intervalMs)
