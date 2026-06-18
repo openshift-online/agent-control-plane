@@ -31,7 +31,7 @@ Agents SHALL report work item status by writing annotations to their own session
 | `work.acp.io/github/pr-status` | `"open"` | PR state: `open`, `closed`, `merged`, `draft` |
 | `work.acp.io/github/pr-checks` | `"passing"` | CI check rollup: `passing`, `failing`, `pending` |
 | `work.acp.io/github/pr-review` | `"approved"` | Review state: `approved`, `changes-requested`, `pending`, `none` |
-| `work.acp.io/phases` | `[{"phase":"implementing","start":"..."}]` | JSON array of work lifecycle phase transitions. Valid phases: `implementing`, `reviewing`, `testing`, `deploying`. Agents append entries; the UI renders multi-segment timeline bars from this data. |
+| `work.acp.io/phases` | `[{"phase":"implementing","start":"..."}]` | JSON array of work lifecycle phase transitions. Valid phases: `implementing`, `reviewing`, `testing`, `deploying`, `complete`. Agents append entries (read-append-write); the UI renders multi-segment timeline bars from this data. Timestamps MUST be accurate UTC — agents should use `date -u +%Y-%m-%dT%H:%M:%SZ` before each write. |
 | `agent.acp.io/status` | `"Blocked: Upstream PR not merged"` | Free-text status label for the Needs You queue |
 | `agent.acp.io/status-criticality` | `"critical"` | Criticality: `critical`, `warning`, `info`. Drives sort, color, icon |
 
@@ -119,7 +119,7 @@ Both views share the same summary bar and notification bell.
 All tabular sections (Needs You, Running, Completed detail) SHALL use a single shared grid template so the eye can build one scanning pattern across the entire dashboard. The grid columns SHALL be:
 
 1. **Status stripe** (4px) — left border colored by criticality/state, transparent when neutral
-2. **Status cell** (~120-148px) — severity label+icon (Needs You), phase pill (Running), result badge (Completed)
+2. **Status cell** (~160-240px) — severity label+icon with line-clamp-2 (Needs You), phase pill (Running), result badge (Completed)
 3. **Issue + summary** (flex) — Jira key + description text, consistent position across all sections
 4. **PR** (72px) — PR reference in mono
 5. **Agent** (~110px) — clickable agent name link
@@ -344,16 +344,27 @@ The Timeline view SHALL display a horizontal Gantt-style chart with sessions as 
 
 **Collapsing:** All groups SHALL default to collapsed (all bars stacked in one lane). Clicking a group header expands it to show individual agent sub-lanes.
 
-**Phase segments:** Each bar SHALL be divided into segments colored by lifecycle phase (implementing, reviewing, testing, deploying). Bar patterns distinguish status: solid = completed, open right edge with pulse = running, diagonal hatching = blocked, danger-colored = failed.
+**Phase segments:** Each bar SHALL be divided into segments colored by lifecycle phase from `work.acp.io/phases`. Phase colors: implementing=#0066cc, reviewing=#6753ac, testing=#009596, deploying=#63993d, complete=#3d8c40. Colorblind-safe patterns distinguish reviewing (diagonal stripes), testing (dots), and deploying (vertical stripes). Sessions without phases use a single color based on session phase (Running=green, Completed=blue, Failed=red). Bar patterns distinguish status: solid = completed, open right edge with gradient pulse = running, diagonal hatching = blocked, red right-edge stripe = failed.
 
-**Fit to screen:** The timeline SHALL auto-scale to fit the viewport width without horizontal scrolling. The "now" marker SHALL be visible at the right edge.
+**Phase segment clamping:** When a time window is selected, segments SHALL be clamped to the visible range — phases that ended before the window start are hidden, and the visible portion of each phase is proportional to its duration within the window.
 
-**Hover popover:** Hovering a bar SHALL show a rich popover with:
-- Jira key + summary as a title (with phase badge top-right)
-- Agent name as a clickable session link
+**Fit to screen:** The timeline SHALL auto-scale to fit the viewport width without horizontal scrolling at default zoom. The "now" marker SHALL be visible at the right edge.
+
+**Zoom:** Users can zoom into the timeline via Ctrl/⌘ + scroll wheel, or +/− buttons. Zooming scales only the lane area — the label column stays fixed width via `position: sticky`. A "Reset" button returns to 1× zoom. The current zoom level is shown as a percentage.
+
+**Time window:** A dropdown selector provides preset time windows: Auto (fit all sessions), Last 5m, 15m, 30m, 1h, 6h, 12h, 24h. Selecting a preset overrides the auto-computed time range.
+
+**Legend:** Two rows above the chart: (1) phase color swatches (Implementing, Reviewing, Testing, Deploying, Complete), (2) bar pattern swatches (Completed multi-segment, Running pulse, Failed, Blocked hatched).
+
+**Hover popover:** Hovering a bar SHALL show a rich popover (controlled Popover with hover open/close behavior, 120ms open delay, 250ms close delay). The popover includes:
+- 5px colored top border matching the current work phase
+- Session summary as title, with session phase badge and tinted work phase pill
+- Blocked/attention banner (red) when `agent.acp.io/status-criticality` is `critical`
+- Agent name as a clickable link to the agent definition page
 - Time range and duration
-- Jira and PR links in a footer (bottom-left), "View Session →" (bottom-right)
-- Recent session messages with live streaming indicator for running sessions
+- Recent session messages (3 most recent) with typing indicator for running sessions (skipped for terminal sessions)
+- Footer: Jira and PR links (left), "View Session" button that opens the chat sidebar (right)
+- Popover arrow connecting card to bar
 
 **Keyboard accessible:** Bars SHALL be keyboard-focusable. Focus SHALL open the popover. Escape SHALL dismiss it and return focus.
 
@@ -402,6 +413,36 @@ Stale sessions SHALL display an amber "Stale" indicator with a tooltip explainin
 - WHEN the Dashboard renders
 - THEN the session appears in the Attention section (not the Blocked section)
 - AND the badge displays the raw value
+
+### Requirement: Work Lifecycle Phases
+
+Agents SHALL report their work lifecycle progression via the `work.acp.io/phases` annotation — a JSON-encoded array of phase transition objects, each with a `phase` name and an ISO 8601 UTC `start` timestamp.
+
+**Valid phases:** `implementing`, `reviewing`, `testing`, `deploying`, `complete`
+
+**Convention:** Agents MUST use `date -u +%Y-%m-%dT%H:%M:%SZ` to obtain accurate timestamps before each write. Agents MUST read the current annotation value, parse the array, append the new entry, and write the full array back. Overwriting with a single entry discards transition history.
+
+The dashboard timeline renders these phases as multi-segment colored bars. When no phases annotation is present, bars fall back to a single color based on session infrastructure phase.
+
+In-flight work cards SHALL exclude sessions where `work.acp.io/jira/status` is a terminal status (e.g., `"Done"`), even if the session is still Running.
+
+#### Scenario: Agent reports phase transitions
+
+- GIVEN an agent starts implementing at 10:00 AM and transitions to reviewing at 10:30 AM
+- WHEN the timeline renders
+- THEN the bar shows a blue (implementing) segment from 10:00–10:30 and a purple (reviewing) segment from 10:30 onward
+
+#### Scenario: Completed work
+
+- GIVEN an agent appends `{"phase":"complete","start":"..."}` to the phases array
+- WHEN the timeline renders
+- THEN the bar shows a dark green (complete) segment at the end
+
+#### Scenario: No phases annotation (fallback)
+
+- GIVEN a session with no `work.acp.io/phases` annotation
+- WHEN the timeline renders
+- THEN the bar is a single color based on session phase (green for Running, blue for Completed, etc.)
 
 ### Requirement: Work View Integration
 
