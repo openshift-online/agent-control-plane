@@ -37,3 +37,6 @@ images:
 - name: quay.io/ambient_code/acp_ambient_ui
   newName: localhost/acp_ambient_ui
   newTag: latest
+- name: quay.io/ambient_code/acp_control_plane
+  newName: localhost/acp_control_plane
+  newTag: latest

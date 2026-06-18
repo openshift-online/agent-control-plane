@@ -944,11 +944,11 @@ kind-port-forward: check-kubectl check-local-context ## Port-forward kind servic
 	@echo ""
 	@echo "$(COLOR_YELLOW)Press Ctrl+C to stop$(COLOR_RESET)"
 	@echo ""
-	@trap 'echo ""; echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port forwarding stopped"; exit 0' INT; \
-	(kubectl port-forward -n ambient-code svc/ambient-ui-service $(KIND_FWD_FRONTEND_PORT):3000 >/dev/null 2>&1 &); \
-	(kubectl port-forward -n ambient-code svc/ambient-api-server $(KIND_FWD_BACKEND_PORT):8000 >/dev/null 2>&1 &); \
-	(kubectl port-forward -n ambient-code svc/ambient-ui-service $(KIND_FWD_AMBIENT_UI_PORT):3000 >/dev/null 2>&1 &); \
-	(kubectl port-forward -n ambient-code svc/keycloak-service $(KIND_FWD_KEYCLOAK_PORT):8080 >/dev/null 2>&1 &); \
+	@trap 'echo ""; echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port forwarding stopped"; kill 0; exit 0' INT TERM; \
+	kubectl port-forward -n ambient-code svc/ambient-ui-service $(KIND_FWD_FRONTEND_PORT):3000 >/dev/null 2>&1 & \
+	kubectl port-forward -n ambient-code svc/ambient-api-server $(KIND_FWD_BACKEND_PORT):8000 >/dev/null 2>&1 & \
+	kubectl port-forward -n ambient-code svc/ambient-ui-service $(KIND_FWD_AMBIENT_UI_PORT):3000 >/dev/null 2>&1 & \
+	kubectl port-forward -n ambient-code svc/keycloak-service $(KIND_FWD_KEYCLOAK_PORT):8080 >/dev/null 2>&1 & \
 	wait
 
 dev-bootstrap: check-kubectl check-local-context ## Bootstrap developer workspace with API key and integrations
