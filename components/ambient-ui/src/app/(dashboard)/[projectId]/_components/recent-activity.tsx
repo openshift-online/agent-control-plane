@@ -1,17 +1,18 @@
 import Link from 'next/link'
-import { ExternalLink, Ticket, GitPullRequest } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { PhaseBadge } from '../sessions/_components/phase-badge'
+import { JiraChip, PrChip, ExternalLinks } from './row-grammar'
 import { formatPreciseDuration, formatRelativeTime } from '@/lib/format-timestamp'
 import {
   ROW_GRID_TEMPLATE,
   WORK_GITHUB_PR_URL,
+  resolveAgentName,
   type CompletionItem,
 } from '@/domain/work-annotations'
 
 type RecentActivityProps = {
   items: CompletionItem[]
   projectId: string
+  agentNames?: Map<string, string>
 }
 
 const RESULT_CONFIG = {
@@ -26,65 +27,7 @@ const STATUS_STRIPE_COLOR: Record<CompletionItem['result'], string> = {
   stopped: 'bg-muted-foreground',
 }
 
-function JiraChip({ issueKey, url }: { issueKey: string; url: string | null }) {
-  const content = (
-    <>
-      <Ticket className="size-3 shrink-0" />
-      <span className="font-mono text-xs">{issueKey}</span>
-    </>
-  )
-
-  if (url) {
-    return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-link hover:text-link-hover hover:bg-accent transition-colors"
-      >
-        {content}
-      </a>
-    )
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-muted-foreground">
-      {content}
-    </span>
-  )
-}
-
-function PrChip({ prRef, url }: { prRef: string; url: string | null }) {
-  const shortRef = prRef.includes('#') ? `#${prRef.split('#').pop()}` : prRef
-
-  const content = (
-    <>
-      <GitPullRequest className="size-3 shrink-0" />
-      <span className="font-mono text-xs">{shortRef}</span>
-    </>
-  )
-
-  if (url) {
-    return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-link hover:text-link-hover hover:bg-accent transition-colors"
-      >
-        {content}
-      </a>
-    )
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-muted-foreground">
-      {content}
-    </span>
-  )
-}
-
-export function RecentActivity({ items, projectId }: RecentActivityProps) {
+export function RecentActivity({ items, projectId, agentNames }: RecentActivityProps) {
   if (items.length === 0) {
     return (
       <div>
@@ -167,16 +110,18 @@ export function RecentActivity({ items, projectId }: RecentActivityProps) {
                 </div>
 
                 {/* Agent */}
-                <div className="hidden @md:block">
-                  {session.agentName ? (
+                <div className="hidden min-w-0 overflow-hidden @md:block">
+                  {session.agentId ? (
                     <Link
-                      href={`/${projectId}/sessions?agent=${encodeURIComponent(session.agentName)}`}
+                      href={`/${projectId}/agents/${session.agentId}`}
                       className="truncate text-xs text-link hover:text-link-hover"
                     >
-                      {session.agentName}
+                      {resolveAgentName(session, agentNames)}
                     </Link>
                   ) : (
-                    <span className="text-xs text-muted-foreground">&mdash;</span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {resolveAgentName(session, agentNames)}
+                    </span>
                   )}
                 </div>
 
@@ -189,30 +134,7 @@ export function RecentActivity({ items, projectId }: RecentActivityProps) {
                 <div />
 
                 {/* Links */}
-                <div className="hidden @md:flex items-center gap-1">
-                  {ref?.url ? (
-                    <a
-                      href={ref.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded-sm p-1 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                      title={`Open ${ref.key} in Jira`}
-                    >
-                      <Ticket className="size-3.5" />
-                    </a>
-                  ) : null}
-                  {prUrl ? (
-                    <a
-                      href={prUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded-sm p-1 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                      title={`Open ${prRef} on GitHub`}
-                    >
-                      <ExternalLink className="size-3.5" />
-                    </a>
-                  ) : null}
-                </div>
+                <ExternalLinks jiraUrl={ref?.url} prUrl={prUrl} />
               </li>
             )
           })}

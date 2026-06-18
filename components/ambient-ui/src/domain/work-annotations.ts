@@ -307,6 +307,15 @@ export function getCompletionItems(sessions: DomainSession[]): CompletionItem[] 
     })
 }
 
+export function resolveAgentName(
+  session: DomainSession,
+  agentNames?: Map<string, string>,
+): string {
+  if (session.agentName) return session.agentName
+  if (session.agentId && agentNames?.has(session.agentId)) return agentNames.get(session.agentId) ?? session.name
+  return session.name
+}
+
 export function isStale(session: DomainSession): boolean {
   if (session.phase !== 'Running') return false
   const elapsed = Date.now() - new Date(session.updatedAt).getTime()

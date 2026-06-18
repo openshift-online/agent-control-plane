@@ -5,7 +5,6 @@ import Link from 'next/link'
 import {
   ChevronRight,
   ChevronDown,
-  ExternalLink,
   Ticket,
   GitPullRequest,
   X,
@@ -46,6 +45,7 @@ import {
   AGENT_STATUS,
   AGENT_STATUS_CRITICALITY,
   parseWorkPhases,
+  resolveAgentName,
 } from '@/domain/work-annotations'
 import type { WorkPhase } from '@/domain/work-annotations'
 import type { DomainSession, SessionPhase } from '@/domain/types'
@@ -245,12 +245,6 @@ function buildHourLabels(timeRange: TimeRange, zoom = 1): { label: string; pct: 
   return labels
 }
 
-function resolveAgentName(session: DomainSession, agentNames?: Map<string, string>): string {
-  if (session.agentName) return session.agentName
-  if (session.agentId && agentNames?.has(session.agentId)) return agentNames.get(session.agentId)!
-  return session.name
-}
-
 function buildGroups(sessions: DomainSession[], agentNames?: Map<string, string>): TimelineGroupData[] {
   const jiraMap = new Map<string, TimelineGroupData>()
   const ungrouped: TimelineGroupData[] = []
@@ -337,7 +331,7 @@ const LEGEND_BAR_STYLES: { label: string; style: React.CSSProperties }[] = [
     label: 'Blocked',
     style: {
       background: `repeating-linear-gradient(45deg, rgb(245 158 11), rgb(245 158 11) 3px, rgba(255,255,255,0.35) 3px, rgba(255,255,255,0.35) 6px)`,
-      border: '1px dashed rgba(0,0,0,0.2)',
+      border: '1px dashed hsl(var(--border))',
       borderRadius: '2px',
     },
   },
@@ -345,7 +339,7 @@ const LEGEND_BAR_STYLES: { label: string; style: React.CSSProperties }[] = [
 
 function TimelineLegend() {
   return (
-    <div className="mb-2 space-y-1.5">
+    <div className="space-y-1.5">
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         {LEGEND_WORK_PHASES.map((p) => (
           <div key={p.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -377,13 +371,13 @@ function TimelineLegend() {
 // ---------------------------------------------------------------------------
 
 const EVENT_BADGE_STYLES: Record<string, { className: string; label: string }> = {
-  tool_use: { className: 'bg-blue-100 text-blue-800', label: 'tool_call' },
-  tool_result: { className: 'bg-blue-100 text-blue-800', label: 'tool_result' },
-  assistant: { className: 'bg-violet-100 text-violet-800', label: 'text' },
-  text: { className: 'bg-violet-100 text-violet-800', label: 'text' },
-  error: { className: 'bg-red-100 text-red-800', label: 'error' },
-  user: { className: 'bg-gray-100 text-gray-800', label: 'user' },
-  lifecycle: { className: 'bg-gray-100 text-gray-600', label: 'lifecycle' },
+  tool_use: { className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300', label: 'tool_call' },
+  tool_result: { className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300', label: 'tool_result' },
+  assistant: { className: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300', label: 'text' },
+  text: { className: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300', label: 'text' },
+  error: { className: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300', label: 'error' },
+  user: { className: 'bg-gray-100 text-gray-800 dark:bg-gray-800/40 dark:text-gray-300', label: 'user' },
+  lifecycle: { className: 'bg-gray-100 text-gray-600 dark:bg-gray-800/40 dark:text-gray-400', label: 'lifecycle' },
 }
 
 function PopoverMessages({ sessionId, isRunning }: { sessionId: string; isRunning: boolean }) {
@@ -692,8 +686,8 @@ function TimelineBar({
 
   const isRunning = session.phase === 'Running'
   const isFailed = session.phase === 'Failed'
-  const isBlocked = session.annotations['agent.acp.io/status-criticality'] === 'critical' &&
-    !!session.annotations['agent.acp.io/status']
+  const isBlocked = session.annotations[AGENT_STATUS_CRITICALITY] === 'critical' &&
+    !!session.annotations[AGENT_STATUS]
   const fallbackColor = SESSION_PHASE_COLORS[session.phase] ?? SESSION_PHASE_COLORS.Pending
   const hasSegments = segments !== null && segments.length > 0
 
@@ -743,7 +737,7 @@ function TimelineBar({
             <span
               className="absolute right-0 top-0 bottom-0 w-2"
               style={{
-                background: `linear-gradient(to right, transparent, ${hasSegments ? WORK_PHASE_COLORS[segments![segments!.length - 1].phase] : fallbackColor})`,
+                background: `linear-gradient(to right, transparent, ${hasSegments ? WORK_PHASE_COLORS[segments[segments.length - 1]?.phase ?? 'implementing'] : fallbackColor})`,
                 animation: 'timeline-pulse 1.2s ease-in-out infinite',
               }}
             />
@@ -858,7 +852,7 @@ function ZoomControls({
         type="button"
         onClick={onZoomOut}
         disabled={zoom <= MIN_ZOOM}
-        className="rounded-md border p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
         aria-label="Zoom out"
       >
         <Minus className="size-3.5" />
@@ -867,7 +861,7 @@ function ZoomControls({
         type="button"
         onClick={onReset}
         disabled={zoom === 1}
-        className="rounded-md border p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
         aria-label="Reset zoom"
       >
         <RotateCcw className="size-3.5" />
@@ -876,14 +870,12 @@ function ZoomControls({
         type="button"
         onClick={onZoomIn}
         disabled={zoom >= MAX_ZOOM}
-        className="rounded-md border p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
         aria-label="Zoom in"
       >
         <Plus className="size-3.5" />
       </button>
-      {zoom > 1 && (
-        <span className="ml-1 font-mono text-xs text-muted-foreground">{Math.round(zoom * 100)}%</span>
-      )}
+      <span className={cn('ml-1 font-mono text-xs text-muted-foreground', zoom <= 1 && 'invisible')}>{Math.round(zoom * 100)}%</span>
     </div>
   )
 }
@@ -960,7 +952,7 @@ export function TimelineView({ sessions, projectId, agentNames }: TimelineViewPr
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <TimelineLegend />
         <div className="flex items-center gap-2">
           <TimeWindowSelect value={timeWindow} onChange={setTimeWindow} />

@@ -9,6 +9,7 @@ import {
 import { formatRelativeTime } from '@/lib/format-timestamp'
 import {
   getWorkItemRef,
+  resolveAgentName,
   WORK_GITHUB_PR,
   WORK_GITHUB_PR_URL,
   WORK_JIRA_URL,
@@ -91,12 +92,6 @@ type NeedsYouRowProps = {
   agentNames?: Map<string, string>
 }
 
-function resolveAgentName(session: NeedsYouItem['session'], agentNames?: Map<string, string>): string {
-  if (session.agentName) return session.agentName
-  if (session.agentId && agentNames?.has(session.agentId)) return agentNames.get(session.agentId)!
-  return session.name
-}
-
 function NeedsYouRow({ item, projectId, agentNames }: NeedsYouRowProps) {
   const { session, statusText, criticality, waitingSince } = item
   const Icon = CRITICALITY_ICON[criticality]
@@ -141,12 +136,12 @@ function NeedsYouRow({ item, projectId, agentNames }: NeedsYouRowProps) {
         </div>
 
         {/* PR */}
-        <div className="hidden min-w-0 overflow-hidden md:block">
+        <div className="hidden min-w-0 overflow-hidden @md:block">
           {prRef ? <PrChip prRef={prRef} url={prUrl} /> : null}
         </div>
 
         {/* Agent */}
-        <div className="hidden min-w-0 overflow-hidden lg:block">
+        <div className="hidden min-w-0 overflow-hidden @lg:block">
           <AgentLink
             agentName={agentName}
             projectId={projectId}

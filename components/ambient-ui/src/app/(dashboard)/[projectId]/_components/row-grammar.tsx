@@ -58,11 +58,11 @@ export function RowHeader({ metaLabel }: RowHeaderProps) {
       <div />
       <div>Status</div>
       <div>Issue</div>
-      <div className="hidden md:block">PR</div>
-      <div className="hidden lg:block">Agent</div>
+      <div className="hidden @md:block">PR</div>
+      <div className="hidden @lg:block">Agent</div>
       <div>{metaLabel}</div>
       <div />
-      <div className="hidden lg:block" />
+      <div className="hidden @lg:block" />
     </RowGrid>
   )
 }
@@ -202,7 +202,7 @@ export function ExternalLinks({ jiraUrl, prUrl }: ExternalLinksProps) {
   }
 
   return (
-    <div className="hidden items-center gap-1 lg:flex">
+    <div className="hidden items-center gap-1 @lg:flex">
       {jiraUrl && (
         <Tooltip>
           <TooltipTrigger asChild>

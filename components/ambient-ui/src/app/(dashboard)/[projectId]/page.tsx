@@ -142,7 +142,7 @@ export default function DashboardPage() {
         <>
           <NeedsYouQueue items={needsYouItems} projectId={projectId} agentNames={agentNames} />
           <ActiveWorkSection cards={workItemCards} projectId={projectId} />
-          <RecentActivity items={recentItems} projectId={projectId} />
+          <RecentActivity items={recentItems} projectId={projectId} agentNames={agentNames} />
         </>
       ) : (
         <TimelineView sessions={sessions} projectId={projectId} agentNames={agentNames} />
