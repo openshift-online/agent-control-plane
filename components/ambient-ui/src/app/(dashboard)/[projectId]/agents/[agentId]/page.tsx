@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { History, FileCode } from 'lucide-react'
+import { History, FileCode, Tags } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAgent } from '@/queries/use-agents'
@@ -10,6 +10,7 @@ import { getAgentLifecycle } from '../_components/lifecycle-badge'
 import { AgentHeader } from './_components/agent-header'
 import { AgentManifestTab } from './_components/agent-manifest-tab'
 import { AgentSessionsTab } from './_components/agent-sessions-tab'
+import { AgentAnnotationsTab } from './_components/agent-annotations-tab'
 
 export default function AgentDetailPage() {
   const { projectId, agentId } = useParams<{ projectId: string; agentId: string }>()
@@ -58,12 +59,18 @@ export default function AgentDetailPage() {
           <TabsTrigger value="sessions">
             <History className="size-4 mr-1.5" /> Run History
           </TabsTrigger>
+          <TabsTrigger value="annotations">
+            <Tags className="size-4 mr-1.5" /> Annotations
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="manifest">
           <AgentManifestTab agent={agent} lifecycle={lifecycle} />
         </TabsContent>
         <TabsContent value="sessions">
           <AgentSessionsTab agentId={agentId} projectId={projectId} />
+        </TabsContent>
+        <TabsContent value="annotations">
+          <AgentAnnotationsTab agent={agent} />
         </TabsContent>
       </Tabs>
     </div>
