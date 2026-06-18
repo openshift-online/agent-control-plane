@@ -140,6 +140,7 @@ CRITICAL: Run `date -u +%Y-%m-%dT%H:%M:%SZ` before writing any phase transition.
 ### Needs You Queue
 
 Sessions appear in the Needs You queue when:
+
 - `agent.acp.io/status` is set (with criticality from `agent.acp.io/status-criticality`)
 - Session phase is `Failed` (auto-critical)
 - `agent.acp.io/needs-input` is set (auto-warning)
@@ -149,6 +150,7 @@ Items sort by criticality (critical → warning → info), then by wait time.
 ### In-Flight Work Cards
 
 Sessions appear as in-flight work when:
+
 - Session phase is `Running`, `Creating`, or `Pending`
 - `work.acp.io/jira/status` is NOT `"Done"` (terminal Jira statuses are excluded)
 
@@ -157,6 +159,7 @@ Cards group by Jira issue key. Multiple sessions on the same issue merge into on
 ### Timeline
 
 The Gantt timeline shows all sessions grouped by Jira issue. Bars render with:
+
 - Multi-segment colors from `work.acp.io/phases` (when present)
 - Single color from session phase (fallback)
 - Running pulse, failed stripe, blocked hatching as status indicators
