@@ -634,15 +634,6 @@ function TimelineBar({
 
   const segments = useMemo(() => computeSegments(session), [session])
 
-  if (!position) return null
-
-  const isRunning = session.phase === 'Running'
-  const isFailed = session.phase === 'Failed'
-  const isBlocked = session.annotations['agent.acp.io/status-criticality'] === 'critical' &&
-    !!session.annotations['agent.acp.io/status']
-  const fallbackColor = SESSION_PHASE_COLORS[session.phase] ?? SESSION_PHASE_COLORS.Pending
-  const hasSegments = segments !== null && segments.length > 0
-
   const [popoverOpen, setPopoverOpen] = useState(false)
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -664,6 +655,15 @@ function TimelineBar({
   const popoverBorderColor = currentWorkPhase
     ? WORK_PHASE_COLORS[currentWorkPhase]
     : SESSION_PHASE_COLORS[session.phase] ?? SESSION_PHASE_COLORS.Pending
+
+  if (!position) return null
+
+  const isRunning = session.phase === 'Running'
+  const isFailed = session.phase === 'Failed'
+  const isBlocked = session.annotations['agent.acp.io/status-criticality'] === 'critical' &&
+    !!session.annotations['agent.acp.io/status']
+  const fallbackColor = SESSION_PHASE_COLORS[session.phase] ?? SESSION_PHASE_COLORS.Pending
+  const hasSegments = segments !== null && segments.length > 0
 
   return (
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
