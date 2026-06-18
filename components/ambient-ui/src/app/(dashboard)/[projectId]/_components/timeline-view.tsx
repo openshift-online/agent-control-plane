@@ -224,13 +224,17 @@ function buildHourLabels(timeRange: TimeRange, zoom = 1): { label: string; pct: 
     cursor.setMinutes(cursor.getMinutes() + (intervalMin - remainder))
   }
 
+  const minPctGap = 6
   while (cursor.getTime() <= timeRange.end.getTime() && labels.length < maxLabels * zoom) {
     const pct = ((cursor.getTime() - timeRange.start.getTime()) / totalMs) * 100
-    const raw = cursor.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-    labels.push({
-      label: raw.replace(/\s?(AM|PM)/i, '$1'),
-      pct,
-    })
+    const prev = labels.length > 0 ? labels[labels.length - 1].pct : -minPctGap
+    if (pct - prev >= minPctGap) {
+      const raw = cursor.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      labels.push({
+        label: raw.replace(/\s?(AM|PM)/i, '$1'),
+        pct,
+      })
+    }
     cursor.setTime(cursor.getTime() + intervalMs)
   }
 
