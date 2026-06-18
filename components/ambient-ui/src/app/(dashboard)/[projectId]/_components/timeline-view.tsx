@@ -87,10 +87,10 @@ type TimelineGroupData = {
 
 const WORK_PHASE_COLORS: Record<WorkPhase, string> = {
   implementing: '#0066cc',
-  reviewing: '#6753ac',
-  testing: '#009596',
-  deploying: '#63993d',
-  complete: '#3d8c40',
+  reviewing: '#5e40be',
+  testing: '#37a3a3',
+  deploying: '#f5921b',
+  complete: '#63993d',
 }
 
 // Fallback colors for sessions without work.acp.io/phases
