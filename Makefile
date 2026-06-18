@@ -841,6 +841,9 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods..."
 	@cd e2e && ./scripts/wait-for-ready.sh
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring SSO..."
+	@NAMESPACE=$(NAMESPACE) KIND_FWD_AMBIENT_UI_PORT=$(KIND_FWD_AMBIENT_UI_PORT) KIND_FWD_KEYCLOAK_PORT=$(KIND_FWD_KEYCLOAK_PORT) \
+		./scripts/setup-kind-sso.sh
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Initializing MinIO..."
 	@cd e2e && ./scripts/init-minio.sh
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Extracting test token..."
@@ -865,8 +868,13 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 	@echo "  Run in another terminal: $(COLOR_BLUE)make kind-port-forward$(COLOR_RESET)"
 	@echo ""
 	@echo "  Then access:"
-	@echo "  Frontend: http://localhost:$(KIND_FWD_FRONTEND_PORT)"
+	@echo "  Frontend: http://localhost:$(KIND_FWD_AMBIENT_UI_PORT)"
 	@echo "  Backend:  http://localhost:$(KIND_FWD_BACKEND_PORT)"
+	@echo "  Keycloak: http://localhost:$(KIND_FWD_KEYCLOAK_PORT)"
+	@echo ""
+	@echo "$(COLOR_BOLD)Default SSO users:$(COLOR_RESET)"
+	@echo "  Developer: developer / developer (ambient-users group)"
+	@echo "  Admin:     admin / admin (ambient-users, ambient-admins groups)"
 	@echo ""
 	@echo "  Get test token: kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d"
 	@echo ""
@@ -918,10 +926,21 @@ kind-login: check-kubectl check-local-context ## Set kubectl context, port-forwa
 kind-port-forward: check-kubectl check-local-context ## Port-forward kind services (for remote Podman)
 	@echo "$(COLOR_BOLD)Port forwarding kind services ($(KIND_CLUSTER_NAME))$(COLOR_RESET)"
 	@echo ""
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring SSO for port-forwarded URLs..."
+	@NAMESPACE=$(NAMESPACE) KIND_FWD_AMBIENT_UI_PORT=$(KIND_FWD_AMBIENT_UI_PORT) KIND_FWD_KEYCLOAK_PORT=$(KIND_FWD_KEYCLOAK_PORT) \
+		./scripts/setup-kind-sso.sh
+	@kubectl rollout restart deployment/ambient-ui -n $(NAMESPACE) >/dev/null 2>&1
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for ambient-ui to be ready..."
+	@kubectl wait --for=condition=ready pod -l app=ambient-ui -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1
+	@echo ""
 	@echo "  Frontend:   http://localhost:$(KIND_FWD_FRONTEND_PORT)"
 	@echo "  Backend:    http://localhost:$(KIND_FWD_BACKEND_PORT)"
 	@echo "  Ambient UI: http://localhost:$(KIND_FWD_AMBIENT_UI_PORT)"
 	@echo "  Keycloak:   http://localhost:$(KIND_FWD_KEYCLOAK_PORT)"
+	@echo ""
+	@echo "$(COLOR_BOLD)Default SSO users:$(COLOR_RESET)"
+	@echo "  Developer: developer / developer"
+	@echo "  Admin:     admin / admin"
 	@echo ""
 	@echo "$(COLOR_YELLOW)Press Ctrl+C to stop$(COLOR_RESET)"
 	@echo ""
