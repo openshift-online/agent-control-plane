@@ -24,6 +24,10 @@ export const LEGACY_COST = 'ambient-code.io/cost/estimate'
 
 export type Criticality = 'critical' | 'warning' | 'info'
 
+export type JiraStatus = 'To Do' | 'In Progress' | 'In Review' | 'Done' | 'Blocked'
+
+export const JIRA_TERMINAL_STATUSES: ReadonlySet<string> = new Set<JiraStatus>(['Done'])
+
 export type WorkPhase = 'implementing' | 'reviewing' | 'testing' | 'deploying'
 
 export type WorkPhaseEntry = {
@@ -212,7 +216,7 @@ export function getNeedsYouItems(sessions: DomainSession[]): NeedsYouItem[] {
 
 export function getWorkItemCards(sessions: DomainSession[]): WorkItemCard[] {
   const activeSessions = sessions.filter(
-    (s) => ACTIVE_PHASES.has(s.phase) && s.annotations[WORK_JIRA_STATUS] !== 'Done',
+    (s) => ACTIVE_PHASES.has(s.phase) && !JIRA_TERMINAL_STATUSES.has(s.annotations[WORK_JIRA_STATUS] ?? ''),
   )
   const groupMap = new Map<string, WorkItemCard>()
 
