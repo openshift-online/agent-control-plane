@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useCallback, useRef } from 'react'
+import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import {
   ChevronRight,
@@ -9,6 +9,9 @@ import {
   Ticket,
   GitPullRequest,
   X,
+  Plus,
+  Minus,
+  RotateCcw,
 } from 'lucide-react'
 import {
   Popover,
@@ -636,56 +639,220 @@ function TimelineBar({
   )
 }
 
-function TimelineLane({
-  session,
-  projectId,
-  timeRange,
-  jiraKey,
-  jiraSummary,
-  jiraUrl,
-  label,
-  isSub,
-  agentNames,
+// Old TimelineLane, TimelineGroup, TimelineGridLines removed — replaced by
+// TimelineGroupRow and TimelineGroupCollapsible below the main component
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
+const MIN_ZOOM = 1
+const MAX_ZOOM = 20
+const ZOOM_STEP = 1.15
+
+function ZoomControls({
+  zoom,
+  onZoomIn,
+  onZoomOut,
+  onReset,
 }: {
-  session: DomainSession
-  projectId: string
-  timeRange: TimeRange
-  jiraKey: string | null
-  jiraSummary: string | null
-  jiraUrl: string | null
-  label: string
-  isSub: boolean
-  agentNames?: Map<string, string>
+  zoom: number
+  onZoomIn: () => void
+  onZoomOut: () => void
+  onReset: () => void
 }) {
   return (
-    <div className="flex border-b border-border last:border-b-0">
-      <div
-        className={cn(
-          'flex w-[130px] shrink-0 items-center overflow-hidden border-r border-border font-mono text-xs',
-          isSub
-            ? 'min-h-7 pl-7 pr-3 text-muted-foreground'
-            : 'min-h-8 px-3 text-foreground',
-        )}
-        title={label}
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={onZoomOut}
+        disabled={zoom <= MIN_ZOOM}
+        className="rounded-md border p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
+        aria-label="Zoom out"
       >
-        <span className="truncate">{label}</span>
+        <Minus className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={onReset}
+        disabled={zoom === 1}
+        className="rounded-md border p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
+        aria-label="Reset zoom"
+      >
+        <RotateCcw className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={onZoomIn}
+        disabled={zoom >= MAX_ZOOM}
+        className="rounded-md border p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30"
+        aria-label="Zoom in"
+      >
+        <Plus className="size-3.5" />
+      </button>
+      {zoom > 1 && (
+        <span className="ml-1 font-mono text-xs text-muted-foreground">{Math.round(zoom * 100)}%</span>
+      )}
+    </div>
+  )
+}
+
+export function TimelineView({ sessions, projectId, agentNames }: TimelineViewProps) {
+  const [zoom, setZoom] = useState(1)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const timeRange = useMemo(() => buildTimeRange(sessions), [sessions])
+  const hourLabels = useMemo(() => buildHourLabels(timeRange, zoom), [timeRange, zoom])
+  const groups = useMemo(() => buildGroups(sessions, agentNames), [sessions, agentNames])
+
+  const applyZoom = useCallback(
+    (newZoom: number, cursorXInContainer?: number) => {
+      const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, newZoom))
+      const el = scrollRef.current
+      if (el && cursorXInContainer !== undefined) {
+        const scrollBefore = el.scrollLeft
+        const viewWidth = el.clientWidth
+        const cursorFrac = (scrollBefore + cursorXInContainer) / (viewWidth * zoom)
+        setZoom(clamped)
+        requestAnimationFrame(() => {
+          el.scrollLeft = Math.max(0, cursorFrac * viewWidth * clamped - cursorXInContainer)
+        })
+      } else {
+        setZoom(clamped)
+      }
+    },
+    [zoom],
+  )
+
+  const handleZoomIn = useCallback(() => applyZoom(zoom * ZOOM_STEP), [zoom, applyZoom])
+  const handleZoomOut = useCallback(() => applyZoom(zoom / ZOOM_STEP), [zoom, applyZoom])
+  const handleReset = useCallback(() => {
+    setZoom(1)
+    if (scrollRef.current) scrollRef.current.scrollLeft = 0
+  }, [])
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      e.stopPropagation()
+      const rect = el.getBoundingClientRect()
+      const cursorX = e.clientX - rect.left
+      const direction = e.deltaY < 0 ? 1 : -1
+      const next = zoom * (direction > 0 ? ZOOM_STEP : 1 / ZOOM_STEP)
+      applyZoom(next, cursorX)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [zoom, applyZoom])
+
+  if (sessions.length === 0) {
+    return (
+      <div className="flex items-center justify-center rounded-lg border bg-card p-12 text-sm text-muted-foreground">
+        No sessions to display on the timeline
       </div>
-      <div className="relative min-h-8 flex-1">
-        <TimelineBar
-          session={session}
-          projectId={projectId}
-          timeRange={timeRange}
-          jiraKey={jiraKey}
-          jiraSummary={jiraSummary}
-          jiraUrl={jiraUrl}
-          agentNames={agentNames}
-        />
+    )
+  }
+
+  const LABEL_W = 130
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <TimelineLegend />
+        <ZoomControls zoom={zoom} onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onReset={handleReset} />
+      </div>
+      <div
+        ref={containerRef}
+        className="overflow-hidden rounded-lg border bg-card"
+        role="region"
+        aria-label="Gantt-style timeline of sessions"
+      >
+        {/*
+          Single scroll container: scrolls both X (zoom) and Y (many lanes).
+          Labels use position:sticky left:0 so they pin while lanes scroll.
+        */}
+        <div
+          ref={scrollRef}
+          className="max-h-[420px] overflow-auto"
+        >
+          <div style={{ width: zoom > 1 ? `calc(${LABEL_W}px + ${(zoom * 100)}%)` : '100%', minWidth: '100%' }}>
+
+            {/* Sticky time-axis header */}
+            <div className="sticky top-0 z-10 flex border-b border-border bg-card">
+              <div className="sticky left-0 z-[2] w-[130px] shrink-0 border-r border-border bg-card" />
+              <div className="relative min-h-7 flex-1">
+                {hourLabels.map((hl) => (
+                  <span
+                    key={hl.label}
+                    className="absolute -translate-x-1/2 select-none font-mono text-xs text-muted-foreground"
+                    style={{ left: `${hl.pct}%`, bottom: '4px' }}
+                  >
+                    {hl.label}
+                  </span>
+                ))}
+                <span
+                  className="absolute right-1 select-none font-mono text-xs font-bold text-destructive"
+                  style={{ bottom: '4px' }}
+                >
+                  Now
+                </span>
+              </div>
+            </div>
+
+            {/* Swim lanes */}
+            {groups.map((group) => (
+              <StickyLabelGroup
+                key={group.key}
+                group={group}
+                projectId={projectId}
+                timeRange={timeRange}
+                agentNames={agentNames}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-function TimelineGroup({
+// ---------------------------------------------------------------------------
+// Sticky-label lane components (labels pin left, bars scroll with zoom)
+// ---------------------------------------------------------------------------
+
+function StickyLabelLane({
+  label,
+  isSub,
+  children,
+}: {
+  label: string
+  isSub: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex border-b border-border last:border-b-0">
+      <div
+        className={cn(
+          'sticky left-0 z-[1] flex w-[130px] shrink-0 items-center overflow-hidden border-r border-border bg-card font-mono text-xs',
+          isSub ? 'pl-7 pr-3 text-muted-foreground' : 'px-3 text-foreground',
+        )}
+        style={{ minHeight: isSub ? 28 : 32 }}
+        title={label}
+      >
+        <span className="truncate">{label}</span>
+      </div>
+      <div className="relative flex-1" style={{ minHeight: isSub ? 28 : 32 }}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function StickyLabelGroup({
   group,
   projectId,
   timeRange,
@@ -697,233 +864,48 @@ function TimelineGroup({
   agentNames?: Map<string, string>
 }) {
   const [expanded, setExpanded] = useState(false)
-
   const toggle = useCallback(() => setExpanded((prev) => !prev), [])
 
-  // Single-session group without Jira: no collapse, just render the lane
   if (!group.isGroup) {
     const session = group.sessions[0]
     if (!session) return null
     return (
-      <TimelineLane
-        session={session}
-        projectId={projectId}
-        timeRange={timeRange}
-        jiraKey={null}
-        jiraSummary={null}
-        jiraUrl={null}
-        label={group.label}
-        isSub={false}
-      />
+      <StickyLabelLane label={group.label} isSub={false}>
+        <TimelineBar session={session} projectId={projectId} timeRange={timeRange} jiraKey={null} jiraSummary={null} jiraUrl={null} agentNames={agentNames} />
+      </StickyLabelLane>
     )
   }
 
   const ChevronIcon = expanded ? ChevronDown : ChevronRight
 
   return (
-    <div className="group/timeline-group">
-      {/* Group header with collapsed bars */}
+    <div>
+      {/* Group header row */}
       <div className="flex border-b border-border hover:bg-muted/50">
         <button
           type="button"
           onClick={toggle}
-          className="flex w-[130px] shrink-0 items-center gap-1 overflow-hidden border-r border-border px-2 font-mono text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="sticky left-0 z-[1] flex w-[130px] shrink-0 items-center gap-1 overflow-hidden border-r border-border bg-card px-2 font-mono text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          style={{ minHeight: 32 }}
           aria-expanded={expanded}
-          aria-label={`${group.label}: ${group.sessions.length} sessions, click to ${expanded ? 'collapse' : 'expand'}`}
+          aria-label={`${group.label}: ${group.sessions.length} sessions`}
         >
           <ChevronIcon className="size-3 shrink-0 text-muted-foreground" />
           <span className="truncate">{group.label}</span>
         </button>
-        <div className="relative min-h-8 flex-1">
-          {!expanded &&
-            group.sessions.map((session) => (
-              <TimelineBar
-                key={session.id}
-                session={session}
-                projectId={projectId}
-                timeRange={timeRange}
-                jiraKey={group.key}
-                jiraSummary={group.jiraSummary}
-                jiraUrl={group.jiraUrl}
-                agentNames={agentNames}
-              />
-            ))}
+        <div className="relative flex-1" style={{ minHeight: 32 }}>
+          {!expanded && group.sessions.map((session) => (
+            <TimelineBar key={session.id} session={session} projectId={projectId} timeRange={timeRange} jiraKey={group.key} jiraSummary={group.jiraSummary} jiraUrl={group.jiraUrl} agentNames={agentNames} />
+          ))}
         </div>
       </div>
 
       {/* Expanded sub-lanes */}
-      {expanded &&
-        group.sessions.map((session) => (
-          <TimelineLane
-            key={session.id}
-            session={session}
-            projectId={projectId}
-            timeRange={timeRange}
-            jiraKey={group.key}
-            jiraSummary={group.jiraSummary}
-            jiraUrl={group.jiraUrl}
-            label={resolveAgentName(session, agentNames)}
-            isSub
-            agentNames={agentNames}
-          />
-        ))}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Grid lines + "Now" marker
-// ---------------------------------------------------------------------------
-
-function TimelineGridLines({
-  timeRange,
-  hourLabels,
-}: {
-  timeRange: TimeRange
-  hourLabels: { label: string; pct: number }[]
-}) {
-  const totalMs = timeRange.end.getTime() - timeRange.start.getTime()
-  const nowPct = totalMs > 0 ? 100 : 0
-
-  return (
-    <>
-      {hourLabels.map((hl) => (
-        <div
-          key={hl.label}
-          className="pointer-events-none absolute top-0 bottom-0 border-l border-dashed border-border"
-          style={{ left: `${hl.pct}%` }}
-        />
+      {expanded && group.sessions.map((session) => (
+        <StickyLabelLane key={session.id} label={resolveAgentName(session, agentNames)} isSub>
+          <TimelineBar session={session} projectId={projectId} timeRange={timeRange} jiraKey={group.key} jiraSummary={group.jiraSummary} jiraUrl={group.jiraUrl} agentNames={agentNames} />
+        </StickyLabelLane>
       ))}
-      {/* "Now" marker */}
-      <div
-        className="pointer-events-none absolute top-0 bottom-0 z-[1] border-l-2 border-destructive"
-        style={{ left: `${nowPct}%` }}
-      />
-    </>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
-
-const MIN_ZOOM = 1
-const MAX_ZOOM = 20
-const ZOOM_STEP = 1.15
-
-export function TimelineView({ sessions, projectId, agentNames }: TimelineViewProps) {
-  const [zoom, setZoom] = useState(1)
-  const scrollRef = useRef<HTMLDivElement>(null)
-
-  const timeRange = useMemo(() => buildTimeRange(sessions), [sessions])
-  const hourLabels = useMemo(() => buildHourLabels(timeRange, zoom), [timeRange, zoom])
-  const groups = useMemo(() => buildGroups(sessions, agentNames), [sessions, agentNames])
-
-  const handleWheel = useCallback(
-    (e: React.WheelEvent<HTMLDivElement>) => {
-      if (!e.ctrlKey && !e.metaKey) return
-      e.preventDefault()
-      const container = scrollRef.current
-      if (!container) return
-
-      const rect = container.getBoundingClientRect()
-      const labelWidth = 130
-      const cursorX = e.clientX - rect.left - labelWidth
-      const laneWidth = rect.width - labelWidth
-      if (laneWidth <= 0) return
-
-      const scrollLeftBefore = container.scrollLeft
-      const cursorFrac = (scrollLeftBefore + cursorX) / (laneWidth * zoom)
-
-      const direction = e.deltaY < 0 ? 1 : -1
-      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * (direction > 0 ? ZOOM_STEP : 1 / ZOOM_STEP)))
-      setZoom(newZoom)
-
-      requestAnimationFrame(() => {
-        if (!container) return
-        const newScrollLeft = cursorFrac * laneWidth * newZoom - cursorX
-        container.scrollLeft = Math.max(0, newScrollLeft)
-      })
-    },
-    [zoom],
-  )
-
-  if (sessions.length === 0) {
-    return (
-      <div className="flex items-center justify-center rounded-lg border bg-card p-12 text-sm text-muted-foreground">
-        No sessions to display on the timeline
-      </div>
-    )
-  }
-
-  const isZoomed = zoom > 1
-
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between">
-        <TimelineLegend />
-        {isZoomed && (
-          <button
-            type="button"
-            onClick={() => setZoom(1)}
-            className="shrink-0 rounded-md border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            Reset zoom
-          </button>
-        )}
-      </div>
-      {!isZoomed && (
-        <p className="mb-1 text-[0.625rem] text-muted-foreground">
-          Hold {typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform) ? '⌘' : 'Ctrl'} + scroll to zoom
-        </p>
-      )}
-      <div
-        className="overflow-hidden rounded-lg border bg-card"
-        role="region"
-        aria-label="Gantt-style timeline of sessions"
-      >
-      <div
-        ref={scrollRef}
-        className={cn('max-h-[420px] overflow-y-auto', isZoomed ? 'overflow-x-auto' : 'overflow-x-hidden')}
-        onWheel={handleWheel}
-      >
-        {/* Inner content stretches horizontally with zoom */}
-        <div style={{ width: `${zoom * 100}%`, minWidth: '100%' }}>
-        {/* Sticky time-axis header */}
-        <div className="sticky top-0 z-10 flex border-b border-border bg-card">
-          <div className="w-[130px] shrink-0 border-r border-border" />
-          <div className="relative flex min-h-7 flex-1 items-end pb-1">
-            {hourLabels.map((hl) => (
-              <span
-                key={hl.label}
-                className="absolute -translate-x-1/2 select-none font-mono text-xs text-muted-foreground"
-                style={{ left: `${hl.pct}%` }}
-              >
-                {hl.label}
-              </span>
-            ))}
-            <span
-              className="absolute right-0 translate-x-0 select-none font-mono text-xs font-bold text-destructive"
-            >
-              Now
-            </span>
-          </div>
-        </div>
-
-        {/* Swim lanes */}
-        {groups.map((group) => (
-          <div key={group.key} className="relative">
-            <TimelineGroup
-              group={group}
-              projectId={projectId}
-              timeRange={timeRange}
-              agentNames={agentNames}
-            />
-          </div>
-        ))}
-        </div>
-      </div>
-      </div>
     </div>
   )
 }
