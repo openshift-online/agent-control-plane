@@ -591,22 +591,31 @@ function TimelinePopover({
 
 function computeSegments(
   session: DomainSession,
+  timeRange: TimeRange,
 ): { phase: WorkPhase; flex: number }[] | null {
   const entries = parseWorkPhases(session.annotations)
   if (entries.length === 0) return null
 
   const sessionStart = getSessionStart(session)
   const sessionEnd = getSessionEnd(session) ?? new Date()
-  const totalMs = sessionEnd.getTime() - sessionStart.getTime()
-  if (totalMs <= 0) return [{ phase: entries[0].phase, flex: 1 }]
+
+  const visibleStart = Math.max(sessionStart.getTime(), timeRange.start.getTime())
+  const visibleEnd = Math.min(sessionEnd.getTime(), timeRange.end.getTime())
+  if (visibleEnd <= visibleStart) return null
 
   const segments: { phase: WorkPhase; flex: number }[] = []
   for (let i = 0; i < entries.length; i++) {
-    const start = i === 0 ? sessionStart : new Date(entries[i].start)
-    const end = i + 1 < entries.length ? new Date(entries[i + 1].start) : sessionEnd
-    const durationMs = Math.max(0, end.getTime() - start.getTime())
-    segments.push({ phase: entries[i].phase, flex: durationMs / totalMs })
+    const segStart = i === 0 ? sessionStart.getTime() : new Date(entries[i].start).getTime()
+    const segEnd = i + 1 < entries.length ? new Date(entries[i + 1].start).getTime() : sessionEnd.getTime()
+
+    const clampedStart = Math.max(segStart, visibleStart)
+    const clampedEnd = Math.min(segEnd, visibleEnd)
+    if (clampedEnd <= clampedStart) continue
+
+    segments.push({ phase: entries[i].phase, flex: clampedEnd - clampedStart })
   }
+
+  if (segments.length === 0) return null
   return segments
 }
 
@@ -632,7 +641,7 @@ function TimelineBar({
     [session, timeRange],
   )
 
-  const segments = useMemo(() => computeSegments(session), [session])
+  const segments = useMemo(() => computeSegments(session, timeRange), [session, timeRange])
 
   const [popoverOpen, setPopoverOpen] = useState(false)
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
