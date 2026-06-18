@@ -570,7 +570,7 @@ function computeSegments(
 
   const segments: { phase: WorkPhase; flex: number }[] = []
   for (let i = 0; i < entries.length; i++) {
-    const start = new Date(entries[i].start)
+    const start = i === 0 ? sessionStart : new Date(entries[i].start)
     const end = i + 1 < entries.length ? new Date(entries[i + 1].start) : sessionEnd
     const durationMs = Math.max(0, end.getTime() - start.getTime())
     segments.push({ phase: entries[i].phase, flex: durationMs / totalMs })
@@ -650,7 +650,7 @@ function TimelineBar({
             width: position.width,
             minWidth: '8px',
             gap: hasSegments ? '1px' : undefined,
-            backgroundColor: hasSegments ? '#fff' : fallbackColor,
+            backgroundColor: hasSegments ? 'hsl(var(--border))' : fallbackColor,
           }}
           tabIndex={0}
           aria-label={`${jiraKey ?? resolveAgentName(session, agentNames)}: ${session.phase}`}
@@ -675,8 +675,11 @@ function TimelineBar({
           ) : null}
           {isRunning && (
             <span
-              className="absolute right-0 top-0 bottom-0 w-1.5 animate-pulse"
-              style={{ backgroundColor: hasSegments ? WORK_PHASE_COLORS[segments![segments!.length - 1].phase] : fallbackColor, opacity: 0.5 }}
+              className="absolute right-0 top-0 bottom-0 w-2"
+              style={{
+                background: `linear-gradient(to right, transparent, ${hasSegments ? WORK_PHASE_COLORS[segments![segments!.length - 1].phase] : fallbackColor})`,
+                animation: 'timeline-pulse 1.2s ease-in-out infinite',
+              }}
             />
           )}
           {isFailed && (
