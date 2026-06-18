@@ -93,6 +93,16 @@ const WORK_PHASE_COLORS: Record<WorkPhase, string> = {
   complete: '#63993d',
 }
 
+const SESSION_STATUS_BORDER: Record<SessionPhase, string> = {
+  Running: '#63993d',
+  Completed: '#a3a3a3',
+  Failed: '#f0561d',
+  Creating: '#f5921b',
+  Pending: '#f5921b',
+  Stopping: '#a3a3a3',
+  Stopped: '#a3a3a3',
+}
+
 // Fallback colors for sessions without work.acp.io/phases
 const SESSION_PHASE_COLORS: Record<SessionPhase, string> = {
   Running: 'rgb(34 197 94)',
@@ -658,6 +668,7 @@ function TimelineBar({
             minWidth: '8px',
             gap: 0,
             backgroundColor: hasSegments ? WORK_PHASE_COLORS[segments[0].phase] : fallbackColor,
+            borderBottom: `2px solid ${SESSION_STATUS_BORDER[session.phase] ?? SESSION_STATUS_BORDER.Pending}`,
           }}
           tabIndex={0}
           aria-label={`${jiraKey ?? resolveAgentName(session, agentNames)}: ${session.phase}`}
