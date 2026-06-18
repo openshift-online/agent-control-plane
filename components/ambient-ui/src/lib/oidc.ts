@@ -44,7 +44,13 @@ async function getOIDCConfig(): Promise<client.Configuration> {
     const discoveredIssuer = typeof metadataObj.issuer === 'string' ? metadataObj.issuer : ''
     const frontendIssuer = env.SSO_FRONTEND_ISSUER_URL
 
-    if (discoveredIssuer && discoveredIssuer !== frontendIssuer) {
+    // Normalize trailing slashes for comparison - both Keycloak discovery output and the env var
+    // should be consistent, but handle mismatches defensively
+    const normalizeUrl = (url: string) => url.replace(/\/+$/, '')
+    const normalizedDiscovered = normalizeUrl(discoveredIssuer)
+    const normalizedFrontend = normalizeUrl(frontendIssuer)
+
+    if (normalizedDiscovered && normalizedDiscovered !== normalizedFrontend) {
       const browserEndpoints = [
         'issuer',
         'authorization_endpoint',
@@ -54,7 +60,9 @@ async function getOIDCConfig(): Promise<client.Configuration> {
 
       browserEndpoints.forEach((key) => {
         if (typeof metadataObj[key] === 'string') {
-          metadataObj[key] = (metadataObj[key] as string).replace(discoveredIssuer, frontendIssuer)
+          // Replace using normalized discovered issuer, but preserve original trailing slash behavior
+          const original = metadataObj[key] as string
+          metadataObj[key] = original.replace(discoveredIssuer, frontendIssuer)
         }
       })
     }
