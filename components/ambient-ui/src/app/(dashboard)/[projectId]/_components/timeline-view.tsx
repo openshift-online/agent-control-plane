@@ -194,30 +194,43 @@ function buildTimeRange(sessions: DomainSession[]): TimeRange {
 }
 
 function buildHourLabels(timeRange: TimeRange, zoom = 1): { label: string; pct: number }[] {
-  const labels: { label: string; pct: number }[] = []
   const totalMs = timeRange.end.getTime() - timeRange.start.getTime()
-  if (totalMs <= 0) return labels
+  if (totalMs <= 0) return []
 
-  const visibleMs = totalMs / zoom
+  const totalHours = totalMs / 3_600_000
+  const maxLabels = 12
+
   let intervalMin: number
-  if (visibleMs <= 30 * 60_000) intervalMin = 5
-  else if (visibleMs <= 2 * 3600_000) intervalMin = 15
-  else if (visibleMs <= 6 * 3600_000) intervalMin = 30
-  else intervalMin = 60
+  if (totalHours <= 0.5) intervalMin = 5
+  else if (totalHours <= 2) intervalMin = 15
+  else if (totalHours <= 6) intervalMin = 30
+  else if (totalHours <= 12) intervalMin = 60
+  else if (totalHours <= 24) intervalMin = 120
+  else intervalMin = 240
 
-  const cursor = new Date(timeRange.start)
-  cursor.setMinutes(0, 0, 0)
-  if (cursor < timeRange.start) {
-    cursor.setTime(cursor.getTime() + intervalMin * 60_000)
+  if (zoom > 1) {
+    const visibleHours = totalHours / zoom
+    if (visibleHours <= 0.5) intervalMin = Math.min(intervalMin, 5)
+    else if (visibleHours <= 2) intervalMin = Math.min(intervalMin, 15)
+    else if (visibleHours <= 6) intervalMin = Math.min(intervalMin, 30)
   }
 
-  while (cursor.getTime() <= timeRange.end.getTime()) {
+  const intervalMs = intervalMin * 60_000
+  const labels: { label: string; pct: number }[] = []
+  const cursor = new Date(timeRange.start)
+  cursor.setSeconds(0, 0)
+  const remainder = cursor.getMinutes() % intervalMin
+  if (remainder !== 0) {
+    cursor.setMinutes(cursor.getMinutes() + (intervalMin - remainder))
+  }
+
+  while (cursor.getTime() <= timeRange.end.getTime() && labels.length < maxLabels * zoom) {
     const pct = ((cursor.getTime() - timeRange.start.getTime()) / totalMs) * 100
     labels.push({
       label: cursor.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
       pct,
     })
-    cursor.setTime(cursor.getTime() + intervalMin * 60_000)
+    cursor.setTime(cursor.getTime() + intervalMs)
   }
 
   return labels
