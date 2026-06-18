@@ -1,11 +1,64 @@
 import type { DomainSession, SessionPhase } from '@/domain/types'
+import {
+  getNeedsYouItems,
+  getWorkItemRef as getWorkItemRefFromAnnotations,
+  getWorkItemCards,
+  getCompletionItems,
+  isStale,
+  getStaleMinutes,
+  getCriticality,
+  ROW_GRID_TEMPLATE,
+  LEGACY_JIRA_ISSUE,
+  LEGACY_GITHUB_PR,
+  LEGACY_COST,
+  LEGACY_NEEDS_INPUT,
+  LEGACY_REVIEW_STATUS,
+  type WorkItemRef,
+  type NeedsYouItem,
+  type WorkItemCard,
+  type CompletionItem,
+  type Criticality,
+} from '@/domain/work-annotations'
 
-// Annotation keys
-const REVIEW_STATUS_KEY = 'ambient-code.io/review/status'
-const NEEDS_INPUT_KEY = 'ambient-code.io/agent/needs-input'
-const JIRA_ISSUE_KEY = 'ambient-code.io/jira/issue'
-const GITHUB_PR_KEY = 'ambient-code.io/github/pr'
-const COST_ANNOTATION_KEY = 'ambient-code.io/cost/estimate'
+export type {
+  WorkItemRef,
+  NeedsYouItem,
+  WorkItemCard,
+  CompletionItem,
+  Criticality,
+}
+
+export {
+  getNeedsYouItems,
+  getWorkItemCards,
+  getCompletionItems,
+  isStale,
+  getStaleMinutes,
+  getCriticality,
+  ROW_GRID_TEMPLATE,
+}
+
+/** @deprecated Use NeedsYouItem instead */
+export type AttentionReason = 'failed' | 'needs-review' | 'needs-input'
+
+/** @deprecated Use NeedsYouItem instead */
+export type AttentionItem = {
+  session: DomainSession
+  reason: AttentionReason
+}
+
+/** @deprecated Use WorkItemRef from work-annotations instead */
+export type WorkItemGroup = {
+  ref: WorkItemRef
+  sessions: DomainSession[]
+}
+
+/** @deprecated Use CompletionItem instead */
+export type RecentActivityItem = {
+  session: DomainSession
+  ref: WorkItemRef | null
+  cost: string | null
+}
 
 const ACTIVE_PHASES: ReadonlySet<SessionPhase> = new Set([
   'Running',
@@ -20,81 +73,51 @@ const TERMINAL_PHASES: ReadonlySet<SessionPhase> = new Set([
   'Stopped',
 ])
 
-export type AttentionReason = 'failed' | 'needs-review' | 'needs-input'
-
-export type AttentionItem = {
-  session: DomainSession
-  reason: AttentionReason
-}
-
-export type WorkItemRef = {
-  type: 'jira' | 'github-pr'
-  key: string
-}
-
-export type WorkItemGroup = {
-  ref: WorkItemRef
-  sessions: DomainSession[]
-}
-
-export type RecentActivityItem = {
-  session: DomainSession
-  ref: WorkItemRef | null
-  cost: string | null
-}
-
-/** Sessions that need operator attention */
+/** Sessions that need operator attention — backward-compatible wrapper around getNeedsYouItems */
 export function getAttentionItems(sessions: DomainSession[]): AttentionItem[] {
+  const needsYou = getNeedsYouItems(sessions)
   const items: AttentionItem[] = []
 
-  for (const session of sessions) {
-    if (session.phase === 'Failed') {
-      items.push({ session, reason: 'failed' })
-      continue
+  for (const item of needsYou) {
+    if (item.session.phase === 'Failed') {
+      items.push({ session: item.session, reason: 'failed' })
+    } else if (item.statusText.startsWith('Waiting for')) {
+      items.push({ session: item.session, reason: 'needs-input' })
+    } else {
+      items.push({ session: item.session, reason: 'needs-review' })
     }
+  }
 
-    const reviewStatus = session.annotations[REVIEW_STATUS_KEY]
+  // Preserve legacy review status items not captured by getNeedsYouItems
+  const coveredIds = new Set(items.map((i) => i.session.id))
+  for (const session of sessions) {
+    if (coveredIds.has(session.id)) continue
+    const reviewStatus = session.annotations[LEGACY_REVIEW_STATUS]
     if (reviewStatus === 'needs-review') {
       items.push({ session, reason: 'needs-review' })
-      continue
-    }
-
-    const needsInput = session.annotations[NEEDS_INPUT_KEY]
-    if (needsInput && needsInput !== 'false') {
-      items.push({ session, reason: 'needs-input' })
     }
   }
 
   return items
 }
 
-/** Extract the primary work item reference from a session's annotations */
-function getWorkItemRef(session: DomainSession): WorkItemRef | null {
-  const jiraKey = session.annotations[JIRA_ISSUE_KEY]
-  if (jiraKey) {
-    return { type: 'jira', key: jiraKey }
-  }
-
-  const prRef = session.annotations[GITHUB_PR_KEY]
-  if (prRef) {
-    return { type: 'github-pr', key: prRef }
-  }
-
-  return null
+/** @deprecated Use getWorkItemRef from work-annotations instead */
+function getWorkItemRefLegacy(session: DomainSession): WorkItemRef | null {
+  return getWorkItemRefFromAnnotations(session.annotations)
 }
 
-/** Active sessions grouped by work item reference */
+/** @deprecated Use getWorkItemCards instead */
 export function getActiveWorkItems(sessions: DomainSession[]): {
   grouped: WorkItemGroup[]
   ungrouped: DomainSession[]
 } {
-  const activeSessions = sessions.filter(s => ACTIVE_PHASES.has(s.phase))
+  const activeSessions = sessions.filter((s) => ACTIVE_PHASES.has(s.phase))
 
   const groupMap = new Map<string, WorkItemGroup>()
   const ungrouped: DomainSession[] = []
 
   for (const session of activeSessions) {
-    const ref = getWorkItemRef(session)
+    const ref = getWorkItemRefLegacy(session)
     if (!ref) {
       ungrouped.push(session)
       continue
@@ -115,22 +138,20 @@ export function getActiveWorkItems(sessions: DomainSession[]): {
   }
 }
 
-const RECENT_ACTIVITY_LIMIT = 10
-
-/** Recently completed sessions for the activity feed */
+/** @deprecated Use getCompletionItems instead */
 export function getRecentActivity(sessions: DomainSession[]): RecentActivityItem[] {
   const completed = sessions
-    .filter(s => TERMINAL_PHASES.has(s.phase))
+    .filter((s) => TERMINAL_PHASES.has(s.phase))
     .sort((a, b) => {
       const aTime = a.completionTime ?? a.updatedAt
       const bTime = b.completionTime ?? b.updatedAt
       return new Date(bTime).getTime() - new Date(aTime).getTime()
     })
-    .slice(0, RECENT_ACTIVITY_LIMIT)
+    .slice(0, 10)
 
-  return completed.map(session => ({
+  return completed.map((session) => ({
     session,
-    ref: getWorkItemRef(session),
-    cost: session.annotations[COST_ANNOTATION_KEY] ?? null,
+    ref: getWorkItemRefLegacy(session),
+    cost: session.annotations[LEGACY_COST] ?? null,
   }))
 }

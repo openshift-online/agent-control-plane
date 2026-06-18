@@ -6,6 +6,7 @@ export type AnnotationCategory =
   | 'cost'
   | 'oncall'
   | 'agent'
+  | 'work'
 
 export type RegisteredAnnotation = {
   key: string
@@ -47,6 +48,21 @@ const ANNOTATION_REGISTRY: readonly RegisteredAnnotation[] = [
 
   // agent
   { key: 'ambient-code.io/parent-agent', category: 'agent', label: 'Parent Agent', icon: 'bot' },
+  { key: 'agent.acp.io/status', category: 'agent', label: 'Agent Status', icon: 'alert-circle' },
+  { key: 'agent.acp.io/status-criticality', category: 'agent', label: 'Status Criticality', icon: 'shield-alert' },
+  { key: 'agent.acp.io/needs-input', category: 'agent', label: 'Needs Input', icon: 'help-circle' },
+
+  // work
+  { key: 'work.acp.io/jira/issue', category: 'work', label: 'Jira Issue', icon: 'ticket' },
+  { key: 'work.acp.io/jira/url', category: 'work', label: 'Jira URL', icon: 'external-link' },
+  { key: 'work.acp.io/jira/status', category: 'work', label: 'Jira Status', icon: 'circle-dot' },
+  { key: 'work.acp.io/jira/summary', category: 'work', label: 'Jira Summary', icon: 'file-text' },
+  { key: 'work.acp.io/github/pr', category: 'work', label: 'GitHub PR', icon: 'git-pull-request' },
+  { key: 'work.acp.io/github/pr-url', category: 'work', label: 'PR URL', icon: 'external-link' },
+  { key: 'work.acp.io/github/pr-status', category: 'work', label: 'PR Status', icon: 'git-pull-request' },
+  { key: 'work.acp.io/github/pr-checks', category: 'work', label: 'CI Checks', icon: 'check-circle' },
+  { key: 'work.acp.io/github/pr-review', category: 'work', label: 'PR Review', icon: 'message-circle' },
+  { key: 'work.acp.io/phases', category: 'work', label: 'Work Phases', icon: 'layers' },
 ] as const
 
 const registryByKey = new Map<string, RegisteredAnnotation>(

@@ -477,6 +477,7 @@ function makeSdkAgent(overrides: Partial<Agent> = {}): Agent {
     project_id: 'proj-123',
     prompt: 'You are a helpful agent.',
     repo_url: 'https://github.com/org/repo',
+    parent_agent_id: '',
     resource_overrides: '',
     workflow_id: 'wf-1',
     ...overrides,

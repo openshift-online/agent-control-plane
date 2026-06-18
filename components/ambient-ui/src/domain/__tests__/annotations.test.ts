@@ -86,6 +86,19 @@ describe('annotation registry', () => {
         'ambient-code.io/cost/estimate',
         'ambient-code.io/oncall/incident',
         'ambient-code.io/parent-agent',
+        'agent.acp.io/status',
+        'agent.acp.io/status-criticality',
+        'agent.acp.io/needs-input',
+        'work.acp.io/jira/issue',
+        'work.acp.io/jira/url',
+        'work.acp.io/jira/status',
+        'work.acp.io/jira/summary',
+        'work.acp.io/github/pr',
+        'work.acp.io/github/pr-url',
+        'work.acp.io/github/pr-status',
+        'work.acp.io/github/pr-checks',
+        'work.acp.io/github/pr-review',
+        'work.acp.io/phases',
       ]
 
       for (const key of expectedKeys) {
@@ -145,9 +158,12 @@ describe('annotation registry', () => {
       expect(results.length).toBe(1)
     })
 
-    it('returns single agent annotation', () => {
+    it('returns all agent annotations', () => {
       const results = getAnnotationsByCategory('agent')
-      expect(results.length).toBe(1)
+      expect(results.length).toBe(4)
+      for (const r of results) {
+        expect(r.category).toBe('agent')
+      }
     })
 
     it('returns empty array for unknown category', () => {
