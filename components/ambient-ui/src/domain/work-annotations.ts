@@ -211,7 +211,9 @@ export function getNeedsYouItems(sessions: DomainSession[]): NeedsYouItem[] {
 }
 
 export function getWorkItemCards(sessions: DomainSession[]): WorkItemCard[] {
-  const activeSessions = sessions.filter((s) => ACTIVE_PHASES.has(s.phase))
+  const activeSessions = sessions.filter(
+    (s) => ACTIVE_PHASES.has(s.phase) && s.annotations[WORK_JIRA_STATUS] !== 'Done',
+  )
   const groupMap = new Map<string, WorkItemCard>()
 
   for (const session of activeSessions) {

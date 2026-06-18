@@ -144,18 +144,23 @@ function getSessionEnd(session: DomainSession): Date | null {
 function calculateBarPosition(
   session: DomainSession,
   timeRange: TimeRange,
-): BarPosition {
+): BarPosition | null {
   const totalMs = timeRange.end.getTime() - timeRange.start.getTime()
   if (totalMs <= 0) return { left: '0%', width: '100%' }
 
   const sessionStart = getSessionStart(session)
   const sessionEnd = getSessionEnd(session) ?? timeRange.end
 
-  const leftMs = Math.max(0, sessionStart.getTime() - timeRange.start.getTime())
-  const widthMs = Math.max(0, sessionEnd.getTime() - sessionStart.getTime())
+  const visibleStart = Math.max(sessionStart.getTime(), timeRange.start.getTime())
+  const visibleEnd = Math.min(sessionEnd.getTime(), timeRange.end.getTime())
+
+  if (visibleEnd <= visibleStart) return null
+
+  const leftMs = visibleStart - timeRange.start.getTime()
+  const widthMs = visibleEnd - visibleStart
 
   const leftPct = (leftMs / totalMs) * 100
-  const widthPct = Math.max(0.3, (widthMs / totalMs) * 100) // min 0.3% ~ 4px at typical widths
+  const widthPct = Math.max(0.3, (widthMs / totalMs) * 100)
 
   return {
     left: `${leftPct}%`,
@@ -628,6 +633,8 @@ function TimelineBar({
   )
 
   const segments = useMemo(() => computeSegments(session), [session])
+
+  if (!position) return null
 
   const isRunning = session.phase === 'Running'
   const isFailed = session.phase === 'Failed'
