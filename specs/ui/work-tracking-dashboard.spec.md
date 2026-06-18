@@ -95,11 +95,13 @@ Sessions with this annotation SHALL surface in the Dashboard attention column an
 
 The Dashboard SHALL support two view modes, toggled via a segmented control (List / Timeline):
 
-**List view (default):** Vertical sections — Needs You queue, Running sessions, Completed Today — using a unified row grammar (see below).
+**List view (default):** Vertical sections — Needs You queue, In-flight work, Completed Today — all using a unified row grammar (see below). No summary counts bar — the section headings with counts serve this purpose.
 
-**Timeline view:** A horizontal Gantt-style swim-lane chart showing all sessions on a time axis, grouped by Jira issue (see Timeline requirement below).
+**Timeline view:** A horizontal Gantt-style swim-lane chart showing all sessions on a time axis, grouped by Jira issue (see Timeline requirement below). Lazy-loaded via `dynamic()` since List is the default.
 
-Both views share the same summary bar and notification bell.
+The dashboard SHALL be the project landing page — both the project card on the picker page and the sidebar project selector SHALL navigate to `/${projectId}` (the dashboard), not `/${projectId}/sessions`.
+
+Both views share the notification bell. The sidebar SHALL preserve project context on global pages (e.g., Credentials) and never disable navigation items.
 
 #### Scenario: View toggle
 
@@ -116,18 +118,19 @@ Both views share the same summary bar and notification bell.
 
 ### Requirement: Unified Row Grammar
 
-All tabular sections (Needs You, Running, Completed detail) SHALL use a single shared grid template so the eye can build one scanning pattern across the entire dashboard. The grid columns SHALL be:
+All tabular sections (Needs You, In-flight work, Completed detail) SHALL use a single shared grid template so the eye can build one scanning pattern across the entire dashboard. The grid columns SHALL be:
 
-1. **Status stripe** (4px) — left border colored by criticality/state, transparent when neutral
-2. **Status cell** (~160-240px) — severity label+icon with line-clamp-2 (Needs You), phase pill (Running), result badge (Completed)
-3. **Issue + summary** (flex) — Jira key + description text, consistent position across all sections
-4. **PR** (72px) — PR reference in mono
-5. **Agent** (~110px) — clickable agent name link
-6. **Meta** (80px) — wait time (Needs You), activity timestamp (Running), duration (Completed)
-7. **Action** (88px fixed) — action button when applicable, empty otherwise
-8. **Links** (52px) — external Jira/PR icon links
+1. **Spacer** (4px) — visual breathing room
+2. **Status cell** (~160-240px) — severity label+icon with line-clamp-2 (Needs You), phase pill (In-flight), result badge (Completed)
+3. **Issue + summary** (flex) — Jira key chip (with hover card showing details) + description text
+4. **PR** (72px) — PR reference chip (shortened to `#N` with full ref in tooltip)
+5. **Agent** (~110px) — clickable agent name linking to agent definition page
+6. **Meta** (80px) — "Since" time (Needs You), "Updated" timestamp (In-flight), duration (Completed)
+7. **Action** (88px fixed) — "View session" button when applicable
 
-Each section SHALL have column headers (Status, Issue, PR, Agent, and a section-specific meta label).
+Jira chips and PR chips are clickable when URL annotations are present — no separate external links column is needed. Container queries (`@md`, `@lg`) control responsive column visibility.
+
+Each section SHALL have column headers. The In-flight work section uses the same row grammar as the other sections (not cards).
 
 #### Scenario: Consistent scanning across sections
 
@@ -137,9 +140,9 @@ Each section SHALL have column headers (Status, Issue, PR, Agent, and a section-
 
 ### Requirement: Notification Bell
 
-The topbar SHALL display a persistent notification bell icon with a badge count showing the number of items in the Needs You queue. Clicking the bell opens a dropdown tray listing each item with its criticality, status text, Jira key, and wait time.
+The topbar SHALL display a persistent notification bell icon with a badge count showing the number of **actionable** items (criticality `critical` or `warning` only — `info` level items are excluded). Clicking the bell opens a Popover tray listing each actionable item with its criticality icon, status text (full wrap, not truncated), Jira key, agent name, and wait time.
 
-The bell provides a persistent attention indicator that is visible regardless of scroll position or active view mode.
+The bell provides a persistent attention indicator visible regardless of scroll position or active view mode. It shares the same React Query cache as the dashboard's `useSessions` call.
 
 #### Scenario: Bell badge with active items
 
@@ -194,7 +197,9 @@ The Needs You section SHALL show all sessions that have an `agent.acp.io/status`
 
 Items SHALL be sorted by criticality (critical first, then warning, then info), then by wait time descending within each criticality tier.
 
-Each row SHALL display: status label (from annotation), issue+summary, PR reference, agent name, wait time, action button, and external links — using the unified row grammar.
+Each row SHALL display: criticality icon + status label (line-clamp-2 with tooltip for overflow), Jira chip (with hover card), PR chip, agent name, "Since" time, and "View session" button — using the unified row grammar.
+
+**Visual escalation:** When any item has `critical` criticality, the section wrapper SHALL display a red-tinted border (`border-destructive/50`) and background (`bg-destructive/5`) to draw immediate attention. The heading count SHALL use `text-destructive font-bold`.
 
 #### Scenario: Mixed attention items
 
@@ -220,17 +225,19 @@ Sessions where the agent has signaled a blocking dependency SHALL appear in the 
 - WHEN the Needs You queue renders
 - THEN the session appears with the agent's status text, a danger-orange border stripe, and an X-circle icon
 
-### Requirement: In-Flight Work Cards
+### Requirement: In-Flight Work Rows
 
-The right column SHALL display in-flight work as cards. A work item is in-flight when at least one session referencing it has phase `Running`, `Creating`, or `Pending`.
+The In-flight work section SHALL display active work items using the unified row grammar (not cards). A work item is in-flight when at least one session referencing it has phase `Running`, `Creating`, or `Pending`, AND `work.acp.io/jira/status` is NOT a terminal status (e.g., `"Done"`).
 
-Work items SHALL be identified by their `work.acp.io/jira/issue` or `work.acp.io/github/pr` annotation. Multiple sessions referencing the same work item SHALL be grouped into a single card.
+Work items SHALL be identified by their `work.acp.io/jira/issue` or `work.acp.io/github/pr` annotation. Multiple sessions referencing the same work item SHALL be grouped into a single row.
 
-Each card SHALL display:
-1. **Header:** Jira issue key + status badge (from `work.acp.io/jira/status`). Clickable if URL annotation present.
-2. **PR row:** PR reference + PR status badge + CI checks badge. Clickable if URL annotation present.
-3. **Agent row:** Agent name(s) working on this item.
-4. **Footer:** Last updated timestamp (relative).
+Each row SHALL display (using unified row grammar):
+1. **Phase pill** — PhaseBadge for the session phase
+2. **Jira key + summary** — clickable chip with hover card, plus Jira status badge
+3. **PR chip** — shortened to `#N` with full ref in tooltip
+4. **Agent** — comma-separated agent names if multiple sessions, clickable to agent definition
+5. **Updated** — relative timestamp
+6. **View session** — link to the first session in the group
 
 #### Scenario: Work item card with full annotations
 
@@ -276,7 +283,7 @@ The bottom zone SHALL display a compact table of recently completed work items s
 
 The table SHALL display: Work item reference (Jira key or PR), Result badge (Merged / Completed / Failed), PR reference, Agent, Duration, and Completion time.
 
-The table SHALL show the 10 most recent completions, sorted by completion time descending.
+The table SHALL show the 10 most recent completions, sorted with failures first (`Failed` → `Stopped` → `Completed`), then by completion time descending within each result tier.
 
 #### Scenario: Recent completions rendering
 
@@ -344,7 +351,11 @@ The Timeline view SHALL display a horizontal Gantt-style chart with sessions as 
 
 **Collapsing:** All groups SHALL default to collapsed (all bars stacked in one lane). Clicking a group header expands it to show individual agent sub-lanes.
 
-**Phase segments:** Each bar SHALL be divided into segments colored by lifecycle phase from `work.acp.io/phases`. Phase colors: implementing=#0066cc, reviewing=#6753ac, testing=#009596, deploying=#63993d, complete=#3d8c40. Colorblind-safe patterns distinguish reviewing (diagonal stripes), testing (dots), and deploying (vertical stripes). Sessions without phases use a single color based on session phase (Running=green, Completed=blue, Failed=red). Bar patterns distinguish status: solid = completed, open right edge with gradient pulse = running, diagonal hatching = blocked, red right-edge stripe = failed.
+**Phase segments:** Each bar SHALL be divided into segments colored by lifecycle phase from `work.acp.io/phases`. Phase colors (Red Hat palette): implementing=#0066cc (interaction-blue-50), reviewing=#5e40be (purple-50), testing=#37a3a3 (teal-50), deploying=#f5921b (orange-40), complete=#63993d (success-green-50). Color only — no CSS patterns (removed for simplicity per Tufte review). Sessions without phases use a single color based on session phase.
+
+**Session status border:** Each bar SHALL display a 4px bottom border colored by session infrastructure phase: Running=#63993d (success-green-50), Failed=#f0561d (danger-orange-50), Pending/Creating=#f5921b (orange-40), Completed/Stopped=#a3a3a3 (gray-40). This provides a second visual channel: bar segments = work lifecycle, bottom border = session status.
+
+**Bar animation:** Bars SHALL animate smoothly between poll cycles via CSS `transition` on width/left (300ms ease-out).
 
 **Phase segment clamping:** When a time window is selected, segments SHALL be clamped to the visible range — phases that ended before the window start are hidden, and the visible portion of each phase is proportional to its duration within the window.
 
@@ -354,7 +365,7 @@ The Timeline view SHALL display a horizontal Gantt-style chart with sessions as 
 
 **Time window:** A dropdown selector provides preset time windows: Auto (fit all sessions), Last 5m, 15m, 30m, 1h, 6h, 12h, 24h. Selecting a preset overrides the auto-computed time range.
 
-**Legend:** Two rows above the chart: (1) phase color swatches (Implementing, Reviewing, Testing, Deploying, Complete), (2) bar pattern swatches (Completed multi-segment, Running pulse, Failed, Blocked hatched).
+**Legend:** Single row above the chart showing phase color swatches (Implementing, Reviewing, Testing, Deploying, Complete). Zoom controls and time window selector appear to the right of the legend, all at consistent `h-7` height with tooltips on +/−/reset buttons.
 
 **Hover popover:** Hovering a bar SHALL show a rich popover (controlled Popover with hover open/close behavior, 120ms open delay, 250ms close delay). The popover includes:
 - 5px colored top border matching the current work phase
@@ -363,7 +374,7 @@ The Timeline view SHALL display a horizontal Gantt-style chart with sessions as 
 - Agent name as a clickable link to the agent definition page
 - Time range and duration
 - Recent session messages (3 most recent) with typing indicator for running sessions (skipped for terminal sessions)
-- Footer: Jira and PR links (left), "View Session" button that opens the chat sidebar (right)
+- Footer: Jira and PR links (left), "Chat Log" button that opens the chat sidebar (right) — distinct from the queue's "View session" navigation link
 - Popover arrow connecting card to bar
 
 **Keyboard accessible:** Bars SHALL be keyboard-focusable. Focus SHALL open the popover. Escape SHALL dismiss it and return focus.
@@ -443,6 +454,17 @@ In-flight work cards SHALL exclude sessions where `work.acp.io/jira/status` is a
 - GIVEN a session with no `work.acp.io/phases` annotation
 - WHEN the timeline renders
 - THEN the bar is a single color based on session phase (green for Running, blue for Completed, etc.)
+
+### Requirement: Agent Annotations Tab
+
+The agent detail page SHALL include an "Annotations" tab showing key/value tables for agent-level annotations and (when an active session exists) current session annotations. Annotations are sorted alphabetically and displayed in monospace font. Session annotations auto-refresh via existing polling.
+
+### Requirement: Navigation and Landing
+
+The dashboard SHALL be the project landing page:
+- Project cards on the picker page navigate to `/${projectId}` (dashboard)
+- Sidebar project selector navigates to `/${projectId}` (dashboard)
+- Sidebar navigation SHALL preserve project context on global pages (e.g., Credentials) and never disable nav items when a project is selected
 
 ### Requirement: Work View Integration
 
