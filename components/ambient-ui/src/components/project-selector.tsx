@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { FolderOpen } from 'lucide-react'
 import { useProjects } from '@/queries/use-projects'
 import { domainProbe } from '@/lib/observability'
 import {
@@ -36,7 +37,10 @@ export function ProjectSelector({ projectId, effectiveProjectId }: ProjectSelect
       }}
     >
       <SelectTrigger className="w-full" aria-label="Select project">
-        <SelectValue placeholder="Select project..." />
+        <div className="flex items-center gap-2">
+          <FolderOpen aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+          <SelectValue placeholder="Select project..." />
+        </div>
       </SelectTrigger>
       <SelectContent>
         {projects.map((project) => (
