@@ -14,9 +14,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 type ProjectSelectorProps = {
   projectId: string | null
+  effectiveProjectId: string | null
 }
 
-export function ProjectSelector({ projectId }: ProjectSelectorProps) {
+export function ProjectSelector({ projectId, effectiveProjectId }: ProjectSelectorProps) {
   const router = useRouter()
   const { data, isLoading } = useProjects()
 
@@ -28,13 +29,13 @@ export function ProjectSelector({ projectId }: ProjectSelectorProps) {
 
   return (
     <Select
-      value={projectId ?? undefined}
+      value={effectiveProjectId ?? undefined}
       onValueChange={(value) => {
         domainProbe.projectSelected({ projectId: value })
         router.push(`/${value}`)
       }}
     >
-      <SelectTrigger className="w-full">
+      <SelectTrigger className="w-full" aria-label="Select project">
         <SelectValue placeholder="Select project..." />
       </SelectTrigger>
       <SelectContent>
