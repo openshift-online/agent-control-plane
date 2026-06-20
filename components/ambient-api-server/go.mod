@@ -11,7 +11,7 @@ require (
 	github.com/openshift-online/ocm-sdk-go v0.1.334
 	github.com/openshift-online/rh-trex-ai v0.0.30
 	github.com/spf13/cobra v1.9.1
-	github.com/spf13/pflag v1.0.6
+	github.com/spf13/pflag v1.0.10
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/resty.v1 v1.12.0
