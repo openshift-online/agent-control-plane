@@ -27,7 +27,7 @@ require (
 	github.com/antlr/antlr4 v0.0.0-20190518164840-edae2a1c9b4b // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/bxcodec/faker/v3 v3.2.0 // indirect
+	github.com/bxcodec/faker/v3 v3.8.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
