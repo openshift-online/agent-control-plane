@@ -8,6 +8,7 @@ import {
   Monitor,
   Bot,
   KeyRound,
+  Settings,
   Moon,
   Sun,
 } from 'lucide-react'
@@ -44,6 +45,10 @@ const operateNavItems: readonly NavItem[] = [
 
 const buildNavItems: readonly NavItem[] = [
   { label: 'Agents', icon: Bot, href: 'agents' },
+]
+
+const projectNavItems: readonly NavItem[] = [
+  { label: 'Settings', icon: Settings, href: 'settings' },
 ]
 
 const configureNavItems: readonly NavItem[] = [
@@ -135,6 +140,7 @@ export function AppSidebar({ projectId, effectiveProjectId }: AppSidebarProps) {
       <SidebarContent>
         <NavGroup label="Operate" items={operateNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} badgeCounts={operateBadges} />
         <NavGroup label="Build" items={buildNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
+        <NavGroup label="Project" items={projectNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
         <Separator className="mx-2 my-1" />
         <NavGroup label="Admin" items={configureNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
       </SidebarContent>

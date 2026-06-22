@@ -124,27 +124,27 @@ function getInitials(name: string, username: string): string {
 // Batch user fetch hook using list endpoint
 // ---------------------------------------------------------------------------
 
-function useUsersByIds(userIds: string[]) {
-  const sortedIds = useMemo(() => [...userIds].sort(), [userIds])
-  const idKey = sortedIds.join(',')
+function useUsersByUsernames(usernames: string[]) {
+  const sortedNames = useMemo(() => [...usernames].sort(), [usernames])
+  const key = sortedNames.join(',')
 
   return useQuery({
-    queryKey: [...queryKeys.users.all, 'by-ids', idKey],
+    queryKey: [...queryKeys.users.all, 'by-usernames', key],
     queryFn: async () => {
-      if (sortedIds.length === 0) return new Map<string, DomainUserSearchResult>()
+      if (sortedNames.length === 0) return new Map<string, DomainUserSearchResult>()
       const adapter = createUsersAdapter()
-      const quoted = sortedIds.map((id) => `'${id}'`).join(',')
+      const quoted = sortedNames.map((u) => `'${u}'`).join(',')
       const result = await adapter.list({
-        search: `id in (${quoted})`,
+        search: `username in (${quoted})`,
         size: 100,
       })
       const map = new Map<string, DomainUserSearchResult>()
       for (const user of result.items) {
-        map.set(user.id, user)
+        map.set(user.username, user)
       }
       return map
     },
-    enabled: sortedIds.length > 0,
+    enabled: sortedNames.length > 0,
     staleTime: 60_000,
   })
 }
@@ -168,11 +168,11 @@ function UserAvatar({ initials }: { initials: string }) {
 function UserSearchCombobox({
   assignableRoles,
   projectId,
-  existingUserIds,
+  existingUsernames,
 }: {
   assignableRoles: DomainRole[]
   projectId: string
-  existingUserIds: Set<string>
+  existingUsernames: Set<string>
 }) {
   const [open, setOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -188,8 +188,8 @@ function UserSearchCombobox({
   const createBinding = useCreateRoleBinding()
 
   const filteredResults = useMemo(
-    () => (searchResults ?? []).filter((u) => !existingUserIds.has(u.id)),
-    [searchResults, existingUserIds],
+    () => (searchResults ?? []).filter((u) => !existingUsernames.has(u.username)),
+    [searchResults, existingUsernames],
   )
 
   const handleSelect = useCallback((user: DomainUserSearchResult) => {
@@ -205,7 +205,7 @@ function UserSearchCombobox({
       {
         roleId: selectedRoleId,
         scope: 'project',
-        userId: selectedUser.id,
+        userId: selectedUser.username,
         projectId,
       },
       {
@@ -566,17 +566,17 @@ export function CollaboratorManager({
     return map
   }, [allRoles])
 
-  // Collect unique userIds from bindings for batch fetch
-  const userIds = useMemo(() => {
+  // Collect unique usernames from bindings for batch fetch
+  const usernames = useMemo(() => {
     if (!bindings) return []
-    const ids = new Set<string>()
+    const names = new Set<string>()
     for (const b of bindings) {
-      if (b.userId) ids.add(b.userId)
+      if (b.userId) names.add(b.userId)
     }
-    return [...ids]
+    return [...names]
   }, [bindings])
 
-  const { data: usersMap, isLoading: usersLoading } = useUsersByIds(userIds)
+  const { data: usersMap, isLoading: usersLoading } = useUsersByUsernames(usernames)
 
   // Resolve collaborators
   const collaborators: ResolvedCollaborator[] = useMemo(() => {
@@ -586,7 +586,7 @@ export function CollaboratorManager({
       .map((b) => {
         const user = usersMap.get(b.userId!)
         const role = roleMap.get(b.roleId)
-        const username = user?.username ?? b.userId ?? 'unknown'
+        const username = b.userId ?? 'unknown'
         const name = user?.name ?? ''
         return {
           binding: b,
@@ -612,9 +612,9 @@ export function CollaboratorManager({
     [currentUserRole, allRoles],
   )
 
-  // Set of existing user IDs for filtering autocomplete
-  const existingUserIds = useMemo(
-    () => new Set(collaborators.map((c) => c.binding.userId).filter(Boolean) as string[]),
+  // Set of existing usernames for filtering autocomplete
+  const existingUsernames = useMemo(
+    () => new Set(collaborators.map((c) => c.username)),
     [collaborators],
   )
 
@@ -624,7 +624,7 @@ export function CollaboratorManager({
     [collaborators],
   )
 
-  const isLoading = bindingsLoading || rolesLoading || (userIds.length > 0 && usersLoading)
+  const isLoading = bindingsLoading || rolesLoading || (usernames.length > 0 && usersLoading)
 
   // Error state
   if (bindingsError) {
@@ -669,7 +669,7 @@ export function CollaboratorManager({
         <UserSearchCombobox
           assignableRoles={assignableRoles}
           projectId={projectId}
-          existingUserIds={existingUserIds}
+          existingUsernames={existingUsernames}
         />
       )}
 
