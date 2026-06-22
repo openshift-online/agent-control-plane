@@ -84,10 +84,17 @@ export default function DashboardPage() {
     [sessions],
   )
 
+  const heading = (
+    <div className="flex items-center gap-3">
+      <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+      <ShareDialog projectId={projectId} currentUserRole={currentUserRole} />
+    </div>
+  )
+
   if (error) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        {heading}
         <p className="text-sm text-destructive">
           Failed to load dashboard data. Please try again later.
         </p>
@@ -98,7 +105,7 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        {heading}
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-48 w-full" />
         <Skeleton className="h-64 w-full" />
@@ -109,7 +116,7 @@ export default function DashboardPage() {
   if (sessions.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        {heading}
         <EmptyState
           icon={LayoutDashboard}
           title="No sessions yet"
@@ -121,12 +128,8 @@ export default function DashboardPage() {
 
   return (
     <div className="@container space-y-6">
-      {/* Heading row with view toggle */}
       <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <ShareDialog projectId={projectId} currentUserRole={currentUserRole} />
-        </div>
+        {heading}
         <Tabs value={view} onValueChange={setView}>
           <TabsList>
             <TabsTrigger value="list">
