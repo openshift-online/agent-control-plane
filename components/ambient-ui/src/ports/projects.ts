@@ -5,8 +5,14 @@ export type ProjectCreateInput = {
   description?: string
 }
 
+export type ProjectPatchInput = {
+  name?: string
+  description?: string
+}
+
 export type ProjectsPort = {
   list: (params?: ListParams) => Promise<PaginatedResult<DomainProject>>
   get: (projectId: string) => Promise<DomainProject>
   create: (input: ProjectCreateInput) => Promise<DomainProject>
+  patch: (projectId: string, input: ProjectPatchInput) => Promise<DomainProject>
 }
