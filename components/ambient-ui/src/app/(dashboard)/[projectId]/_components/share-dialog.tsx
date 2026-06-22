@@ -1,22 +1,23 @@
 'use client'
 
+import { useState } from 'react'
 import { Share2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-
+import { useProject } from '@/queries/use-projects'
 import { CollaboratorManager } from './collaborator-manager'
 
 type ShareDialogProps = {
   projectId: string
-  currentUserRole: string | null
+  currentUserRole?: string | null
   trigger?: React.ReactNode
 }
 
@@ -25,8 +26,12 @@ export function ShareDialog({
   currentUserRole,
   trigger,
 }: ShareDialogProps) {
+  const [open, setOpen] = useState(false)
+  const { data: project } = useProject(projectId)
+  const projectName = project?.name ?? projectId
+
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger ?? (
           <Button variant="outline" size="sm">
@@ -35,17 +40,21 @@ export function ShareDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Share project</DialogTitle>
-          <DialogDescription>
-            Add collaborators and manage access to this project.
-          </DialogDescription>
+      <DialogContent className="sm:max-w-lg gap-0 p-0">
+        <DialogHeader className="px-6 pt-6 pb-4">
+          <DialogTitle>Share &ldquo;{projectName}&rdquo;</DialogTitle>
         </DialogHeader>
-        <CollaboratorManager
-          projectId={projectId}
-          currentUserRole={currentUserRole}
-        />
+        <div className="px-6">
+          <CollaboratorManager
+            projectId={projectId}
+            currentUserRole={currentUserRole}
+          />
+        </div>
+        <DialogFooter className="px-6 py-4 border-t">
+          <Button onClick={() => setOpen(false)}>
+            Done
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

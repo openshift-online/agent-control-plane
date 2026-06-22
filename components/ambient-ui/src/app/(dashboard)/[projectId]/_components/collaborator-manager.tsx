@@ -1,12 +1,11 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useQueryClient, useQuery } from '@tanstack/react-query'
-import { Loader2, Search, UserPlus, X, LogOut, Trash2, Users } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Loader2, Users } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Button } from '@/components/ui/button'
 import {
   Command,
   CommandEmpty,
@@ -15,11 +14,12 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Popover, PopoverContent, PopoverAnchor } from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -33,12 +33,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
 
 import { useCurrentUser } from '@/hooks/use-current-user'
@@ -76,8 +70,21 @@ type ResolvedCollaborator = {
 }
 
 // ---------------------------------------------------------------------------
-// Role hierarchy helpers
+// Helpers
 // ---------------------------------------------------------------------------
+
+const AVATAR_COLORS = [
+  'bg-red-600', 'bg-blue-600', 'bg-green-600', 'bg-purple-600',
+  'bg-orange-600', 'bg-teal-600', 'bg-pink-600', 'bg-indigo-600',
+]
+
+function avatarColor(username: string): string {
+  let hash = 0
+  for (let i = 0; i < username.length; i++) {
+    hash = ((hash << 5) - hash + username.charCodeAt(i)) | 0
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]!
+}
 
 function getAssignableRoles(
   currentUserRole: string | null,
@@ -106,7 +113,7 @@ function getInitials(name: string, username: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Batch user fetch hook using list endpoint
+// Batch user fetch by username
 // ---------------------------------------------------------------------------
 
 function useUsersByUsernames(usernames: string[]) {
@@ -135,22 +142,22 @@ function useUsersByUsernames(usernames: string[]) {
 }
 
 // ---------------------------------------------------------------------------
-// Sub-components
+// User avatar
 // ---------------------------------------------------------------------------
 
-function UserAvatar({ initials }: { initials: string }) {
+function UserAvatar({ initials, username }: { initials: string; username: string }) {
   return (
-    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+    <div className={`flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white ${avatarColor(username)}`}>
       {initials}
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// User search combobox
+// Search input (Google Drive style)
 // ---------------------------------------------------------------------------
 
-function UserSearchCombobox({
+function UserSearchInput({
   assignableRoles,
   projectId,
   existingUsernames,
@@ -159,15 +166,9 @@ function UserSearchCombobox({
   projectId: string
   existingUsernames: Set<string>
 }) {
-  const [open, setOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedUser, setSelectedUser] = useState<DomainUserSearchResult | null>(null)
-  const [selectedRoleId, setSelectedRoleId] = useState<string>(
-    () => {
-      const viewer = assignableRoles.find((r) => r.name === RoleName.ProjectViewer)
-      return viewer?.id ?? assignableRoles[0]?.id ?? ''
-    },
-  )
+  const [open, setOpen] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const { data: searchResults, isLoading: isSearching } = useUserSearch(searchQuery)
   const createBinding = useCreateRoleBinding()
@@ -177,26 +178,26 @@ function UserSearchCombobox({
     [searchResults, existingUsernames],
   )
 
-  const handleSelect = useCallback((user: DomainUserSearchResult) => {
-    setSelectedUser(user)
-    setOpen(false)
-    setSearchQuery('')
-  }, [])
+  const defaultRoleId = useMemo(() => {
+    const viewer = assignableRoles.find((r) => r.name === RoleName.ProjectViewer)
+    return viewer?.id ?? assignableRoles[0]?.id ?? ''
+  }, [assignableRoles])
 
-  const handleAdd = useCallback(() => {
-    if (!selectedUser || !selectedRoleId) return
+  const handleSelect = useCallback((user: DomainUserSearchResult) => {
+    if (!defaultRoleId) return
 
     createBinding.mutate(
       {
-        roleId: selectedRoleId,
+        roleId: defaultRoleId,
         scope: 'project',
-        userId: selectedUser.username,
+        userId: user.username,
         projectId,
       },
       {
         onSuccess: () => {
-          toast.success(`Added ${selectedUser.name || selectedUser.username}`)
-          setSelectedUser(null)
+          toast.success(`Added ${user.name || user.username}`)
+          setSearchQuery('')
+          setOpen(false)
         },
         onError: (error) => {
           const message = error instanceof Error ? error.message : 'Failed to add collaborator'
@@ -208,114 +209,73 @@ function UserSearchCombobox({
         },
       },
     )
-  }, [selectedUser, selectedRoleId, projectId, createBinding])
+  }, [defaultRoleId, projectId, createBinding])
+
+  const showDropdown = searchQuery.length > 0 && (filteredResults.length > 0 || isSearching)
 
   return (
-    <div className="flex items-center gap-2">
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            aria-expanded={open}
-            className="w-full justify-start text-sm font-normal"
-          >
-            {selectedUser ? (
-              <span className="truncate">
-                {selectedUser.name || selectedUser.username}
-              </span>
-            ) : (
-              <span className="flex items-center gap-2 text-muted-foreground">
-                <Search className="size-4" />
-                Search users...
-              </span>
-            )}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[300px] p-0" align="start">
-          <Command shouldFilter={false}>
+    <Popover open={open && showDropdown} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>
+        <div className="relative">
+          <Command shouldFilter={false} className="border rounded-md">
             <CommandInput
-              placeholder="Search by name or username..."
+              ref={inputRef}
+              placeholder="Add people..."
               value={searchQuery}
-              onValueChange={setSearchQuery}
+              onValueChange={(v) => {
+                setSearchQuery(v)
+                if (v.length > 0) setOpen(true)
+              }}
+              onFocus={() => { if (searchQuery.length > 0) setOpen(true) }}
+              className="h-11"
             />
-            <CommandList>
-              {isSearching && searchQuery.length > 0 && (
-                <div className="flex items-center justify-center py-4">
-                  <Loader2 className="size-4 animate-spin text-muted-foreground" />
-                </div>
-              )}
-              {!isSearching && searchQuery.length > 0 && filteredResults.length === 0 && (
-                <CommandEmpty>No users found.</CommandEmpty>
-              )}
-              {filteredResults.length > 0 && (
-                <CommandGroup>
-                  {filteredResults.map((user) => (
-                    <CommandItem
-                      key={user.id}
-                      value={user.id}
-                      onSelect={() => handleSelect(user)}
-                    >
-                      <UserAvatar initials={getInitials(user.name, user.username)} />
-                      <div className="ml-2 flex flex-col">
-                        <span className="text-sm font-medium">{user.name || user.username}</span>
-                        {user.name && (
-                          <span className="text-xs text-muted-foreground">@{user.username}</span>
-                        )}
-                      </div>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              )}
-            </CommandList>
           </Command>
-        </PopoverContent>
-      </Popover>
-
-      {assignableRoles.length > 1 && (
-        <Select value={selectedRoleId} onValueChange={setSelectedRoleId}>
-          <SelectTrigger className="w-[120px] shrink-0">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {assignableRoles.map((role) => (
-              <SelectItem key={role.id} value={role.id}>
-                {getDisplayRole(role.name)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
-
-      <Button
-        size="sm"
-        onClick={handleAdd}
-        disabled={!selectedUser || !selectedRoleId || createBinding.isPending}
+        </div>
+      </PopoverAnchor>
+      <PopoverContent
+        className="w-[--radix-popover-trigger-width] p-0"
+        align="start"
+        onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        {createBinding.isPending ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : (
-          <UserPlus className="mr-1 size-4" />
-        )}
-        Add
-      </Button>
-
-      {selectedUser && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setSelectedUser(null)}
-          className="shrink-0 px-2"
-        >
-          <X className="size-4" />
-        </Button>
-      )}
-    </div>
+        <Command shouldFilter={false}>
+          <CommandList>
+            {isSearching && (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="size-4 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {!isSearching && filteredResults.length === 0 && searchQuery.length > 0 && (
+              <CommandEmpty>No users found.</CommandEmpty>
+            )}
+            {filteredResults.length > 0 && (
+              <CommandGroup>
+                {filteredResults.map((user) => (
+                  <CommandItem
+                    key={user.id}
+                    value={user.id}
+                    onSelect={() => handleSelect(user)}
+                    disabled={createBinding.isPending}
+                  >
+                    <UserAvatar initials={getInitials(user.name, user.username)} username={user.username} />
+                    <div className="ml-2 flex flex-col">
+                      <span className="text-sm font-medium">{user.name || user.username}</span>
+                      {user.name && (
+                        <span className="text-xs text-muted-foreground">@{user.username}</span>
+                      )}
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Collaborator row
+// Collaborator row (Google Drive style)
 // ---------------------------------------------------------------------------
 
 function CollaboratorRow({
@@ -339,22 +299,26 @@ function CollaboratorRow({
   const [confirmOpen, setConfirmOpen] = useState(false)
 
   const canMutate = !readOnly && assignableRoles.length > 0
+  const isOwnerRole = collaborator.roleName === RoleName.ProjectOwner
 
-  // Whether the current caller can change this user's role:
-  // They can only change to roles they can assign, and the row user's current
-  // role must also be within the roles they can assign (strictly-below rule)
   const canChangeRole =
     canMutate &&
     !isSoleOwner &&
     assignableRoles.some((r) => r.name === collaborator.roleName)
 
-  const canRemove = canMutate && !(isSoleOwner && isCurrentUser)
-
   const handleRoleChange = useCallback(
-    (newRoleId: string) => {
-      const newRole = allRoles.find((r) => r.id === newRoleId)
+    (value: string) => {
+      if (value === '__remove__') {
+        setConfirmOpen(true)
+        return
+      }
+      if (value === '__leave__') {
+        setConfirmOpen(true)
+        return
+      }
+      const newRole = allRoles.find((r) => r.id === value)
       patchBinding.mutate(
-        { id: collaborator.binding.id, request: { roleId: newRoleId } },
+        { id: collaborator.binding.id, request: { roleId: value } },
         {
           onSuccess: () => {
             toast.success(
@@ -362,9 +326,7 @@ function CollaboratorRow({
             )
           },
           onError: (error) => {
-            toast.error(
-              error instanceof Error ? error.message : 'Failed to change role',
-            )
+            toast.error(error instanceof Error ? error.message : 'Failed to change role')
           },
         },
       )
@@ -372,23 +334,19 @@ function CollaboratorRow({
     [collaborator, patchBinding, allRoles],
   )
 
-  const handleRemove = useCallback(() => {
+  const handleConfirmRemove = useCallback(() => {
     deleteBinding.mutate(collaborator.binding.id, {
       onSuccess: () => {
         if (isCurrentUser) {
           toast.success('You have left the project')
           router.push('/')
         } else {
-          toast.success(
-            `Removed ${collaborator.name || collaborator.username}`,
-          )
+          toast.success(`Removed ${collaborator.name || collaborator.username}`)
         }
         setConfirmOpen(false)
       },
       onError: (error) => {
-        toast.error(
-          error instanceof Error ? error.message : 'Failed to remove collaborator',
-        )
+        toast.error(error instanceof Error ? error.message : 'Failed to remove')
         setConfirmOpen(false)
       },
     })
@@ -396,8 +354,8 @@ function CollaboratorRow({
 
   return (
     <>
-      <div className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/50">
-        <UserAvatar initials={collaborator.initials} />
+      <div className="flex items-center gap-3 py-2">
+        <UserAvatar initials={collaborator.initials} username={collaborator.username} />
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
@@ -413,82 +371,38 @@ function CollaboratorRow({
           </span>
         </div>
 
-        {/* Role selector or display */}
-        <div className="flex items-center gap-2">
-          {canChangeRole ? (
-            <Select
-              value={collaborator.binding.roleId}
-              onValueChange={handleRoleChange}
-              disabled={patchBinding.isPending}
-            >
-              <SelectTrigger size="sm" className="w-[110px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {assignableRoles.map((role) => (
-                  <SelectItem key={role.id} value={role.id}>
-                    {getDisplayRole(role.name)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <span className="text-sm text-muted-foreground">
-              {collaborator.roleDisplayName}
-            </span>
-          )}
-
-          {/* Remove / Leave button */}
-          {canRemove && !isSoleOwner ? (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="shrink-0 px-2 text-destructive hover:text-destructive"
-                    onClick={() => setConfirmOpen(true)}
-                    disabled={deleteBinding.isPending}
-                  >
-                    {deleteBinding.isPending ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : isCurrentUser ? (
-                      <LogOut className="size-4" />
-                    ) : (
-                      <Trash2 className="size-4" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {isCurrentUser ? 'Leave project' : 'Remove'}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ) : isSoleOwner && isCurrentUser ? (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="shrink-0 px-2"
-                      disabled
-                    >
-                      <LogOut className="size-4" />
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  Transfer project ownership before leaving
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ) : null}
-        </div>
+        {/* Role: static text for owners / non-editable, Select dropdown otherwise */}
+        {canChangeRole ? (
+          <Select
+            value={collaborator.binding.roleId}
+            onValueChange={handleRoleChange}
+            disabled={patchBinding.isPending || deleteBinding.isPending}
+          >
+            <SelectTrigger className="w-[120px] shrink-0 border-0 shadow-none h-8 text-sm text-muted-foreground hover:text-foreground">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {assignableRoles.map((role) => (
+                <SelectItem key={role.id} value={role.id}>
+                  {getDisplayRole(role.name)}
+                </SelectItem>
+              ))}
+              <SelectSeparator />
+              <SelectItem
+                value={isCurrentUser ? '__leave__' : '__remove__'}
+                className="text-destructive focus:text-destructive"
+              >
+                {isCurrentUser ? 'Leave project' : 'Remove access'}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        ) : (
+          <span className="text-sm text-muted-foreground pr-2">
+            {collaborator.roleDisplayName}
+          </span>
+        )}
       </div>
 
-      {/* Confirmation dialog */}
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -497,19 +411,17 @@ function CollaboratorRow({
             </AlertDialogTitle>
             <AlertDialogDescription>
               {isCurrentUser
-                ? 'You will lose access to this project. This action cannot be undone.'
+                ? 'You will lose access to this project.'
                 : `${collaborator.name || collaborator.username} will lose access to this project.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleRemove}
+              onClick={handleConfirmRemove}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteBinding.isPending ? (
-                <Loader2 className="mr-2 size-4 animate-spin" />
-              ) : null}
+              {deleteBinding.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
               {isCurrentUser ? 'Leave' : 'Remove'}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -530,7 +442,6 @@ export function CollaboratorManager({
 }: CollaboratorManagerProps) {
   const { user: currentUser } = useCurrentUser()
 
-  // Fetch project-scoped role bindings
   const searchFilter = `scope = 'project' and project_id = '${projectId}'`
   const {
     data: bindings,
@@ -538,11 +449,9 @@ export function CollaboratorManager({
     error: bindingsError,
   } = useAllRoleBindings(searchFilter)
 
-  // Fetch all roles to resolve roleId → name
   const { data: rolesData, isLoading: rolesLoading } = useRoles({ size: 100 })
   const allRoles = useMemo(() => rolesData?.items ?? [], [rolesData])
 
-  // Build a roleId → role lookup
   const roleMap = useMemo(() => {
     const map = new Map<string, DomainRole>()
     for (const role of allRoles) {
@@ -551,7 +460,6 @@ export function CollaboratorManager({
     return map
   }, [allRoles])
 
-  // Collect unique usernames from bindings for batch fetch
   const usernames = useMemo(() => {
     if (!bindings) return []
     const names = new Set<string>()
@@ -563,7 +471,6 @@ export function CollaboratorManager({
 
   const { data: usersMap, isLoading: usersLoading } = useUsersByUsernames(usernames)
 
-  // Resolve collaborators
   const collaborators: ResolvedCollaborator[] = useMemo(() => {
     if (!bindings || !usersMap) return []
     return bindings
@@ -590,7 +497,6 @@ export function CollaboratorManager({
       })
   }, [bindings, usersMap, roleMap])
 
-  // Check if the current user has a global platform:admin binding
   const globalBindingsSearch = currentUser
     ? `scope = 'global' and user_id = '${currentUser.username}'`
     : undefined
@@ -604,7 +510,6 @@ export function CollaboratorManager({
     })
   }, [globalBindings, roleMap])
 
-  // Self-resolve the current user's role from bindings if not provided by parent
   const resolvedUserRole = useMemo(() => {
     if (currentUserRole) return currentUserRole
     if (isPlatformAdmin) return RoleName.PlatformAdmin
@@ -615,19 +520,16 @@ export function CollaboratorManager({
     return role?.name ?? null
   }, [currentUserRole, isPlatformAdmin, currentUser, bindings, roleMap])
 
-  // Determine assignable roles based on resolvedUserRole
   const assignableRoles = useMemo(
     () => getAssignableRoles(resolvedUserRole, allRoles),
     [resolvedUserRole, allRoles],
   )
 
-  // Set of existing usernames for filtering autocomplete
   const existingUsernames = useMemo(
     () => new Set(collaborators.map((c) => c.username)),
     [collaborators],
   )
 
-  // Count owners to determine sole-owner status
   const ownerCount = useMemo(
     () => collaborators.filter((c) => c.roleName === RoleName.ProjectOwner).length,
     [collaborators],
@@ -635,7 +537,6 @@ export function CollaboratorManager({
 
   const isLoading = bindingsLoading || rolesLoading || (usernames.length > 0 && usersLoading)
 
-  // Error state
   if (bindingsError) {
     return (
       <div className="rounded-md border border-destructive/50 bg-destructive/5 p-4">
@@ -646,22 +547,20 @@ export function CollaboratorManager({
     )
   }
 
-  // Loading state
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        {!readOnly && assignableRoles.length > 0 && (
-          <Skeleton className="h-10 w-full" />
-        )}
-        <div className="space-y-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="flex items-center gap-3 px-2 py-2">
-              <Skeleton className="size-8 rounded-full" />
+      <div className="space-y-5">
+        <Skeleton className="h-11 w-full rounded-md" />
+        <div className="space-y-1">
+          <Skeleton className="h-4 w-32 mb-3" />
+          {[1, 2].map((i) => (
+            <div key={i} className="flex items-center gap-3 py-2">
+              <Skeleton className="size-9 rounded-full" />
               <div className="flex-1 space-y-1">
                 <Skeleton className="h-4 w-32" />
                 <Skeleton className="h-3 w-24" />
               </div>
-              <Skeleton className="h-8 w-[110px]" />
+              <Skeleton className="h-5 w-14" />
             </div>
           ))}
         </div>
@@ -672,45 +571,47 @@ export function CollaboratorManager({
   const effectiveReadOnly = readOnly === true || assignableRoles.length === 0
 
   return (
-    <div className="space-y-4">
-      {/* Add collaborator section */}
+    <div className="space-y-5">
+      {/* Search input */}
       {!effectiveReadOnly && (
-        <UserSearchCombobox
+        <UserSearchInput
           assignableRoles={assignableRoles}
           projectId={projectId}
           existingUsernames={existingUsernames}
         />
       )}
 
-      {/* Collaborator list */}
-      {collaborators.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-8 text-center">
-          <Users className="size-8 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            No collaborators yet — share this project to get started
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-1">
-          {collaborators.map((collaborator) => {
-            const isCurrentUser =
-              currentUser?.username === collaborator.username
-            const isSoleOwner =
-              collaborator.roleName === RoleName.ProjectOwner && ownerCount === 1
-            return (
-              <CollaboratorRow
-                key={collaborator.binding.id}
-                collaborator={collaborator}
-                assignableRoles={assignableRoles}
-                allRoles={allRoles}
-                isCurrentUser={isCurrentUser}
-                isSoleOwner={isSoleOwner}
-                readOnly={effectiveReadOnly}
-              />
-            )
-          })}
-        </div>
-      )}
+      {/* People with access */}
+      <div>
+        <h3 className="text-sm font-medium mb-2">People with access</h3>
+
+        {collaborators.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-6 text-center">
+            <Users className="size-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              No collaborators yet
+            </p>
+          </div>
+        ) : (
+          <div>
+            {collaborators.map((collaborator) => {
+              const isCurrentUser = currentUser?.username === collaborator.username
+              const isSoleOwner = collaborator.roleName === RoleName.ProjectOwner && ownerCount === 1
+              return (
+                <CollaboratorRow
+                  key={collaborator.binding.id}
+                  collaborator={collaborator}
+                  assignableRoles={assignableRoles}
+                  allRoles={allRoles}
+                  isCurrentUser={isCurrentUser}
+                  isSoleOwner={isSoleOwner}
+                  readOnly={effectiveReadOnly}
+                />
+              )
+            })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
