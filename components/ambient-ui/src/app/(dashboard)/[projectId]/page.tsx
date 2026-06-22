@@ -9,10 +9,14 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmptyState } from '@/components/empty-state'
 import { useSessions } from '@/queries/use-sessions'
 import { useAgentNames } from '@/queries/use-agents'
+import { useAllRoleBindings } from '@/queries/use-role-bindings'
+import { useRoles } from '@/queries/use-roles'
+import { useCurrentUser } from '@/hooks/use-current-user'
 import { getNeedsYouItems, getWorkItemCards, getCompletionItems } from '@/domain/work-annotations'
 import { NeedsYouQueue } from './_components/needs-you-queue'
 import { ActiveWorkSection } from './_components/active-work-section'
 import { RecentActivity } from './_components/recent-activity'
+import { ShareDialog } from './_components/share-dialog'
 
 const TimelineView = dynamic(
   () => import('./_components/timeline-view').then((m) => ({ default: m.TimelineView })),
@@ -31,6 +35,20 @@ export default function DashboardPage() {
   const router = useRouter()
   const { data, isLoading, error } = useSessions(projectId)
   const { data: agentNames } = useAgentNames(projectId)
+
+  // Resolve current user's project role for the Share button
+  const { user: currentUser } = useCurrentUser()
+  const bindingSearch = `scope = 'project' and project_id = '${projectId}'`
+  const { data: projectBindings } = useAllRoleBindings(bindingSearch)
+  const { data: rolesData } = useRoles({ size: 100 })
+
+  const currentUserRole = useMemo(() => {
+    if (!currentUser || !projectBindings || !rolesData) return null
+    const binding = projectBindings.find((b) => b.userId === currentUser.username)
+    if (!binding) return null
+    const role = rolesData.items.find((r) => r.id === binding.roleId)
+    return role?.name ?? null
+  }, [currentUser, projectBindings, rolesData])
 
   const rawView = searchParams.get('view')
   const view: ViewMode = isViewMode(rawView) ? rawView : 'list'
@@ -105,7 +123,10 @@ export default function DashboardPage() {
     <div className="@container space-y-6">
       {/* Heading row with view toggle */}
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <ShareDialog projectId={projectId} currentUserRole={currentUserRole} />
+        </div>
         <Tabs value={view} onValueChange={setView}>
           <TabsList>
             <TabsTrigger value="list">
