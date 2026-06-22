@@ -13,7 +13,6 @@ import { getNeedsYouItems, getWorkItemCards, getCompletionItems } from '@/domain
 import { NeedsYouQueue } from './_components/needs-you-queue'
 import { ActiveWorkSection } from './_components/active-work-section'
 import { RecentActivity } from './_components/recent-activity'
-import { ShareDialog } from './_components/share-dialog'
 
 const TimelineView = dynamic(
   () => import('./_components/timeline-view').then((m) => ({ default: m.TimelineView })),
@@ -70,10 +69,7 @@ export default function DashboardPage() {
   if (error) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <ShareDialog projectId={projectId} />
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="text-sm text-destructive">
           Failed to load dashboard data. Please try again later.
         </p>
@@ -84,10 +80,7 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <ShareDialog projectId={projectId} />
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-48 w-full" />
         <Skeleton className="h-64 w-full" />
@@ -98,10 +91,7 @@ export default function DashboardPage() {
   if (sessions.length === 0) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <ShareDialog projectId={projectId} />
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <EmptyState
           icon={LayoutDashboard}
           title="No sessions yet"
@@ -114,10 +104,7 @@ export default function DashboardPage() {
   return (
     <div className="@container space-y-6">
       <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <ShareDialog projectId={projectId} />
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <Tabs value={view} onValueChange={setView}>
           <TabsList>
             <TabsTrigger value="list">

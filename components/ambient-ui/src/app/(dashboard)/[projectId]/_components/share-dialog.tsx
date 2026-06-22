@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Share2 } from 'lucide-react'
+import { UserPlus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -35,7 +35,7 @@ export function ShareDialog({
       <DialogTrigger asChild>
         {trigger ?? (
           <Button variant="outline" size="sm">
-            <Share2 className="mr-1.5 size-4" />
+            <UserPlus className="mr-1.5 size-4" />
             Share
           </Button>
         )}
