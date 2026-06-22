@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { LogOut, Search } from 'lucide-react'
+import { LogOut, Search, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Breadcrumb,
@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useCurrentUser } from '@/hooks/use-current-user'
 import { NotificationBell } from '@/components/notification-bell'
+import { useWorkspaceFlag } from '@/services/queries/use-feature-flags-admin'
 
 type NavHeaderProps = {
   projectId?: string | null
@@ -70,6 +71,22 @@ function SearchTrigger() {
         {isMac ? '⌘' : 'Ctrl+'}K
       </kbd>
     </button>
+  )
+}
+
+function SettingsGearIcon({ projectId }: { projectId: string }) {
+  const { enabled: sharingEnabled } = useWorkspaceFlag(projectId, 'feature.project-sharing.enabled')
+
+  if (!sharingEnabled) {
+    return null
+  }
+
+  return (
+    <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+      <Link href={`/${projectId}/settings`} aria-label="Project settings">
+        <Settings className="size-4" />
+      </Link>
+    </Button>
   )
 }
 
@@ -168,6 +185,7 @@ export function NavHeader({ projectId, effectiveProjectId, projectName, pageName
 
       <div className="ml-auto flex items-center gap-2">
         <SearchTrigger />
+        {projectId && <SettingsGearIcon projectId={projectId} />}
         {effectiveProjectId && <NotificationBell projectId={effectiveProjectId} />}
         <UserMenu />
       </div>
