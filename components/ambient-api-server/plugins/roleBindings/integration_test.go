@@ -11,6 +11,7 @@ import (
 	"gopkg.in/resty.v1"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/ambient-code/platform/components/ambient-api-server/test"
 )
 
@@ -152,4 +153,53 @@ func TestRoleBindingListSearch(t *testing.T) {
 	Expect(len(list.Items)).To(Equal(1))
 	Expect(list.Total).To(Equal(int32(1)))
 	Expect(*list.Items[0].Id).To(Equal(roleBindings[0].ID))
+}
+
+func TestRoleBindingPostInternalRoleWithPlatformAdmin(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+	ensureBuiltInRoles()
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+	username := strings.ToLower(account.Username())
+	seedAdminBinding(username)
+
+	tokenReaderRoleID := lookupRoleID(pkgrbac.RoleCredentialTokenReader)
+	Expect(tokenReaderRoleID).NotTo(BeEmpty(), "credential:token-reader role must exist")
+
+	roleBindingInput := openapi.RoleBinding{
+		RoleId: tokenReaderRoleID,
+		Scope:  "global",
+	}
+	roleBindingInput.SetUserId("test-runner-sa")
+
+	roleBindingOutput, resp, err := client.DefaultAPI.ApiAmbientV1RoleBindingsPost(ctx).RoleBinding(roleBindingInput).Execute()
+	Expect(err).NotTo(HaveOccurred(), "platform:admin should allow internal role assignment: %v", err)
+	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+	Expect(*roleBindingOutput.Id).NotTo(BeEmpty())
+	Expect(roleBindingOutput.RoleId).To(Equal(tokenReaderRoleID))
+}
+
+func TestRoleBindingPostInternalRoleAgentRunner(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+	ensureBuiltInRoles()
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+	username := strings.ToLower(account.Username())
+	seedAdminBinding(username)
+
+	runnerRoleID := lookupRoleID(pkgrbac.RoleAgentRunner)
+	Expect(runnerRoleID).NotTo(BeEmpty(), "agent:runner role must exist")
+
+	roleBindingInput := openapi.RoleBinding{
+		RoleId: runnerRoleID,
+		Scope:  "global",
+	}
+	roleBindingInput.SetUserId("test-runner-pod")
+
+	roleBindingOutput, resp, err := client.DefaultAPI.ApiAmbientV1RoleBindingsPost(ctx).RoleBinding(roleBindingInput).Execute()
+	Expect(err).NotTo(HaveOccurred(), "platform:admin should allow agent:runner assignment: %v", err)
+	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+	Expect(*roleBindingOutput.Id).NotTo(BeEmpty())
 }

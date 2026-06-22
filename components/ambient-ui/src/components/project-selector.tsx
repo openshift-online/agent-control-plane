@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { FolderOpen } from 'lucide-react'
 import { useProjects } from '@/queries/use-projects'
 import { domainProbe } from '@/lib/observability'
 import {
@@ -14,9 +15,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 type ProjectSelectorProps = {
   projectId: string | null
+  effectiveProjectId: string | null
 }
 
-export function ProjectSelector({ projectId }: ProjectSelectorProps) {
+export function ProjectSelector({ projectId, effectiveProjectId }: ProjectSelectorProps) {
   const router = useRouter()
   const { data, isLoading } = useProjects()
 
@@ -28,14 +30,17 @@ export function ProjectSelector({ projectId }: ProjectSelectorProps) {
 
   return (
     <Select
-      value={projectId ?? undefined}
+      value={effectiveProjectId ?? undefined}
       onValueChange={(value) => {
         domainProbe.projectSelected({ projectId: value })
-        router.push(`/${value}/sessions`)
+        router.push(`/${value}`)
       }}
     >
-      <SelectTrigger className="w-full">
-        <SelectValue placeholder="Select project..." />
+      <SelectTrigger className="w-full" aria-label="Select project">
+        <div className="flex items-center gap-2">
+          <FolderOpen aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+          <SelectValue placeholder="Select project..." />
+        </div>
       </SelectTrigger>
       <SelectContent>
         {projects.map((project) => (

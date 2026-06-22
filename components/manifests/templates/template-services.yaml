@@ -212,22 +212,22 @@ objects:
               - name: PGHOST
                 valueFrom:
                   secretKeyRef:
-                    name: ambient-api-server-db
+                    name: ${DB_SECRET_NAME}
                     key: db.host
               - name: PGUSER
                 valueFrom:
                   secretKeyRef:
-                    name: ambient-api-server-db
+                    name: ${DB_SECRET_NAME}
                     key: db.user
               - name: PGPASSWORD
                 valueFrom:
                   secretKeyRef:
-                    name: ambient-api-server-db
+                    name: ${DB_SECRET_NAME}
                     key: db.password
               - name: PGDATABASE
                 valueFrom:
                   secretKeyRef:
-                    name: ambient-api-server-db
+                    name: ${DB_SECRET_NAME}
                     key: db.name
           - name: migration
             image: ${IMAGE_AMBIENT_API_SERVER}:${IMAGE_TAG}
@@ -240,7 +240,7 @@ objects:
               - --db-user-file=/secrets/db/db.user
               - --db-password-file=/secrets/db/db.password
               - --db-name-file=/secrets/db/db.name
-              - --db-sslmode=disable
+              - --db-sslmode=${DB_SSLMODE}
               - --alsologtostderr
               - -v=4
             volumeMounts:
@@ -303,7 +303,7 @@ objects:
               - --metrics-server-bindaddress=:4433
               - --health-check-server-bindaddress=:4434
               - --enable-health-check-https=false
-              - --db-sslmode=disable
+              - --db-sslmode=${DB_SSLMODE}
               - --db-max-open-connections=50
               - --enable-db-debug=false
               - --enable-metrics-https=false
@@ -366,7 +366,7 @@ objects:
         volumes:
           - name: db-secrets
             secret:
-              secretName: ambient-api-server-db
+              secretName: ${DB_SECRET_NAME}
           - name: app-secrets
             secret:
               secretName: ambient-api-server
@@ -735,18 +735,24 @@ parameters:
   - name: NAMESPACE
     description: Target namespace
     value: ambient-api
+  - name: DB_SECRET_NAME
+    description: Name of the Secret containing db.host, db.port, db.user, db.password, db.name
+    value: ambient-api-server-db
+  - name: DB_SSLMODE
+    description: PostgreSQL SSL mode (disable for in-cluster, require for RDS)
+    value: disable
   - name: KEYCLOAK_REALM_URL
     description: Keycloak realm URL (e.g. https://keycloak.example.com/realms/ambient-code)
     required: true
   - name: ROUTE_HOST_API
-    description: API server route hostname
-    required: true
+    description: API server route hostname (leave empty for auto-generated)
+    value: ""
   - name: ROUTE_HOST_UI
-    description: UI route hostname
-    required: true
+    description: UI route hostname (leave empty for auto-generated)
+    value: ""
   - name: SSO_REDIRECT_URI
-    description: OIDC callback URL for ambient-ui
-    required: true
+    description: OIDC callback URL for ambient-ui (leave empty to derive from route)
+    value: ""
   - name: ANTHROPIC_VERTEX_PROJECT_ID
     description: GCP project ID for Vertex AI
     value: itpc-gcp-hcm-pe-eng-claude

@@ -21,6 +21,7 @@ type ProjectReconciler struct {
 	projectKube        *kubeclient.KubeClient
 	provisioner        kubeclient.NamespaceProvisioner
 	cpRuntimeNamespace string
+	platformMode       string
 	logger             zerolog.Logger
 }
 
@@ -31,13 +32,14 @@ func (r *ProjectReconciler) nsKube() *kubeclient.KubeClient {
 	return r.kube
 }
 
-func NewProjectReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cpRuntimeNamespace string, logger zerolog.Logger) *ProjectReconciler {
+func NewProjectReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cpRuntimeNamespace, platformMode string, logger zerolog.Logger) *ProjectReconciler {
 	return &ProjectReconciler{
 		factory:            factory,
 		kube:               kube,
 		projectKube:        projectKube,
 		provisioner:        provisioner,
 		cpRuntimeNamespace: cpRuntimeNamespace,
+		platformMode:       platformMode,
 		logger:             logger.With().Str("reconciler", "projects").Logger(),
 	}
 }
@@ -187,11 +189,63 @@ func (r *ProjectReconciler) ensureCreatorRoleBinding(ctx context.Context, projec
 	return nil
 }
 
+func (r *ProjectReconciler) controlPlaneRBACRules() []interface{} {
+	rules := []interface{}{
+		map[string]interface{}{
+			"apiGroups": []interface{}{""},
+			"resources": []interface{}{"secrets", "serviceaccounts", "services"},
+			"verbs":     []interface{}{"get", "list", "watch", "create", "delete", "deletecollection"},
+		},
+		map[string]interface{}{
+			"apiGroups": []interface{}{""},
+			"resources": []interface{}{"pods"},
+			"verbs":     []interface{}{"get", "list", "watch", "create", "delete", "deletecollection"},
+		},
+		map[string]interface{}{
+			"apiGroups": []interface{}{"rbac.authorization.k8s.io"},
+			"resources": []interface{}{"rolebindings"},
+			"verbs":     []interface{}{"get", "list", "watch", "create", "delete"},
+		},
+	}
+
+	if r.platformMode == "mpp" {
+		rules = append(rules,
+			map[string]interface{}{
+				"apiGroups": []interface{}{"build.openshift.io"},
+				"resources": []interface{}{"buildconfigs", "buildconfigs/instantiate", "builds", "builds/log"},
+				"verbs":     []interface{}{"get", "list", "create", "update", "delete"},
+			},
+			map[string]interface{}{
+				"apiGroups": []interface{}{"image.openshift.io"},
+				"resources": []interface{}{"imagestreams", "imagestreamtags", "imagestreamimages"},
+				"verbs":     []interface{}{"get", "list", "create", "update", "delete"},
+			},
+			map[string]interface{}{
+				"apiGroups": []interface{}{"route.openshift.io"},
+				"resources": []interface{}{"routes"},
+				"verbs":     []interface{}{"get", "list", "create", "update", "delete"},
+			},
+		)
+	}
+
+	return rules
+}
+
 func (r *ProjectReconciler) ensureControlPlaneRBAC(ctx context.Context, project types.Project) error {
 	namespace := r.provisioner.NamespaceName(project.ID)
 	const roleName = "ambient-control-plane-project-manager"
 
-	if _, err := r.nsKube().GetRole(ctx, namespace, roleName); err == nil {
+	desiredRules := r.controlPlaneRBACRules()
+
+	existing, err := r.nsKube().GetRole(ctx, namespace, roleName)
+	if err == nil {
+		if err := unstructured.SetNestedSlice(existing.Object, desiredRules, "rules"); err != nil {
+			return fmt.Errorf("setting rules on Role %s/%s: %w", namespace, roleName, err)
+		}
+		if _, err := r.nsKube().UpdateRole(ctx, existing); err != nil {
+			return fmt.Errorf("updating Role %s/%s: %w", namespace, roleName, err)
+		}
+		r.logger.Info().Str("namespace", namespace).Msg("control-plane RBAC role updated")
 		return nil
 	} else if !k8serrors.IsNotFound(err) {
 		return fmt.Errorf("checking Role %s/%s: %w", namespace, roleName, err)
@@ -205,27 +259,11 @@ func (r *ProjectReconciler) ensureControlPlaneRBAC(ctx context.Context, project 
 				"name":      roleName,
 				"namespace": namespace,
 			},
-			"rules": []interface{}{
-				map[string]interface{}{
-					"apiGroups": []interface{}{""},
-					"resources": []interface{}{"secrets", "serviceaccounts", "services"},
-					"verbs":     []interface{}{"get", "list", "watch", "create", "delete", "deletecollection"},
-				},
-				map[string]interface{}{
-					"apiGroups": []interface{}{""},
-					"resources": []interface{}{"pods"},
-					"verbs":     []interface{}{"get", "list", "watch", "create", "delete", "deletecollection"},
-				},
-				map[string]interface{}{
-					"apiGroups": []interface{}{"rbac.authorization.k8s.io"},
-					"resources": []interface{}{"rolebindings"},
-					"verbs":     []interface{}{"get", "list", "watch", "create", "delete"},
-				},
-			},
+			"rules": desiredRules,
 		},
 	}
 
-	if _, err := r.nsKube().CreateRole(ctx, role); err != nil && !k8serrors.IsAlreadyExists(err) {
+	if _, err := r.nsKube().CreateRole(ctx, role); err != nil {
 		return fmt.Errorf("creating Role %s/%s: %w", namespace, roleName, err)
 	}
 
@@ -252,7 +290,7 @@ func (r *ProjectReconciler) ensureControlPlaneRBAC(ctx context.Context, project 
 		},
 	}
 
-	if _, err := r.nsKube().CreateRoleBinding(ctx, namespace, rb); err != nil && !k8serrors.IsAlreadyExists(err) {
+	if _, err := r.nsKube().CreateRoleBinding(ctx, namespace, rb); err != nil {
 		return fmt.Errorf("creating RoleBinding %s/%s: %w", namespace, roleName, err)
 	}
 

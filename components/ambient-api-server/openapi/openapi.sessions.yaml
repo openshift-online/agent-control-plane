@@ -480,6 +480,11 @@ components:
             kube_namespace:
               type: string
               readOnly: true
+            last_activity_at:
+              type: string
+              format: date-time
+              readOnly: true
+              description: Timestamp of the last agent activity (message push) for staleness detection.
     # NEW SCHEMA START
     SessionList:
     # NEW SCHEMA END

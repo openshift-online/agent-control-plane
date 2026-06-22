@@ -11,6 +11,8 @@ async function getOIDCConfig(): Promise<client.Configuration> {
     return cachedConfig
   }
 
+  // Always fetch discovery from the backend issuer (cluster-internal DNS)
+  // The pod can't reach SSO_FRONTEND_ISSUER_URL (localhost:18856)
   const issuerURL = env.SSO_ISSUER_URL
   const clientId = env.SSO_CLIENT_ID
   const clientSecret = env.SSO_CLIENT_SECRET
@@ -33,18 +35,52 @@ async function getOIDCConfig(): Promise<client.Configuration> {
   }
   const metadata: unknown = await resp.json()
 
-  cachedConfig = new client.Configuration(
+  // Keycloak returns browser-facing URLs using KC_HOSTNAME (e.g. http://localhost/sso).
+  // When port-forwarding the service for local development, the browser needs to reach Keycloak on
+  // a port-forwarded URL instead of the internal service URL.
+  // Rewrite the discovered issuer prefix to SSO_FRONTEND_ISSUER_URL for browser endpoints.
+  if (env.SSO_FRONTEND_ISSUER_URL) {
+    const metadataObj = metadata as Record<string, unknown>
+    const discoveredIssuer = typeof metadataObj.issuer === 'string' ? metadataObj.issuer : ''
+    const frontendIssuer = env.SSO_FRONTEND_ISSUER_URL
+
+    // Normalize trailing slashes for comparison - both Keycloak discovery output and the env var
+    // should be consistent, but handle mismatches defensively
+    const normalizeUrl = (url: string) => url.replace(/\/+$/, '')
+    const normalizedDiscovered = normalizeUrl(discoveredIssuer)
+    const normalizedFrontend = normalizeUrl(frontendIssuer)
+
+    if (normalizedDiscovered && normalizedDiscovered !== normalizedFrontend) {
+      const browserEndpoints = [
+        'issuer',
+        'authorization_endpoint',
+        'end_session_endpoint',
+        'check_session_iframe',
+      ]
+
+      browserEndpoints.forEach((key) => {
+        if (typeof metadataObj[key] === 'string') {
+          // Replace using normalized discovered issuer, but preserve original trailing slash behavior
+          const original = metadataObj[key] as string
+          metadataObj[key] = original.replace(discoveredIssuer, frontendIssuer)
+        }
+      })
+    }
+  }
+
+  const config = new client.Configuration(
     metadata as client.ServerMetadata,
     clientId,
     clientSecret,
   )
 
   if (useInsecure) {
-    client.allowInsecureRequests(cachedConfig)
+    client.allowInsecureRequests(config)
   }
 
+  cachedConfig = config
   cachedAt = Date.now()
-  return cachedConfig
+  return config
 }
 
 export async function buildAuthorizationUrl(redirectUri: string): Promise<{
@@ -52,6 +88,7 @@ export async function buildAuthorizationUrl(redirectUri: string): Promise<{
   codeVerifier: string
   state: string
 }> {
+  // Fetch config with rewritten URLs (backend fetch, frontend URLs)
   const config = await getOIDCConfig()
   const codeVerifier = client.randomPKCECodeVerifier()
   const codeChallenge = await client.calculatePKCECodeChallenge(codeVerifier)
@@ -110,6 +147,7 @@ export async function refreshOIDCTokens(refreshToken: string): Promise<{
 }
 
 export async function getEndSessionUrl(postLogoutRedirectUri: string, idTokenHint?: string): Promise<string> {
+  // Config already has frontend URLs due to rewriting
   const config = await getOIDCConfig()
   const metadata = config.serverMetadata()
   const endSessionEndpoint = metadata.end_session_endpoint

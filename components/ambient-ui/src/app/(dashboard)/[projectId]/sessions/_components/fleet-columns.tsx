@@ -18,18 +18,41 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import type { DomainSession, SessionPhase } from '@/domain/types'
+import {
+  WORK_JIRA_ISSUE,
+  WORK_JIRA_URL,
+  WORK_GITHUB_PR,
+  WORK_GITHUB_PR_URL,
+  AGENT_NEEDS_INPUT,
+  LEGACY_JIRA_ISSUE,
+  LEGACY_GITHUB_PR,
+  LEGACY_GITLAB_MR,
+  LEGACY_GERRIT_CHANGE,
+  LEGACY_NEEDS_INPUT,
+  isStale,
+  getStaleMinutes,
+} from '@/domain/work-annotations'
 import { formatRelativeTime, formatAbsoluteTime, formatPreciseDuration } from '@/lib/format-timestamp'
 import { useChatSidebar } from '@/components/chat-sidebar-context'
 import { PhaseBadge } from './phase-badge'
 
 const COST_ANNOTATION = 'ambient-code.io/cost/estimate'
 
-/** Annotation keys for work item integrations, in priority order */
+/** URL companion keys for clickable work item chips */
+const WORK_ITEM_URL_COMPANIONS: Record<string, string> = {
+  [WORK_JIRA_ISSUE]: WORK_JIRA_URL,
+  [WORK_GITHUB_PR]: WORK_GITHUB_PR_URL,
+}
+
+/** Annotation keys for work item integrations, in priority order.
+ *  New `work.acp.io/*` keys first, then legacy `ambient-code.io/*` fallbacks. */
 const WORK_ITEM_ANNOTATIONS = [
-  { key: 'ambient-code.io/jira/issue', label: 'Jira', Icon: Ticket },
-  { key: 'ambient-code.io/github/pr', label: 'PR', Icon: GitPullRequest },
-  { key: 'ambient-code.io/gitlab/mr', label: 'MR', Icon: GitPullRequest },
-  { key: 'ambient-code.io/gerrit/change', label: 'Gerrit', Icon: ExternalLink },
+  { key: WORK_JIRA_ISSUE, label: 'Jira', Icon: Ticket },
+  { key: WORK_GITHUB_PR, label: 'PR', Icon: GitPullRequest },
+  { key: LEGACY_JIRA_ISSUE, label: 'Jira', Icon: Ticket },
+  { key: LEGACY_GITHUB_PR, label: 'PR', Icon: GitPullRequest },
+  { key: LEGACY_GITLAB_MR, label: 'MR', Icon: GitPullRequest },
+  { key: LEGACY_GERRIT_CHANGE, label: 'Gerrit', Icon: ExternalLink },
 ] as const
 
 const REVIEW_STATUS_ANNOTATION = 'ambient-code.io/review/status'
@@ -144,7 +167,27 @@ export const fleetColumns = [
   }),
   col.accessor('phase', {
     header: 'Phase',
-    cell: info => <PhaseBadge phase={info.getValue()} />,
+    cell: info => {
+      const session = info.row.original
+      const staleMinutes = getStaleMinutes(session)
+      return (
+        <span className="inline-flex items-center gap-1.5">
+          <PhaseBadge phase={info.getValue()} />
+          {staleMinutes !== null && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="border-status-warning-border text-status-warning-foreground">
+                  Stale
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                No messages or tool calls received for over 15 minutes
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </span>
+      )
+    },
     size: 130,
     enableSorting: true,
     sortingFn: phaseSortingFn,
@@ -173,10 +216,31 @@ export const fleetColumns = [
       for (const { key, label, Icon } of WORK_ITEM_ANNOTATIONS) {
         const value = annotations[key]
         if (value) {
-          return (
-            <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+          const urlKey = WORK_ITEM_URL_COMPANIONS[key]
+          const url = urlKey ? annotations[urlKey] : undefined
+          const chipContent = (
+            <>
               <Icon className="size-3 shrink-0" />
               <span className="truncate max-w-[120px]">{value}</span>
+              {url && <ExternalLink className="size-2.5 shrink-0 opacity-60" />}
+            </>
+          )
+          if (url) {
+            return (
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+              >
+                {chipContent}
+              </a>
+            )
+          }
+          return (
+            <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+              {chipContent}
             </span>
           )
         }
@@ -211,15 +275,31 @@ export const fleetColumns = [
     id: 'review',
     header: 'Review',
     cell: ({ row }) => {
-      const raw = row.original.annotations[REVIEW_STATUS_ANNOTATION]
-      if (!raw || !isReviewStatus(raw)) {
+      const annotations = row.original.annotations
+      const raw = annotations[REVIEW_STATUS_ANNOTATION]
+      const needsInput =
+        annotations[AGENT_NEEDS_INPUT] ?? annotations[LEGACY_NEEDS_INPUT]
+      const hasNeedsInput = needsInput !== undefined && needsInput !== 'false'
+
+      if (!raw && !hasNeedsInput) {
         return <span className="text-muted-foreground">—</span>
       }
-      const config = REVIEW_STATUS_CONFIG[raw]
+
+      const reviewConfig = raw && isReviewStatus(raw) ? REVIEW_STATUS_CONFIG[raw] : null
+
       return (
-        <Badge variant="outline" className={config.className}>
-          {config.label}
-        </Badge>
+        <span className="inline-flex items-center gap-1.5 flex-wrap">
+          {reviewConfig && (
+            <Badge variant="outline" className={reviewConfig.className}>
+              {reviewConfig.label}
+            </Badge>
+          )}
+          {hasNeedsInput && (
+            <Badge variant="outline" className="border-status-warning-border text-status-warning-foreground">
+              Needs Input
+            </Badge>
+          )}
+        </span>
       )
     },
     enableSorting: false,

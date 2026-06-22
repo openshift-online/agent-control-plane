@@ -73,7 +73,7 @@ Compare the spec against the current state of the code. For each component:
 | **CLI**      | Does `acpctl` implement every route marked implemented in the spec CLI table? |
 | **Operator** | Does the control plane handle Agent-scoped session start? |
 | **Runners**  | Does the runner drain inbox at session start and push correct event types? |
-| **FE**       | Do API service layer, queries, and components exist for all new entities? |
+| **FE**       | Do API service layer, queries, and components exist for all new entities? Run the ui-audit skill. |
 
 Check all three directions for every Kind:
 1. Spec ERD → `model.go` — spec says field exists; is it in the model?

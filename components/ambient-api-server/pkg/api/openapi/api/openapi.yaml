@@ -4140,6 +4140,12 @@ components:
           kube_namespace:
             readOnly: true
             type: string
+          last_activity_at:
+            description: Timestamp of the last agent activity (message push) for staleness
+              detection.
+            format: date-time
+            readOnly: true
+            type: string
         required:
         - name
         type: object
@@ -4156,6 +4162,7 @@ components:
         sdk_restart_count: 7
         updated_at: 2000-01-23T04:56:07.000+00:00
         project_id: project_id
+        last_activity_at: 2000-01-23T04:56:07.000+00:00
         parent_session_id: parent_session_id
         id: id
         href: href
@@ -4206,6 +4213,7 @@ components:
           sdk_restart_count: 7
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
+          last_activity_at: 2000-01-23T04:56:07.000+00:00
           parent_session_id: parent_session_id
           id: id
           href: href
@@ -4241,6 +4249,7 @@ components:
           sdk_restart_count: 7
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
+          last_activity_at: 2000-01-23T04:56:07.000+00:00
           parent_session_id: parent_session_id
           id: id
           href: href
@@ -5052,6 +5061,7 @@ components:
           sdk_restart_count: 7
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
+          last_activity_at: 2000-01-23T04:56:07.000+00:00
           parent_session_id: parent_session_id
           id: id
           href: href
@@ -5087,6 +5097,7 @@ components:
           sdk_restart_count: 7
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
+          last_activity_at: 2000-01-23T04:56:07.000+00:00
           parent_session_id: parent_session_id
           id: id
           href: href
@@ -5133,6 +5144,7 @@ components:
           sdk_restart_count: 7
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
+          last_activity_at: 2000-01-23T04:56:07.000+00:00
           parent_session_id: parent_session_id
           id: id
           href: href

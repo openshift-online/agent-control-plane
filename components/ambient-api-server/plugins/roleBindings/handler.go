@@ -82,10 +82,11 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 					return nil, errors.GeneralError("authorization check failed")
 				}
 				callerLevel := pkgrbac.HighestLevel(callerRoleNames)
-				if pkgrbac.InternalRoles[targetRoleName] && callerLevel != 0 {
-					return nil, errors.Forbidden("cannot assign internal role")
-				}
-				if !pkgrbac.CanGrant(callerLevel, targetRoleName) {
+				if pkgrbac.InternalRoles[targetRoleName] {
+					if callerLevel != 0 {
+						return nil, errors.Forbidden("cannot assign internal role")
+					}
+				} else if !pkgrbac.CanGrant(callerLevel, targetRoleName) {
 					return nil, errors.Forbidden("insufficient privileges to grant this role")
 				}
 

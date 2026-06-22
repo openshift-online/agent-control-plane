@@ -26,6 +26,8 @@ func ensureBuiltInRoles() {
 		{"agent:operator", `["agent:read","agent:update","agent:start","agent:list","session:read","session:list"]`},
 		{"agent:observer", `["agent:read","agent:list","session:read","session:list"]`},
 		{"agent:runner", `["session:read","session_message:*"]`},
+		{"credential:owner", `["credential:create","credential:read","credential:update","credential:delete","credential:list"]`},
+		{"credential:token-reader", `["credential:fetch_token"]`},
 	}
 	for _, r := range roles {
 		g.Exec(

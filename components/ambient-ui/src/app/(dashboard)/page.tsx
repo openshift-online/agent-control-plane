@@ -83,13 +83,13 @@ export default function ProjectPickerPage() {
           <Card
             key={project.id}
             className="cursor-pointer transition-shadow hover:shadow-md"
-            onClick={() => router.push(`/${project.id}/sessions`)}
+            onClick={() => router.push(`/${project.id}`)}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()
-                router.push(`/${project.id}/sessions`)
+                router.push(`/${project.id}`)
               }
             }}
           >

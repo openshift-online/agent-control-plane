@@ -315,6 +315,56 @@ func TestWatchSessionMessages(t *testing.T) {
 	}
 }
 
+func TestGRPCPushUpdatesLastActivityAt(t *testing.T) {
+	h, _ := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	token := h.CreateJWTString(account)
+
+	conn, err := grpc.NewClient(
+		h.GRPCAddress(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	Expect(err).NotTo(HaveOccurred())
+	defer func() { _ = conn.Close() }()
+
+	client := pb.NewSessionServiceClient(conn)
+	ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer "+token)
+
+	created, err := client.CreateSession(ctx, &pb.CreateSessionRequest{
+		Name:   "grpc-activity-test",
+		Prompt: stringPtr("test prompt"),
+	})
+	Expect(err).NotTo(HaveOccurred())
+	sessionID := created.GetMetadata().GetId()
+	defer func() {
+		_, _ = client.DeleteSession(ctx, &pb.DeleteSessionRequest{Id: sessionID})
+	}()
+
+	// Verify last_activity_at is nil on creation
+	got, err := client.GetSession(ctx, &pb.GetSessionRequest{Id: sessionID})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(got.GetLastActivityAt()).To(BeNil(), "last_activity_at should be nil on creation via gRPC")
+
+	beforePush := time.Now().UTC().Add(-time.Second)
+
+	// Push a message via gRPC
+	_, err = client.PushSessionMessage(ctx, &pb.PushSessionMessageRequest{
+		SessionId: sessionID,
+		EventType: "system",
+		Payload:   "grpc activity test message",
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	// Fetch the session via gRPC and verify last_activity_at is set
+	got, err = client.GetSession(ctx, &pb.GetSessionRequest{Id: sessionID})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(got.GetLastActivityAt()).NotTo(BeNil(), "last_activity_at should be set after gRPC message push")
+	lastActivity := got.GetLastActivityAt().AsTime()
+	Expect(lastActivity).To(BeTemporally(">", beforePush), "last_activity_at should be recent")
+	Expect(lastActivity).To(BeTemporally("~", time.Now().UTC(), 10*time.Second), "last_activity_at should be close to now")
+}
+
 func TestWatchSessionMessagesReplay(t *testing.T) {
 	h, _ := test.RegisterIntegration(t)
 
