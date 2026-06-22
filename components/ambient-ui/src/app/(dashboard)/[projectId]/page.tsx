@@ -9,9 +9,6 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmptyState } from '@/components/empty-state'
 import { useSessions } from '@/queries/use-sessions'
 import { useAgentNames } from '@/queries/use-agents'
-import { useAllRoleBindings } from '@/queries/use-role-bindings'
-import { useRoles } from '@/queries/use-roles'
-import { useCurrentUser } from '@/hooks/use-current-user'
 import { getNeedsYouItems, getWorkItemCards, getCompletionItems } from '@/domain/work-annotations'
 import { NeedsYouQueue } from './_components/needs-you-queue'
 import { ActiveWorkSection } from './_components/active-work-section'
@@ -35,20 +32,6 @@ export default function DashboardPage() {
   const router = useRouter()
   const { data, isLoading, error } = useSessions(projectId)
   const { data: agentNames } = useAgentNames(projectId)
-
-  // Resolve current user's project role for the Share button
-  const { user: currentUser } = useCurrentUser()
-  const bindingSearch = `scope = 'project' and project_id = '${projectId}'`
-  const { data: projectBindings } = useAllRoleBindings(bindingSearch)
-  const { data: rolesData } = useRoles({ size: 100 })
-
-  const currentUserRole = useMemo(() => {
-    if (!currentUser || !projectBindings || !rolesData) return null
-    const binding = projectBindings.find((b) => b.userId === currentUser.username)
-    if (!binding) return null
-    const role = rolesData.items.find((r) => r.id === binding.roleId)
-    return role?.name ?? null
-  }, [currentUser, projectBindings, rolesData])
 
   const rawView = searchParams.get('view')
   const view: ViewMode = isViewMode(rawView) ? rawView : 'list'
@@ -84,17 +67,13 @@ export default function DashboardPage() {
     [sessions],
   )
 
-  const heading = (
-    <div className="flex items-center gap-3">
-      <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-      <ShareDialog projectId={projectId} currentUserRole={currentUserRole} />
-    </div>
-  )
-
   if (error) {
     return (
       <div className="space-y-6">
-        {heading}
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <ShareDialog projectId={projectId} />
+        </div>
         <p className="text-sm text-destructive">
           Failed to load dashboard data. Please try again later.
         </p>
@@ -105,7 +84,10 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        {heading}
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <ShareDialog projectId={projectId} />
+        </div>
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-48 w-full" />
         <Skeleton className="h-64 w-full" />
@@ -116,7 +98,10 @@ export default function DashboardPage() {
   if (sessions.length === 0) {
     return (
       <div className="space-y-6">
-        {heading}
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <ShareDialog projectId={projectId} />
+        </div>
         <EmptyState
           icon={LayoutDashboard}
           title="No sessions yet"
@@ -129,7 +114,10 @@ export default function DashboardPage() {
   return (
     <div className="@container space-y-6">
       <div className="flex items-center justify-between gap-4">
-        {heading}
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <ShareDialog projectId={projectId} />
+        </div>
         <Tabs value={view} onValueChange={setView}>
           <TabsList>
             <TabsTrigger value="list">
