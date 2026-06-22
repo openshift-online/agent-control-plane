@@ -178,8 +178,11 @@ else
 fi
 echo ""
 
+AMBIENT_UI_URL="${AMBIENT_UI_URL:-http://localhost:8080}"
+
 echo "Next steps:"
-echo "  1. Create a session via the UI at http://localhost:8080"
+echo "  - Create a session via the UI at $AMBIENT_UI_URL"
+echo "  - Note: Existing sessions will need to be restarted to use Vertex AI"
 echo ""
 echo "To switch back to Anthropic API, update the ConfigMap:"
 echo "  kubectl patch configmap operator-config -n $NAMESPACE --type merge \\"

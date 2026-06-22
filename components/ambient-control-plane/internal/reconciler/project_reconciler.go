@@ -21,6 +21,7 @@ type ProjectReconciler struct {
 	projectKube        *kubeclient.KubeClient
 	provisioner        kubeclient.NamespaceProvisioner
 	cpRuntimeNamespace string
+	platformMode       string
 	logger             zerolog.Logger
 }
 
@@ -31,13 +32,14 @@ func (r *ProjectReconciler) nsKube() *kubeclient.KubeClient {
 	return r.kube
 }
 
-func NewProjectReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cpRuntimeNamespace string, logger zerolog.Logger) *ProjectReconciler {
+func NewProjectReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cpRuntimeNamespace, platformMode string, logger zerolog.Logger) *ProjectReconciler {
 	return &ProjectReconciler{
 		factory:            factory,
 		kube:               kube,
 		projectKube:        projectKube,
 		provisioner:        provisioner,
 		cpRuntimeNamespace: cpRuntimeNamespace,
+		platformMode:       platformMode,
 		logger:             logger.With().Str("reconciler", "projects").Logger(),
 	}
 }
@@ -188,7 +190,7 @@ func (r *ProjectReconciler) ensureCreatorRoleBinding(ctx context.Context, projec
 }
 
 func (r *ProjectReconciler) controlPlaneRBACRules() []interface{} {
-	return []interface{}{
+	rules := []interface{}{
 		map[string]interface{}{
 			"apiGroups": []interface{}{""},
 			"resources": []interface{}{"secrets", "serviceaccounts", "services"},
@@ -204,22 +206,29 @@ func (r *ProjectReconciler) controlPlaneRBACRules() []interface{} {
 			"resources": []interface{}{"rolebindings"},
 			"verbs":     []interface{}{"get", "list", "watch", "create", "delete"},
 		},
-		map[string]interface{}{
-			"apiGroups": []interface{}{"build.openshift.io"},
-			"resources": []interface{}{"buildconfigs", "buildconfigs/instantiate", "builds", "builds/log"},
-			"verbs":     []interface{}{"get", "list", "create", "update", "delete"},
-		},
-		map[string]interface{}{
-			"apiGroups": []interface{}{"image.openshift.io"},
-			"resources": []interface{}{"imagestreams", "imagestreamtags", "imagestreamimages"},
-			"verbs":     []interface{}{"get", "list", "create", "update", "delete"},
-		},
-		map[string]interface{}{
-			"apiGroups": []interface{}{"route.openshift.io"},
-			"resources": []interface{}{"routes"},
-			"verbs":     []interface{}{"get", "list", "create", "update", "delete"},
-		},
 	}
+
+	if r.platformMode == "mpp" {
+		rules = append(rules,
+			map[string]interface{}{
+				"apiGroups": []interface{}{"build.openshift.io"},
+				"resources": []interface{}{"buildconfigs", "buildconfigs/instantiate", "builds", "builds/log"},
+				"verbs":     []interface{}{"get", "list", "create", "update", "delete"},
+			},
+			map[string]interface{}{
+				"apiGroups": []interface{}{"image.openshift.io"},
+				"resources": []interface{}{"imagestreams", "imagestreamtags", "imagestreamimages"},
+				"verbs":     []interface{}{"get", "list", "create", "update", "delete"},
+			},
+			map[string]interface{}{
+				"apiGroups": []interface{}{"route.openshift.io"},
+				"resources": []interface{}{"routes"},
+				"verbs":     []interface{}{"get", "list", "create", "update", "delete"},
+			},
+		)
+	}
+
+	return rules
 }
 
 func (r *ProjectReconciler) ensureControlPlaneRBAC(ctx context.Context, project types.Project) error {
