@@ -57,4 +57,10 @@ export const queryKeys = {
     list: (params?: ListParams) =>
       [...queryKeys.roles.lists(), params] as const,
   },
+  users: {
+    all: ['users'] as const,
+    lists: () => [...queryKeys.users.all, 'list'] as const,
+    list: (params?: ListParams) =>
+      [...queryKeys.users.lists(), params] as const,
+  },
 } as const

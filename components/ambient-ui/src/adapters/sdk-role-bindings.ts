@@ -1,9 +1,10 @@
 import { RoleBindingAPI } from 'ambient-sdk'
-import type { RoleBindingCreateRequest } from 'ambient-sdk'
+import type { RoleBindingCreateRequest, RoleBindingPatchRequest } from 'ambient-sdk'
 import type { RoleBindingsPort } from '@/ports/role-bindings'
 import type {
   DomainRoleBinding,
   DomainRoleBindingCreateRequest,
+  DomainRoleBindingPatchRequest,
   ListParams,
   PaginatedResult,
 } from '@/domain/types'
@@ -67,6 +68,14 @@ export function createRoleBindingsAdapter(): RoleBindingsPort {
       const api = getAPI()
       const sdkReq = mapDomainCreateToSdk(request)
       const roleBinding = await api.create(sdkReq)
+      return mapSdkRoleBindingToDomain(roleBinding)
+    },
+
+    async patch(id: string, request: DomainRoleBindingPatchRequest): Promise<DomainRoleBinding> {
+      const api = getAPI()
+      const sdkReq: RoleBindingPatchRequest = {}
+      if (request.roleId) sdkReq.role_id = request.roleId
+      const roleBinding = await api.update(sanitizeId(id), sdkReq)
       return mapSdkRoleBindingToDomain(roleBinding)
     },
 
