@@ -61,7 +61,7 @@ import { createUsersAdapter } from '@/adapters/sdk-users'
 
 type CollaboratorManagerProps = {
   projectId: string
-  currentUserRole: string | null // role name like 'project:owner'
+  currentUserRole?: string | null
   readOnly?: boolean
 }
 
@@ -606,10 +606,20 @@ export function CollaboratorManager({
       })
   }, [bindings, usersMap, roleMap])
 
-  // Determine assignable roles based on currentUserRole
+  // Self-resolve the current user's role from bindings if not provided by parent
+  const resolvedUserRole = useMemo(() => {
+    if (currentUserRole) return currentUserRole
+    if (!currentUser || !bindings) return null
+    const userBinding = bindings.find((b) => b.userId === currentUser.username)
+    if (!userBinding) return null
+    const role = roleMap.get(userBinding.roleId)
+    return role?.name ?? null
+  }, [currentUserRole, currentUser, bindings, roleMap])
+
+  // Determine assignable roles based on resolvedUserRole
   const assignableRoles = useMemo(
-    () => getAssignableRoles(currentUserRole, allRoles),
-    [currentUserRole, allRoles],
+    () => getAssignableRoles(resolvedUserRole, allRoles),
+    [resolvedUserRole, allRoles],
   )
 
   // Set of existing usernames for filtering autocomplete
@@ -660,7 +670,7 @@ export function CollaboratorManager({
     )
   }
 
-  const effectiveReadOnly = readOnly || assignableRoles.length === 0
+  const effectiveReadOnly = readOnly === true || assignableRoles.length === 0
 
   return (
     <div className="space-y-4">
