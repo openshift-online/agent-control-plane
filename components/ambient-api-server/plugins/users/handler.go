@@ -170,7 +170,7 @@ func (h userHandler) List(w http.ResponseWriter, r *http.Request) {
 				userList.Items = append(userList.Items, converted)
 			}
 			if listArgs.Fields != nil {
-				filteredItems, err := presenters.SliceFilter(listArgs.Fields, userList.Items)
+				filteredItems, err := presenters.SliceFilter(listArgs.Fields, userList)
 				if err != nil {
 					return nil, err
 				}
