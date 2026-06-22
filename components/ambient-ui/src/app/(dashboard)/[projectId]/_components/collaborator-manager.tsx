@@ -53,6 +53,7 @@ import { useRoles } from '@/queries/use-roles'
 import { queryKeys } from '@/queries/query-keys'
 import type { DomainRoleBinding, DomainUserSearchResult } from '@/domain/types'
 import type { DomainRole } from '@/ports/roles'
+import { RoleName, getRoleLevel, getDisplayRole } from '@/domain/roles'
 import { createUsersAdapter } from '@/adapters/sdk-users'
 
 // ---------------------------------------------------------------------------
@@ -78,35 +79,19 @@ type ResolvedCollaborator = {
 // Role hierarchy helpers
 // ---------------------------------------------------------------------------
 
-const PROJECT_ROLE_HIERARCHY: Record<string, number> = {
-  'platform:admin': 4,
-  'project:owner': 3,
-  'project:editor': 2,
-  'project:viewer': 1,
-}
-
 function getAssignableRoles(
   currentUserRole: string | null,
   allRoles: DomainRole[],
 ): DomainRole[] {
-  const callerLevel = currentUserRole ? (PROJECT_ROLE_HIERARCHY[currentUserRole] ?? 0) : 0
+  const callerLevel = getRoleLevel(currentUserRole)
   if (callerLevel === 0) return []
 
-  // For platform:admin, they can assign Owner, Editor, Viewer
-  // For project:owner, they can assign Editor, Viewer
-  // For project:editor, they can assign Viewer
   const assignableNames: string[] = []
-  if (callerLevel >= 4) assignableNames.push('project:owner')
-  if (callerLevel >= 3) assignableNames.push('project:editor')
-  if (callerLevel >= 2) assignableNames.push('project:viewer')
+  if (callerLevel >= getRoleLevel(RoleName.PlatformAdmin)) assignableNames.push(RoleName.ProjectOwner)
+  if (callerLevel >= getRoleLevel(RoleName.ProjectOwner)) assignableNames.push(RoleName.ProjectEditor)
+  if (callerLevel >= getRoleLevel(RoleName.ProjectEditor)) assignableNames.push(RoleName.ProjectViewer)
 
   return allRoles.filter((r) => assignableNames.includes(r.name))
-}
-
-function getDisplayRole(roleName: string): string {
-  const parts = roleName.split(':')
-  const label = parts[parts.length - 1] ?? roleName
-  return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
 function getInitials(name: string, username: string): string {
@@ -179,7 +164,7 @@ function UserSearchCombobox({
   const [selectedUser, setSelectedUser] = useState<DomainUserSearchResult | null>(null)
   const [selectedRoleId, setSelectedRoleId] = useState<string>(
     () => {
-      const viewer = assignableRoles.find((r) => r.name === 'project:viewer')
+      const viewer = assignableRoles.find((r) => r.name === RoleName.ProjectViewer)
       return viewer?.id ?? assignableRoles[0]?.id ?? ''
     },
   )
@@ -598,23 +583,37 @@ export function CollaboratorManager({
         }
       })
       .sort((a, b) => {
-        // Sort: owners first, then editors, then viewers
-        const aLevel = PROJECT_ROLE_HIERARCHY[a.roleName] ?? 0
-        const bLevel = PROJECT_ROLE_HIERARCHY[b.roleName] ?? 0
+        const aLevel = getRoleLevel(a.roleName)
+        const bLevel = getRoleLevel(b.roleName)
         if (aLevel !== bLevel) return bLevel - aLevel
         return a.username.localeCompare(b.username)
       })
   }, [bindings, usersMap, roleMap])
 
+  // Check if the current user has a global platform:admin binding
+  const globalBindingsSearch = currentUser
+    ? `scope = 'global' and user_id = '${currentUser.username}'`
+    : undefined
+  const { data: globalBindings } = useAllRoleBindings(globalBindingsSearch)
+
+  const isPlatformAdmin = useMemo(() => {
+    if (!globalBindings || !roleMap.size) return false
+    return globalBindings.some((b) => {
+      const role = roleMap.get(b.roleId)
+      return role?.name === RoleName.PlatformAdmin
+    })
+  }, [globalBindings, roleMap])
+
   // Self-resolve the current user's role from bindings if not provided by parent
   const resolvedUserRole = useMemo(() => {
     if (currentUserRole) return currentUserRole
+    if (isPlatformAdmin) return RoleName.PlatformAdmin
     if (!currentUser || !bindings) return null
     const userBinding = bindings.find((b) => b.userId === currentUser.username)
     if (!userBinding) return null
     const role = roleMap.get(userBinding.roleId)
     return role?.name ?? null
-  }, [currentUserRole, currentUser, bindings, roleMap])
+  }, [currentUserRole, isPlatformAdmin, currentUser, bindings, roleMap])
 
   // Determine assignable roles based on resolvedUserRole
   const assignableRoles = useMemo(
@@ -630,7 +629,7 @@ export function CollaboratorManager({
 
   // Count owners to determine sole-owner status
   const ownerCount = useMemo(
-    () => collaborators.filter((c) => c.roleName === 'project:owner').length,
+    () => collaborators.filter((c) => c.roleName === RoleName.ProjectOwner).length,
     [collaborators],
   )
 
@@ -697,7 +696,7 @@ export function CollaboratorManager({
             const isCurrentUser =
               currentUser?.username === collaborator.username
             const isSoleOwner =
-              collaborator.roleName === 'project:owner' && ownerCount === 1
+              collaborator.roleName === RoleName.ProjectOwner && ownerCount === 1
             return (
               <CollaboratorRow
                 key={collaborator.binding.id}

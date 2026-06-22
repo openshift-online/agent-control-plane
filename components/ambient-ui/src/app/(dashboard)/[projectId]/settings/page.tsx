@@ -17,23 +17,8 @@ import { useRoles } from '@/queries/use-roles'
 import { useCurrentUser } from '@/hooks/use-current-user'
 import { useWorkspaceFlag } from '@/services/queries/use-feature-flags-admin'
 import { CollaboratorManager } from '../_components/collaborator-manager'
+import { RoleName, canEditProject } from '@/domain/roles'
 import type { DomainRoleBinding } from '@/domain/types'
-
-// ---------------------------------------------------------------------------
-// Role helpers
-// ---------------------------------------------------------------------------
-
-const ROLE_HIERARCHY: Record<string, number> = {
-  'platform:admin': 4,
-  'project:owner': 3,
-  'project:editor': 2,
-  'project:viewer': 1,
-}
-
-function canEditProject(role: string | null): boolean {
-  const level = role ? (ROLE_HIERARCHY[role] ?? 0) : 0
-  return level >= 2 // editor or above
-}
 
 // ---------------------------------------------------------------------------
 // Hook: resolve current user's role name from bindings + roles
@@ -281,7 +266,7 @@ function MembersTabWithRole({
     return <MembersTabSkeleton />
   }
 
-  const readOnly = roleName === 'project:viewer' || roleName === null
+  const readOnly = roleName === RoleName.ProjectViewer || roleName === null
 
   return (
     <CollaboratorManager

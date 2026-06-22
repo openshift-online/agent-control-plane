@@ -20,21 +20,19 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/empty-state'
 import type { DomainProject, DomainRoleBinding } from '@/domain/types'
 import type { DomainRole } from '@/ports/roles'
+import { RoleName, getDisplayRole } from '@/domain/roles'
 
 type RoleVariant = 'default' | 'secondary' | 'outline'
 
-function getRoleDisplay(roleName: string): { label: string; variant: RoleVariant } {
-  const stripped = roleName.replace(/^project:/, '')
-  const capitalized = stripped.charAt(0).toUpperCase() + stripped.slice(1)
-  switch (stripped) {
-    case 'owner':
-      return { label: capitalized, variant: 'default' }
-    case 'editor':
-      return { label: capitalized, variant: 'secondary' }
-    case 'viewer':
-      return { label: capitalized, variant: 'outline' }
+function getRoleBadge(roleName: string): { label: string; variant: RoleVariant } {
+  const label = getDisplayRole(roleName)
+  switch (roleName) {
+    case RoleName.ProjectOwner:
+      return { label, variant: 'default' }
+    case RoleName.ProjectEditor:
+      return { label, variant: 'secondary' }
     default:
-      return { label: capitalized, variant: 'outline' }
+      return { label, variant: 'outline' }
   }
 }
 
@@ -82,7 +80,7 @@ function ProjectCard({
 }: ProjectCardProps) {
   const userBinding = bindings?.find((b) => b.userId === currentUsername)
   const role = userBinding ? roleMap.get(userBinding.roleId) : undefined
-  const roleDisplay = role ? getRoleDisplay(role.name) : null
+  const roleDisplay = role ? getRoleBadge(role.name) : null
 
   const isShared = (bindings?.length ?? 0) > 1
   const collaborators = bindings
