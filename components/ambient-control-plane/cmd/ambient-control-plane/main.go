@@ -189,7 +189,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 
 	inf := informer.New(sdk, watchManager, log.Logger)
 
-	projectReconciler := reconciler.NewProjectReconciler(factory, kube, projectKube, provisioner, cfg.CPRuntimeNamespace, log.Logger)
+	projectReconciler := reconciler.NewProjectReconciler(factory, kube, projectKube, provisioner, cfg.CPRuntimeNamespace, cfg.PlatformMode, log.Logger)
 	projectSettingsReconciler := reconciler.NewProjectSettingsReconciler(factory, kube, log.Logger)
 
 	inf.RegisterHandler("projects", projectReconciler.Reconcile)

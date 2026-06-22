@@ -23,9 +23,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useCurrentUser } from '@/hooks/use-current-user'
+import { NotificationBell } from '@/components/notification-bell'
 
 type NavHeaderProps = {
   projectId?: string | null
+  effectiveProjectId?: string | null
   projectName?: string | null
   pageName?: string | null
   sessionName?: string | null
@@ -109,7 +111,7 @@ function UserMenu() {
   )
 }
 
-export function NavHeader({ projectId, projectName, pageName, sessionName, detailName }: NavHeaderProps) {
+export function NavHeader({ projectId, effectiveProjectId, projectName, pageName, sessionName, detailName }: NavHeaderProps) {
   const mappedPageName = pageName ? displayLabel(pageName) : null
 
   return (
@@ -166,6 +168,7 @@ export function NavHeader({ projectId, projectName, pageName, sessionName, detai
 
       <div className="ml-auto flex items-center gap-2">
         <SearchTrigger />
+        {effectiveProjectId && <NotificationBell projectId={effectiveProjectId} />}
         <UserMenu />
       </div>
     </header>

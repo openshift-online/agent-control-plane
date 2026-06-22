@@ -21,21 +21,24 @@ GO_MODULES=(
 )
 
 # Determine which modules are affected by the staged files
-declare -A affected_modules=()
+affected_modules=""
 for file in "$@"; do
     for mod in "${GO_MODULES[@]}"; do
         if [[ "$file" == "$mod/"* || "$file" == "$REPO_ROOT/$mod/"* ]]; then
-            affected_modules["$mod"]=1
+            case " $affected_modules " in
+                *" $mod "*) ;;
+                *) affected_modules="$affected_modules $mod" ;;
+            esac
         fi
     done
 done
 
-if [ ${#affected_modules[@]} -eq 0 ]; then
+if [ -z "$affected_modules" ]; then
     exit 0
 fi
 
 exit_code=0
-for mod in "${!affected_modules[@]}"; do
+for mod in $affected_modules; do
     mod_dir="$REPO_ROOT/$mod"
     if [ -f "$mod_dir/go.mod" ]; then
         echo "go vet: $mod"

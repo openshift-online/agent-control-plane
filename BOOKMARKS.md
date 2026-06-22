@@ -5,7 +5,6 @@ Progressive disclosure for task-specific documentation and references.
 ## Table of Contents
 
 - [Specs](#specs)
-- [Workflows](#workflows)
 - [Standards](#standards)
 - [Governance](#governance)
 - [Architecture Decisions](#architecture-decisions)
@@ -21,18 +20,14 @@ Progressive disclosure for task-specific documentation and references.
 
 ## Specs
 
-Desired state of the system, organized by capability domain.
+Desired state of the system. Three consolidated specs plus engineering standards.
 
-| Spec | Domain | Purpose |
-|------|--------|---------|
-| [Ambient Data Model](specs/api/ambient-model.spec.md) | api | Platform-wide data model: projects, agents, sessions, credentials, RBAC |
-| [Control Plane](specs/control-plane/control-plane.spec.md) | control-plane | CP architecture, runner structure, K8s provisioning |
-| [Runner](specs/agents/runner.spec.md) | agents | Runner subprocess lifecycle, bridges, gRPC/HTTP endpoints |
-| [MCP Server](specs/integrations/mcp-server.spec.md) | integrations | MCP tool definitions, sidecar and public endpoint modes |
-| [Security](specs/security/security.spec.md) | security | Identity boundaries, credential authorization, per-session isolation, design decisions |
-| [OpenShell Sandbox](specs/security/openshell-sandbox.spec.md) | security | Agent subprocess sandbox: network namespace, Landlock, seccomp, TLS proxy, OPA policy |
-
-Feature specs remain in numbered directories under `specs/` (e.g., `specs/001-*/spec.md`).
+| Spec | Covers |
+|------|--------|
+| [Platform](specs/platform/) | Data model, API, CLI, control plane, runner, MCP server |
+| [Security](specs/security/) | Identity boundaries, SSO, RBAC, credential binding/encryption, sandbox |
+| [UI](specs/ui/) | Operations dashboard, agent authoring, annotations, live preview |
+| [Spec Index](specs/index.spec.md) | Bookmark page for all spec domains |
 
 ## Standards
 
@@ -48,7 +43,7 @@ Component-specific conventions loaded by review agents on demand.
 
 | Document | Purpose |
 |----------|---------|
-| [Runner Constitution](specs/agents/runner-constitution.md) | Version pinning, automated freshness, image discipline, schema sync, bridge modularity |
+| Runner Constitution | Version pinning, automated freshness, image discipline, schema sync, bridge modularity (now in [platform/runner-constitution.md](specs/platform/runner-constitution.md)) |
 | [SDD Preflight](.github/workflows/sdd-preflight.yml) | CI workflow enforcing constitution compliance on PRs |
 
 ## Architecture Decisions

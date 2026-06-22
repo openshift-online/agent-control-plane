@@ -61,6 +61,8 @@ type Session struct {
 	KubeCrName         *string    `json:"kube_cr_name,omitempty"`
 	KubeCrUid          *string    `json:"kube_cr_uid,omitempty"`
 	KubeNamespace      *string    `json:"kube_namespace,omitempty"`
+	// Timestamp of the last agent activity (message push) for staleness detection.
+	LastActivityAt *time.Time `json:"last_activity_at,omitempty"`
 }
 
 type _Session Session
@@ -1195,6 +1197,38 @@ func (o *Session) SetKubeNamespace(v string) {
 	o.KubeNamespace = &v
 }
 
+// GetLastActivityAt returns the LastActivityAt field value if set, zero value otherwise.
+func (o *Session) GetLastActivityAt() time.Time {
+	if o == nil || IsNil(o.LastActivityAt) {
+		var ret time.Time
+		return ret
+	}
+	return *o.LastActivityAt
+}
+
+// GetLastActivityAtOk returns a tuple with the LastActivityAt field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetLastActivityAtOk() (*time.Time, bool) {
+	if o == nil || IsNil(o.LastActivityAt) {
+		return nil, false
+	}
+	return o.LastActivityAt, true
+}
+
+// HasLastActivityAt returns a boolean if a field has been set.
+func (o *Session) HasLastActivityAt() bool {
+	if o != nil && !IsNil(o.LastActivityAt) {
+		return true
+	}
+
+	return false
+}
+
+// SetLastActivityAt gets a reference to the given time.Time and assigns it to the LastActivityAt field.
+func (o *Session) SetLastActivityAt(v time.Time) {
+	o.LastActivityAt = &v
+}
+
 func (o Session) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -1307,6 +1341,9 @@ func (o Session) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.KubeNamespace) {
 		toSerialize["kube_namespace"] = o.KubeNamespace
+	}
+	if !IsNil(o.LastActivityAt) {
+		toSerialize["last_activity_at"] = o.LastActivityAt
 	}
 	return toSerialize, nil
 }

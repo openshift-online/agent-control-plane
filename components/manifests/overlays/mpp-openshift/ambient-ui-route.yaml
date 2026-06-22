@@ -1,0 +1,20 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ambient-ui
+  namespace: ambient-code--runtime-int
+  labels:
+    app: ambient-ui
+    shard: internal
+  annotations:
+    haproxy.router.openshift.io/timeout: 10m
+    haproxy.router.openshift.io/timeout-tunnel: 10m
+spec:
+  to:
+    kind: Service
+    name: ambient-ui
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

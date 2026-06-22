@@ -71,10 +71,10 @@ jobs:
             {"name":"ambient-control-plane","context":"./components","image":"quay.io/ambient_code/acp_control_plane","dockerfile":"./components/ambient-control-plane/Dockerfile"},
             {"name":"ambient-mcp","context":"./components/ambient-mcp","image":"quay.io/ambient_code/acp_mcp","dockerfile":"./components/ambient-mcp/Dockerfile"},
             {"name":"ambient-ui","context":"./components","image":"quay.io/ambient_code/acp_ambient_ui","dockerfile":"./components/ambient-ui/Dockerfile"},
-            {"name":"credential-github","context":"./components","image":"quay.io/ambient_code/acp_credential_github","dockerfile":"./components/credential-sidecars/github/Dockerfile"},
-            {"name":"credential-jira","context":"./components","image":"quay.io/ambient_code/acp_credential_jira","dockerfile":"./components/credential-sidecars/jira/Dockerfile"},
-            {"name":"credential-k8s","context":"./components","image":"quay.io/ambient_code/acp_credential_k8s","dockerfile":"./components/credential-sidecars/k8s/Dockerfile"},
-            {"name":"credential-google","context":"./components","image":"quay.io/ambient_code/acp_credential_google","dockerfile":"./components/credential-sidecars/google/Dockerfile"}
+            {"name":"credential-github","context":".","image":"quay.io/ambient_code/acp_credential_github","dockerfile":"./components/credential-sidecars/github/Dockerfile"},
+            {"name":"credential-jira","context":".","image":"quay.io/ambient_code/acp_credential_jira","dockerfile":"./components/credential-sidecars/jira/Dockerfile"},
+            {"name":"credential-k8s","context":".","image":"quay.io/ambient_code/acp_credential_k8s","dockerfile":"./components/credential-sidecars/k8s/Dockerfile"},
+            {"name":"credential-google","context":".","image":"quay.io/ambient_code/acp_credential_google","dockerfile":"./components/credential-sidecars/google/Dockerfile"}
           ]'
 
           SELECTED="${{ github.event.inputs.components }}"

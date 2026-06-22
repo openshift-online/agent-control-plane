@@ -8,7 +8,6 @@ import {
   Monitor,
   Bot,
   KeyRound,
-  Globe,
   Moon,
   Sun,
 } from 'lucide-react'
@@ -16,7 +15,6 @@ import { useSessions } from '@/queries/use-sessions'
 import { getAttentionItems } from '@/app/(dashboard)/[projectId]/_components/dashboard-helpers'
 import { ProjectSelector } from '@/components/project-selector'
 import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import {
   Sidebar,
@@ -34,6 +32,7 @@ import {
 
 type AppSidebarProps = {
   projectId: string | null
+  effectiveProjectId: string | null
 }
 
 type NavItem = { readonly label: string; readonly icon: typeof Monitor; readonly href: string; readonly global?: boolean }
@@ -54,13 +53,13 @@ const configureNavItems: readonly NavItem[] = [
 function NavGroup({
   label,
   items,
-  projectId,
+  effectiveProjectId,
   pathname,
   badgeCounts,
 }: {
   label: string
   items: readonly NavItem[]
-  projectId: string | null
+  effectiveProjectId: string | null
   pathname: string
   badgeCounts?: Record<string, number>
 }) {
@@ -71,15 +70,14 @@ function NavGroup({
         <SidebarMenu>
           {items.map((item) => {
             const isGlobal = item.global === true
-            const isDisabled = !isGlobal && !projectId
 
             const href = isGlobal
               ? item.href
-              : projectId
+              : effectiveProjectId
                 ? item.href
-                  ? `/${projectId}/${item.href}`
-                  : `/${projectId}`
-                : '#'
+                  ? `/${effectiveProjectId}/${item.href}`
+                  : `/${effectiveProjectId}`
+                : '/'
 
             const isActive = isGlobal
               ? pathname === href || pathname.startsWith(href + '/')
@@ -91,35 +89,16 @@ function NavGroup({
 
             return (
               <SidebarMenuItem key={item.label}>
-                {isDisabled ? (
-                  <TooltipProvider delayDuration={300}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <SidebarMenuButton
-                          disabled
-                          tooltip={item.label}
-                        >
-                          <item.icon />
-                          <span>{item.label}</span>
-                        </SidebarMenuButton>
-                      </TooltipTrigger>
-                      <TooltipContent side="right">
-                        Select a project to access {item.label}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                ) : (
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive}
-                    tooltip={item.label}
-                  >
-                    <Link href={href}>
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                )}
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive}
+                  tooltip={item.label}
+                >
+                  <Link href={href}>
+                    <item.icon />
+                    <span>{item.label}</span>
+                  </Link>
+                </SidebarMenuButton>
                 {badgeCount > 0 && (
                   <SidebarMenuBadge>{badgeCount}</SidebarMenuBadge>
                 )}
@@ -132,10 +111,10 @@ function NavGroup({
   )
 }
 
-export function AppSidebar({ projectId }: AppSidebarProps) {
+export function AppSidebar({ projectId, effectiveProjectId }: AppSidebarProps) {
   const pathname = usePathname()
   const { theme, setTheme } = useTheme()
-  const { data: sessionsData } = useSessions(projectId ?? '', undefined)
+  const { data: sessionsData } = useSessions(effectiveProjectId ?? '', undefined)
 
   const operateBadges = (() => {
     if (!sessionsData?.items) return undefined
@@ -150,14 +129,14 @@ export function AppSidebar({ projectId }: AppSidebarProps) {
           <Bot className="size-5 text-primary" />
           <span className="text-sm font-semibold tracking-tight">ACP</span>
         </div>
-        <ProjectSelector projectId={projectId} />
+        <ProjectSelector projectId={projectId} effectiveProjectId={effectiveProjectId} />
       </SidebarHeader>
 
       <SidebarContent>
-        <NavGroup label="Operate" items={operateNavItems} projectId={projectId} pathname={pathname} badgeCounts={operateBadges} />
-        <NavGroup label="Build" items={buildNavItems} projectId={projectId} pathname={pathname} />
+        <NavGroup label="Operate" items={operateNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} badgeCounts={operateBadges} />
+        <NavGroup label="Build" items={buildNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
         <Separator className="mx-2 my-1" />
-        <NavGroup label="Configure" items={configureNavItems} projectId={projectId} pathname={pathname} />
+        <NavGroup label="Admin" items={configureNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
       </SidebarContent>
 
       <SidebarFooter>
@@ -168,10 +147,10 @@ export function AppSidebar({ projectId }: AppSidebarProps) {
             size="icon"
             className="size-7"
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            aria-label="Toggle theme"
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
           >
-            <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            <Sun aria-hidden="true" className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+            <Moon aria-hidden="true" className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           </Button>
         </div>
         {process.env.NEXT_PUBLIC_GIT_COMMIT && process.env.NEXT_PUBLIC_GIT_COMMIT !== 'unknown' && (

@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
+
+	"github.com/golang/glog"
 )
 
 type MessageService interface {
@@ -33,6 +36,13 @@ func (s *sqlMessageService) Push(ctx context.Context, sessionID, eventType, payl
 	}
 	if err := s.dao.Insert(ctx, msg); err != nil {
 		return nil, fmt.Errorf("push session message: %w", err)
+	}
+
+	// Update session's last_activity_at after successful message insert.
+	// Errors are logged but not propagated — the message was already persisted
+	// and activity tracking is best-effort.
+	if err := s.dao.UpdateSessionLastActivity(ctx, sessionID, time.Now().UTC()); err != nil {
+		glog.Warningf("failed to update last_activity_at for session %s: %v", sessionID, err)
 	}
 
 	s.mu.RLock()

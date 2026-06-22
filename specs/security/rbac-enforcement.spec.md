@@ -1,10 +1,8 @@
-# RBAC Enforcement Specification
-
-## Purpose
+# RBAC Enforcement
 
 The ambient-api-server SHALL enforce scope-aware authorization on all API endpoints
 (HTTP and gRPC) using the database-backed Role and RoleBinding model defined in the
-[Ambient Data Model Spec](../api/ambient-model.spec.md). Every request that passes
+[Ambient Data Model Spec](../platform/index.spec.md). Every request that passes
 authentication SHALL be evaluated against the caller's role bindings, restricting
 access to the specific resources identified by each binding's scope. Users start with
 zero permissions and gain access by creating projects (self-service) or receiving
@@ -441,7 +439,7 @@ The service caller bypass SHALL apply to both HTTP and gRPC request paths.
 
 The service token endpoint SHALL only be reachable from within the cluster.
 Exfiltration of the service token MUST NOT grant external access. See
-[Security Specification — Proxy Authentication](security.spec.md#requirement-proxy-authentication)
+[Security Specification — Proxy Authentication](identity-boundaries.spec.md#requirement-proxy-authentication)
 for cluster-internal caller validation requirements.
 
 #### Scenario: Control plane updates session status
@@ -589,9 +587,4 @@ the caller has no matching resources.
 | Configuration flag for rollout | Gradual enablement. Operators can seed admins and verify behavior in staging before enabling in production. No big-bang cutover. |
 | Proxy routes out of scope | Routes forwarded by the proxy plugin to external backends are outside the scope of ambient-api-server RBAC. Those backends handle their own authorization. |
 
-## References
-
-- [Ambient Data Model Spec](../api/ambient-model.spec.md) — Role, RoleBinding schemas, built-in roles, permission matrix
-- [Security Specification](security.spec.md) — identity boundaries, credential authorization model
-- [SSO Authentication Spec](sso-authentication.spec.md) — JWT validation, identity claims
-- [Security Standards](../standards/security/security.spec.md) — token handling, RBAC patterns
+---

@@ -423,8 +423,6 @@ components:
             project_id:
               type: string
               description: The project this agent belongs to
-            parent_agent_id:
-              type: string
             owner_user_id:
               type: string
             name:
