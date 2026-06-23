@@ -59,4 +59,5 @@ func init() {
 	db.RegisterMigration(migration())
 	db.RegisterMigration(indexMigration())
 	db.RegisterMigration(executionFieldsMigration())
+	db.RegisterMigration(schedulerFieldsMigration())
 }

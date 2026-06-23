@@ -177,4 +177,5 @@ func init() {
 	db.RegisterMigration(schemaExpansionMigration())
 	db.RegisterMigration(agentIDMigration())
 	db.RegisterMigration(lastActivityAtMigration())
+	db.RegisterMigration(scheduledSessionLinkMigration())
 }

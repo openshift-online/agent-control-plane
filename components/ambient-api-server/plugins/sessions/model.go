@@ -21,8 +21,10 @@ type Session struct {
 	LlmModel             *string  `json:"llm_model"`
 	LlmTemperature       *float64 `json:"llm_temperature"`
 	LlmMaxTokens         *int32   `json:"llm_max_tokens"`
-	ParentSessionId      *string  `json:"parent_session_id"`
-	BotAccountName       *string  `json:"bot_account_name"`
+	ParentSessionId          *string    `json:"parent_session_id"`
+	SourceScheduledSessionId *string    `json:"source_scheduled_session_id,omitempty"`
+	ScheduledFor             *time.Time `json:"scheduled_for,omitempty"`
+	BotAccountName           *string    `json:"bot_account_name"`
 	ResourceOverrides    *string  `json:"resource_overrides"`
 	EnvironmentVariables *string  `json:"environment_variables"`
 	SessionLabels        *string  `json:"labels" gorm:"column:labels"`

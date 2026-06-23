@@ -3065,7 +3065,7 @@ Name | Type | Description  | Notes
 
 ## ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost
 
-> ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost(ctx, id, ssId).Execute()
+> Session ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost(ctx, id, ssId).Execute()
 
 Manually trigger a scheduled session to run immediately
 
@@ -3092,7 +3092,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 	}
-	// response from `ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost`: ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response
+	// response from `ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost`: Session
 	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost`: %v\n", resp)
 }
 ```
@@ -3118,7 +3118,7 @@ Name | Type | Description  | Notes
 
 ### Return type
 
-[**ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response**](ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response.md)
+[**Session**](Session.md)
 
 ### Authorization
 

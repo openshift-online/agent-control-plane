@@ -1,6 +1,8 @@
 package sessions
 
 import (
+	"time"
+
 	"gorm.io/gorm"
 
 	"github.com/go-gormigrate/gormigrate/v2"
@@ -138,6 +140,26 @@ func lastActivityAtMigration() *gormigrate.Migration {
 		},
 		Rollback: func(tx *gorm.DB) error {
 			return tx.Exec(`ALTER TABLE sessions DROP COLUMN IF EXISTS last_activity_at`).Error
+		},
+	}
+}
+
+func scheduledSessionLinkMigration() *gormigrate.Migration {
+	type Session struct {
+		SourceScheduledSessionId *string    `gorm:"column:source_scheduled_session_id"`
+		ScheduledFor             *time.Time `gorm:"column:scheduled_for"`
+	}
+	return &gormigrate.Migration{
+		ID: "202606230002",
+		Migrate: func(tx *gorm.DB) error {
+			if err := tx.Table("sessions").AutoMigrate(&Session{}); err != nil {
+				return err
+			}
+			return tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_schedule_idempotency ON sessions(source_scheduled_session_id, scheduled_for) WHERE source_scheduled_session_id IS NOT NULL`).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx.Exec(`DROP INDEX IF EXISTS idx_sessions_schedule_idempotency`)
+			return nil
 		},
 	}
 }

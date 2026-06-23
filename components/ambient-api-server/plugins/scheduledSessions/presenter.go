@@ -25,6 +25,8 @@ func PresentScheduledSession(ss *ScheduledSession) openapi.ScheduledSession {
 		Schedule:          ss.Schedule,
 		Timezone:          &ss.Timezone,
 		Enabled:           &enabled,
+		OverlapPolicy:     &ss.OverlapPolicy,
+		CreatedByUserId:   ss.CreatedByUserId,
 		SessionPrompt:     ss.SessionPrompt,
 		LastRunAt:         ss.LastRunAt,
 		NextRunAt:         ss.NextRunAt,
@@ -54,5 +56,9 @@ func ConvertScheduledSession(in openapi.ScheduledSession) *ScheduledSession {
 	if in.Enabled != nil {
 		ss.Enabled = *in.Enabled
 	}
+	if in.OverlapPolicy != nil {
+		ss.OverlapPolicy = *in.OverlapPolicy
+	}
+	ss.CreatedByUserId = in.CreatedByUserId
 	return ss
 }

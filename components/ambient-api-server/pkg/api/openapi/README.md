@@ -154,7 +154,6 @@ Class | Method | HTTP request | Description
  - [AgentList](docs/AgentList.md)
  - [AgentPatchRequest](docs/AgentPatchRequest.md)
  - [AgentSessionList](docs/AgentSessionList.md)
- - [ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response](docs/ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response.md)
  - [Credential](docs/Credential.md)
  - [CredentialList](docs/CredentialList.md)
  - [CredentialPatchRequest](docs/CredentialPatchRequest.md)

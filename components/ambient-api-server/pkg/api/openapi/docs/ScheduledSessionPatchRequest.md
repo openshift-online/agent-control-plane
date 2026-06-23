@@ -10,6 +10,7 @@ Name | Type | Description | Notes
 **Schedule** | Pointer to **string** |  | [optional] 
 **Timezone** | Pointer to **string** |  | [optional] 
 **Enabled** | Pointer to **bool** |  | [optional] 
+**OverlapPolicy** | Pointer to **string** |  | [optional] 
 **SessionPrompt** | Pointer to **string** |  | [optional] 
 **Timeout** | Pointer to **int32** |  | [optional] 
 **InactivityTimeout** | Pointer to **int32** |  | [optional] 
@@ -184,6 +185,31 @@ SetEnabled sets Enabled field to given value.
 `func (o *ScheduledSessionPatchRequest) HasEnabled() bool`
 
 HasEnabled returns a boolean if a field has been set.
+
+### GetOverlapPolicy
+
+`func (o *ScheduledSessionPatchRequest) GetOverlapPolicy() string`
+
+GetOverlapPolicy returns the OverlapPolicy field if non-nil, zero value otherwise.
+
+### GetOverlapPolicyOk
+
+`func (o *ScheduledSessionPatchRequest) GetOverlapPolicyOk() (*string, bool)`
+
+GetOverlapPolicyOk returns a tuple with the OverlapPolicy field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetOverlapPolicy
+
+`func (o *ScheduledSessionPatchRequest) SetOverlapPolicy(v string)`
+
+SetOverlapPolicy sets OverlapPolicy field to given value.
+
+### HasOverlapPolicy
+
+`func (o *ScheduledSessionPatchRequest) HasOverlapPolicy() bool`
+
+HasOverlapPolicy returns a boolean if a field has been set.
 
 ### GetSessionPrompt
 

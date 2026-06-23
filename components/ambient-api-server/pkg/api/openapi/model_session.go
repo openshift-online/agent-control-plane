@@ -32,20 +32,24 @@ type Session struct {
 	RepoUrl   *string    `json:"repo_url,omitempty"`
 	Prompt    *string    `json:"prompt,omitempty"`
 	// Set from authentication token. Cannot be set or modified via API.
-	CreatedByUserId      *string  `json:"created_by_user_id,omitempty"`
-	AssignedUserId       *string  `json:"assigned_user_id,omitempty"`
-	WorkflowId           *string  `json:"workflow_id,omitempty"`
-	Repos                *string  `json:"repos,omitempty"`
-	Timeout              *int32   `json:"timeout,omitempty"`
-	LlmModel             *string  `json:"llm_model,omitempty"`
-	LlmTemperature       *float64 `json:"llm_temperature,omitempty"`
-	LlmMaxTokens         *int32   `json:"llm_max_tokens,omitempty"`
-	ParentSessionId      *string  `json:"parent_session_id,omitempty"`
-	BotAccountName       *string  `json:"bot_account_name,omitempty"`
-	ResourceOverrides    *string  `json:"resource_overrides,omitempty"`
-	EnvironmentVariables *string  `json:"environment_variables,omitempty"`
-	Labels               *string  `json:"labels,omitempty"`
-	Annotations          *string  `json:"annotations,omitempty"`
+	CreatedByUserId *string  `json:"created_by_user_id,omitempty"`
+	AssignedUserId  *string  `json:"assigned_user_id,omitempty"`
+	WorkflowId      *string  `json:"workflow_id,omitempty"`
+	Repos           *string  `json:"repos,omitempty"`
+	Timeout         *int32   `json:"timeout,omitempty"`
+	LlmModel        *string  `json:"llm_model,omitempty"`
+	LlmTemperature  *float64 `json:"llm_temperature,omitempty"`
+	LlmMaxTokens    *int32   `json:"llm_max_tokens,omitempty"`
+	ParentSessionId *string  `json:"parent_session_id,omitempty"`
+	// ID of the ScheduledSession that created this session.
+	SourceScheduledSessionId *string `json:"source_scheduled_session_id,omitempty"`
+	// The cron tick time this session was created for.
+	ScheduledFor         *time.Time `json:"scheduled_for,omitempty"`
+	BotAccountName       *string    `json:"bot_account_name,omitempty"`
+	ResourceOverrides    *string    `json:"resource_overrides,omitempty"`
+	EnvironmentVariables *string    `json:"environment_variables,omitempty"`
+	Labels               *string    `json:"labels,omitempty"`
+	Annotations          *string    `json:"annotations,omitempty"`
 	// The Agent that owns this session. Immutable after creation.
 	AgentId *string `json:"agent_id,omitempty"`
 	// Immutable after creation. Set at creation time only.
@@ -619,6 +623,70 @@ func (o *Session) HasParentSessionId() bool {
 // SetParentSessionId gets a reference to the given string and assigns it to the ParentSessionId field.
 func (o *Session) SetParentSessionId(v string) {
 	o.ParentSessionId = &v
+}
+
+// GetSourceScheduledSessionId returns the SourceScheduledSessionId field value if set, zero value otherwise.
+func (o *Session) GetSourceScheduledSessionId() string {
+	if o == nil || IsNil(o.SourceScheduledSessionId) {
+		var ret string
+		return ret
+	}
+	return *o.SourceScheduledSessionId
+}
+
+// GetSourceScheduledSessionIdOk returns a tuple with the SourceScheduledSessionId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetSourceScheduledSessionIdOk() (*string, bool) {
+	if o == nil || IsNil(o.SourceScheduledSessionId) {
+		return nil, false
+	}
+	return o.SourceScheduledSessionId, true
+}
+
+// HasSourceScheduledSessionId returns a boolean if a field has been set.
+func (o *Session) HasSourceScheduledSessionId() bool {
+	if o != nil && !IsNil(o.SourceScheduledSessionId) {
+		return true
+	}
+
+	return false
+}
+
+// SetSourceScheduledSessionId gets a reference to the given string and assigns it to the SourceScheduledSessionId field.
+func (o *Session) SetSourceScheduledSessionId(v string) {
+	o.SourceScheduledSessionId = &v
+}
+
+// GetScheduledFor returns the ScheduledFor field value if set, zero value otherwise.
+func (o *Session) GetScheduledFor() time.Time {
+	if o == nil || IsNil(o.ScheduledFor) {
+		var ret time.Time
+		return ret
+	}
+	return *o.ScheduledFor
+}
+
+// GetScheduledForOk returns a tuple with the ScheduledFor field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetScheduledForOk() (*time.Time, bool) {
+	if o == nil || IsNil(o.ScheduledFor) {
+		return nil, false
+	}
+	return o.ScheduledFor, true
+}
+
+// HasScheduledFor returns a boolean if a field has been set.
+func (o *Session) HasScheduledFor() bool {
+	if o != nil && !IsNil(o.ScheduledFor) {
+		return true
+	}
+
+	return false
+}
+
+// SetScheduledFor gets a reference to the given time.Time and assigns it to the ScheduledFor field.
+func (o *Session) SetScheduledFor(v time.Time) {
+	o.ScheduledFor = &v
 }
 
 // GetBotAccountName returns the BotAccountName field value if set, zero value otherwise.
@@ -1287,6 +1355,12 @@ func (o Session) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.ParentSessionId) {
 		toSerialize["parent_session_id"] = o.ParentSessionId
+	}
+	if !IsNil(o.SourceScheduledSessionId) {
+		toSerialize["source_scheduled_session_id"] = o.SourceScheduledSessionId
+	}
+	if !IsNil(o.ScheduledFor) {
+		toSerialize["scheduled_for"] = o.ScheduledFor
 	}
 	if !IsNil(o.BotAccountName) {
 		toSerialize["bot_account_name"] = o.BotAccountName

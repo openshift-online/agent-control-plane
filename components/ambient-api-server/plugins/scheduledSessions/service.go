@@ -31,6 +31,7 @@ type ScheduledSessionPatch struct {
 	InactivityTimeout *int32
 	StopOnRunFinished *bool
 	RunnerType        *string
+	OverlapPolicy     *string
 }
 
 type sqlScheduledSessionService struct {
@@ -97,6 +98,9 @@ func (s *sqlScheduledSessionService) Patch(ctx context.Context, id string, patch
 	}
 	if patch.RunnerType != nil {
 		ss.RunnerType = patch.RunnerType
+	}
+	if patch.OverlapPolicy != nil {
+		ss.OverlapPolicy = *patch.OverlapPolicy
 	}
 	updated, err := s.dao.Replace(ctx, ss)
 	if err != nil {

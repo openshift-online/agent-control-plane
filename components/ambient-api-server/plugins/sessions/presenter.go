@@ -24,6 +24,8 @@ func ConvertSession(session openapi.Session) *Session {
 	c.LlmTemperature = session.LlmTemperature
 	c.LlmMaxTokens = session.LlmMaxTokens
 	c.ParentSessionId = session.ParentSessionId
+	c.SourceScheduledSessionId = session.SourceScheduledSessionId
+	c.ScheduledFor = session.ScheduledFor
 	c.BotAccountName = session.BotAccountName
 	c.ResourceOverrides = session.ResourceOverrides
 	c.EnvironmentVariables = session.EnvironmentVariables
@@ -61,8 +63,10 @@ func PresentSession(session *Session) openapi.Session {
 		LlmModel:             session.LlmModel,
 		LlmTemperature:       session.LlmTemperature,
 		LlmMaxTokens:         session.LlmMaxTokens,
-		ParentSessionId:      session.ParentSessionId,
-		BotAccountName:       session.BotAccountName,
+		ParentSessionId:          session.ParentSessionId,
+		SourceScheduledSessionId: session.SourceScheduledSessionId,
+		ScheduledFor:             session.ScheduledFor,
+		BotAccountName:           session.BotAccountName,
 		ResourceOverrides:    session.ResourceOverrides,
 		EnvironmentVariables: session.EnvironmentVariables,
 		Labels:               session.SessionLabels,

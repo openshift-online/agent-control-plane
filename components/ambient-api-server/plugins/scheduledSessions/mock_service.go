@@ -43,6 +43,9 @@ func (s *InMemoryScheduledSessionService) Create(_ context.Context, ss *Schedule
 	if ss.Timezone == "" {
 		ss.Timezone = "UTC"
 	}
+	if ss.OverlapPolicy == "" {
+		ss.OverlapPolicy = "skip"
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cp := *ss
@@ -89,6 +92,9 @@ func (s *InMemoryScheduledSessionService) Patch(_ context.Context, id string, pa
 	}
 	if patch.RunnerType != nil {
 		ss.RunnerType = patch.RunnerType
+	}
+	if patch.OverlapPolicy != nil {
+		ss.OverlapPolicy = *patch.OverlapPolicy
 	}
 	ss.UpdatedAt = time.Now()
 	cp := *ss

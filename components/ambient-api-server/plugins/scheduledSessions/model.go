@@ -16,6 +16,8 @@ type ScheduledSession struct {
 	Schedule          string     `json:"schedule"`
 	Timezone          string     `json:"timezone"`
 	Enabled           bool       `json:"enabled"`
+	OverlapPolicy     string     `json:"overlap_policy" gorm:"default:skip"`
+	CreatedByUserId   *string    `json:"created_by_user_id,omitempty"`
 	SessionPrompt     *string    `json:"session_prompt,omitempty"`
 	LastRunAt         *time.Time `json:"last_run_at,omitempty"`
 	NextRunAt         *time.Time `json:"next_run_at,omitempty"`
@@ -39,6 +41,9 @@ func (s *ScheduledSession) BeforeCreate(tx *gorm.DB) error {
 	s.ID = api.NewID()
 	if s.Timezone == "" {
 		s.Timezone = "UTC"
+	}
+	if s.OverlapPolicy == "" {
+		s.OverlapPolicy = "skip"
 	}
 	return nil
 }

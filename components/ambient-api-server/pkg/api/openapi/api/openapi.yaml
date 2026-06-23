@@ -3831,12 +3831,12 @@ paths:
         schema:
           type: string
       responses:
-        "200":
+        "201":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/_api_ambient_v1_projects__id__scheduled_sessions__ss_id__trigger_post_200_response"
-          description: Scheduled session triggered
+                $ref: "#/components/schemas/Session"
+          description: Session created from trigger
         "401":
           content:
             application/json:
@@ -4089,6 +4089,15 @@ components:
             type: integer
           parent_session_id:
             type: string
+          source_scheduled_session_id:
+            description: ID of the ScheduledSession that created this session.
+            readOnly: true
+            type: string
+          scheduled_for:
+            description: The cron tick time this session was created for.
+            format: date-time
+            readOnly: true
+            type: string
           bot_account_name:
             type: string
           resource_overrides:
@@ -4154,6 +4163,8 @@ components:
         completion_time: 2000-01-23T04:56:07.000+00:00
         agent_id: agent_id
         created_at: 2000-01-23T04:56:07.000+00:00
+        source_scheduled_session_id: source_scheduled_session_id
+        scheduled_for: 2000-01-23T04:56:07.000+00:00
         annotations: annotations
         reconciled_workflow: reconciled_workflow
         timeout: 5
@@ -4205,6 +4216,8 @@ components:
           completion_time: 2000-01-23T04:56:07.000+00:00
           agent_id: agent_id
           created_at: 2000-01-23T04:56:07.000+00:00
+          source_scheduled_session_id: source_scheduled_session_id
+          scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
           reconciled_workflow: reconciled_workflow
           timeout: 5
@@ -4241,6 +4254,8 @@ components:
           completion_time: 2000-01-23T04:56:07.000+00:00
           agent_id: agent_id
           created_at: 2000-01-23T04:56:07.000+00:00
+          source_scheduled_session_id: source_scheduled_session_id
+          scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
           reconciled_workflow: reconciled_workflow
           timeout: 5
@@ -5053,6 +5068,8 @@ components:
           completion_time: 2000-01-23T04:56:07.000+00:00
           agent_id: agent_id
           created_at: 2000-01-23T04:56:07.000+00:00
+          source_scheduled_session_id: source_scheduled_session_id
+          scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
           reconciled_workflow: reconciled_workflow
           timeout: 5
@@ -5089,6 +5106,8 @@ components:
           completion_time: 2000-01-23T04:56:07.000+00:00
           agent_id: agent_id
           created_at: 2000-01-23T04:56:07.000+00:00
+          source_scheduled_session_id: source_scheduled_session_id
+          scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
           reconciled_workflow: reconciled_workflow
           timeout: 5
@@ -5136,6 +5155,8 @@ components:
           completion_time: 2000-01-23T04:56:07.000+00:00
           agent_id: agent_id
           created_at: 2000-01-23T04:56:07.000+00:00
+          source_scheduled_session_id: source_scheduled_session_id
+          scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
           reconciled_workflow: reconciled_workflow
           timeout: 5
@@ -5472,6 +5493,17 @@ components:
           enabled:
             description: Whether the schedule is active
             type: boolean
+          overlap_policy:
+            description: Behavior when a previous session from this schedule is still
+              active. Defaults to skip.
+            enum:
+            - skip
+            - allow
+            type: string
+          created_by_user_id:
+            description: User who created this schedule. Set from JWT on create. Immutable.
+            readOnly: true
+            type: string
           session_prompt:
             description: Prompt passed to each triggered session
             type: string
@@ -5501,6 +5533,7 @@ components:
         - schedule
         type: object
       example:
+        overlap_policy: skip
         last_run_at: 2000-01-23T04:56:07.000+00:00
         agent_id: agent_id
         next_run_at: 2000-01-23T04:56:07.000+00:00
@@ -5510,6 +5543,7 @@ components:
         description: description
         runner_type: runner_type
         inactivity_timeout: 5
+        created_by_user_id: created_by_user_id
         enabled: true
         timeout: 5
         schedule: schedule
@@ -5535,7 +5569,8 @@ components:
         kind: kind
         page: 0
         items:
-        - last_run_at: 2000-01-23T04:56:07.000+00:00
+        - overlap_policy: skip
+          last_run_at: 2000-01-23T04:56:07.000+00:00
           agent_id: agent_id
           next_run_at: 2000-01-23T04:56:07.000+00:00
           kind: kind
@@ -5544,6 +5579,7 @@ components:
           description: description
           runner_type: runner_type
           inactivity_timeout: 5
+          created_by_user_id: created_by_user_id
           enabled: true
           timeout: 5
           schedule: schedule
@@ -5554,7 +5590,8 @@ components:
           id: id
           href: href
           session_prompt: session_prompt
-        - last_run_at: 2000-01-23T04:56:07.000+00:00
+        - overlap_policy: skip
+          last_run_at: 2000-01-23T04:56:07.000+00:00
           agent_id: agent_id
           next_run_at: 2000-01-23T04:56:07.000+00:00
           kind: kind
@@ -5563,6 +5600,7 @@ components:
           description: description
           runner_type: runner_type
           inactivity_timeout: 5
+          created_by_user_id: created_by_user_id
           enabled: true
           timeout: 5
           schedule: schedule
@@ -5577,6 +5615,7 @@ components:
       example:
         schedule: schedule
         stop_on_run_finished: true
+        overlap_policy: skip
         agent_id: agent_id
         timezone: timezone
         name: name
@@ -5599,6 +5638,11 @@ components:
           type: string
         enabled:
           type: boolean
+        overlap_policy:
+          enum:
+          - skip
+          - allow
+          type: string
         session_prompt:
           type: string
         timeout:
@@ -5610,13 +5654,6 @@ components:
         stop_on_run_finished:
           type: boolean
         runner_type:
-          type: string
-      type: object
-    _api_ambient_v1_projects__id__scheduled_sessions__ss_id__trigger_post_200_response:
-      example:
-        status: status
-      properties:
-        status:
           type: string
       type: object
   securitySchemes:

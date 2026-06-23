@@ -10,7 +10,6 @@ docs/Agent.md
 docs/AgentList.md
 docs/AgentPatchRequest.md
 docs/AgentSessionList.md
-docs/ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response.md
 docs/Credential.md
 docs/CredentialList.md
 docs/CredentialPatchRequest.md
@@ -53,7 +52,6 @@ docs/UserPatchRequest.md
 git_push.sh
 go.mod
 go.sum
-model__api_ambient_v1_projects__id__scheduled_sessions__ss_id__trigger_post_200_response.go
 model_agent.go
 model_agent_list.go
 model_agent_patch_request.go

@@ -26,6 +26,7 @@ type ScheduledSessionPatchRequest struct {
 	Schedule          *string `json:"schedule,omitempty"`
 	Timezone          *string `json:"timezone,omitempty"`
 	Enabled           *bool   `json:"enabled,omitempty"`
+	OverlapPolicy     *string `json:"overlap_policy,omitempty"`
 	SessionPrompt     *string `json:"session_prompt,omitempty"`
 	Timeout           *int32  `json:"timeout,omitempty"`
 	InactivityTimeout *int32  `json:"inactivity_timeout,omitempty"`
@@ -242,6 +243,38 @@ func (o *ScheduledSessionPatchRequest) SetEnabled(v bool) {
 	o.Enabled = &v
 }
 
+// GetOverlapPolicy returns the OverlapPolicy field value if set, zero value otherwise.
+func (o *ScheduledSessionPatchRequest) GetOverlapPolicy() string {
+	if o == nil || IsNil(o.OverlapPolicy) {
+		var ret string
+		return ret
+	}
+	return *o.OverlapPolicy
+}
+
+// GetOverlapPolicyOk returns a tuple with the OverlapPolicy field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ScheduledSessionPatchRequest) GetOverlapPolicyOk() (*string, bool) {
+	if o == nil || IsNil(o.OverlapPolicy) {
+		return nil, false
+	}
+	return o.OverlapPolicy, true
+}
+
+// HasOverlapPolicy returns a boolean if a field has been set.
+func (o *ScheduledSessionPatchRequest) HasOverlapPolicy() bool {
+	if o != nil && !IsNil(o.OverlapPolicy) {
+		return true
+	}
+
+	return false
+}
+
+// SetOverlapPolicy gets a reference to the given string and assigns it to the OverlapPolicy field.
+func (o *ScheduledSessionPatchRequest) SetOverlapPolicy(v string) {
+	o.OverlapPolicy = &v
+}
+
 // GetSessionPrompt returns the SessionPrompt field value if set, zero value otherwise.
 func (o *ScheduledSessionPatchRequest) GetSessionPrompt() string {
 	if o == nil || IsNil(o.SessionPrompt) {
@@ -429,6 +462,9 @@ func (o ScheduledSessionPatchRequest) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Enabled) {
 		toSerialize["enabled"] = o.Enabled
+	}
+	if !IsNil(o.OverlapPolicy) {
+		toSerialize["overlap_policy"] = o.OverlapPolicy
 	}
 	if !IsNil(o.SessionPrompt) {
 		toSerialize["session_prompt"] = o.SessionPrompt

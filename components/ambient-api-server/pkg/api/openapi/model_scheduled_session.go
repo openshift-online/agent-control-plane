@@ -41,6 +41,10 @@ type ScheduledSession struct {
 	Timezone *string `json:"timezone,omitempty"`
 	// Whether the schedule is active
 	Enabled *bool `json:"enabled,omitempty"`
+	// Behavior when a previous session from this schedule is still active. Defaults to skip.
+	OverlapPolicy *string `json:"overlap_policy,omitempty"`
+	// User who created this schedule. Set from JWT on create. Immutable.
+	CreatedByUserId *string `json:"created_by_user_id,omitempty"`
 	// Prompt passed to each triggered session
 	SessionPrompt *string    `json:"session_prompt,omitempty"`
 	LastRunAt     *time.Time `json:"last_run_at,omitempty"`
@@ -437,6 +441,70 @@ func (o *ScheduledSession) SetEnabled(v bool) {
 	o.Enabled = &v
 }
 
+// GetOverlapPolicy returns the OverlapPolicy field value if set, zero value otherwise.
+func (o *ScheduledSession) GetOverlapPolicy() string {
+	if o == nil || IsNil(o.OverlapPolicy) {
+		var ret string
+		return ret
+	}
+	return *o.OverlapPolicy
+}
+
+// GetOverlapPolicyOk returns a tuple with the OverlapPolicy field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ScheduledSession) GetOverlapPolicyOk() (*string, bool) {
+	if o == nil || IsNil(o.OverlapPolicy) {
+		return nil, false
+	}
+	return o.OverlapPolicy, true
+}
+
+// HasOverlapPolicy returns a boolean if a field has been set.
+func (o *ScheduledSession) HasOverlapPolicy() bool {
+	if o != nil && !IsNil(o.OverlapPolicy) {
+		return true
+	}
+
+	return false
+}
+
+// SetOverlapPolicy gets a reference to the given string and assigns it to the OverlapPolicy field.
+func (o *ScheduledSession) SetOverlapPolicy(v string) {
+	o.OverlapPolicy = &v
+}
+
+// GetCreatedByUserId returns the CreatedByUserId field value if set, zero value otherwise.
+func (o *ScheduledSession) GetCreatedByUserId() string {
+	if o == nil || IsNil(o.CreatedByUserId) {
+		var ret string
+		return ret
+	}
+	return *o.CreatedByUserId
+}
+
+// GetCreatedByUserIdOk returns a tuple with the CreatedByUserId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ScheduledSession) GetCreatedByUserIdOk() (*string, bool) {
+	if o == nil || IsNil(o.CreatedByUserId) {
+		return nil, false
+	}
+	return o.CreatedByUserId, true
+}
+
+// HasCreatedByUserId returns a boolean if a field has been set.
+func (o *ScheduledSession) HasCreatedByUserId() bool {
+	if o != nil && !IsNil(o.CreatedByUserId) {
+		return true
+	}
+
+	return false
+}
+
+// SetCreatedByUserId gets a reference to the given string and assigns it to the CreatedByUserId field.
+func (o *ScheduledSession) SetCreatedByUserId(v string) {
+	o.CreatedByUserId = &v
+}
+
 // GetSessionPrompt returns the SessionPrompt field value if set, zero value otherwise.
 func (o *ScheduledSession) GetSessionPrompt() string {
 	if o == nil || IsNil(o.SessionPrompt) {
@@ -700,6 +768,12 @@ func (o ScheduledSession) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Enabled) {
 		toSerialize["enabled"] = o.Enabled
+	}
+	if !IsNil(o.OverlapPolicy) {
+		toSerialize["overlap_policy"] = o.OverlapPolicy
+	}
+	if !IsNil(o.CreatedByUserId) {
+		toSerialize["created_by_user_id"] = o.CreatedByUserId
 	}
 	if !IsNil(o.SessionPrompt) {
 		toSerialize["session_prompt"] = o.SessionPrompt
