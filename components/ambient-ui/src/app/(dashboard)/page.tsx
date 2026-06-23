@@ -1,12 +1,15 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { FolderOpen, Users } from 'lucide-react'
+import { FolderOpen, Users, Search, Activity } from 'lucide-react'
 import { useProjects } from '@/queries/use-projects'
+import { useSessions } from '@/queries/use-sessions'
 import { useAllRoleBindings } from '@/queries/use-role-bindings'
 import { useRoles } from '@/queries/use-roles'
 import { useCurrentUser } from '@/hooks/use-current-user'
+import { getNeedsYouItems } from '@/domain/work-annotations'
+import { formatRelativeTime } from '@/lib/format-timestamp'
 import { CreateProjectDialog } from './_components/create-project-dialog'
 import {
   Card,
@@ -16,13 +19,33 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/empty-state'
-import type { DomainProject, DomainRoleBinding } from '@/domain/types'
+import type { DomainProject, DomainRoleBinding, SessionPhase } from '@/domain/types'
 import type { DomainRole } from '@/ports/roles'
 import { RoleName, getDisplayRole } from '@/domain/roles'
 
 type RoleVariant = 'default' | 'secondary' | 'outline'
+
+const BORDER_COLORS = [
+  '#37a3a3', // teal-50
+  '#5e40be', // purple-50
+  '#f5921b', // orange-40
+  '#0066cc', // interaction-blue-50
+  '#63993d', // success-green-50
+] as const
+
+function getProjectBorderColor(name: string): string {
+  const hash = name.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 5
+  return BORDER_COLORS[hash]
+}
+
+const RUNNING_PHASES: ReadonlySet<SessionPhase> = new Set([
+  'Running',
+  'Creating',
+  'Pending',
+])
 
 function getRoleBadge(roleName: string): { label: string; variant: RoleVariant } {
   const label = getDisplayRole(roleName)
@@ -78,6 +101,9 @@ function ProjectCard({
   bindingsLoaded,
   onClick,
 }: ProjectCardProps) {
+  const { data: sessionsData } = useSessions(project.id)
+  const sessions = sessionsData?.items ?? []
+
   const userBinding = bindings?.find((b) => b.userId === currentUsername)
   const role = userBinding ? roleMap.get(userBinding.roleId) : undefined
   const roleDisplay = role ? getRoleBadge(role.name) : null
@@ -87,9 +113,31 @@ function ProjectCard({
     ?.filter((b) => b.userId !== currentUsername && b.userId !== null)
     .slice(0, 3) ?? []
 
+  const needsAttentionCount = useMemo(
+    () => getNeedsYouItems(sessions).length,
+    [sessions],
+  )
+
+  const runningCount = useMemo(
+    () => sessions.filter((s) => RUNNING_PHASES.has(s.phase)).length,
+    [sessions],
+  )
+
+  const lastActivity = useMemo(() => {
+    if (sessions.length === 0) return null
+    const mostRecent = sessions.reduce((latest, s) =>
+      s.updatedAt > latest ? s.updatedAt : latest,
+      sessions[0].updatedAt,
+    )
+    return mostRecent
+  }, [sessions])
+
+  const borderColor = getProjectBorderColor(project.name)
+
   return (
     <Card
-      className="cursor-pointer transition-shadow hover:shadow-md"
+      className="cursor-pointer border-l-4 transition-all duration-150 hover:shadow-md hover:border-primary/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      style={{ borderLeftColor: borderColor }}
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -101,24 +149,37 @@ function ProjectCard({
       }}
     >
       <CardHeader>
-        <CardTitle>{project.name}</CardTitle>
+        <div className="flex items-center gap-2">
+          <CardTitle>{project.name}</CardTitle>
+          {!bindingsLoaded && (
+            <Skeleton className="h-5 w-14" />
+          )}
+          {bindingsLoaded && roleDisplay && (
+            <Badge variant={roleDisplay.variant} className="text-xs px-2 py-0.5">
+              {roleDisplay.label}
+            </Badge>
+          )}
+        </div>
         {project.description && (
           <CardDescription>{project.description}</CardDescription>
         )}
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <p className="text-xs text-muted-foreground">
-              {project.status ?? 'Active'}
-            </p>
-            {!bindingsLoaded && (
-              <Skeleton className="h-5 w-14" />
-            )}
-            {bindingsLoaded && roleDisplay && (
-              <Badge variant={roleDisplay.variant} className="text-[10px] px-1.5 py-0">
-                {roleDisplay.label}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            {needsAttentionCount > 0 && (
+              <Badge variant="destructive" className="text-xs px-2 py-0.5">
+                {needsAttentionCount} need{needsAttentionCount === 1 ? 's' : ''} attention
               </Badge>
+            )}
+            {runningCount > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <Activity className="h-3 w-3 text-green-500" />
+                {runningCount} running
+              </span>
+            )}
+            {lastActivity && (
+              <span>Last active {formatRelativeTime(lastActivity)}</span>
             )}
           </div>
           {bindingsLoaded && isShared && (
@@ -152,6 +213,7 @@ export default function ProjectPickerPage() {
   const { user } = useCurrentUser()
   const { data: allBindings } = useAllRoleBindings("scope = 'project'")
   const { data: rolesData } = useRoles()
+  const [searchQuery, setSearchQuery] = useState('')
 
   const roleMap = useMemo(() => {
     const map = new Map<string, DomainRole>()
@@ -211,23 +273,43 @@ export default function ProjectPickerPage() {
         <EmptyState
           icon={FolderOpen}
           title="No projects found"
-          description="Create a project to get started with ACP."
+          description="Create your first project to start running agent sessions."
+          action={<CreateProjectDialog />}
         />
-        <div className="flex justify-center">
-          <CreateProjectDialog />
-        </div>
       </div>
     )
   }
 
+  const filteredProjects = searchQuery
+    ? projects.filter((p) =>
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()),
+      )
+    : projects
+
+  const gridCols =
+    projects.length >= 6 ? 'lg:grid-cols-3' : 'lg:grid-cols-2'
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Projects</h1>
+        <h1 className="text-2xl font-semibold">
+          Projects ({projects.length})
+        </h1>
         <CreateProjectDialog />
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {projects.map((project) => (
+      {projects.length > 6 && (
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search projects..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+      )}
+      <div className={`grid gap-4 sm:grid-cols-2 ${gridCols}`}>
+        {filteredProjects.map((project) => (
           <ProjectCard
             key={project.id}
             project={project}
