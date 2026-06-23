@@ -203,8 +203,11 @@ export function CredentialCreateSheet({
                   <SelectGroup key={cat.label}>
                     <SelectLabel>{cat.label}</SelectLabel>
                     {cat.providers.map((p) => (
-                      <SelectItem key={p.provider} value={p.provider}>
+                      <SelectItem key={p.provider} value={p.provider} disabled={p.comingSoon}>
                         {p.label}
+                        {p.comingSoon && (
+                          <span className="ml-1.5 text-[10px] text-muted-foreground">(coming soon)</span>
+                        )}
                       </SelectItem>
                     ))}
                   </SelectGroup>
