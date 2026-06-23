@@ -53,19 +53,6 @@ import { RoleName, getDisplayRole } from '@/domain/roles'
 
 type RoleVariant = 'default' | 'secondary' | 'outline'
 
-const BORDER_COLORS = [
-  '#37a3a3', // teal-50
-  '#5e40be', // purple-50
-  '#f5921b', // orange-40
-  '#0066cc', // interaction-blue-50
-  '#63993d', // success-green-50
-] as const
-
-function getProjectBorderColor(name: string): string {
-  const hash = name.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 5
-  return BORDER_COLORS[hash]
-}
-
 const RUNNING_PHASES: ReadonlySet<SessionPhase> = new Set([
   'Running',
   'Creating',
@@ -164,13 +151,10 @@ function ProjectCard({
     )
   }, [sessions])
 
-  const borderColor = getProjectBorderColor(project.name)
-
   return (
     <>
       <Card
-        className="flex cursor-pointer flex-col border-l-4 transition-all duration-150 hover:shadow-md hover:border-primary/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        style={{ borderLeftColor: borderColor }}
+        className="group/card relative flex cursor-pointer flex-col transition-all duration-150 hover:shadow-md hover:border-primary/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         onClick={onClick}
         role="button"
         tabIndex={0}
@@ -181,27 +165,12 @@ function ProjectCard({
           }
         }}
       >
-        <CardHeader className="flex-row items-start justify-between gap-2 space-y-0">
-          <div className="min-w-0 space-y-1">
-            <div className="flex items-center gap-2">
-              <CardTitle className="truncate">{project.name}</CardTitle>
-              {!bindingsLoaded && <Skeleton className="h-5 w-14" />}
-              {bindingsLoaded && roleDisplay && (
-                <Badge variant={roleDisplay.variant} className="shrink-0 text-xs px-2 py-0.5">
-                  {roleDisplay.label}
-                </Badge>
-              )}
-            </div>
-            <CardDescription className="line-clamp-1">
-              {project.description || ' '}
-            </CardDescription>
-          </div>
-          <DropdownMenu>
+        <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 shrink-0 text-muted-foreground"
+                className="absolute right-2 top-2 z-10 h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 group-hover/card:opacity-100"
                 onClick={(e) => e.stopPropagation()}
                 aria-label="Project actions"
               >
@@ -231,6 +200,19 @@ function ProjectCard({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+        <CardHeader>
+            <div className="flex items-center gap-2 pr-8">
+              <CardTitle className="truncate">{project.name}</CardTitle>
+              {!bindingsLoaded && <Skeleton className="h-5 w-14" />}
+              {bindingsLoaded && roleDisplay && (
+                <Badge variant={roleDisplay.variant} className="shrink-0 text-xs px-2 py-0.5">
+                  {roleDisplay.label}
+                </Badge>
+              )}
+            </div>
+            <CardDescription className="line-clamp-1">
+              {project.description || ' '}
+            </CardDescription>
         </CardHeader>
 
         <CardContent className="mt-auto">
