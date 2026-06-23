@@ -3,7 +3,7 @@
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-api-server local-logs-ui local-logs-control-plane local-shell-api-server local-shell-ui
 .PHONY: local-test local-test-dev local-test-quick test-all local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-status kind-login kind-sso-toggle
+.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-status kind-login kind-sso-toggle kind-setup-vertex
 .PHONY: preflight-cluster preflight dev-env dev
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: unleash-port-forward unleash-status
@@ -855,6 +855,7 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 		ANTHROPIC_VERTEX_PROJECT_ID="$(ANTHROPIC_VERTEX_PROJECT_ID)" \
 		CLOUD_ML_REGION="$(CLOUD_ML_REGION)" \
 		GOOGLE_APPLICATION_CREDENTIALS="$(GOOGLE_APPLICATION_CREDENTIALS)" \
+		AMBIENT_UI_URL="http://$$(if [ -n "$(KIND_HOST)" ]; then echo "$(KIND_HOST)"; else echo "localhost"; fi):$(KIND_FWD_AMBIENT_UI_PORT)" \
 		./scripts/setup-vertex-kind.sh; \
 	fi
 	@if [ -f .dev-bootstrap.env ] && [ -f ./scripts/bootstrap-workspace.sh ]; then \
@@ -1028,9 +1029,7 @@ screenshots-clean: ## Remove generated screenshots
 	@rm -rf e2e/cypress/screenshots/output/
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Screenshot output cleaned"
 
-kind-rebuild: check-kind check-kubectl check-local-context build-all ## Rebuild, reload, and restart all components in kind
-	@$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$' || \
-		(echo "$(COLOR_RED)✗$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' not found. Run 'make kind-up LOCAL_IMAGES=true' first." && exit 1)
+kind-rebuild: check-kind check-kubectl check-local-context _kind-require-cluster build-all ## Rebuild, reload, and restart all components in kind
 	@$(MAKE) --no-print-directory _kind-load-images
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Applying kind-local manifests..."
 	@kubectl apply --validate=false -k components/manifests/overlays/kind-local/ $(QUIET_REDIRECT)
@@ -1114,6 +1113,11 @@ kind-status: check-kind ## Show all kind clusters and their port assignments
 			fi; \
 		done; \
 	fi
+
+kind-setup-vertex: check-kubectl _kind-require-cluster ## Configure Vertex AI for the kind cluster
+	@NAMESPACE=$(NAMESPACE) \
+		AMBIENT_UI_URL="http://$$(if [ -n "$(KIND_HOST)" ]; then echo "$(KIND_HOST)"; else echo "localhost"; fi):$(KIND_FWD_AMBIENT_UI_PORT)" \
+		./scripts/setup-vertex-kind.sh
 
 kind-clean: kind-down ## Alias for kind-down
 
@@ -1240,6 +1244,10 @@ check-architecture: ## Validate build architecture matches host
 	else \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Using native architecture"; \
 	fi
+
+_kind-require-cluster: ## Internal: Fail fast if kind cluster is not running
+	@$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$' || \
+		(echo "$(COLOR_RED)✗$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' not found. Run 'make kind-up LOCAL_IMAGES=true' first, or set KIND_CLUSTER_NAME to an existing cluster." && exit 1)
 
 _kind-load-images: ## Internal: Load images into kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind ($(KIND_CLUSTER_NAME))..."
