@@ -25,6 +25,8 @@ type SessionService interface {
 	Start(ctx context.Context, id string) (*Session, *errors.ServiceError)
 	Stop(ctx context.Context, id string) (*Session, *errors.ServiceError)
 	ActiveByAgentID(ctx context.Context, agentID string) (*Session, *errors.ServiceError)
+	ByScheduledSessionID(ctx context.Context, scheduledSessionID string) (SessionList, *errors.ServiceError)
+	ActiveByScheduledSessionID(ctx context.Context, scheduledSessionID string) (*Session, *errors.ServiceError)
 
 	FindByIDs(ctx context.Context, ids []string) (SessionList, *errors.ServiceError)
 
@@ -275,6 +277,25 @@ func (s *sqlSessionService) ActiveByAgentID(ctx context.Context, agentID string)
 			return nil, nil
 		}
 		return nil, errors.GeneralError("unable to look up active session for agent %s: %s", agentID, err)
+	}
+	return session, nil
+}
+
+func (s *sqlSessionService) ByScheduledSessionID(ctx context.Context, scheduledSessionID string) (SessionList, *errors.ServiceError) {
+	list, err := s.sessionDao.ByScheduledSessionID(ctx, scheduledSessionID)
+	if err != nil {
+		return nil, errors.GeneralError("unable to list sessions for schedule %s: %s", scheduledSessionID, err)
+	}
+	return list, nil
+}
+
+func (s *sqlSessionService) ActiveByScheduledSessionID(ctx context.Context, scheduledSessionID string) (*Session, *errors.ServiceError) {
+	session, err := s.sessionDao.ActiveByScheduledSessionID(ctx, scheduledSessionID)
+	if err != nil {
+		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, errors.GeneralError("unable to look up active session for schedule %s: %s", scheduledSessionID, err)
 	}
 	return session, nil
 }
