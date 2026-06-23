@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { LogOut, Search, Settings, UserPlus } from 'lucide-react'
+import { LogOut, Search, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Breadcrumb,
@@ -22,7 +22,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useCurrentUser } from '@/hooks/use-current-user'
 import { useAllRoleBindings } from '@/queries/use-role-bindings'
 import { useRoles } from '@/queries/use-roles'
@@ -143,7 +142,7 @@ export function NavHeader({ projectId, effectiveProjectId, projectName, pageName
           <BreadcrumbItem>
             <BreadcrumbLink asChild>
               <Link href="/">
-                <span>ACP</span>
+                <span>Projects</span>
               </Link>
             </BreadcrumbLink>
           </BreadcrumbItem>
@@ -193,26 +192,11 @@ export function NavHeader({ projectId, effectiveProjectId, projectName, pageName
               projectId={effectiveProjectId}
               currentUserRole={currentUserRole}
               trigger={
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Share project">
-                      <UserPlus className="size-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Share</TooltipContent>
-                </Tooltip>
+                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Share project" title="Share">
+                  <UserPlus className="size-4" />
+                </Button>
               }
             />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" asChild aria-label="Project settings">
-                  <Link href={`/${effectiveProjectId}/settings`}>
-                    <Settings className="size-4" />
-                  </Link>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Settings</TooltipContent>
-            </Tooltip>
             <NotificationBell projectId={effectiveProjectId} />
           </>
         )}
