@@ -6,6 +6,7 @@ import { useTheme } from 'next-themes'
 import {
   LayoutDashboard,
   Monitor,
+  CalendarClock,
   Bot,
   KeyRound,
   Settings,
@@ -41,6 +42,7 @@ type NavItem = { readonly label: string; readonly icon: typeof Monitor; readonly
 const operateNavItems: readonly NavItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '' },
   { label: 'Sessions', icon: Monitor, href: 'sessions' },
+  { label: 'Schedules', icon: CalendarClock, href: 'schedules' },
 ]
 
 const buildNavItems: readonly NavItem[] = [

@@ -234,3 +234,58 @@ export type DomainUserSearchResult = {
   username: string
   name: string
 }
+
+export type OverlapPolicy = 'skip' | 'allow'
+
+export type DomainScheduledSession = {
+  id: string
+  name: string
+  description: string | null
+  projectId: string
+  agentId: string | null
+  createdByUserId: string | null
+  schedule: string
+  timezone: string
+  enabled: boolean
+  overlapPolicy: OverlapPolicy
+  sessionPrompt: string | null
+  lastRunAt: string | null
+  nextRunAt: string | null
+  timeout: number | null
+  inactivityTimeout: number | null
+  stopOnRunFinished: boolean | null
+  runnerType: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type DomainScheduledSessionCreateRequest = {
+  name: string
+  projectId: string
+  agentId?: string
+  schedule: string
+  timezone?: string
+  enabled?: boolean
+  overlapPolicy?: OverlapPolicy
+  sessionPrompt?: string
+  timeout?: number
+  inactivityTimeout?: number
+  stopOnRunFinished?: boolean
+  runnerType?: string
+  description?: string
+}
+
+export type DomainScheduledSessionUpdateRequest = {
+  name?: string
+  description?: string
+  agentId?: string
+  schedule?: string
+  timezone?: string
+  enabled?: boolean
+  overlapPolicy?: OverlapPolicy
+  sessionPrompt?: string
+  timeout?: number
+  inactivityTimeout?: number
+  stopOnRunFinished?: boolean
+  runnerType?: string
+}

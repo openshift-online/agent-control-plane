@@ -40,6 +40,9 @@ function makeSdkSession(overrides: Partial<Session> = {}): Session {
     start_time: '2026-01-15T10:01:00Z',
     timeout: 3600,
     workflow_id: '',
+    last_activity_at: '',
+    source_scheduled_session_id: '',
+    scheduled_for: '',
     ...overrides,
   }
 }
@@ -477,7 +480,6 @@ function makeSdkAgent(overrides: Partial<Agent> = {}): Agent {
     project_id: 'proj-123',
     prompt: 'You are a helpful agent.',
     repo_url: 'https://github.com/org/repo',
-    parent_agent_id: '',
     resource_overrides: '',
     workflow_id: 'wf-1',
     ...overrides,
