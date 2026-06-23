@@ -345,7 +345,7 @@ func (h roleBindingHandler) List(w http.ResponseWriter, r *http.Request) {
 				// 1. user_id matches caller (own bindings), OR
 				// 2. project_id is in caller's authorized projects (team bindings), OR
 				// 3. credential_id is in caller's authorized credentials
-				userFilter, err := pkgrbac.TSLEqual("user_id", username)
+				userFilter, err := pkgrbac.TSLEqualUsername("user_id", username)
 				if err != nil {
 					return nil, errors.Forbidden("invalid username")
 				}

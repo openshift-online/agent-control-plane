@@ -143,7 +143,7 @@ func (h userHandler) List(w http.ResponseWriter, r *http.Request) {
 					}
 				} else if username != "" {
 					// Fall back to own record only
-					scopeFilter, err := pkgrbac.TSLEqual("username", username)
+					scopeFilter, err := pkgrbac.TSLEqualUsername("username", username)
 					if err != nil {
 						return nil, errors.Forbidden("invalid username")
 					}
