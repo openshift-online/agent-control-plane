@@ -92,6 +92,8 @@ type retryEvent struct {
 	fireAt       time.Time
 }
 
+type FailureHandler func(ctx context.Context, event ResourceEvent, err error)
+
 type Informer struct {
 	sdk          *sdkclient.Client
 	watchManager *watcher.WatchManager
@@ -100,6 +102,8 @@ type Informer struct {
 	logger       zerolog.Logger
 	eventCh      chan ResourceEvent
 	retryCh      chan retryEvent
+
+	OnMaxRetriesExceeded FailureHandler
 
 	sessionCache         map[string]types.Session
 	projectCache         map[string]types.Project
@@ -228,6 +232,10 @@ func (inf *Informer) scheduleRetry(ctx context.Context, event ResourceEvent, han
 			Int("handler", handlerIndex).
 			Int("attempts", attempt+1).
 			Msg("handler failed after max retries")
+
+		if inf.OnMaxRetriesExceeded != nil {
+			inf.OnMaxRetriesExceeded(ctx, event, err)
+		}
 	}
 }
 

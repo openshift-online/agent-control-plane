@@ -160,7 +160,7 @@ func (s *PodStatusSyncer) mapPodPhaseToSessionPhase(podPhase string, pod *unstru
 		if s.hasContainerCrashLoop(pod) {
 			return PhaseFailed
 		}
-		return ""
+		return PhaseRunning
 	default:
 		return ""
 	}

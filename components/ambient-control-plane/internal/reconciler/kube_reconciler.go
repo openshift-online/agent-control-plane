@@ -224,7 +224,7 @@ func (r *SimpleKubeReconciler) provisionSession(ctx context.Context, session typ
 		return fmt.Errorf("ensuring service: %w", err)
 	}
 
-	r.updateSessionPhaseWithNamespace(ctx, session, PhaseRunning, namespace)
+	r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 	return nil
 }
 
@@ -1260,6 +1260,68 @@ func (r *SimpleKubeReconciler) updateSessionPhase(ctx context.Context, session t
 		Str("old_phase", session.Phase).
 		Str("new_phase", newPhase).
 		Msg("session phase updated")
+}
+
+func (r *SimpleKubeReconciler) HandleProvisioningFailure(ctx context.Context, event informer.ResourceEvent, err error) {
+	session := event.Object.Session
+	if session == nil {
+		return
+	}
+
+	for _, tp := range TerminalPhases {
+		if session.Phase == tp {
+			return
+		}
+	}
+
+	r.logger.Error().
+		Err(err).
+		Str("session_id", session.ID).
+		Str("phase", session.Phase).
+		Msg("session provisioning failed after max retries")
+
+	condition := map[string]interface{}{
+		"type":               "Provisioning",
+		"status":             "False",
+		"reason":             "SetupFailed",
+		"message":            err.Error(),
+		"lastTransitionTime": time.Now().UTC().Format(time.RFC3339),
+	}
+	conditionsJSON, marshalErr := json.Marshal([]interface{}{condition})
+	if marshalErr != nil {
+		r.logger.Error().Err(marshalErr).Str("session_id", session.ID).Msg("failed to marshal conditions")
+		r.updateSessionPhase(ctx, *session, PhaseFailed)
+		return
+	}
+
+	if session.ProjectID == "" {
+		r.logger.Debug().Str("session_id", session.ID).Msg("skipping failure update: no project_id")
+		return
+	}
+
+	sdk, sdkErr := r.factory.ForProject(ctx, session.ProjectID)
+	if sdkErr != nil {
+		r.logger.Warn().Err(sdkErr).Str("session_id", session.ID).Msg("failed to get SDK client for failure update")
+		return
+	}
+
+	now := time.Now()
+	patch := map[string]interface{}{
+		"phase":           PhaseFailed,
+		"conditions":      string(conditionsJSON),
+		"completion_time": &now,
+	}
+
+	if _, updateErr := sdk.Sessions().UpdateStatus(ctx, session.ID, patch); updateErr != nil {
+		r.logger.Warn().Err(updateErr).Str("session_id", session.ID).Msg("failed to update session to Failed")
+		return
+	}
+
+	r.logger.Info().
+		Str("session_id", session.ID).
+		Str("old_phase", session.Phase).
+		Str("new_phase", PhaseFailed).
+		Msg("session marked as Failed due to provisioning error")
 }
 
 func sessionLabelSelector(sessionID string) string {

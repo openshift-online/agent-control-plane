@@ -19,6 +19,7 @@ import { LogsTab } from './_components/logs-tab'
 import { ChatTab } from './_components/chat-tab'
 import { ResourcesTab } from './_components/resources-tab'
 import { ConfigTab } from './_components/config-tab'
+import { SessionConditions } from './_components/session-conditions'
 
 export default function SessionDetailPage() {
   const { sessionId } = useParams<{ projectId: string; sessionId: string }>()
@@ -58,6 +59,9 @@ export default function SessionDetailPage() {
   return (
     <div className="space-y-6">
       <SessionHeader session={session} />
+      {session.conditions.length > 0 && (
+        <SessionConditions conditions={session.conditions} />
+      )}
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="w-full *:flex-1">
           <TabsTrigger value="overview">
