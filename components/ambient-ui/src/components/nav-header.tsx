@@ -197,9 +197,7 @@ export function NavHeader({ projectId, effectiveProjectId, projectName, pageName
             }
           />
         )}
-        {effectiveProjectId && (
-          <NotificationBell projectId={effectiveProjectId} />
-        )}
+        <NotificationBell />
         <UserMenu />
       </div>
     </header>

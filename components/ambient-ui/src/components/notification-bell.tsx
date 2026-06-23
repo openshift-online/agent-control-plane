@@ -15,16 +15,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { useSessions } from '@/queries/use-sessions'
+import { useAllSessions } from '@/queries/use-sessions'
 import { getNeedsYouItems, ACTIONABLE_CRITICALITIES } from '@/domain/work-annotations'
 import type { Criticality, NeedsYouItem } from '@/domain/work-annotations'
 import { WORK_JIRA_ISSUE } from '@/domain/work-annotations'
 import { formatRelativeTime } from '@/lib/format-timestamp'
 import { cn } from '@/lib/utils'
 
-type NotificationBellProps = {
-  projectId: string
-}
+type NotificationBellProps = Record<string, never>
 
 const CRITICALITY_ICON: Record<Criticality, typeof XCircle> = {
   critical: XCircle,
@@ -38,19 +36,14 @@ const CRITICALITY_ICON_CLASS: Record<Criticality, string> = {
   info: 'text-blue-500',
 }
 
-function TrayItem({
-  item,
-  projectId,
-}: {
-  item: NeedsYouItem
-  projectId: string
-}) {
+function TrayItem({ item }: { item: NeedsYouItem }) {
   const Icon = CRITICALITY_ICON[item.criticality]
   const jiraKey = item.session.annotations[WORK_JIRA_ISSUE] ?? null
+  const sessionProjectId = item.session.projectId
 
   return (
     <Link
-      href={`/${projectId}/sessions/${item.session.id}`}
+      href={sessionProjectId ? `/${sessionProjectId}/sessions/${item.session.id}` : '#'}
       className={cn(
         'flex items-start gap-2 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent',
         item.criticality === 'critical' && 'bg-destructive/5',
@@ -67,6 +60,11 @@ function TrayItem({
           {item.statusText}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          {sessionProjectId && (
+            <span className="rounded bg-muted px-1 py-px text-[10px] font-medium">
+              {sessionProjectId}
+            </span>
+          )}
           {jiraKey && (
             <span className="inline-flex items-center gap-0.5 rounded bg-muted px-1 py-px font-mono text-[10px]">
               <Ticket className="size-3" />
@@ -82,8 +80,8 @@ function TrayItem({
   )
 }
 
-export function NotificationBell({ projectId }: NotificationBellProps) {
-  const { data } = useSessions(projectId)
+export function NotificationBell(_props: NotificationBellProps) {
+  const { data } = useAllSessions()
   const allItems = getNeedsYouItems(data?.items ?? [])
   const items = allItems.filter((item) => ACTIONABLE_CRITICALITIES.has(item.criticality))
   const count = items.length
@@ -124,7 +122,6 @@ export function NotificationBell({ projectId }: NotificationBellProps) {
               <TrayItem
                 key={item.session.id}
                 item={item}
-                projectId={projectId}
               />
             ))}
           </div>
