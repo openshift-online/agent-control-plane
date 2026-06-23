@@ -11,7 +11,8 @@ import (
 
 // safeTSLValuePattern matches values safe for interpolation into TSL search
 // expressions (KSUIDs, usernames, etc.). Rejects SQL/TSL metacharacters.
-var safeTSLValuePattern = regexp.MustCompile(`^[a-zA-Z0-9_.@:\-]+$`)
+// Allows spaces for usernames like "varun rao".
+var safeTSLValuePattern = regexp.MustCompile(`^[a-zA-Z0-9_.@:\- ]+$`)
 
 // ValidateTSLValues checks that every value in the slice is safe for
 // interpolation into a TSL search string. Returns an error naming the
