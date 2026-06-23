@@ -78,6 +78,31 @@ func schedulerFieldsMigration() *gormigrate.Migration {
 	}
 }
 
+func backfillNextRunAtMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202606230003",
+		Migrate: func(tx *gorm.DB) error {
+			var schedules []*ScheduledSession
+			if err := tx.Where("enabled = true AND next_run_at IS NULL AND deleted_at IS NULL").Find(&schedules).Error; err != nil {
+				return err
+			}
+			now := time.Now()
+			for _, ss := range schedules {
+				next, err := NextRunAtFrom(now, ss.Schedule, ss.Timezone)
+				if err != nil {
+					tx.Model(ss).Updates(map[string]interface{}{"enabled": false, "next_run_at": nil})
+					continue
+				}
+				tx.Model(ss).Update("next_run_at", next)
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return nil
+		},
+	}
+}
+
 func indexMigration() *gormigrate.Migration {
 	stmts := []string{
 		`CREATE INDEX IF NOT EXISTS idx_scheduled_sessions_project ON scheduled_sessions(project_id)`,

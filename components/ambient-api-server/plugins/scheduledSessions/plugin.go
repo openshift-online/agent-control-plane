@@ -100,4 +100,5 @@ func init() {
 	db.RegisterMigration(indexMigration())
 	db.RegisterMigration(executionFieldsMigration())
 	db.RegisterMigration(schedulerFieldsMigration())
+	db.RegisterMigration(backfillNextRunAtMigration())
 }
