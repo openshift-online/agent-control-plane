@@ -1,10 +1,16 @@
 package scheduledSessions
 
 import (
+	"context"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 
+	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
+	"github.com/openshift-online/rh-trex-ai/pkg/controllers"
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
 	"github.com/openshift-online/rh-trex-ai/pkg/environments"
 	"github.com/openshift-online/rh-trex-ai/pkg/registry"
@@ -61,6 +67,33 @@ func init() {
 				rbac.NewEvaluator(&e.Database.SessionFactory),
 			)
 		}
+	})
+
+	pkgserver.RegisterController("ScheduledSessionScheduler", func(_ *controllers.KindControllerManager, services pkgserver.ServicesInterface) {
+		envServices := services.(*environments.Services)
+
+		var svc ScheduledSessionService
+		if obj := envServices.GetService("ScheduledSessionsSQL"); obj != nil {
+			svc = obj.(func() ScheduledSessionService)()
+		}
+		if svc == nil {
+			return
+		}
+		sqlSvc, ok := svc.(*sqlScheduledSessionService)
+		if !ok {
+			return
+		}
+
+		env := environments.Environment()
+		dao := NewScheduledSessionDao(&env.Database.SessionFactory)
+		lockFactory := db.NewAdvisoryLockFactory(env.Database.SessionFactory)
+		clk := clock.RealClock{}
+
+		scheduler := NewScheduler(sqlSvc, dao, lockFactory, clk, SchedulerConfig{})
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		_ = stop
+		scheduler.Start(ctx)
+		glog.Info("Scheduled session scheduler started")
 	})
 
 	db.RegisterMigration(migration())
