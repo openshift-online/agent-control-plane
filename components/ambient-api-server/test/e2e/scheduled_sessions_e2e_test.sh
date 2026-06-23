@@ -69,7 +69,7 @@ assert_status() {
 assert_field() {
   local json="$1" field="$2" expected="$3" desc="$4"
   local actual
-  actual=$(echo "$json" | jq -r ".${field} // empty")
+  actual=$(echo "$json" | jq -r "if .${field} == null then \"\" else (.${field} | tostring) end")
   if [[ "$actual" == "$expected" ]]; then
     pass "$desc"
   else
@@ -187,10 +187,14 @@ pass "Got admin auth token"
 # --- Phase 1: Create project + agent ---
 echo -e "\n${BOLD}Phase 1: Create project and agent${NC}"
 
-api POST "/projects" "$TOKEN" '{"id":"'"${PROJECT_ID}"'","name":"'"${PROJECT_ID}"'","description":"Scheduled sessions e2e test"}'
-assert_status "201" "$HTTP_STATUS" "Create project"
+api POST "/projects" "$TOKEN" '{"name":"'"${PROJECT_ID}"'","description":"Scheduled sessions e2e test"}'
+if [[ "$HTTP_STATUS" == "201" || "$HTTP_STATUS" == "409" ]]; then
+  pass "Create project (or already exists)"
+else
+  fail "Create project" "expected 201 or 409, got $HTTP_STATUS"
+fi
 
-api POST "/projects/${PROJECT_ID}/agents" "$TOKEN" '{"name":"sched-test-agent","prompt":"You are a test agent."}'
+api POST "/projects/${PROJECT_ID}/agents" "$TOKEN" '{"name":"sched-test-agent","project_id":"'"${PROJECT_ID}"'","prompt":"You are a test agent."}'
 assert_status "201" "$HTTP_STATUS" "Create agent"
 AGENT_ID=$(echo "$HTTP_BODY" | jq -r '.id')
 assert_not_null "$HTTP_BODY" "id" "Agent has ID"
@@ -273,7 +277,7 @@ echo -e "\n${BOLD}Phase 7: Manual trigger${NC}"
 api PATCH "/projects/${PROJECT_ID}/scheduled-sessions/${SCHED_ID}" "$TOKEN" '{"overlap_policy":"skip"}'
 
 api POST "/projects/${PROJECT_ID}/scheduled-sessions/${SCHED_ID}/trigger" "$TOKEN"
-assert_status "200" "$HTTP_STATUS" "Trigger schedule"
+assert_status "201" "$HTTP_STATUS" "Trigger schedule"
 TRIGGERED_SESSION_ID=$(echo "$HTTP_BODY" | jq -r '.id // empty')
 if [[ -n "$TRIGGERED_SESSION_ID" && "$TRIGGERED_SESSION_ID" != "null" ]]; then
   pass "Trigger returned session with ID"
@@ -308,7 +312,7 @@ echo -e "\n${BOLD}Phase 9: Multiple triggers${NC}"
 
 sleep 2  # ensure different scheduled_for timestamp
 api POST "/projects/${PROJECT_ID}/scheduled-sessions/${SCHED_ID}/trigger" "$TOKEN"
-assert_status "200" "$HTTP_STATUS" "Second trigger succeeds"
+assert_status "201" "$HTTP_STATUS" "Second trigger succeeds"
 SECOND_SESSION_ID=$(echo "$HTTP_BODY" | jq -r '.id // empty')
 if [[ -n "$SECOND_SESSION_ID" && "$SECOND_SESSION_ID" != "$TRIGGERED_SESSION_ID" ]]; then
   pass "Second trigger creates a different session"
