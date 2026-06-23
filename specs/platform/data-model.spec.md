@@ -117,6 +117,8 @@ erDiagram
         string  created_by_user_id FK "who created or started the session"
         string  assigned_user_id FK "nullable — override for session ownership"
         string  parent_session_id FK "nullable — source session for clones"
+        string  source_scheduled_session_id "nullable — FK to ScheduledSession that triggered this"
+        time    scheduled_for "nullable — cron tick time; idempotency key with source_scheduled_session_id"
         string  prompt "task scope for this run"
         string  repo_url "nullable — primary repo for the session"
         string  repos "JSON array of RepoEntry (additional attached repos)"
@@ -208,11 +210,13 @@ erDiagram
         string ID PK "KSUID"
         string project_id FK
         string agent_id FK "nullable — which Agent to ignite on each trigger"
+        string created_by_user_id "set from JWT on create; immutable"
         string name "human-readable; unique within project"
         string description
         string schedule "cron expression"
         string timezone "IANA timezone; default UTC"
         bool   enabled "false = suspended; schedule not evaluated"
+        string overlap_policy "skip (default) or allow"
         string session_prompt "injected as Session.prompt on each trigger"
         int32  timeout "nullable — max session duration in seconds for triggered sessions"
         int32  inactivity_timeout "nullable — idle timeout in seconds"
@@ -523,15 +527,17 @@ A `ScheduledSession` is a project-scoped definition that ignites an Agent on a r
 | Field | Notes |
 |-------|-------|
 | `name` | Human-readable, unique within the project. |
-| `agent_id` | Which Agent to ignite. Must exist in the same project. |
-| `schedule` | Standard cron expression (e.g. `"0 9 * * 1-5"` = 9 AM on weekdays). |
+| `agent_id` | Which Agent to ignite. Nullable — if NULL, creates a project-scoped session. |
+| `created_by_user_id` | User who created the schedule. Set server-side from JWT on create. Immutable. Used for pre-trigger authorization checks. |
+| `schedule` | Standard cron expression (e.g. `"0 9 * * 1-5"` = 9 AM on weekdays). Validated at write time. |
 | `timezone` | IANA timezone string (e.g. `"America/New_York"`). Defaults to `UTC`. |
 | `enabled` | `false` suspends evaluation without deleting the schedule. |
+| `overlap_policy` | `"skip"` (default) or `"allow"`. Controls whether a new session is created when the previous run from this schedule is still active. |
 | `session_prompt` | Injected as `Session.prompt` on each trigger — the recurring task. |
 | `last_run_at` | Wall-clock time of the last trigger. Null if never triggered. |
-| `next_run_at` | Computed from `schedule` + `timezone`. Updated after each trigger. |
+| `next_run_at` | Computed from `schedule` + `timezone`. Updated after each trigger. NULL when `enabled = false`. |
 
-**Trigger semantics:** Each trigger calls `POST /projects/{id}/agents/{agent_id}/start`, which is idempotent. If the Agent already has an active Session at trigger time, the trigger is skipped and recorded as a missed run in the runs list.
+**Trigger semantics:** Each trigger creates a Session directly via the internal session service (same code path as `ignite_handler.go`). The `overlap_policy` field controls behavior when a previous session from the same schedule is still active: `skip` (default) advances `next_run_at` without creating a new session; `allow` creates a new session regardless. See [Scheduled Session Execution spec](scheduled-session-execution.spec.md) for full execution semantics.
 
 **Manual trigger:** `POST .../trigger` ignites the Agent immediately outside the cron schedule, using the same `session_prompt`. Useful for testing or one-off runs.
 
