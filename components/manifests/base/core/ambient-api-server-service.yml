@@ -79,9 +79,7 @@ spec:
             - --db-password-file=/secrets/db/db.password
             - --db-name-file=/secrets/db/db.name
             - --enable-jwt=true
-            # Authz disabled: api-server has no internal RBAC middleware yet.
-            # Auth is handled by the backend proxy. TODO: enable when authz is implemented.
-            - --enable-authz=false
+            - --enable-authz=true
             - --jwk-cert-file=/configs/authentication/jwks.json
             - --enable-https=false
             - --api-server-bindaddress=:8000

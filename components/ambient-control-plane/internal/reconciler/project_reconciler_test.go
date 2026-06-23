@@ -36,17 +36,46 @@ func newFakeKubeClient(objects ...runtime.Object) *kubeclient.KubeClient {
 	return kubeclient.NewFromDynamic(dynClient, zerolog.Nop())
 }
 
-func newTestProjectReconciler(kube *kubeclient.KubeClient) *ProjectReconciler {
+func newTestProjectReconciler(kube *kubeclient.KubeClient, platformMode string) *ProjectReconciler {
 	return &ProjectReconciler{
 		kube:               kube,
 		provisioner:        &stubProvisioner{},
 		cpRuntimeNamespace: "ambient-system",
+		platformMode:       platformMode,
 		logger:             zerolog.Nop(),
 	}
 }
 
-func TestControlPlaneRBACRules_ContainsAllAPIGroups(t *testing.T) {
-	r := newTestProjectReconciler(nil)
+func TestControlPlaneRBACRules_StandardMode(t *testing.T) {
+	r := newTestProjectReconciler(nil, "standard")
+	rules := r.controlPlaneRBACRules()
+
+	expectedGroups := map[string]bool{
+		"":                          false,
+		"rbac.authorization.k8s.io": false,
+	}
+
+	for _, rule := range rules {
+		ruleMap := rule.(map[string]interface{})
+		apiGroups := ruleMap["apiGroups"].([]interface{})
+		for _, g := range apiGroups {
+			expectedGroups[g.(string)] = true
+		}
+	}
+
+	for group, found := range expectedGroups {
+		if !found {
+			t.Errorf("expected API group %q in RBAC rules, but not found", group)
+		}
+	}
+
+	if len(rules) != 3 {
+		t.Errorf("expected 3 rule entries in standard mode, got %d", len(rules))
+	}
+}
+
+func TestControlPlaneRBACRules_MPPMode(t *testing.T) {
+	r := newTestProjectReconciler(nil, "mpp")
 	rules := r.controlPlaneRBACRules()
 
 	expectedGroups := map[string]bool{
@@ -72,12 +101,12 @@ func TestControlPlaneRBACRules_ContainsAllAPIGroups(t *testing.T) {
 	}
 
 	if len(rules) != 6 {
-		t.Errorf("expected 6 rule entries, got %d", len(rules))
+		t.Errorf("expected 6 rule entries in mpp mode, got %d", len(rules))
 	}
 }
 
 func TestControlPlaneRBACRules_OpenShiftBuildResources(t *testing.T) {
-	r := newTestProjectReconciler(nil)
+	r := newTestProjectReconciler(nil, "mpp")
 	rules := r.controlPlaneRBACRules()
 
 	var buildRule map[string]interface{}
@@ -113,7 +142,7 @@ func TestControlPlaneRBACRules_OpenShiftBuildResources(t *testing.T) {
 
 func TestEnsureControlPlaneRBAC_CreatesRoleAndBinding(t *testing.T) {
 	kube := newFakeKubeClient()
-	r := newTestProjectReconciler(kube)
+	r := newTestProjectReconciler(kube, "standard")
 
 	project := types.Project{ObjectReference: types.ObjectReference{ID: "test-project"}, Name: "Test"}
 
@@ -130,8 +159,8 @@ func TestEnsureControlPlaneRBAC_CreatesRoleAndBinding(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("expected rules in created Role: found=%v err=%v", found, err)
 	}
-	if len(rules) != 6 {
-		t.Errorf("expected 6 rules in created Role, got %d", len(rules))
+	if len(rules) != 3 {
+		t.Errorf("expected 3 rules in created Role (standard mode), got %d", len(rules))
 	}
 }
 
@@ -155,7 +184,7 @@ func TestEnsureControlPlaneRBAC_UpdatesExistingRole(t *testing.T) {
 	}
 
 	kube := newFakeKubeClient(existingRole)
-	r := newTestProjectReconciler(kube)
+	r := newTestProjectReconciler(kube, "mpp")
 
 	project := types.Project{ObjectReference: types.ObjectReference{ID: "test-project"}, Name: "Test"}
 
@@ -173,6 +202,6 @@ func TestEnsureControlPlaneRBAC_UpdatesExistingRole(t *testing.T) {
 		t.Fatalf("expected rules in updated Role: found=%v err=%v", found, err)
 	}
 	if len(rules) != 6 {
-		t.Errorf("expected 6 rules after update (was 1), got %d", len(rules))
+		t.Errorf("expected 6 rules after update in mpp mode (was 1), got %d", len(rules))
 	}
 }
