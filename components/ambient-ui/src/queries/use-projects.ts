@@ -65,3 +65,14 @@ export function usePatchProject(port?: ProjectsPort) {
     },
   })
 }
+
+export function useDeleteProject(port?: ProjectsPort) {
+  const queryClient = useQueryClient()
+  const adapter = port ?? getDefaultPort()
+  return useMutation({
+    mutationFn: (projectId: string) => adapter.delete(projectId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all })
+    },
+  })
+}

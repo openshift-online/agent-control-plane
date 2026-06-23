@@ -47,6 +47,10 @@ function createSdkProjectsAdapter(api: ProjectAPI): ProjectsPort {
       })
       return mapSdkProjectToDomain(project)
     },
+
+    async delete(projectId: string): Promise<void> {
+      await api.delete(projectId)
+    },
   }
 }
 

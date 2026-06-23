@@ -130,7 +130,7 @@ function useCurrentUserRole(projectId: string | null | undefined) {
 
 export function NavHeader({ projectId, effectiveProjectId, projectName, pageName, sessionName, detailName }: NavHeaderProps) {
   const mappedPageName = pageName ? displayLabel(pageName) : null
-  const currentUserRole = useCurrentUserRole(effectiveProjectId)
+  const currentUserRole = useCurrentUserRole(projectId)
 
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b bg-background px-4">
@@ -186,19 +186,19 @@ export function NavHeader({ projectId, effectiveProjectId, projectName, pageName
 
       <div className="ml-auto flex items-center gap-2">
         <SearchTrigger />
+        {projectId && (
+          <ShareDialog
+            projectId={projectId}
+            currentUserRole={currentUserRole}
+            trigger={
+              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Share project" title="Share">
+                <UserPlus className="size-4" />
+              </Button>
+            }
+          />
+        )}
         {effectiveProjectId && (
-          <>
-            <ShareDialog
-              projectId={effectiveProjectId}
-              currentUserRole={currentUserRole}
-              trigger={
-                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Share project" title="Share">
-                  <UserPlus className="size-4" />
-                </Button>
-              }
-            />
-            <NotificationBell projectId={effectiveProjectId} />
-          </>
+          <NotificationBell projectId={effectiveProjectId} />
         )}
         <UserMenu />
       </div>
