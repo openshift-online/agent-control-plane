@@ -225,11 +225,11 @@ func (h *scheduledSessionHandler) Trigger(w http.ResponseWriter, r *http.Request
 			if created == nil {
 				return map[string]string{"status": "skipped"}, nil
 			}
+			w.WriteHeader(http.StatusCreated)
 			return sessions.PresentSession(created), nil
 		},
-		ErrorHandler: handlers.HandleError,
 	}
-	handlers.Handle(w, r, cfg, http.StatusCreated)
+	handlers.HandleGet(w, r, cfg)
 }
 
 // Runs — GET /api/ambient/v1/projects/{project_id}/scheduled-sessions/{id}/runs
