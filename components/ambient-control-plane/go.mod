@@ -17,20 +17,20 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
-	github.com/go-openapi/jsonpointer v0.21.0 // indirect
-	github.com/go-openapi/jsonreference v0.20.2 // indirect
-	github.com/go-openapi/swag v0.25.4 // indirect
-	github.com/go-openapi/swag/cmdutils v0.25.4 // indirect
-	github.com/go-openapi/swag/conv v0.25.4 // indirect
-	github.com/go-openapi/swag/fileutils v0.25.4 // indirect
-	github.com/go-openapi/swag/jsonname v0.25.4 // indirect
-	github.com/go-openapi/swag/jsonutils v0.25.4 // indirect
-	github.com/go-openapi/swag/loading v0.25.4 // indirect
-	github.com/go-openapi/swag/mangling v0.25.4 // indirect
-	github.com/go-openapi/swag/netutils v0.25.4 // indirect
-	github.com/go-openapi/swag/stringutils v0.25.4 // indirect
-	github.com/go-openapi/swag/typeutils v0.25.4 // indirect
-	github.com/go-openapi/swag/yamlutils v0.25.4 // indirect
+	github.com/go-openapi/jsonpointer v0.23.1 // indirect
+	github.com/go-openapi/jsonreference v0.21.6 // indirect
+	github.com/go-openapi/swag v0.26.1 // indirect
+	github.com/go-openapi/swag/cmdutils v0.26.1 // indirect
+	github.com/go-openapi/swag/conv v0.26.1 // indirect
+	github.com/go-openapi/swag/fileutils v0.26.1 // indirect
+	github.com/go-openapi/swag/jsonname v0.26.1 // indirect
+	github.com/go-openapi/swag/jsonutils v0.26.1 // indirect
+	github.com/go-openapi/swag/loading v0.26.1 // indirect
+	github.com/go-openapi/swag/mangling v0.26.1 // indirect
+	github.com/go-openapi/swag/netutils v0.26.1 // indirect
+	github.com/go-openapi/swag/stringutils v0.26.1 // indirect
+	github.com/go-openapi/swag/typeutils v0.26.1 // indirect
+	github.com/go-openapi/swag/yamlutils v0.26.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -54,7 +54,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260618221249-bc653b64f974 // indirect
-	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
+	k8s.io/utils v0.0.0-20260617174310-a95e086a2553 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
