@@ -7,6 +7,8 @@ import (
 
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
+
+	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 )
 
 // InMemoryScheduledSessionService is a zero-dependency service for tests and local dev.
@@ -134,7 +136,20 @@ func (s *InMemoryScheduledSessionService) Resume(ctx context.Context, id string)
 	return s.Patch(ctx, id, &ScheduledSessionPatch{Enabled: &enabled})
 }
 
-func (s *InMemoryScheduledSessionService) Trigger(ctx context.Context, id string) *errors.ServiceError {
-	_, err := s.Get(ctx, id)
-	return err
+func (s *InMemoryScheduledSessionService) Trigger(ctx context.Context, id string) (*sessions.Session, *errors.ServiceError) {
+	ss, err := s.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	stub := &sessions.Session{
+		Name: "triggered-" + ss.Name,
+	}
+	stub.ID = api.NewID()
+	stub.SourceScheduledSessionId = &ss.ID
+	now := time.Now()
+	stub.ScheduledFor = &now
+	stub.CreatedByUserId = ss.CreatedByUserId
+	stub.ProjectId = &ss.ProjectId
+	stub.AgentId = ss.AgentId
+	return stub, nil
 }

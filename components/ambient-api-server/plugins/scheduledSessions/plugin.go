@@ -11,7 +11,9 @@ import (
 	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/clock"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/plugins/rbac"
+	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 )
 
 func init() {
@@ -54,6 +56,8 @@ func init() {
 			return NewScheduledSessionService(
 				NewScheduledSessionDao(&e.Database.SessionFactory),
 				clock.RealClock{},
+				sessions.Service(&e.Services),
+				rbac.NewEvaluator(&e.Database.SessionFactory),
 			)
 		}
 	})

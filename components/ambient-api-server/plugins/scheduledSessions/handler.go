@@ -4,7 +4,9 @@ import (
 	"net/http"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 	"github.com/gorilla/mux"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 )
@@ -70,6 +72,7 @@ type scheduledSessionCreateRequest struct {
 	Schedule          string  `json:"schedule"`
 	Timezone          *string `json:"timezone,omitempty"`
 	Enabled           *bool   `json:"enabled,omitempty"`
+	OverlapPolicy     *string `json:"overlap_policy,omitempty"`
 	SessionPrompt     *string `json:"session_prompt,omitempty"`
 	Timeout           *int32  `json:"timeout,omitempty"`
 	InactivityTimeout *int32  `json:"inactivity_timeout,omitempty"`
@@ -101,6 +104,7 @@ func (h *scheduledSessionHandler) Create(w http.ResponseWriter, r *http.Request)
 			},
 		},
 		Action: func() (interface{}, *errors.ServiceError) {
+			ctx := r.Context()
 			oaBody := openapi.ScheduledSession{
 				Name:              body.Name,
 				Description:       body.Description,
@@ -109,6 +113,7 @@ func (h *scheduledSessionHandler) Create(w http.ResponseWriter, r *http.Request)
 				Schedule:          body.Schedule,
 				Timezone:          body.Timezone,
 				Enabled:           body.Enabled,
+				OverlapPolicy:     body.OverlapPolicy,
 				SessionPrompt:     body.SessionPrompt,
 				Timeout:           body.Timeout,
 				InactivityTimeout: body.InactivityTimeout,
@@ -116,7 +121,10 @@ func (h *scheduledSessionHandler) Create(w http.ResponseWriter, r *http.Request)
 				RunnerType:        body.RunnerType,
 			}
 			ss := ConvertScheduledSession(oaBody)
-			created, err := h.svc.Create(r.Context(), ss)
+			if username := auth.GetUsernameFromContext(ctx); username != "" {
+				ss.CreatedByUserId = &username
+			}
+			created, err := h.svc.Create(ctx, ss)
 			if err != nil {
 				return nil, err
 			}
@@ -142,6 +150,7 @@ func (h *scheduledSessionHandler) Patch(w http.ResponseWriter, r *http.Request) 
 				Schedule:          body.Schedule,
 				Timezone:          body.Timezone,
 				Enabled:           body.Enabled,
+				OverlapPolicy:     body.OverlapPolicy,
 				SessionPrompt:     body.SessionPrompt,
 				Timeout:           body.Timeout,
 				InactivityTimeout: body.InactivityTimeout,
@@ -208,13 +217,18 @@ func (h *scheduledSessionHandler) Trigger(w http.ResponseWriter, r *http.Request
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
 			id := mux.Vars(r)["id"]
-			if err := h.svc.Trigger(r.Context(), id); err != nil {
+			created, err := h.svc.Trigger(r.Context(), id)
+			if err != nil {
 				return nil, err
 			}
-			return map[string]string{"status": "triggered"}, nil
+			if created == nil {
+				return map[string]string{"status": "skipped"}, nil
+			}
+			return sessions.PresentSession(created), nil
 		},
+		ErrorHandler: handlers.HandleError,
 	}
-	handlers.HandleGet(w, r, cfg)
+	handlers.Handle(w, r, cfg, http.StatusCreated)
 }
 
 // Runs — GET /api/ambient/v1/projects/{project_id}/scheduled-sessions/{id}/runs

@@ -2,13 +2,17 @@ package scheduledSessions
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 	"gorm.io/gorm"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/clock"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
+	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 )
 
 type ScheduledSessionService interface {
@@ -19,7 +23,7 @@ type ScheduledSessionService interface {
 	ListByProject(ctx context.Context, projectId string) (ScheduledSessionList, *errors.ServiceError)
 	Suspend(ctx context.Context, id string) (*ScheduledSession, *errors.ServiceError)
 	Resume(ctx context.Context, id string) (*ScheduledSession, *errors.ServiceError)
-	Trigger(ctx context.Context, id string) *errors.ServiceError
+	Trigger(ctx context.Context, id string) (*sessions.Session, *errors.ServiceError)
 }
 
 type ScheduledSessionPatch struct {
@@ -38,12 +42,19 @@ type ScheduledSessionPatch struct {
 }
 
 type sqlScheduledSessionService struct {
-	dao   ScheduledSessionDao
-	clock clock.Clock
+	dao        ScheduledSessionDao
+	clock      clock.Clock
+	sessionSvc sessions.SessionService
+	evaluator  *rbac.Evaluator
 }
 
-func NewScheduledSessionService(dao ScheduledSessionDao, clk clock.Clock) ScheduledSessionService {
-	return &sqlScheduledSessionService{dao: dao, clock: clk}
+func NewScheduledSessionService(dao ScheduledSessionDao, clk clock.Clock, sessionSvc sessions.SessionService, evaluator *rbac.Evaluator) ScheduledSessionService {
+	return &sqlScheduledSessionService{
+		dao:        dao,
+		clock:      clk,
+		sessionSvc: sessionSvc,
+		evaluator:  evaluator,
+	}
 }
 
 func (s *sqlScheduledSessionService) Get(ctx context.Context, id string) (*ScheduledSession, *errors.ServiceError) {
@@ -184,13 +195,83 @@ func (s *sqlScheduledSessionService) Resume(ctx context.Context, id string) (*Sc
 	return s.Patch(ctx, id, &ScheduledSessionPatch{Enabled: &enabled})
 }
 
-func (s *sqlScheduledSessionService) Trigger(ctx context.Context, id string) *errors.ServiceError {
+func (s *sqlScheduledSessionService) Trigger(ctx context.Context, id string) (*sessions.Session, *errors.ServiceError) {
 	ss, svcErr := s.Get(ctx, id)
 	if svcErr != nil {
-		return svcErr
+		return nil, svcErr
 	}
-	_ = ss
-	// In production this would enqueue an immediate one-off session via the agent start endpoint.
-	// In this session, we record intent and return success.
-	return nil
+	return s.createSessionFromSchedule(ctx, ss, s.clock.Now().Truncate(time.Second), false)
+}
+
+func (s *sqlScheduledSessionService) createSessionFromSchedule(
+	ctx context.Context,
+	ss *ScheduledSession,
+	scheduledFor time.Time,
+	isSchedulerTrigger bool,
+) (*sessions.Session, *errors.ServiceError) {
+	if isSchedulerTrigger {
+		if ss.CreatedByUserId == nil {
+			glog.Warningf("Schedule %s disabled: no creator identity", ss.ID)
+			ss.Enabled = false
+			_ = s.dao.UpdateScheduleState(ctx, ss)
+			return nil, nil
+		}
+
+		if s.evaluator != nil {
+			allowed, evalErr := s.evaluator.Evaluate(ctx, *ss.CreatedByUserId, rbac.ResourceSession, rbac.ActionCreate, rbac.RequestScope{ProjectID: ss.ProjectId})
+			if evalErr != nil {
+				return nil, errors.GeneralError("RBAC evaluation failed for schedule %s: %v", ss.ID, evalErr)
+			}
+			if !allowed {
+				glog.Warningf("Schedule %s disabled: creator %s no longer authorized", ss.ID, *ss.CreatedByUserId)
+				ss.Enabled = false
+				_ = s.dao.UpdateScheduleState(ctx, ss)
+				return nil, nil
+			}
+		}
+
+		if ss.OverlapPolicy == "skip" && s.sessionSvc != nil {
+			active, lookupErr := s.sessionSvc.ActiveByScheduledSessionID(ctx, ss.ID)
+			if lookupErr != nil {
+				return nil, lookupErr
+			}
+			if active != nil {
+				glog.Infof("Schedule %s: skipping due to overlap (active session %s)", ss.ID, active.ID)
+				return nil, nil
+			}
+		}
+	}
+
+	if s.sessionSvc == nil {
+		return nil, errors.GeneralError("session service not available")
+	}
+
+	stopDefault := true
+	stopVal := &stopDefault
+	if ss.StopOnRunFinished != nil {
+		stopVal = ss.StopOnRunFinished
+	}
+
+	sess := &sessions.Session{
+		Name:                     fmt.Sprintf("sched-%s-%d", ss.Name, scheduledFor.Unix()),
+		Prompt:                   ss.SessionPrompt,
+		ProjectId:                &ss.ProjectId,
+		AgentId:                  ss.AgentId,
+		Timeout:                  ss.Timeout,
+		CreatedByUserId:          ss.CreatedByUserId,
+		SourceScheduledSessionId: &ss.ID,
+		ScheduledFor:             &scheduledFor,
+	}
+	_ = stopVal // stop_on_run_finished is on the Session model but not yet wired to runner behavior
+
+	created, createErr := s.sessionSvc.Create(ctx, sess)
+	if createErr != nil {
+		return nil, createErr
+	}
+
+	if _, startErr := s.sessionSvc.Start(ctx, created.ID); startErr != nil {
+		glog.Warningf("Schedule %s: session %s created but start failed: %v", ss.ID, created.ID, startErr)
+	}
+
+	return created, nil
 }
