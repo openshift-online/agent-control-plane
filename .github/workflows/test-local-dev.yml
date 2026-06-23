@@ -178,6 +178,12 @@ jobs:
         KC_URL=http://localhost:18592 \
         bash components/ambient-api-server/test/e2e/rbac_e2e_test.sh
 
+    - name: Run Scheduled Sessions E2E tests
+      run: |
+        API_URL=http://localhost:13592/api/ambient/v1 \
+        KC_URL=http://localhost:18592 \
+        bash components/ambient-api-server/test/e2e/scheduled_sessions_e2e_test.sh
+
     - name: Show deployment status
       if: always()
       run: |
