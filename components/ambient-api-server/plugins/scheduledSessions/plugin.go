@@ -27,7 +27,7 @@ func init() {
 		envServices := services.(*environments.Services)
 
 		var svc ScheduledSessionService
-		if obj := envServices.GetService("ScheduledSessions"); obj != nil {
+		if obj := envServices.GetService("ScheduledSessionsSQL"); obj != nil {
 			svc = obj.(func() ScheduledSessionService)()
 		} else {
 			svc = NewInMemoryService()
