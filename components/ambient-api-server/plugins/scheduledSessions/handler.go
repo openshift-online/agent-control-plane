@@ -12,11 +12,12 @@ import (
 )
 
 type scheduledSessionHandler struct {
-	svc ScheduledSessionService
+	svc        ScheduledSessionService
+	sessionSvc sessions.SessionService
 }
 
-func NewScheduledSessionHandler(svc ScheduledSessionService) *scheduledSessionHandler {
-	return &scheduledSessionHandler{svc: svc}
+func NewScheduledSessionHandler(svc ScheduledSessionService, sessionSvc sessions.SessionService) *scheduledSessionHandler {
+	return &scheduledSessionHandler{svc: svc, sessionSvc: sessionSvc}
 }
 
 // List — GET /api/ambient/v1/projects/{project_id}/scheduled-sessions
@@ -235,15 +236,24 @@ func (h *scheduledSessionHandler) Trigger(w http.ResponseWriter, r *http.Request
 func (h *scheduledSessionHandler) Runs(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
-			// Returns sessions triggered by this scheduled session.
-			// In production, query sessions where source_scheduled_session_id = id.
-			// For now, return empty list so the endpoint works and is testable.
-			return map[string]interface{}{
-				"kind":  "SessionList",
-				"page":  1,
-				"size":  0,
-				"total": 0,
-				"items": []interface{}{},
+			id := mux.Vars(r)["id"]
+			if _, svcErr := h.svc.Get(r.Context(), id); svcErr != nil {
+				return nil, svcErr
+			}
+			runs, svcErr := h.sessionSvc.ByScheduledSessionID(r.Context(), id)
+			if svcErr != nil {
+				return nil, svcErr
+			}
+			items := make([]openapi.Session, 0, len(runs))
+			for _, s := range runs {
+				items = append(items, sessions.PresentSession(s))
+			}
+			return openapi.SessionList{
+				Kind:  "SessionList",
+				Page:  1,
+				Size:  int32(len(runs)),
+				Total: int32(len(runs)),
+				Items: items,
 			}, nil
 		},
 	}

@@ -31,7 +31,8 @@ func init() {
 			authzMiddleware = dbAuthz
 		}
 
-		h := NewScheduledSessionHandler(svc)
+		sessionSvc := sessions.Service(envServices)
+		h := NewScheduledSessionHandler(svc, sessionSvc)
 
 		projectRouter := apiV1Router.PathPrefix("/projects/{project_id}").Subrouter()
 		schedRouter := projectRouter.PathPrefix("/scheduled-sessions").Subrouter()
