@@ -10,6 +10,7 @@ require (
 	github.com/onsi/gomega v1.29.0
 	github.com/openshift-online/ocm-sdk-go v0.1.503
 	github.com/openshift-online/rh-trex-ai v0.0.30
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.10
 	google.golang.org/grpc v1.79.3

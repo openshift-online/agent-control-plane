@@ -2,10 +2,13 @@ package scheduledSessions
 
 import (
 	"context"
+	"time"
 
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 	"gorm.io/gorm"
+
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/clock"
 )
 
 type ScheduledSessionService interface {
@@ -35,11 +38,12 @@ type ScheduledSessionPatch struct {
 }
 
 type sqlScheduledSessionService struct {
-	dao ScheduledSessionDao
+	dao   ScheduledSessionDao
+	clock clock.Clock
 }
 
-func NewScheduledSessionService(dao ScheduledSessionDao) ScheduledSessionService {
-	return &sqlScheduledSessionService{dao: dao}
+func NewScheduledSessionService(dao ScheduledSessionDao, clk clock.Clock) ScheduledSessionService {
+	return &sqlScheduledSessionService{dao: dao, clock: clk}
 }
 
 func (s *sqlScheduledSessionService) Get(ctx context.Context, id string) (*ScheduledSession, *errors.ServiceError) {
@@ -54,9 +58,27 @@ func (s *sqlScheduledSessionService) Get(ctx context.Context, id string) (*Sched
 }
 
 func (s *sqlScheduledSessionService) Create(ctx context.Context, ss *ScheduledSession) (*ScheduledSession, *errors.ServiceError) {
-	created, err := s.dao.Create(ctx, ss)
+	if err := ValidateCron(ss.Schedule); err != nil {
+		return nil, errors.Validation("invalid cron expression: %v", err)
+	}
+	if ss.Timezone == "" {
+		ss.Timezone = "UTC"
+	}
+	if _, err := time.LoadLocation(ss.Timezone); err != nil {
+		return nil, errors.Validation("invalid timezone: %v", err)
+	}
+	if ss.OverlapPolicy != "" && ss.OverlapPolicy != "skip" && ss.OverlapPolicy != "allow" {
+		return nil, errors.Validation("overlap_policy must be 'skip' or 'allow'")
+	}
+	next, err := NextRunAt(s.clock, ss.Schedule, ss.Timezone, ss.Enabled)
 	if err != nil {
-		return nil, errors.GeneralError("failed to create scheduled session: %v", err)
+		return nil, errors.GeneralError("failed to compute next_run_at: %v", err)
+	}
+	ss.NextRunAt = next
+
+	created, createErr := s.dao.Create(ctx, ss)
+	if createErr != nil {
+		return nil, errors.GeneralError("failed to create scheduled session: %v", createErr)
 	}
 	return created, nil
 }
@@ -66,6 +88,9 @@ func (s *sqlScheduledSessionService) Patch(ctx context.Context, id string, patch
 	if svcErr != nil {
 		return nil, svcErr
 	}
+
+	recomputeNext := false
+
 	if patch.Name != nil {
 		ss.Name = *patch.Name
 	}
@@ -76,13 +101,22 @@ func (s *sqlScheduledSessionService) Patch(ctx context.Context, id string, patch
 		ss.AgentId = patch.AgentId
 	}
 	if patch.Schedule != nil {
+		if err := ValidateCron(*patch.Schedule); err != nil {
+			return nil, errors.Validation("invalid cron expression: %v", err)
+		}
 		ss.Schedule = *patch.Schedule
+		recomputeNext = true
 	}
 	if patch.Timezone != nil {
+		if _, err := time.LoadLocation(*patch.Timezone); err != nil {
+			return nil, errors.Validation("invalid timezone: %v", err)
+		}
 		ss.Timezone = *patch.Timezone
+		recomputeNext = true
 	}
 	if patch.Enabled != nil {
 		ss.Enabled = *patch.Enabled
+		recomputeNext = true
 	}
 	if patch.SessionPrompt != nil {
 		ss.SessionPrompt = patch.SessionPrompt
@@ -100,8 +134,20 @@ func (s *sqlScheduledSessionService) Patch(ctx context.Context, id string, patch
 		ss.RunnerType = patch.RunnerType
 	}
 	if patch.OverlapPolicy != nil {
+		if *patch.OverlapPolicy != "skip" && *patch.OverlapPolicy != "allow" {
+			return nil, errors.Validation("overlap_policy must be 'skip' or 'allow'")
+		}
 		ss.OverlapPolicy = *patch.OverlapPolicy
 	}
+
+	if recomputeNext {
+		next, err := NextRunAt(s.clock, ss.Schedule, ss.Timezone, ss.Enabled)
+		if err != nil {
+			return nil, errors.GeneralError("failed to compute next_run_at: %v", err)
+		}
+		ss.NextRunAt = next
+	}
+
 	updated, err := s.dao.Replace(ctx, ss)
 	if err != nil {
 		return nil, errors.GeneralError("failed to update scheduled session: %v", err)

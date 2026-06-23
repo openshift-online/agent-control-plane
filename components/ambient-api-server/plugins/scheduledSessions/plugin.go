@@ -10,6 +10,7 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/registry"
 	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
 
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/clock"
 	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/plugins/rbac"
 )
 
@@ -52,6 +53,7 @@ func init() {
 		return func() ScheduledSessionService {
 			return NewScheduledSessionService(
 				NewScheduledSessionDao(&e.Database.SessionFactory),
+				clock.RealClock{},
 			)
 		}
 	})
