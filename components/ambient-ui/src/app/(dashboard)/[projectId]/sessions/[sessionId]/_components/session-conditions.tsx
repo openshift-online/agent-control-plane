@@ -1,6 +1,20 @@
 import { AlertTriangle } from 'lucide-react'
 import type { DomainCondition } from '@/domain/types'
 
+const CONDITION_TITLES: Record<string, string> = {
+  SetupFailed: 'Setup failed',
+  StartupFailed: 'Session failed to start',
+  Error: 'Session error',
+  OOMKilled: 'Session ran out of memory',
+}
+
+function formatConditionTitle(condition: DomainCondition): string {
+  if (condition.reason && CONDITION_TITLES[condition.reason]) {
+    return CONDITION_TITLES[condition.reason]
+  }
+  return 'Session error'
+}
+
 type SessionConditionsProps = {
   conditions: DomainCondition[]
 }
@@ -21,7 +35,7 @@ export function SessionConditions({ conditions }: SessionConditionsProps) {
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-status-error-foreground" aria-hidden="true" />
           <div className="min-w-0 flex-1 text-sm">
             <p className="font-medium text-status-error-foreground">
-              {condition.reason ?? condition.type} failed
+              {formatConditionTitle(condition)}
             </p>
             {condition.message && (
               <p className="mt-1 text-muted-foreground break-words">

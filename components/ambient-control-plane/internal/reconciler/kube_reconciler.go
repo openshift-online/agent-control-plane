@@ -1284,7 +1284,7 @@ func (r *SimpleKubeReconciler) HandleProvisioningFailure(ctx context.Context, ev
 		"type":               "Provisioning",
 		"status":             "False",
 		"reason":             "SetupFailed",
-		"message":            err.Error(),
+		"message":            sanitizeProvisioningError(err),
 		"lastTransitionTime": time.Now().UTC().Format(time.RFC3339),
 	}
 	conditionsJSON, marshalErr := json.Marshal([]interface{}{condition})
@@ -1322,6 +1322,21 @@ func (r *SimpleKubeReconciler) HandleProvisioningFailure(ctx context.Context, ev
 		Str("old_phase", session.Phase).
 		Str("new_phase", PhaseFailed).
 		Msg("session marked as Failed due to provisioning error")
+}
+
+func sanitizeProvisioningError(err error) string {
+	switch {
+	case k8serrors.IsForbidden(err), k8serrors.IsUnauthorized(err):
+		return "Insufficient permissions to provision session resources. Contact your administrator to verify cluster RBAC configuration."
+	case k8serrors.IsNotFound(err):
+		return "Required cluster resources are not available. Contact your administrator to verify the platform configuration."
+	case k8serrors.IsResourceExpired(err), k8serrors.IsTooManyRequests(err):
+		return "Resource quota exceeded. The cluster does not have enough capacity to provision this session."
+	case k8serrors.IsServerTimeout(err), k8serrors.IsServiceUnavailable(err):
+		return "The cluster is temporarily unavailable. Try creating the session again."
+	default:
+		return "Session provisioning failed. Check the platform logs for details."
+	}
 }
 
 func sessionLabelSelector(sessionID string) string {
