@@ -30,5 +30,15 @@ kubectl patch secret sso-credentials -n "$NAMESPACE" --type=json -p="[
   }
 ]" >/dev/null
 
-# Keycloak's KC_HOSTNAME is already set correctly in the manifest
-# We don't need to patch it - the dual-issuer pattern handles browser vs pod URLs
+# Patch KC_HOSTNAME so Keycloak generates correct URLs for port-forwarded access.
+# Only patch if the value changed to avoid unnecessary restarts.
+DESIRED_KC_HOSTNAME="http://localhost:${KIND_FWD_KEYCLOAK_PORT}"
+CURRENT_KC_HOSTNAME=$(kubectl get deployment/keycloak -n "$NAMESPACE" \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="KC_HOSTNAME")].value}' 2>/dev/null || true)
+
+if [ "$CURRENT_KC_HOSTNAME" != "$DESIRED_KC_HOSTNAME" ]; then
+  kubectl set env deployment/keycloak -n "$NAMESPACE" \
+    KC_HOSTNAME="$DESIRED_KC_HOSTNAME" >/dev/null
+  echo "Waiting for Keycloak restart..."
+  kubectl rollout status deployment/keycloak -n "$NAMESPACE" --timeout=120s >/dev/null 2>&1
+fi

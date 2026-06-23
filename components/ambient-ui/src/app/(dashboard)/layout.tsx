@@ -18,7 +18,7 @@ import {
 import { useRecentVisits } from '@/hooks/use-recent-visits'
 import { useLastActiveProject } from '@/hooks/use-last-active-project'
 
-const GLOBAL_ROUTES = new Set(['credentials', 'settings'])
+const GLOBAL_ROUTES = new Set(['credentials'])
 
 function extractNavContext(pathname: string) {
   const segments = pathname.split('/').filter(Boolean)

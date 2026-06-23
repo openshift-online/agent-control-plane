@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { RoleBindingsPort } from '@/ports/role-bindings'
-import type { DomainRoleBinding, DomainRoleBindingCreateRequest, ListParams } from '@/domain/types'
+import type { DomainRoleBinding, DomainRoleBindingCreateRequest, DomainRoleBindingPatchRequest, ListParams } from '@/domain/types'
 import { createRoleBindingsAdapter } from '@/adapters/sdk-role-bindings'
 import { queryKeys } from './query-keys'
 
@@ -33,6 +33,19 @@ export function useCreateRoleBinding(port?: RoleBindingsPort) {
   return useMutation({
     mutationFn: (request: DomainRoleBindingCreateRequest) =>
       adapter.create(request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.roleBindings.all })
+    },
+  })
+}
+
+export function usePatchRoleBinding(port?: RoleBindingsPort) {
+  const queryClient = useQueryClient()
+  const adapter = port ?? getDefaultPort()
+
+  return useMutation({
+    mutationFn: ({ id, request }: { id: string; request: DomainRoleBindingPatchRequest }) =>
+      adapter.patch(id, request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.roleBindings.all })
     },

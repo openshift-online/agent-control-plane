@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -8,6 +9,8 @@ import (
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
 	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
+	"github.com/openshift-online/rh-trex-ai/pkg/db"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
@@ -16,14 +19,16 @@ import (
 var _ handlers.RestHandler = projectHandler{}
 
 type projectHandler struct {
-	project ProjectService
-	generic services.GenericService
+	project        ProjectService
+	generic        services.GenericService
+	sessionFactory *db.SessionFactory
 }
 
-func NewProjectHandler(project ProjectService, generic services.GenericService) *projectHandler {
+func NewProjectHandler(project ProjectService, generic services.GenericService, sessionFactory *db.SessionFactory) *projectHandler {
 	return &projectHandler{
-		project: project,
-		generic: generic,
+		project:        project,
+		generic:        generic,
+		sessionFactory: sessionFactory,
 	}
 }
 
@@ -164,4 +169,87 @@ func (h projectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	handlers.HandleDelete(w, r, cfg, http.StatusNoContent)
+}
+
+// transferOwnershipRequest is the request body for POST /projects/{id}/transfer-ownership.
+type transferOwnershipRequest struct {
+	TargetUserID string `json:"target_user_id"`
+}
+
+func (h projectHandler) TransferOwnership(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	projectID := mux.Vars(r)["id"]
+
+	// Decode request body
+	var req transferOwnershipRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		handlers.HandleError(ctx, w, errors.BadRequest("invalid request body: %v", err))
+		return
+	}
+	if req.TargetUserID == "" {
+		handlers.HandleError(ctx, w, errors.BadRequest("target_user_id is required"))
+		return
+	}
+
+	// Verify project exists
+	_, svcErr := h.project.Get(ctx, projectID)
+	if svcErr != nil {
+		handlers.HandleError(ctx, w, svcErr)
+		return
+	}
+
+	// Authorization: caller must be project:owner on this project OR platform:admin
+	username := auth.GetUsernameFromContext(ctx)
+	if h.sessionFactory == nil {
+		handlers.HandleError(ctx, w, errors.Forbidden("authorization not available"))
+		return
+	}
+
+	g := (*h.sessionFactory).New(ctx)
+	var callerRoleNames []string
+	if dbErr := g.Table("role_bindings rb").
+		Select("r.name").
+		Joins("JOIN roles r ON r.id = rb.role_id").
+		Where("rb.user_id = ? AND (rb.project_id = ? OR rb.scope = 'global') AND r.deleted_at IS NULL AND rb.deleted_at IS NULL",
+			username, projectID).
+		Scan(&callerRoleNames).Error; dbErr != nil {
+		handlers.HandleError(ctx, w, errors.GeneralError("authorization check failed"))
+		return
+	}
+
+	callerLevel := pkgrbac.HighestLevel(callerRoleNames)
+	isAdmin := callerLevel == 0
+	isProjectOwner := false
+	for _, rn := range callerRoleNames {
+		if rn == pkgrbac.RoleProjectOwner {
+			isProjectOwner = true
+			break
+		}
+	}
+
+	if !isAdmin && !isProjectOwner {
+		handlers.HandleError(ctx, w, errors.Forbidden("Forbidden"))
+		return
+	}
+
+	// Perform the transfer
+	svcErr = h.project.TransferOwnership(ctx, projectID, username, req.TargetUserID, isAdmin)
+	if svcErr != nil {
+		handlers.HandleError(ctx, w, svcErr)
+		return
+	}
+
+	// Return the updated project
+	project, svcErr := h.project.Get(ctx, projectID)
+	if svcErr != nil {
+		handlers.HandleError(ctx, w, svcErr)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	result := PresentProject(project)
+	if encErr := json.NewEncoder(w).Encode(result); encErr != nil {
+		handlers.HandleError(ctx, w, errors.GeneralError("failed to encode response: %v", encErr))
+	}
 }

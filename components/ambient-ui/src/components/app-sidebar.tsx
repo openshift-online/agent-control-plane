@@ -8,6 +8,7 @@ import {
   Monitor,
   Bot,
   KeyRound,
+  Settings,
   Moon,
   Sun,
 } from 'lucide-react'
@@ -44,6 +45,10 @@ const operateNavItems: readonly NavItem[] = [
 
 const buildNavItems: readonly NavItem[] = [
   { label: 'Agents', icon: Bot, href: 'agents' },
+]
+
+const projectNavItems: readonly NavItem[] = [
+  { label: 'Settings', icon: Settings, href: 'settings' },
 ]
 
 const configureNavItems: readonly NavItem[] = [
@@ -135,6 +140,7 @@ export function AppSidebar({ projectId, effectiveProjectId }: AppSidebarProps) {
       <SidebarContent>
         <NavGroup label="Operate" items={operateNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} badgeCounts={operateBadges} />
         <NavGroup label="Build" items={buildNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
+        <NavGroup label="Project" items={projectNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
         <Separator className="mx-2 my-1" />
         <NavGroup label="Admin" items={configureNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
       </SidebarContent>
@@ -147,7 +153,7 @@ export function AppSidebar({ projectId, effectiveProjectId }: AppSidebarProps) {
             size="icon"
             className="size-7"
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+            aria-label="Toggle theme"
           >
             <Sun aria-hidden="true" className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
             <Moon aria-hidden="true" className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
