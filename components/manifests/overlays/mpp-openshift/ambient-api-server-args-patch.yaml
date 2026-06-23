@@ -15,7 +15,7 @@ spec:
             - --db-user-file=/secrets/db/db.user
             - --db-password-file=/secrets/db/db.password
             - --db-name-file=/secrets/db/db.name
-            - --enable-authz=false
+            - --enable-authz=true
             - --enable-https=false
             - --api-server-bindaddress=:8000
             - --metrics-server-bindaddress=:4433

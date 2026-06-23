@@ -43,8 +43,8 @@
 #
 # WHAT THIS SCRIPT DOES:
 #   1. Creates a Kubernetes secret with your GCP service account credentials
-#   2. Patches the operator-config ConfigMap to enable Vertex AI mode
-#   3. Restarts the operator to pick up the new configuration
+#   2. Creates the operator-config ConfigMap to enable Vertex AI mode
+#   3. Restarts the control plane to pick up the new configuration
 #
 # VERIFICATION:
 #   After running, check operator logs:
@@ -139,24 +139,22 @@ kubectl create secret generic ambient-vertex \
 echo "  Done"
 echo ""
 
-# Step 2: Patch the operator-config ConfigMap with env vars
-echo "Step 2/3: Patching operator-config ConfigMap..."
-kubectl patch configmap operator-config -n "$NAMESPACE" --type merge -p "{
-  \"data\": {
-    \"USE_VERTEX\": \"1\",
-    \"ANTHROPIC_VERTEX_PROJECT_ID\": \"$ANTHROPIC_VERTEX_PROJECT_ID\",
-    \"CLOUD_ML_REGION\": \"$CLOUD_ML_REGION\",
-    \"GOOGLE_APPLICATION_CREDENTIALS\": \"/app/vertex/ambient-code-key.json\"
-  }
-}"
+# Step 2: Create the operator-config ConfigMap with Vertex env vars
+echo "Step 2/3: Creating operator-config ConfigMap..."
+kubectl delete configmap operator-config -n "$NAMESPACE" 2>/dev/null || true
+kubectl create configmap operator-config \
+  --from-literal=USE_VERTEX=1 \
+  --from-literal=ANTHROPIC_VERTEX_PROJECT_ID="$ANTHROPIC_VERTEX_PROJECT_ID" \
+  --from-literal=CLOUD_ML_REGION="$CLOUD_ML_REGION" \
+  --from-literal=GOOGLE_APPLICATION_CREDENTIALS="/app/vertex/ambient-code-key.json" \
+  -n "$NAMESPACE"
 echo "  Done"
 echo ""
 
-# Step 3: Restart operator and backend to pick up changes
-echo "Step 3/3: Restarting operator and backend to apply changes..."
-kubectl rollout restart deployment agentic-operator backend-api -n "$NAMESPACE"
-kubectl rollout status deployment agentic-operator -n "$NAMESPACE" --timeout=60s
-kubectl rollout status deployment backend-api -n "$NAMESPACE" --timeout=60s
+# Step 3: Restart control plane to pick up changes
+echo "Step 3/3: Restarting control plane to apply changes..."
+kubectl rollout restart deployment ambient-control-plane -n "$NAMESPACE"
+kubectl rollout status deployment ambient-control-plane -n "$NAMESPACE" --timeout=60s
 echo ""
 
 echo "=== Setup Complete ==="
@@ -180,10 +178,13 @@ else
 fi
 echo ""
 
+AMBIENT_UI_URL="${AMBIENT_UI_URL:-http://localhost:8080}"
+
 echo "Next steps:"
-echo "  1. Create a session via the UI at http://localhost:8080"
+echo "  - Create a session via the UI at $AMBIENT_UI_URL"
+echo "  - Note: Existing sessions will need to be restarted to use Vertex AI"
 echo ""
 echo "To switch back to Anthropic API, update the ConfigMap:"
 echo "  kubectl patch configmap operator-config -n $NAMESPACE --type merge \\"
 echo "    -p '{\"data\":{\"USE_VERTEX\":\"0\"}}'"
-echo "  kubectl rollout restart deployment agentic-operator -n $NAMESPACE"
+echo "  kubectl rollout restart deployment ambient-control-plane -n $NAMESPACE"
