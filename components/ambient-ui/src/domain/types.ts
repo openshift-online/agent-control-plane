@@ -224,3 +224,13 @@ export type DomainRoleBindingCreateRequest = {
   credentialId?: string
   sessionId?: string
 }
+
+export type DomainRoleBindingPatchRequest = {
+  roleId?: string
+}
+
+export type DomainUserSearchResult = {
+  id: string
+  username: string
+  name: string
+}

@@ -10,8 +10,12 @@ import (
 )
 
 // safeTSLValuePattern matches values safe for interpolation into TSL search
-// expressions (KSUIDs, usernames, etc.). Rejects SQL/TSL metacharacters.
+// expressions (KSUIDs, project IDs, etc.). Rejects SQL/TSL metacharacters.
 var safeTSLValuePattern = regexp.MustCompile(`^[a-zA-Z0-9_.@:\-]+$`)
+
+// safeTSLUsernamePattern extends safeTSLValuePattern to allow spaces,
+// which appear in display-name-style usernames like "varun rao".
+var safeTSLUsernamePattern = regexp.MustCompile(`^[a-zA-Z0-9_.@:\- ]+$`)
 
 // ValidateTSLValues checks that every value in the slice is safe for
 // interpolation into a TSL search string. Returns an error naming the
@@ -34,6 +38,15 @@ func ValidateTSLValues(values []string) error {
 func TSLEqual(column, value string) (string, error) {
 	if err := ValidateTSLValues([]string{value}); err != nil {
 		return "", err
+	}
+	return column + " = '" + value + "'", nil
+}
+
+// TSLEqualUsername builds a TSL equality expression for username values,
+// which may contain spaces (e.g., "varun rao").
+func TSLEqualUsername(column, value string) (string, error) {
+	if !safeTSLUsernamePattern.MatchString(value) {
+		return "", fmt.Errorf("unsafe username for TSL interpolation: %q", value)
 	}
 	return column + " = '" + value + "'", nil
 }

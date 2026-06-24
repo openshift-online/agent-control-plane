@@ -20,7 +20,7 @@ spec:
             - --enable-jwt=true
             # Authz disabled: api-server has no internal RBAC middleware yet.
             # Auth is handled by the backend proxy. TODO: enable when authz is implemented.
-            - --enable-authz=false
+            - --enable-authz=true
             - --jwk-cert-url=https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/certs
             - --enable-https=true
             - --https-cert-file=/etc/tls/tls.crt

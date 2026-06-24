@@ -23,7 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 claude = [
   "anthropic[vertex]==0.109.2",
-  "claude-agent-sdk==0.2.104",
+  "claude-agent-sdk==0.2.106",
 ]
 observability = [
   "langfuse==4.7.1",
@@ -41,10 +41,10 @@ all = [
 
 [dependency-groups]
 dev = [
-  "pytest==9.1.0",
+  "pytest==9.1.1",
   "pytest-asyncio==1.4.0",
   "pytest-cov==7.1.0",
-  "ruff==0.15.17",
+  "ruff==0.15.18",
   "black==26.5.1",
   "httpx==0.28.1",
 ]

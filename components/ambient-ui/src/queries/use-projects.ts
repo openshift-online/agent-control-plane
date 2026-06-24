@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { ProjectsPort, ProjectCreateInput } from '@/ports/projects'
+import type { ProjectsPort, ProjectCreateInput, ProjectPatchInput } from '@/ports/projects'
 import type { ListParams } from '@/domain/types'
 import { createProjectsAdapter } from '@/adapters/sdk-projects'
 import { queryKeys } from './query-keys'
@@ -50,5 +50,29 @@ export function useProject(
     enabled: !!projectId,
     staleTime: 30_000,
     refetchInterval: 30_000,
+  })
+}
+
+export function usePatchProject(port?: ProjectsPort) {
+  const queryClient = useQueryClient()
+  const adapter = port ?? getDefaultPort()
+  return useMutation({
+    mutationFn: ({ projectId, input }: { projectId: string; input: ProjectPatchInput }) =>
+      adapter.patch(projectId, input),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(variables.projectId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all })
+    },
+  })
+}
+
+export function useDeleteProject(port?: ProjectsPort) {
+  const queryClient = useQueryClient()
+  const adapter = port ?? getDefaultPort()
+  return useMutation({
+    mutationFn: (projectId: string) => adapter.delete(projectId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all })
+    },
   })
 }

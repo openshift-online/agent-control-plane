@@ -53,6 +53,23 @@ function createSdkSessionsAdapter(api: SessionAPI): SessionsPort {
       }
     },
 
+    async listAll(params?: ListParams): Promise<PaginatedResult<DomainSession>> {
+      const page = params?.page ?? 1
+      const size = params?.size ?? 200
+      const opts: Record<string, unknown> = { page, size }
+      if (params?.search) opts.search = params.search
+      if (params?.orderBy) opts.orderBy = params.orderBy
+      const result = await api.list(opts)
+      const items = result.items.map(mapSdkSessionToDomain)
+      return {
+        items,
+        total: result.total,
+        page,
+        size,
+        hasMore: page * size < result.total,
+      }
+    },
+
     async get(sessionId: string): Promise<DomainSession> {
       const session = await api.get(sessionId)
       return mapSdkSessionToDomain(session)

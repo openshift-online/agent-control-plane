@@ -103,7 +103,6 @@ export default function DashboardPage() {
 
   return (
     <div className="@container space-y-6">
-      {/* Heading row with view toggle */}
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <Tabs value={view} onValueChange={setView}>
