@@ -1,4 +1,7 @@
-import { AlertTriangle } from 'lucide-react'
+'use client'
+
+import { useState } from 'react'
+import { AlertTriangle, X } from 'lucide-react'
 import type { DomainCondition } from '@/domain/types'
 
 const CONDITION_TITLES: Record<string, string> = {
@@ -21,9 +24,10 @@ type SessionConditionsProps = {
 }
 
 export function SessionConditions({ conditions }: SessionConditionsProps) {
+  const [dismissed, setDismissed] = useState(false)
   const failedConditions = conditions.filter(c => c.status === 'False')
 
-  if (failedConditions.length === 0) return null
+  if (dismissed || failedConditions.length === 0) return null
 
   return (
     <div className="space-y-2">
@@ -37,6 +41,14 @@ export function SessionConditions({ conditions }: SessionConditionsProps) {
           <p className="min-w-0 flex-1 text-sm text-status-error-foreground break-words">
             {formatConditionTitle(condition)}
           </p>
+          <button
+            type="button"
+            onClick={() => setDismissed(true)}
+            className="mt-0.5 shrink-0 rounded p-0.5 text-status-error-foreground/60 hover:text-status-error-foreground hover:bg-status-error/20"
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       ))}
     </div>

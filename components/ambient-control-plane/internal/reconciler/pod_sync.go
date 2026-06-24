@@ -223,9 +223,12 @@ func (s *PodStatusSyncer) hasContainerCrashLoop(pod *unstructured.Unstructured) 
 func (s *PodStatusSyncer) updateSessionPhase(ctx context.Context, sdk *sdkclient.Client, session *types.Session, newPhase string, pod *unstructured.Unstructured) {
 	patch := map[string]interface{}{"phase": newPhase}
 
-	if newPhase == PhaseRunning && session.StartTime == nil {
-		now := time.Now()
-		patch["start_time"] = &now
+	if newPhase == PhaseRunning {
+		if session.StartTime == nil {
+			now := time.Now()
+			patch["start_time"] = &now
+		}
+		patch["conditions"] = "[]"
 	}
 
 	if newPhase == PhaseCompleted || newPhase == PhaseFailed || newPhase == PhaseStopped {
