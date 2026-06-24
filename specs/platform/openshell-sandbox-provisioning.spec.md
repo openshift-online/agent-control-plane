@@ -16,15 +16,15 @@ The OpenShell gateway exposes a gRPC service (`openshell.v1.OpenShell`) that man
 This iteration is scoped to **scheduled agent runs** (single-run, short-lived sessions). The following are explicitly out of scope:
 
 - **Long-running / steerable sessions** — credential lifecycle concerns (token expiry mid-session, gateway-managed refresh via OAuth2/client-credentials flows) are deferred
-- **Gateway provisioning** — the OpenShell gateway is assumed to already be deployed in each project namespace; ACP will not create it
+- **Gateway provisioning** — the OpenShell gateway is assumed to already be deployed in each project namespace; ACP will not create it. A future iteration should have the control plane provision and reconcile gateway lifecycle per project namespace (potentially adapting the [upstream Helm chart values](https://github.com/NVIDIA/OpenShell/blob/main/deploy/helm/openshell/values.yaml) into a managed resource)
 - **Namespace-level credential storage** — credentials remain stored in ACP, not as Kubernetes Secrets in the project namespace
 - **Network policy ownership** — OpenShell policies (including network egress rules allowing runner-to-control-plane gRPC) will be user-configurable via the Agent spec. Whether ACP auto-injects the control plane egress rule on top of the user-configured policy or requires users to include it explicitly is TBD
 
-### Relationship to `specs/security/openshell-sandbox.spec.md`
+### Relationship to [openshell-sandbox.spec.md]
 
-This specification defines **gateway mode** — an alternative to the **file mode** sandbox approach defined in `specs/security/openshell-sandbox.spec.md`. Both modes coexist and are selectable at deployment time via the `OPENSHELL_USE_GATEWAY` environment variable.
+This specification defines **gateway mode** — an alternative to the **file mode** sandbox approach defined in [openshell-sandbox.spec.md]. Both modes coexist and are selectable at deployment time via the `OPENSHELL_USE_GATEWAY` environment variable.
 
-**File mode** (existing, `specs/security/openshell-sandbox.spec.md`): The OpenShell Supervisor binary runs inside the runner container, wrapping the Claude CLI process directly. Requires policy ConfigMap propagation, elevated container security context, and the Supervisor binary baked into the runner image.
+**File mode** (existing, [openshell-sandbox.spec.md]): The OpenShell Supervisor binary runs inside the runner container, wrapping the Claude CLI process directly. Requires policy ConfigMap propagation, elevated container security context, and the Supervisor binary baked into the runner image.
 
 **Gateway mode** (this spec): The OpenShell gateway owns sandbox lifecycle, policy enforcement, network isolation, and credential injection. The control plane delegates to the gateway via gRPC instead of creating pods directly. Sandboxes created by the gateway contain a Supervisor, but the gateway manages its configuration and security context — the control plane does not need to propagate policy ConfigMaps, grant elevated capabilities, or configure the Supervisor.
 
@@ -64,26 +64,29 @@ When `OPENSHELL_USE_GATEWAY` is true, the control plane SHALL create agent sandb
 - THEN the operation SHALL fail with an error
 - AND the control plane SHALL NOT fall back to file-mode sandbox or direct pod creation
 
-### Requirement: Gateway Discovery via Service DNS
+### Requirement: Gateway Discovery via Route
 
-The control plane SHALL discover the OpenShell gateway in each project namespace using Kubernetes Service DNS with a configurable service name and port.
+The control plane SHALL discover the OpenShell gateway in each project namespace by looking up the OpenShift Route associated with the gateway's gRPC service. This avoids hardcoding service names or ports — the gateway's [Helm chart configures a gRPC Route](https://github.com/NVIDIA/OpenShell/blob/main/deploy/helm/openshell/values.yaml#L357), and the control plane reads it at runtime.
 
-#### Scenario: Default discovery
+#### Scenario: Route-based discovery
 
-- GIVEN no override configuration is set
-- WHEN the control plane needs to reach the gateway in namespace `my-project`
-- THEN it SHALL connect to `openshell-gateway.my-project.svc.cluster.local:8080`
+- GIVEN an OpenShell gateway is deployed in namespace `my-project`
+- AND the gateway's Helm chart has created a Route for the gRPC service
+- WHEN the control plane needs to reach the gateway
+- THEN it SHALL list Routes in namespace `my-project` matching a well-known label (e.g., `app.kubernetes.io/name=openshell`)
+- AND it SHALL extract the gateway endpoint from the Route's `.spec.host` and `.spec.port`
 
-#### Scenario: Custom service name
+#### Scenario: Route not found
 
-- GIVEN `OPENSHELL_GATEWAY_SERVICE` is set to `my-gateway`
-- AND `OPENSHELL_GATEWAY_PORT` is set to `9090`
-- WHEN the control plane needs to reach the gateway in namespace `my-project`
-- THEN it SHALL connect to `my-gateway.my-project.svc.cluster.local:9090`
+- GIVEN `OPENSHELL_USE_GATEWAY` is `true`
+- AND no matching Route is found in the project namespace
+- WHEN the control plane attempts to discover the gateway
+- THEN it SHALL fail with an error indicating the gateway Route was not found
+- AND it SHALL NOT fall back to hardcoded service names
 
 ### Requirement: Sandbox Identity and Naming
 
-Each sandbox SHALL have a deterministic name derived from the session ID using the existing `safeResourceName()` helper (`kube_reconciler.go`), and SHALL carry labels that identify the owning session and project.
+Each sandbox SHALL have a deterministic name derived from the session ID using the existing `safeResourceName()` helper ([kube_reconciler.go]), and SHALL carry labels that identify the owning session and project.
 
 Sandbox naming follows the same `session-<safe_name>` pattern used by pods (`podName()`), services (`serviceName()`), and service accounts (`serviceAccountName()`). The `safeResourceName()` helper lowercases the ID and truncates to 40 characters. Session IDs are KSUIDs (27 base62-encoded characters, alphanumeric only), so truncation never removes significant characters and lowercasing is defensive — KSUIDs contain no hyphens or DNS-unsafe characters. If the ID format changes in the future, the 40-character truncation limit would need to be reassessed for collision risk.
 
@@ -104,7 +107,7 @@ Sandbox naming follows the same `session-<safe_name>` pattern used by pods (`pod
 
 In gateway mode, the control plane SHALL NOT set a SecurityContext on the runner container. The OpenShell gateway owns pod creation and applies its own security settings — including the SCC, capabilities, and privilege configuration recommended by the [OpenShell OpenShift deployment guide](https://docs.nvidia.com/openshell/kubernetes/openshift). The gateway's sandbox service account is bound to the required SCC as part of the pre-deployed Helm installation.
 
-This is a significant change from file mode, where the control plane must grant elevated privileges (`root`, `SYS_ADMIN`, `NET_ADMIN`, `SYS_PTRACE`, `SETUID`, `SETGID`, `CHOWN`, `DAC_OVERRIDE`, seccomp `Unconfined`) to the runner container so the in-container Supervisor can create network namespaces and drop privileges. In gateway mode, the Supervisor is still present inside the sandbox, but the gateway configures it — the control plane's `buildRunnerSecurityContext()` and `buildVolumes()` (OpenShell policy mount) are not invoked.
+This is a significant change from file mode, where the control plane must grant elevated privileges (`root`, `SYS_ADMIN`, `NET_ADMIN`, `SYS_PTRACE`, `SETUID`, `SETGID`, `CHOWN`, `DAC_OVERRIDE`, seccomp `Unconfined`) to the runner container so the in-container Supervisor can create network namespaces and drop privileges. In gateway mode, the Supervisor is still present inside the sandbox, but the gateway configures it — the control plane's [`buildRunnerSecurityContext()`][kube_reconciler.go] and `buildVolumes()` (OpenShell policy mount) are not invoked.
 
 #### Scenario: Gateway mode — no ACP-managed SecurityContext
 
@@ -120,7 +123,7 @@ This is a significant change from file mode, where the control plane must grant 
 
 - GIVEN `OPENSHELL_USE_GATEWAY` is `false` and `OPENSHELL_ENABLED` is `true`
 - WHEN the control plane provisions a session
-- THEN it SHALL apply the elevated SecurityContext as defined in `specs/security/openshell-sandbox.spec.md` § Container Security Context
+- THEN it SHALL apply the elevated SecurityContext as defined in [openshell-sandbox.spec.md § Container Security Context][sandbox-security-context]
 - AND behavior SHALL be identical to the current file-mode implementation
 
 ### Requirement: Credential Mapping to OpenShell Providers
@@ -243,9 +246,9 @@ The sandbox base image SHALL include the runner, so the existing runner → cont
 
 ### Requirement: Sandbox Status Syncing
 
-The status syncer SHALL poll the OpenShell gateway for sandbox phase as a secondary signal, but only for sessions still in `Running` phase. Sessions in terminal phases (`Completed`, `Failed`, `Stopped`) are skipped entirely — no gateway calls are made. The syncer SHALL reuse the existing `podSyncInterval` (15 seconds) from `pod_sync.go` for its polling interval. The OpenShell `SandboxPhase` enum does not include a `SUCCEEDED` or `COMPLETED` state, and `SandboxStatus` does not expose an exit code. The gateway sandbox phase is used to detect error conditions and abnormal terminations that the runner cannot self-report.
+The status syncer SHALL poll the OpenShell gateway for sandbox phase as a secondary signal, but only for sessions still in `Running` phase. Sessions in terminal phases (`Completed`, `Failed`, `Stopped`) are skipped entirely — no gateway calls are made. The syncer SHALL reuse the existing `podSyncInterval` (15 seconds) from [pod_sync.go] for its polling interval. The OpenShell `SandboxPhase` enum does not include a `SUCCEEDED` or `COMPLETED` state, and `SandboxStatus` does not expose an exit code. The gateway sandbox phase is used to detect error conditions and abnormal terminations that the runner cannot self-report.
 
-> **Future optimization:** The OpenShell proto defines a `WatchSandbox` streaming RPC that could replace polling with push-based status updates. Since the control plane already uses gRPC streaming for API server events (`internal/watcher/watcher.go`), adopting `WatchSandbox` would be a natural improvement in a later iteration.
+> **Future optimization:** The OpenShell proto defines a `WatchSandbox` streaming RPC that could replace polling with push-based status updates. Since the control plane already uses gRPC streaming for API server events ([watcher.go]), adopting `WatchSandbox` would be a natural improvement in a later iteration.
 
 #### Scenario: Sandbox phase mapping
 
@@ -297,7 +300,7 @@ The control plane SHALL vendor OpenShell proto definitions and generate Go gRPC 
 
 ### Requirement: gRPC Connection Management
 
-The control plane SHALL maintain a cache of gRPC connections to OpenShell gateways, one per namespace, with lazy initialization. Connections SHALL handle gateway pod restarts transparently using gRPC's built-in reconnection, following the same resilience patterns used by the control plane's existing gRPC watcher (`internal/watcher/watcher.go`).
+The control plane SHALL maintain a cache of gRPC connections to OpenShell gateways, one per namespace, with lazy initialization. Connections SHALL handle gateway pod restarts transparently using gRPC's built-in reconnection, following the same resilience patterns used by the control plane's existing gRPC watcher ([watcher.go]).
 
 #### Scenario: Connection caching
 
@@ -332,7 +335,7 @@ The control plane SHALL maintain a cache of gRPC connections to OpenShell gatewa
 
 ### Requirement: Configuration
 
-The control plane SHALL expose configuration for OpenShell gateway mode alongside the existing `OPENSHELL_ENABLED` flag. `OPENSHELL_ENABLED` continues to control file-mode sandbox activation as defined in `specs/security/openshell-sandbox.spec.md`. `OPENSHELL_USE_GATEWAY` is an independent flag that selects gateway-based provisioning.
+The control plane SHALL expose configuration for OpenShell gateway mode alongside the existing `OPENSHELL_ENABLED` flag. `OPENSHELL_ENABLED` continues to control file-mode sandbox activation as defined in [openshell-sandbox.spec.md]. `OPENSHELL_USE_GATEWAY` is an independent flag that selects gateway-based provisioning.
 
 > **Future work:** Once Unleash integration is added to the control plane, gateway mode SHOULD be gated behind a feature flag (e.g., `openshell-gateway-provisioning`) for gradual rollout and kill-switch capability. This is deferred to a follow-up spec.
 
@@ -344,8 +347,6 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | Variable | Default | Purpose |
 |---|---|---|
 | `OPENSHELL_USE_GATEWAY` | `false` | Enable gateway-based sandbox provisioning (this spec) |
-| `OPENSHELL_GATEWAY_SERVICE` | `openshell-gateway` | Kubernetes Service name of the gateway |
-| `OPENSHELL_GATEWAY_PORT` | `8080` | Port of the gateway gRPC service |
 
 #### Scenario: Mode interaction
 
@@ -355,7 +356,7 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 
 - GIVEN `OPENSHELL_USE_GATEWAY` is `false`
 - AND `OPENSHELL_ENABLED` is `true`
-- THEN file-mode sandbox SHALL be active as defined in `specs/security/openshell-sandbox.spec.md`
+- THEN file-mode sandbox SHALL be active as defined in [openshell-sandbox.spec.md]
 
 - GIVEN `OPENSHELL_USE_GATEWAY` is `false` and `OPENSHELL_ENABLED` is `false`
 - THEN no sandbox isolation SHALL be applied (direct pod creation)
@@ -368,16 +369,24 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 
 | Consumer | Impact |
 |---|---|
-| `kube_reconciler.go` `ensurePod()` | Preserved unchanged; used when `OPENSHELL_USE_GATEWAY=false` |
-| `kube_reconciler.go` credential sidecars | Preserved unchanged; replaced by OpenShell providers only when gateway mode is active |
-| `kube_reconciler.go` `ensureOpenShellPolicy()` | Preserved unchanged; skipped when gateway mode is active |
-| `kube_reconciler.go` `buildRunnerSecurityContext()` | Preserved unchanged; not invoked in gateway mode (gateway owns pod security settings) |
-| `pod_sync.go` | Extended with sandbox sync branch for gateway mode |
+| [kube_reconciler.go] `ensurePod()` | Preserved unchanged; used when `OPENSHELL_USE_GATEWAY=false` |
+| [kube_reconciler.go] credential sidecars | Preserved unchanged; replaced by OpenShell providers only when gateway mode is active |
+| [kube_reconciler.go] `ensureOpenShellPolicy()` | Preserved unchanged; skipped when gateway mode is active |
+| [kube_reconciler.go] `buildRunnerSecurityContext()` | Preserved unchanged; not invoked in gateway mode (gateway owns pod security settings) |
+| [pod_sync.go] | Extended with sandbox sync branch for gateway mode |
 | `main.go` | Extended to create and wire `GatewayClient` when `OPENSHELL_USE_GATEWAY=true` |
-| `config.go` | Extended with 3 new fields (`OpenShellUseGateway`, `OpenShellGatewayService`, `OpenShellGatewayPort`) |
-| `specs/security/openshell-sandbox.spec.md` | Unchanged — file-mode spec remains authoritative when `OPENSHELL_USE_GATEWAY=false` |
+| [config.go] | Extended with `OpenShellUseGateway` field |
+| [openshell-sandbox.spec.md] | Unchanged — file-mode spec remains authoritative when `OPENSHELL_USE_GATEWAY=false` |
 | Runner pod | No changes — same image, same env vars, running inside OpenShell sandbox instead of bare pod |
 
 ### Backward compatibility
 
 When `OPENSHELL_USE_GATEWAY=false` (the default), all behavior is identical to the current system. File-mode sandbox (`OPENSHELL_ENABLED=true`) and direct pod creation (`OPENSHELL_ENABLED=false`) continue to work as before. No existing deployment is affected unless the operator explicitly enables gateway mode and installs OpenShell gateways.
+
+<!-- Reference links -->
+[openshell-sandbox.spec.md]: ../security/openshell-sandbox.spec.md
+[sandbox-security-context]: ../security/openshell-sandbox.spec.md#requirement-container-security-context
+[kube_reconciler.go]: ../../components/ambient-control-plane/internal/reconciler/kube_reconciler.go
+[pod_sync.go]: ../../components/ambient-control-plane/internal/reconciler/pod_sync.go
+[watcher.go]: ../../components/ambient-control-plane/internal/watcher/watcher.go
+[config.go]: ../../components/ambient-control-plane/internal/config/config.go
