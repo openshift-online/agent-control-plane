@@ -71,6 +71,17 @@ export function useSessions(
   })
 }
 
+export function useAllSessions(
+  port?: SessionsPort,
+) {
+  const adapter = port ?? getDefaultPort()
+  return useQuery({
+    queryKey: queryKeys.sessions.listAll(),
+    queryFn: () => adapter.listAll({ size: 200 }),
+    refetchInterval: 10_000,
+  })
+}
+
 export function useSession(
   sessionId: string,
   port?: SessionsPort,

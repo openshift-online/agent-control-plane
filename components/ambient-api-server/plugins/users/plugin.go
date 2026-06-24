@@ -23,7 +23,10 @@ const EventSource = "Users"
 
 type ServiceLocator func() UserService
 
+var registeredSessionFactory *db.SessionFactory
+
 func NewServiceLocator(env *environments.Env) ServiceLocator {
+	registeredSessionFactory = &env.Database.SessionFactory
 	return func() UserService {
 		return NewUserService(
 			db.NewAdvisoryLockFactory(env.Database.SessionFactory),
@@ -54,7 +57,7 @@ func init() {
 		if dbAuthz := pkgrbac.Middleware(envServices); dbAuthz != nil {
 			authzMiddleware = dbAuthz
 		}
-		userHandler := NewUserHandler(Service(envServices), generic.Service(envServices))
+		userHandler := NewUserHandler(Service(envServices), generic.Service(envServices), registeredSessionFactory)
 
 		usersRouter := apiV1Router.PathPrefix("/users").Subrouter()
 		usersRouter.HandleFunc("", userHandler.List).Methods(http.MethodGet)

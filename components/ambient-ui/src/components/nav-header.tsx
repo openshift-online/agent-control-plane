@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { LogOut, Search } from 'lucide-react'
+import { LogOut, Search, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Breadcrumb,
@@ -23,9 +23,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useCurrentUser } from '@/hooks/use-current-user'
-
+import { useAllRoleBindings } from '@/queries/use-role-bindings'
+import { useRoles } from '@/queries/use-roles'
+import { NotificationBell } from '@/components/notification-bell'
+import { ShareDialog } from '@/app/(dashboard)/[projectId]/_components/share-dialog'
 type NavHeaderProps = {
   projectId?: string | null
+  effectiveProjectId?: string | null
   projectName?: string | null
   pageName?: string | null
   sessionName?: string | null
@@ -109,8 +113,24 @@ function UserMenu() {
   )
 }
 
-export function NavHeader({ projectId, projectName, pageName, sessionName, detailName }: NavHeaderProps) {
+function useCurrentUserRole(projectId: string | null | undefined) {
+  const { user } = useCurrentUser()
+  const bindingSearch = projectId ? `scope = 'project' and project_id = '${projectId}'` : ''
+  const { data: bindings } = useAllRoleBindings(bindingSearch)
+  const { data: rolesData } = useRoles({ size: 100 })
+
+  return useMemo(() => {
+    if (!user || !bindings || !rolesData || !projectId) return null
+    const binding = bindings.find((b) => b.userId === user.username)
+    if (!binding) return null
+    const role = rolesData.items.find((r) => r.id === binding.roleId)
+    return role?.name ?? null
+  }, [user, bindings, rolesData, projectId])
+}
+
+export function NavHeader({ projectId, effectiveProjectId, projectName, pageName, sessionName, detailName }: NavHeaderProps) {
   const mappedPageName = pageName ? displayLabel(pageName) : null
+  const currentUserRole = useCurrentUserRole(projectId)
 
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b bg-background px-4">
@@ -122,7 +142,7 @@ export function NavHeader({ projectId, projectName, pageName, sessionName, detai
           <BreadcrumbItem>
             <BreadcrumbLink asChild>
               <Link href="/">
-                <span>ACP</span>
+                <span>Projects</span>
               </Link>
             </BreadcrumbLink>
           </BreadcrumbItem>
@@ -166,6 +186,18 @@ export function NavHeader({ projectId, projectName, pageName, sessionName, detai
 
       <div className="ml-auto flex items-center gap-2">
         <SearchTrigger />
+        {projectId && (
+          <ShareDialog
+            projectId={projectId}
+            currentUserRole={currentUserRole}
+            trigger={
+              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Share project" title="Share">
+                <UserPlus className="size-4" />
+              </Button>
+            }
+          />
+        )}
+        <NotificationBell />
         <UserMenu />
       </div>
     </header>

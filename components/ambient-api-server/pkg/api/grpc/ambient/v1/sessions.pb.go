@@ -55,6 +55,7 @@ type Session struct {
 	KubeCrUid            *string                `protobuf:"bytes,30,opt,name=kube_cr_uid,json=kubeCrUid,proto3,oneof" json:"kube_cr_uid,omitempty"`
 	KubeNamespace        *string                `protobuf:"bytes,31,opt,name=kube_namespace,json=kubeNamespace,proto3,oneof" json:"kube_namespace,omitempty"`
 	AgentId              *string                `protobuf:"bytes,32,opt,name=agent_id,json=agentId,proto3,oneof" json:"agent_id,omitempty"`
+	LastActivityAt       *timestamppb.Timestamp `protobuf:"bytes,33,opt,name=last_activity_at,json=lastActivityAt,proto3,oneof" json:"last_activity_at,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -304,6 +305,13 @@ func (x *Session) GetAgentId() string {
 		return *x.AgentId
 	}
 	return ""
+}
+
+func (x *Session) GetLastActivityAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastActivityAt
+	}
+	return nil
 }
 
 type CreateSessionRequest struct {
@@ -1315,7 +1323,7 @@ var File_ambient_v1_sessions_proto protoreflect.FileDescriptor
 const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\n" +
 	"\x19ambient/v1/sessions.proto\x12\n" +
-	"ambient.v1\x1a\x17ambient/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb4\x0e\n" +
+	"ambient.v1\x1a\x17ambient/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x94\x0f\n" +
 	"\aSession\x127\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x1b.ambient.v1.ObjectReferenceR\bmetadata\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1e\n" +
@@ -1355,7 +1363,8 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"kubeCrName\x88\x01\x01\x12#\n" +
 	"\vkube_cr_uid\x18\x1e \x01(\tH\x1aR\tkubeCrUid\x88\x01\x01\x12*\n" +
 	"\x0ekube_namespace\x18\x1f \x01(\tH\x1bR\rkubeNamespace\x88\x01\x01\x12\x1e\n" +
-	"\bagent_id\x18  \x01(\tH\x1cR\aagentId\x88\x01\x01B\v\n" +
+	"\bagent_id\x18  \x01(\tH\x1cR\aagentId\x88\x01\x01\x12I\n" +
+	"\x10last_activity_at\x18! \x01(\v2\x1a.google.protobuf.TimestampH\x1dR\x0elastActivityAt\x88\x01\x01B\v\n" +
 	"\t_repo_urlB\t\n" +
 	"\a_promptB\x15\n" +
 	"\x13_created_by_user_idB\x13\n" +
@@ -1386,7 +1395,8 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\r_kube_cr_nameB\x0e\n" +
 	"\f_kube_cr_uidB\x11\n" +
 	"\x0f_kube_namespaceB\v\n" +
-	"\t_agent_idJ\x04\b\t\x10\n" +
+	"\t_agent_idB\x13\n" +
+	"\x11_last_activity_atJ\x04\b\t\x10\n" +
 	"R\vinteractive\"\x91\b\n" +
 	"\x14CreateSessionRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1e\n" +
@@ -1584,36 +1594,37 @@ var file_ambient_v1_sessions_proto_depIdxs = []int32{
 	14, // 0: ambient.v1.Session.metadata:type_name -> ambient.v1.ObjectReference
 	15, // 1: ambient.v1.Session.start_time:type_name -> google.protobuf.Timestamp
 	15, // 2: ambient.v1.Session.completion_time:type_name -> google.protobuf.Timestamp
-	15, // 3: ambient.v1.UpdateSessionStatusRequest.start_time:type_name -> google.protobuf.Timestamp
-	15, // 4: ambient.v1.UpdateSessionStatusRequest.completion_time:type_name -> google.protobuf.Timestamp
-	0,  // 5: ambient.v1.ListSessionsResponse.items:type_name -> ambient.v1.Session
-	16, // 6: ambient.v1.ListSessionsResponse.metadata:type_name -> ambient.v1.ListMeta
-	17, // 7: ambient.v1.SessionWatchEvent.type:type_name -> ambient.v1.EventType
-	0,  // 8: ambient.v1.SessionWatchEvent.session:type_name -> ambient.v1.Session
-	15, // 9: ambient.v1.SessionMessage.created_at:type_name -> google.protobuf.Timestamp
-	2,  // 10: ambient.v1.SessionService.GetSession:input_type -> ambient.v1.GetSessionRequest
-	1,  // 11: ambient.v1.SessionService.CreateSession:input_type -> ambient.v1.CreateSessionRequest
-	3,  // 12: ambient.v1.SessionService.UpdateSession:input_type -> ambient.v1.UpdateSessionRequest
-	4,  // 13: ambient.v1.SessionService.UpdateSessionStatus:input_type -> ambient.v1.UpdateSessionStatusRequest
-	5,  // 14: ambient.v1.SessionService.DeleteSession:input_type -> ambient.v1.DeleteSessionRequest
-	6,  // 15: ambient.v1.SessionService.ListSessions:input_type -> ambient.v1.ListSessionsRequest
-	9,  // 16: ambient.v1.SessionService.WatchSessions:input_type -> ambient.v1.WatchSessionsRequest
-	12, // 17: ambient.v1.SessionService.PushSessionMessage:input_type -> ambient.v1.PushSessionMessageRequest
-	13, // 18: ambient.v1.SessionService.WatchSessionMessages:input_type -> ambient.v1.WatchSessionMessagesRequest
-	0,  // 19: ambient.v1.SessionService.GetSession:output_type -> ambient.v1.Session
-	0,  // 20: ambient.v1.SessionService.CreateSession:output_type -> ambient.v1.Session
-	0,  // 21: ambient.v1.SessionService.UpdateSession:output_type -> ambient.v1.Session
-	0,  // 22: ambient.v1.SessionService.UpdateSessionStatus:output_type -> ambient.v1.Session
-	8,  // 23: ambient.v1.SessionService.DeleteSession:output_type -> ambient.v1.DeleteSessionResponse
-	7,  // 24: ambient.v1.SessionService.ListSessions:output_type -> ambient.v1.ListSessionsResponse
-	10, // 25: ambient.v1.SessionService.WatchSessions:output_type -> ambient.v1.SessionWatchEvent
-	11, // 26: ambient.v1.SessionService.PushSessionMessage:output_type -> ambient.v1.SessionMessage
-	11, // 27: ambient.v1.SessionService.WatchSessionMessages:output_type -> ambient.v1.SessionMessage
-	19, // [19:28] is the sub-list for method output_type
-	10, // [10:19] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	15, // 3: ambient.v1.Session.last_activity_at:type_name -> google.protobuf.Timestamp
+	15, // 4: ambient.v1.UpdateSessionStatusRequest.start_time:type_name -> google.protobuf.Timestamp
+	15, // 5: ambient.v1.UpdateSessionStatusRequest.completion_time:type_name -> google.protobuf.Timestamp
+	0,  // 6: ambient.v1.ListSessionsResponse.items:type_name -> ambient.v1.Session
+	16, // 7: ambient.v1.ListSessionsResponse.metadata:type_name -> ambient.v1.ListMeta
+	17, // 8: ambient.v1.SessionWatchEvent.type:type_name -> ambient.v1.EventType
+	0,  // 9: ambient.v1.SessionWatchEvent.session:type_name -> ambient.v1.Session
+	15, // 10: ambient.v1.SessionMessage.created_at:type_name -> google.protobuf.Timestamp
+	2,  // 11: ambient.v1.SessionService.GetSession:input_type -> ambient.v1.GetSessionRequest
+	1,  // 12: ambient.v1.SessionService.CreateSession:input_type -> ambient.v1.CreateSessionRequest
+	3,  // 13: ambient.v1.SessionService.UpdateSession:input_type -> ambient.v1.UpdateSessionRequest
+	4,  // 14: ambient.v1.SessionService.UpdateSessionStatus:input_type -> ambient.v1.UpdateSessionStatusRequest
+	5,  // 15: ambient.v1.SessionService.DeleteSession:input_type -> ambient.v1.DeleteSessionRequest
+	6,  // 16: ambient.v1.SessionService.ListSessions:input_type -> ambient.v1.ListSessionsRequest
+	9,  // 17: ambient.v1.SessionService.WatchSessions:input_type -> ambient.v1.WatchSessionsRequest
+	12, // 18: ambient.v1.SessionService.PushSessionMessage:input_type -> ambient.v1.PushSessionMessageRequest
+	13, // 19: ambient.v1.SessionService.WatchSessionMessages:input_type -> ambient.v1.WatchSessionMessagesRequest
+	0,  // 20: ambient.v1.SessionService.GetSession:output_type -> ambient.v1.Session
+	0,  // 21: ambient.v1.SessionService.CreateSession:output_type -> ambient.v1.Session
+	0,  // 22: ambient.v1.SessionService.UpdateSession:output_type -> ambient.v1.Session
+	0,  // 23: ambient.v1.SessionService.UpdateSessionStatus:output_type -> ambient.v1.Session
+	8,  // 24: ambient.v1.SessionService.DeleteSession:output_type -> ambient.v1.DeleteSessionResponse
+	7,  // 25: ambient.v1.SessionService.ListSessions:output_type -> ambient.v1.ListSessionsResponse
+	10, // 26: ambient.v1.SessionService.WatchSessions:output_type -> ambient.v1.SessionWatchEvent
+	11, // 27: ambient.v1.SessionService.PushSessionMessage:output_type -> ambient.v1.SessionMessage
+	11, // 28: ambient.v1.SessionService.WatchSessionMessages:output_type -> ambient.v1.SessionMessage
+	20, // [20:29] is the sub-list for method output_type
+	11, // [11:20] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_ambient_v1_sessions_proto_init() }

@@ -27,6 +27,12 @@ patches:
     version: v1
     kind: Deployment
     name: ambient-ui
+- path: image-pull-policy-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-control-plane
 
 # Remap images from Quay.io to locally-built names
 # Podman tags images with localhost/ prefix, which kind preserves when loading
@@ -36,4 +42,25 @@ images:
   newTag: latest
 - name: quay.io/ambient_code/acp_ambient_ui
   newName: localhost/acp_ambient_ui
+  newTag: latest
+- name: quay.io/ambient_code/acp_control_plane
+  newName: localhost/acp_control_plane
+  newTag: latest
+- name: quay.io/ambient_code/acp_claude_runner
+  newName: localhost/acp_claude_runner
+  newTag: latest
+- name: quay.io/ambient_code/acp_mcp
+  newName: localhost/acp_mcp
+  newTag: latest
+- name: quay.io/ambient_code/acp_credential_github
+  newName: localhost/acp_credential_github
+  newTag: latest
+- name: quay.io/ambient_code/acp_credential_jira
+  newName: localhost/acp_credential_jira
+  newTag: latest
+- name: quay.io/ambient_code/acp_credential_k8s
+  newName: localhost/acp_credential_k8s
+  newTag: latest
+- name: quay.io/ambient_code/acp_credential_google
+  newName: localhost/acp_credential_google
   newTag: latest

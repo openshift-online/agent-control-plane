@@ -9,6 +9,7 @@ import (
 	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
+	"github.com/openshift-online/rh-trex-ai/pkg/db"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
@@ -17,14 +18,16 @@ import (
 var _ handlers.RestHandler = userHandler{}
 
 type userHandler struct {
-	user    UserService
-	generic services.GenericService
+	user           UserService
+	generic        services.GenericService
+	sessionFactory *db.SessionFactory
 }
 
-func NewUserHandler(user UserService, generic services.GenericService) *userHandler {
+func NewUserHandler(user UserService, generic services.GenericService, sessionFactory *db.SessionFactory) *userHandler {
 	return &userHandler{
-		user:    user,
-		generic: generic,
+		user:           user,
+		generic:        generic,
+		sessionFactory: sessionFactory,
 	}
 }
 
@@ -93,18 +96,61 @@ func (h userHandler) List(w http.ResponseWriter, r *http.Request) {
 
 			listArgs := services.NewListArguments(r.URL.Query())
 
-			// RBAC: non-admin callers can only see their own user record
+			// RBAC: non-admin callers can only see their own user record,
+			// unless they have a project-scoped binding at editor level or
+			// above — in that case, allow TSL search but restrict response
+			// fields to id,username,name.
 			authResult := pkgrbac.GetAuthResult(ctx)
+			restrictFields := false
 			if authResult != nil && !authResult.IsGlobalAdmin {
 				username := auth.GetUsernameFromContext(ctx)
-				if username != "" {
-					scopeFilter, err := pkgrbac.TSLEqual("username", username)
+				hasEditorBinding := false
+
+				if h.sessionFactory != nil && username != "" {
+					var callerProjectRoles []string
+					g := (*h.sessionFactory).New(ctx)
+					if dbErr := g.Table("role_bindings rb").
+						Select("r.name").
+						Joins("JOIN roles r ON r.id = rb.role_id").
+						Where("rb.user_id = ? AND rb.scope = 'project' AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username).
+						Scan(&callerProjectRoles).Error; dbErr == nil {
+						callerLevel := pkgrbac.HighestLevel(callerProjectRoles)
+						// Level 2 = project:editor, level 1 = project:owner, level 0 = platform:admin
+						if callerLevel <= 2 && callerLevel != 999 {
+							hasEditorBinding = true
+						}
+					}
+				}
+
+				if hasEditorBinding {
+					// Allow search but enforce field restriction
+					allowedFields := map[string]bool{"id": true, "username": true, "name": true}
+					if listArgs.Fields != nil {
+						for _, f := range listArgs.Fields {
+							if !allowedFields[f] {
+								return nil, errors.Forbidden("field not allowed for user search")
+							}
+						}
+					} else {
+						// Force field restriction when caller doesn't specify fields
+						listArgs.Fields = []string{"id", "username", "name"}
+					}
+					restrictFields = true
+
+					// Cap results at 10 for autocomplete search
+					if listArgs.Size > 10 {
+						listArgs.Size = 10
+					}
+				} else if username != "" {
+					// Fall back to own record only
+					scopeFilter, err := pkgrbac.TSLEqualUsername("username", username)
 					if err != nil {
 						return nil, errors.Forbidden("invalid username")
 					}
 					pkgrbac.AppendTSLFilter(listArgs, scopeFilter)
 				}
 			}
+			_ = restrictFields
 
 			var users []User
 			paging, err := h.generic.List(ctx, "id", listArgs, &users)
@@ -124,7 +170,7 @@ func (h userHandler) List(w http.ResponseWriter, r *http.Request) {
 				userList.Items = append(userList.Items, converted)
 			}
 			if listArgs.Fields != nil {
-				filteredItems, err := presenters.SliceFilter(listArgs.Fields, userList.Items)
+				filteredItems, err := presenters.SliceFilter(listArgs.Fields, userList)
 				if err != nil {
 					return nil, err
 				}

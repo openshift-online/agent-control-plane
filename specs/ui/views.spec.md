@@ -1,89 +1,8 @@
 # Views
 
 ## Dashboard (Default Landing Page)
-## Requirement: Attention-First Landing
 
-The Dashboard SHALL be the default landing page when a user selects a project. It SHALL answer three questions in priority order: "What needs my attention?", "What is actively being worked on?", and "What completed recently?"
-
-### Scenario: Attention banner
-
-- GIVEN sessions exist with `phase: Failed` or annotations `ambient-code.io/review/status: "needs-review"` or `ambient-code.io/agent/needs-input`
-- WHEN the Dashboard renders
-- THEN an attention banner appears at the top showing counts of items requiring human action
-- AND each item is a clickable link to the relevant session or work item
-- AND the sidebar "Dashboard" item displays a badge with the total attention count
-
-### Scenario: Nothing needs attention
-
-- GIVEN no sessions are failed, no reviews are pending, no agents need input
-- WHEN the Dashboard renders
-- THEN the attention banner is hidden
-- AND the sidebar badge is not displayed
-
-### Scenario: Active work section
-
-- GIVEN sessions with integration annotations (`ambient-code.io/jira/issue`, `ambient-code.io/github/pr`)
-- WHEN the Dashboard renders
-- THEN it displays active work items as cards, grouped by integration reference
-- AND each card shows the work item identifier (Jira key, PR number) as the primary heading
-- AND session/agent information appears as secondary metadata within the card
-
-### Scenario: Sessions without integration annotations
-
-- GIVEN sessions with no integration annotations
-- WHEN the Dashboard renders
-- THEN they appear as session cards with the session name as the primary identifier
-- AND they are visually distinct from work-item-linked cards (lighter weight, no colored border)
-
-### Scenario: Recent activity feed
-
-- GIVEN completed sessions exist
-- WHEN the Dashboard renders
-- THEN a compact timeline shows the last N completed work items with reference, outcome, duration, and cost
-
-## Requirement: Needs-Input Annotation
-
-Agents SHALL be able to signal that they are blocked on human input by writing the annotation `ambient-code.io/agent/needs-input`. The value SHALL describe the type of input needed (e.g., `"approval"`, `"clarification"`, `"credentials"`, `"review"`).
-
-Sessions with this annotation SHALL surface in the Dashboard attention banner and SHALL display a distinct, non-muted badge in the Sessions table — at least as prominent as the Phase badge.
-
-### Scenario: Agent flags need for input
-
-- GIVEN a Running session where the agent writes `ambient-code.io/agent/needs-input: "approval"`
-- WHEN the Dashboard renders
-- THEN the attention banner includes this session with label "Waiting for approval"
-- AND the Sessions table shows an amber "Needs Input" badge on this session's row
-
----
-
-## Work View (SDLC Artifacts)
-## Requirement: Aggregated Work Items
-
-The Work view SHALL aggregate all registered integration annotations (`ambient-code.io/jira/issue`, `ambient-code.io/github/pr`, `ambient-code.io/gitlab/mr`, `ambient-code.io/oncall/incident`) across sessions in the active project.
-
-The view SHALL display work items as first-class objects, with sessions shown as subordinate detail. It SHALL support tabs for each artifact type (Pull Requests, Tickets, Merge Requests, Incidents), with counts on each tab.
-
-### Scenario: Work view rendering
-
-- GIVEN sessions in a project with various integration annotations
-- WHEN the Work view renders
-- THEN it displays tabbed tables: Pull Requests, Tickets, Merge Requests, Incidents
-- AND each tab label includes a count of items
-- AND each row shows the reference, enriched details (if available), linked sessions, agent, and status
-
-### Scenario: Work item attention grouping
-
-- GIVEN work items in various states
-- WHEN the Work view renders
-- THEN items are grouped within each tab: "Needs Attention" (needs-review, failed, changes-requested) at top, "In Progress" (linked to running sessions) in middle, "Done" (completed, merged) at bottom — collapsed by default
-
-### Scenario: Work item status filtering
-
-- GIVEN the Work view with items in various statuses
-- WHEN the user selects a status filter
-- THEN only matching items are displayed
-
-Status filtering requires enrichment data. When enrichment is unavailable, the status filter SHALL be hidden.
+The Dashboard is defined in [`work-tracking-dashboard.spec.md`](work-tracking-dashboard.spec.md). It serves as the default landing page and unified work view, superseding the former standalone Work View.
 
 ---
 
@@ -538,7 +457,8 @@ The UI SHALL NOT access credential tokens. The `credential:token-reader` role is
 ---
 
 ## Issues View
-**Note:** The Issues view has been superseded by the Work View (see "Work View (SDLC Artifacts)" section above). The Work view provides the same aggregated integration references with richer grouping by attention-need and tabbed artifact types. The sidebar label is "Work" rather than "Issues" to reflect the broader scope (all SDLC artifacts, not just bug-tracking items).
+
+**Note:** The Issues view has been superseded by the Dashboard (see [`work-tracking-dashboard.spec.md`](work-tracking-dashboard.spec.md)).
 
 ---
 

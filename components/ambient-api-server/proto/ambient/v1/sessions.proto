@@ -41,6 +41,7 @@ message Session {
   optional string kube_cr_uid = 30;
   optional string kube_namespace = 31;
   optional string agent_id = 32;
+  optional google.protobuf.Timestamp last_activity_at = 33;
 }
 
 message CreateSessionRequest {

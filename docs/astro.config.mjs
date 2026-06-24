@@ -77,6 +77,7 @@ export default defineConfig({
           label: 'Guides',
           items: [
             { slug: 'guides/custom-ca-bundle' },
+            { slug: 'guides/work-tracking-annotations' },
           ],
         },
         {

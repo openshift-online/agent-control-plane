@@ -37,7 +37,10 @@ const EventSource = "Projects"
 
 type ServiceLocator func() ProjectService
 
+var registeredSessionFactory *db.SessionFactory
+
 func NewServiceLocator(env *environments.Env) ServiceLocator {
+	registeredSessionFactory = &env.Database.SessionFactory
 	return func() ProjectService {
 		return NewProjectService(
 			db.NewAdvisoryLockFactory(env.Database.SessionFactory),
@@ -82,7 +85,7 @@ func init() {
 		if dbAuthz := pkgrbac.Middleware(envServices); dbAuthz != nil {
 			authzMiddleware = dbAuthz
 		}
-		projectHandler := NewProjectHandler(Service(envServices), generic.Service(envServices))
+		projectHandler := NewProjectHandler(Service(envServices), generic.Service(envServices), registeredSessionFactory)
 		homeHandler := NewHomeHandler(agents.Service(envServices))
 
 		projectsRouter := apiV1Router.PathPrefix("/projects").Subrouter()
@@ -91,6 +94,7 @@ func init() {
 		projectsRouter.HandleFunc("", projectHandler.Create).Methods(http.MethodPost)
 		projectsRouter.HandleFunc("/{id}", projectHandler.Patch).Methods(http.MethodPatch)
 		projectsRouter.HandleFunc("/{id}", projectHandler.Delete).Methods(http.MethodDelete)
+		projectsRouter.HandleFunc("/{id}/transfer-ownership", projectHandler.TransferOwnership).Methods(http.MethodPost)
 		projectsRouter.HandleFunc("/{id}/agents", homeHandler.ListAgents).Methods(http.MethodGet)
 		projectsRouter.Use(authMiddleware.AuthenticateAccountJWT)
 		projectsRouter.Use(authzMiddleware.AuthorizeApi)

@@ -57,6 +57,9 @@ func sessionToProto(s *Session) *pb.Session {
 	if s.CompletionTime != nil {
 		proto.CompletionTime = timestamppb.New(*s.CompletionTime)
 	}
+	if s.LastActivityAt != nil {
+		proto.LastActivityAt = timestamppb.New(*s.LastActivityAt)
+	}
 
 	return proto
 }

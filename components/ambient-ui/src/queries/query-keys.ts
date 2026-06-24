@@ -6,6 +6,8 @@ export const queryKeys = {
     lists: () => [...queryKeys.sessions.all, 'list'] as const,
     list: (projectId: string, params?: ListParams) =>
       [...queryKeys.sessions.lists(), projectId, params] as const,
+    listAll: (params?: ListParams) =>
+      [...queryKeys.sessions.lists(), 'all-projects', params] as const,
     details: () => [...queryKeys.sessions.all, 'detail'] as const,
     detail: (sessionId: string) =>
       [...queryKeys.sessions.details(), sessionId] as const,
@@ -56,5 +58,11 @@ export const queryKeys = {
     lists: () => [...queryKeys.roles.all, 'list'] as const,
     list: (params?: ListParams) =>
       [...queryKeys.roles.lists(), params] as const,
+  },
+  users: {
+    all: ['users'] as const,
+    lists: () => [...queryKeys.users.all, 'list'] as const,
+    list: (params?: ListParams) =>
+      [...queryKeys.users.lists(), params] as const,
   },
 } as const
