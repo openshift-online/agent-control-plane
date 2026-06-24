@@ -59,7 +59,7 @@ export default function SessionDetailPage() {
   return (
     <div className="space-y-6">
       <SessionHeader session={session} />
-      {session.conditions.length > 0 && (
+      {session.phase !== 'Running' && session.conditions.length > 0 && (
         <SessionConditions conditions={session.conditions} />
       )}
       <Tabs value={activeTab} onValueChange={handleTabChange}>
