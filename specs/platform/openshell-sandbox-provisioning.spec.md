@@ -166,7 +166,7 @@ The gateway's egress proxy resolves credential placeholders to real values at re
 #### Scenario: Provider type mapping
 
 - GIVEN the following ambient credential provider names
-- THEN they SHALL map to OpenShell provider types as follows:
+- THEN they SHALL map to OpenShell provider types as follows (see [supported provider types](https://docs.nvidia.com/openshell/sandboxes/manage-providers#supported-provider-types) and [supported inference providers](https://docs.nvidia.com/openshell/sandboxes/manage-providers#supported-inference-providers)):
 
 | Ambient Provider | OpenShell Type |
 |---|---|
