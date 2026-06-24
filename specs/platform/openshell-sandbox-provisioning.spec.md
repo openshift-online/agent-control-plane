@@ -54,7 +54,7 @@ When `OPENSHELL_USE_GATEWAY` is true, the control plane SHALL create agent sandb
 - GIVEN `OPENSHELL_USE_GATEWAY` is `false`
 - WHEN a session transitions to `Pending` phase
 - THEN the control plane SHALL use the existing provisioning path (direct pod creation, with file-mode sandbox if `OPENSHELL_ENABLED` is true)
-- AND no interaction with the OpenShell gateway SHALL occur
+- AND no interaction with the OpenShell gateway SHALL occur and no OpenShell gateway will be provisioned/reconciled
 
 #### Scenario: Gateway unreachable
 
