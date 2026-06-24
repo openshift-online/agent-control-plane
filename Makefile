@@ -3,7 +3,7 @@
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-api-server local-logs-ui local-logs-control-plane local-shell-api-server local-shell-ui
 .PHONY: local-test local-test-dev local-test-quick test-all local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-status kind-login kind-sso-toggle kind-setup-vertex
+.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-reload-ambient-control-plane kind-reload-ambient-api-server kind-status kind-login kind-sso-toggle kind-setup-vertex
 .PHONY: preflight-cluster preflight dev-env dev
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: unleash-port-forward unleash-status
@@ -565,6 +565,20 @@ clean: ## Clean up Kubernetes resources
 	@kubectl delete -k components/manifests/overlays/production -n $(NAMESPACE) --ignore-not-found
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Cleanup complete"
 
+# kind-reload-component: tag, load into kind, and restart a single component
+# Usage: $(call kind-reload-component,IMAGE,DEPLOYMENT_NAME,DISPLAY_NAME)
+define kind-reload-component
+	@$(CONTAINER_ENGINE) tag $(1) localhost/$(1) 2>/dev/null || true
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading image into kind cluster ($(KIND_CLUSTER_NAME))..."
+	@$(CONTAINER_ENGINE) save localhost/$(1) | \
+		$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
+		ctr --namespace=k8s.io images import -
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting $(2)..."
+	@kubectl rollout restart deployment/$(2) -n $(NAMESPACE) $(QUIET_REDIRECT)
+	@kubectl rollout status deployment/$(2) -n $(NAMESPACE) --timeout=60s
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) $(3) reloaded"
+endef
+
 ##@ Kind Local Development
 
 # COMPONENT for dev/preflight: ambient-api-server, ambient-ui, or comma-separated. Empty = port-forward only.
@@ -1044,15 +1058,22 @@ kind-reload-ambient-ui: check-kind check-kubectl check-local-context ## Rebuild 
 		-f ambient-ui/Dockerfile \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(AMBIENT_UI_IMAGE) . $(QUIET_REDIRECT)
-	@$(CONTAINER_ENGINE) tag $(AMBIENT_UI_IMAGE) localhost/$(AMBIENT_UI_IMAGE) 2>/dev/null || true
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading image into kind cluster ($(KIND_CLUSTER_NAME))..."
-	@$(CONTAINER_ENGINE) save localhost/$(AMBIENT_UI_IMAGE) | \
-		$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
-		ctr --namespace=k8s.io images import -
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting ambient-ui..."
-	@kubectl rollout restart deployment/ambient-ui -n $(NAMESPACE) $(QUIET_REDIRECT)
-	@kubectl rollout status deployment/ambient-ui -n $(NAMESPACE) --timeout=60s
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Ambient UI reloaded"
+	$(call kind-reload-component,$(AMBIENT_UI_IMAGE),ambient-ui,Ambient UI)
+
+kind-reload-ambient-control-plane: check-kind check-kubectl check-local-context ## Rebuild and reload ambient-control-plane only (kind)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding ambient-control-plane..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-f components/ambient-control-plane/Dockerfile \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		-t $(CONTROL_PLANE_IMAGE) components $(QUIET_REDIRECT)
+	$(call kind-reload-component,$(CONTROL_PLANE_IMAGE),ambient-control-plane,Ambient control plane)
+
+kind-reload-ambient-api-server: check-kind check-kubectl check-local-context ## Rebuild and reload ambient-api-server only (kind)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding ambient-api-server..."
+	@cd components/ambient-api-server && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		-t $(API_SERVER_IMAGE) . $(QUIET_REDIRECT)
+	$(call kind-reload-component,$(API_SERVER_IMAGE),ambient-api-server,Ambient API server)
 
 kind-sso-toggle: check-kubectl ## Toggle SSO auth on/off in Kind (affects both frontend and backend)
 	@UNLEASH_ADMIN_TOKEN=$$(kubectl get secret unleash-credentials -n $(NAMESPACE) -o jsonpath='{.data.admin-api-token}' | base64 -d); \
