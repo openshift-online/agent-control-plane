@@ -120,36 +120,37 @@ This is a significant change from file mode, where the control plane must grant 
 
 ### Requirement: Credential Mapping to OpenShell Providers
 
-The control plane SHALL map ambient platform credentials to OpenShell providers and attach them to sandboxes, replacing the credential sidecar container pattern. The control plane SHALL also watch for credential configuration changes and propagate updates to the gateway via the `UpdateProvider` RPC.
+The control plane SHALL map ambient platform credentials to project-scoped OpenShell providers, replacing the credential sidecar container pattern. Providers are scoped to the project namespace — all sandboxes within a namespace share the same set of providers. The control plane ensures providers exist before creating sandboxes and updates them when credentials change.
 
-The gateway's egress proxy resolves credential placeholders to real values at request time — the agent process inside the sandbox never holds real credentials, only opaque placeholders. This means provider updates take effect immediately for subsequent requests without restarting the sandbox. If the proxy encounters a placeholder it cannot resolve, it rejects the request with HTTP 500 rather than forwarding the raw placeholder upstream (fail-closed).
+The gateway's egress proxy resolves credential placeholders to real values at request time — the agent process inside the sandbox never holds real credentials, only opaque placeholders. This means provider updates take effect immediately for subsequent requests without restarting any sandbox. If the proxy encounters a placeholder it cannot resolve, it rejects the request with HTTP 500 rather than forwarding the raw placeholder upstream (fail-closed).
 
 This iteration focuses on **scheduled agent runs** (short-lived sessions). Long-running session credential lifecycle (token expiry mid-session, gateway-managed refresh via OAuth2/client-credentials flows) is out of scope.
 
-#### Scenario: Creating providers from ambient credentials
+#### Scenario: Ensuring project providers exist
 
-- GIVEN a session has resolved credentials for `github` and `anthropic`
-- WHEN the control plane provisions the sandbox
-- THEN it SHALL create an OpenShell provider for each credential via the `CreateProvider` RPC
+- GIVEN a project has configured credentials for `github` and `anthropic`
+- WHEN the control plane provisions a sandbox in that project's namespace
+- THEN it SHALL ensure an OpenShell provider exists for each credential via `CreateProvider` (idempotent — skip if already exists)
 - AND the `github` credential SHALL map to OpenShell provider type `github`
 - AND the `anthropic` credential SHALL map to OpenShell provider type `claude`
 - AND providers for unrecognized types SHALL use the `generic` OpenShell provider type
-- AND each provider name SHALL be scoped to the session (e.g., `session-<safe_id>-github`)
+- AND each provider name SHALL be scoped to the project (e.g., `<project_name>-github`)
 
 #### Scenario: Attaching providers to sandbox
 
-- GIVEN providers have been created for a session's credentials
-- WHEN the sandbox is created
-- THEN the `CreateSandboxRequest.Spec.Providers` field SHALL list all provider names
+- GIVEN project-scoped providers exist in the namespace
+- WHEN a sandbox is created for a session
+- THEN the `CreateSandboxRequest.Spec.Providers` field SHALL list all project provider names
 - AND the OpenShell gateway SHALL inject credentials transparently via its egress proxy
+- AND multiple sandboxes in the same namespace SHALL share the same providers
 
-#### Scenario: Credential rotation during a session
+#### Scenario: Credential rotation
 
-- GIVEN a running session with providers attached to a sandbox
+- GIVEN a project with active providers attached to one or more sandboxes
 - WHEN an ambient credential configuration changes (e.g., token rotation)
 - THEN the control plane SHALL call `UpdateProvider` on the gateway with the new credential values
 - AND the gateway's egress proxy SHALL resolve subsequent requests to the updated credentials at request time
-- AND the sandbox SHALL NOT be restarted
+- AND no sandboxes SHALL be restarted
 
 #### Scenario: Provider type mapping
 
@@ -180,22 +181,23 @@ The control plane SHALL pass session configuration to the sandbox as environment
 
 ### Requirement: Sandbox Deprovisioning
 
-When a session is stopped or deleted, the control plane SHALL delete the sandbox and its associated providers via the OpenShell gateway.
+When a session is stopped or deleted, the control plane SHALL delete the sandbox via the OpenShell gateway. Project-scoped providers are NOT deleted as part of session cleanup — they persist in the namespace for use by other sessions.
 
 #### Scenario: Session stopping
 
 - GIVEN a running session with an active sandbox
 - WHEN the session phase transitions to `Stopping`
 - THEN the control plane SHALL call `DeleteSandbox` with the session's sandbox name
-- AND the control plane SHALL call `DeleteProvider` for each provider created for the session
 - AND the session phase SHALL transition to `Stopped`
+- AND project-scoped providers SHALL NOT be deleted
 
 #### Scenario: Session deletion
 
-- GIVEN a session with associated sandbox and providers
+- GIVEN a session with an associated sandbox
 - WHEN the session is deleted
-- THEN the control plane SHALL delete the sandbox and all session-scoped providers
+- THEN the control plane SHALL delete the sandbox
 - AND the control plane SHALL continue to clean up Kubernetes resources (service accounts, secrets, services) as before
+- AND project-scoped providers SHALL NOT be deleted
 
 ### Requirement: Dual-Signal Session Lifecycle
 
@@ -203,36 +205,40 @@ Session lifecycle in gateway mode SHALL be determined by two complementary signa
 
 The sandbox base image SHALL include the runner, so the existing runner → control plane gRPC event push continues to function inside gateway-managed sandboxes. The sandbox network policy SHALL permit egress to the control plane's gRPC endpoint.
 
+**Tracking mechanism:** The session phase in PostgreSQL serves as the persistence mechanism for `RUN_FINISHED` receipt. When the runner pushes `RUN_FINISHED`, the session transitions to `Completed` — this is the existing behavior. The status syncer SHALL only check sandbox status for sessions still in `Running` phase; sessions already in a terminal phase (`Completed`, `Failed`, `Stopped`) are skipped. This means no additional state tracking is required — the session phase itself is the durable record of whether the runner reported completion, and the design is safe across control plane restarts.
+
 #### Scenario: Normal completion via runner event
 
-- GIVEN a running session inside a gateway-managed sandbox
+- GIVEN a session in `Running` phase inside a gateway-managed sandbox
 - WHEN the runner pushes a `RUN_FINISHED` event to the control plane
 - THEN the session phase SHALL transition to `Completed` (existing behavior, unchanged)
 - AND the sandbox MAY be cleaned up by the gateway after the runner process exits
+- AND subsequent status syncer polls SHALL skip this session (terminal phase)
 
 #### Scenario: Abnormal termination via sandbox disappearance
 
-- GIVEN a running session with an active sandbox
+- GIVEN a session in `Running` phase with an active sandbox
 - AND the gateway is reachable
-- AND the control plane has NOT received a `RUN_FINISHED` event for this session
 - WHEN the status syncer calls `GetSandbox` and receives a not-found response
 - THEN the session phase SHALL transition to `Failed`
 - AND the syncer SHALL log a warning with the session ID and sandbox name indicating the sandbox disappeared without a runner completion event
 
 #### Scenario: Sandbox disappearance after runner completion
 
-- GIVEN a running session with an active sandbox
-- AND the control plane HAS received a `RUN_FINISHED` event for this session
-- WHEN the status syncer calls `GetSandbox` and receives a not-found response
-- THEN no phase change SHALL occur (session is already in a terminal phase)
+- GIVEN a session in a terminal phase (`Completed`, `Failed`, or `Stopped`)
+- WHEN the status syncer evaluates this session
+- THEN it SHALL skip sandbox status checks entirely (terminal phases are not synced)
+- AND no `GetSandbox` call SHALL be made for sessions in terminal phases
 
 ### Requirement: Sandbox Status Syncing
 
-The status syncer SHALL poll the OpenShell gateway for sandbox phase as a secondary signal. The OpenShell `SandboxPhase` enum does not include a `SUCCEEDED` or `COMPLETED` state, and `SandboxStatus` does not expose an exit code. The gateway sandbox phase is used to detect error conditions and abnormal terminations that the runner cannot self-report.
+The status syncer SHALL poll the OpenShell gateway for sandbox phase as a secondary signal, but only for sessions still in `Running` phase. Sessions in terminal phases (`Completed`, `Failed`, `Stopped`) are skipped entirely — no gateway calls are made. The syncer SHALL reuse the existing `podSyncInterval` (15 seconds) from `pod_sync.go` for its polling interval. The OpenShell `SandboxPhase` enum does not include a `SUCCEEDED` or `COMPLETED` state, and `SandboxStatus` does not expose an exit code. The gateway sandbox phase is used to detect error conditions and abnormal terminations that the runner cannot self-report.
+
+> **Future optimization:** The OpenShell proto defines a `WatchSandbox` streaming RPC that could replace polling with push-based status updates. Since the control plane already uses gRPC streaming for API server events (`internal/watcher/watcher.go`), adopting `WatchSandbox` would be a natural improvement in a later iteration.
 
 #### Scenario: Sandbox phase mapping
 
-- GIVEN a running session with an active sandbox
+- GIVEN a session in `Running` phase with an active sandbox
 - WHEN the status syncer polls the gateway
 - THEN sandbox phases SHALL map to session phases as follows:
 
@@ -243,8 +249,9 @@ The status syncer SHALL poll the OpenShell gateway for sandbox phase as a second
 | Sandbox exists, phase `ERROR` | `Failed` | Gateway detected an error |
 | Sandbox exists, phase `DELETING` | (no change) | Gateway is cleaning up |
 | Sandbox exists, phase `UNKNOWN` | (no change, log warning) | Transient or unexpected state |
-| Sandbox not found, `RUN_FINISHED` received | (no change) | Already completed via primary signal |
-| Sandbox not found, no `RUN_FINISHED` | `Failed` | Abnormal termination |
+| Sandbox not found | `Failed` | Abnormal termination (sandbox disappeared while session still Running) |
+
+Sessions in terminal phases are not listed because the syncer skips them before reaching the gateway call.
 
 #### Scenario: Gateway unreachable during sync
 
@@ -312,34 +319,11 @@ The control plane SHALL maintain a cache of gRPC connections to OpenShell gatewa
 - WHEN the control plane shuts down
 - THEN it SHALL close all cached gRPC connections
 
-### Requirement: Feature Flag Gate
-
-Gateway mode SHALL be gated behind an Unleash feature flag (`openshell-gateway-provisioning`) in addition to the `OPENSHELL_USE_GATEWAY` environment variable. Both MUST be enabled for gateway mode to activate. This provides gradual rollout capability and a kill-switch that does not require redeployment.
-
-#### Scenario: Feature flag enabled
-
-- GIVEN the Unleash flag `openshell-gateway-provisioning` is enabled
-- AND `OPENSHELL_USE_GATEWAY` is `true`
-- WHEN the control plane provisions a session
-- THEN it SHALL use gateway-based sandbox provisioning
-
-#### Scenario: Feature flag disabled (kill-switch)
-
-- GIVEN the Unleash flag `openshell-gateway-provisioning` is disabled
-- AND `OPENSHELL_USE_GATEWAY` is `true`
-- WHEN the control plane provisions a session
-- THEN it SHALL fall back to the existing provisioning path (file-mode or direct pod creation)
-- AND it SHALL log an info message indicating gateway mode is disabled by feature flag
-
-#### Scenario: Env var disabled
-
-- GIVEN `OPENSHELL_USE_GATEWAY` is `false`
-- THEN the feature flag SHALL NOT be evaluated
-- AND the existing provisioning path SHALL be used regardless of flag state
-
 ### Requirement: Configuration
 
-The control plane SHALL expose configuration for OpenShell gateway mode alongside the existing `OPENSHELL_ENABLED` flag. `OPENSHELL_ENABLED` continues to control file-mode sandbox activation as defined in `specs/security/openshell-sandbox.spec.md`. `OPENSHELL_USE_GATEWAY` is an independent flag that selects gateway-based provisioning. Gateway mode is only active when both the env var and the Unleash feature flag (`openshell-gateway-provisioning`) are enabled.
+The control plane SHALL expose configuration for OpenShell gateway mode alongside the existing `OPENSHELL_ENABLED` flag. `OPENSHELL_ENABLED` continues to control file-mode sandbox activation as defined in `specs/security/openshell-sandbox.spec.md`. `OPENSHELL_USE_GATEWAY` is an independent flag that selects gateway-based provisioning.
+
+> **Future work:** Once Unleash integration is added to the control plane, gateway mode SHOULD be gated behind a feature flag (e.g., `openshell-gateway-provisioning`) for gradual rollout and kill-switch capability. This is deferred to a follow-up spec.
 
 #### Scenario: Configuration fields
 
@@ -354,11 +338,11 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 
 #### Scenario: Mode interaction
 
-- GIVEN `OPENSHELL_USE_GATEWAY` is `true` and the `openshell-gateway-provisioning` feature flag is enabled
+- GIVEN `OPENSHELL_USE_GATEWAY` is `true`
 - THEN gateway mode SHALL be active regardless of the `OPENSHELL_ENABLED` value
 - AND file-mode requirements (policy ConfigMap propagation, elevated security context, wrapper script) SHALL NOT apply
 
-- GIVEN `OPENSHELL_USE_GATEWAY` is `false` or the `openshell-gateway-provisioning` feature flag is disabled
+- GIVEN `OPENSHELL_USE_GATEWAY` is `false`
 - AND `OPENSHELL_ENABLED` is `true`
 - THEN file-mode sandbox SHALL be active as defined in `specs/security/openshell-sandbox.spec.md`
 
