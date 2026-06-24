@@ -233,7 +233,7 @@ func (s *PodStatusSyncer) updateSessionPhase(ctx context.Context, sdk *sdkclient
 		patch["completion_time"] = &now
 	}
 
-	if newPhase == PhaseFailed {
+	if newPhase == PhaseFailed && pod != nil {
 		if conditionsJSON := s.buildFailureConditions(pod); conditionsJSON != "" {
 			patch["conditions"] = conditionsJSON
 		}

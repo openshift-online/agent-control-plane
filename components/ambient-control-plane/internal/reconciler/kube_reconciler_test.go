@@ -2,7 +2,13 @@ package reconciler
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func TestBuildCredentialSidecars_NoCredentials(t *testing.T) {
@@ -152,6 +158,67 @@ func TestBuildCredentialSidecars_LocalImagePullPolicy(t *testing.T) {
 	sidecar := sidecars[0].(map[string]interface{})
 	if sidecar["imagePullPolicy"] != "IfNotPresent" {
 		t.Errorf("expected IfNotPresent for localhost image, got %s", sidecar["imagePullPolicy"])
+	}
+}
+
+func TestSanitizeProvisioningError_Forbidden(t *testing.T) {
+	err := k8serrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "deployments"}, "test", fmt.Errorf("access denied"))
+	msg := sanitizeProvisioningError(err)
+	if !strings.Contains(msg, "Insufficient permissions") {
+		t.Errorf("expected permissions message, got %q", msg)
+	}
+	if strings.Contains(msg, "apps") || strings.Contains(msg, "deployments") {
+		t.Errorf("message leaks K8s internals: %q", msg)
+	}
+}
+
+func TestSanitizeProvisioningError_NotFound(t *testing.T) {
+	err := k8serrors.NewNotFound(schema.GroupResource{Resource: "namespaces"}, "test-ns")
+	msg := sanitizeProvisioningError(err)
+	if !strings.Contains(msg, "not available") {
+		t.Errorf("expected not-available message, got %q", msg)
+	}
+	if strings.Contains(msg, "namespaces") || strings.Contains(msg, "test-ns") {
+		t.Errorf("message leaks K8s internals: %q", msg)
+	}
+}
+
+func TestSanitizeProvisioningError_ServerTimeout(t *testing.T) {
+	err := k8serrors.NewServerTimeout(schema.GroupResource{Resource: "pods"}, "create", 30)
+	msg := sanitizeProvisioningError(err)
+	if !strings.Contains(msg, "temporarily unavailable") {
+		t.Errorf("expected unavailable message, got %q", msg)
+	}
+}
+
+func TestSanitizeProvisioningError_TooManyRequests(t *testing.T) {
+	err := &k8serrors.StatusError{ErrStatus: metav1.Status{
+		Reason: metav1.StatusReasonTooManyRequests,
+		Code:   429,
+	}}
+	msg := sanitizeProvisioningError(err)
+	if !strings.Contains(msg, "quota exceeded") {
+		t.Errorf("expected quota message, got %q", msg)
+	}
+}
+
+func TestSanitizeProvisioningError_GenericError(t *testing.T) {
+	err := fmt.Errorf("something unexpected happened")
+	msg := sanitizeProvisioningError(err)
+	if !strings.Contains(msg, "provisioning failed") {
+		t.Errorf("expected generic message, got %q", msg)
+	}
+	if strings.Contains(msg, "unexpected") {
+		t.Errorf("message leaks original error: %q", msg)
+	}
+}
+
+func TestSanitizeProvisioningError_WrappedForbidden(t *testing.T) {
+	inner := k8serrors.NewForbidden(schema.GroupResource{Resource: "namespaces"}, "ns", fmt.Errorf("denied"))
+	wrapped := fmt.Errorf("provisioning namespace: %w", inner)
+	msg := sanitizeProvisioningError(wrapped)
+	if !strings.Contains(msg, "Insufficient permissions") {
+		t.Errorf("expected permissions message for wrapped error, got %q", msg)
 	}
 }
 

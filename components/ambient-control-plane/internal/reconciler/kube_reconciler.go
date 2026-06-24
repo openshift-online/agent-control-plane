@@ -1263,15 +1263,34 @@ func (r *SimpleKubeReconciler) updateSessionPhase(ctx context.Context, session t
 }
 
 func (r *SimpleKubeReconciler) HandleProvisioningFailure(ctx context.Context, event informer.ResourceEvent, err error) {
-	session := event.Object.Session
-	if session == nil {
+	eventSession := event.Object.Session
+	if eventSession == nil {
 		return
 	}
 
-	for _, tp := range TerminalPhases {
-		if session.Phase == tp {
-			return
-		}
+	if eventSession.ProjectID == "" {
+		r.logger.Debug().Str("session_id", eventSession.ID).Msg("skipping failure update: no project_id")
+		return
+	}
+
+	sdk, sdkErr := r.factory.ForProject(ctx, eventSession.ProjectID)
+	if sdkErr != nil {
+		r.logger.Warn().Err(sdkErr).Str("session_id", eventSession.ID).Msg("failed to get SDK client for failure update")
+		return
+	}
+
+	session, fetchErr := sdk.Sessions().Get(ctx, eventSession.ID)
+	if fetchErr != nil {
+		r.logger.Warn().Err(fetchErr).Str("session_id", eventSession.ID).Msg("failed to re-fetch session for failure update")
+		return
+	}
+
+	if isTerminalPhase(session.Phase) {
+		r.logger.Debug().
+			Str("session_id", session.ID).
+			Str("phase", session.Phase).
+			Msg("session already in terminal phase, skipping provisioning failure")
+		return
 	}
 
 	r.logger.Error().
@@ -1291,17 +1310,6 @@ func (r *SimpleKubeReconciler) HandleProvisioningFailure(ctx context.Context, ev
 	if marshalErr != nil {
 		r.logger.Error().Err(marshalErr).Str("session_id", session.ID).Msg("failed to marshal conditions")
 		r.updateSessionPhase(ctx, *session, PhaseFailed)
-		return
-	}
-
-	if session.ProjectID == "" {
-		r.logger.Debug().Str("session_id", session.ID).Msg("skipping failure update: no project_id")
-		return
-	}
-
-	sdk, sdkErr := r.factory.ForProject(ctx, session.ProjectID)
-	if sdkErr != nil {
-		r.logger.Warn().Err(sdkErr).Str("session_id", session.ID).Msg("failed to get SDK client for failure update")
 		return
 	}
 

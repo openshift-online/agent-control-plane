@@ -103,6 +103,7 @@ type Informer struct {
 	eventCh      chan ResourceEvent
 	retryCh      chan retryEvent
 
+	// Single handler; set during init before Run() is called.
 	OnMaxRetriesExceeded FailureHandler
 
 	sessionCache         map[string]types.Session
