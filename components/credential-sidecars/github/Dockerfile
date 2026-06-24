@@ -41,4 +41,3 @@ EXPOSE 8091
 
 ENTRYPOINT ["credential-entrypoint", "mcp-proxy", "--pass-environment", "--port", "8091", "--"]
 CMD ["github-mcp-server", "stdio"]
-

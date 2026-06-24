@@ -72,4 +72,3 @@ ENV HOSTNAME="0.0.0.0"
 LABEL org.opencontainers.image.revision=$GIT_COMMIT
 
 CMD ["node", "server.js"]
-

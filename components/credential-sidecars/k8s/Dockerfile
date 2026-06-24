@@ -31,4 +31,3 @@ EXPOSE 8093
 
 ENTRYPOINT ["credential-entrypoint", "kubernetes-mcp-server"]
 CMD ["--port", "8093", "--disable-multi-cluster", "--kubeconfig", "/tmp/.ambient_kubeconfig"]
-

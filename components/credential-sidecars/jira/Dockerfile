@@ -26,4 +26,3 @@ EXPOSE 8092
 
 ENTRYPOINT ["credential-entrypoint", "mcp-atlassian"]
 CMD ["--transport", "sse", "--port", "8092"]
-

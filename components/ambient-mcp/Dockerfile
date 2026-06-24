@@ -35,4 +35,3 @@ USER 1001
 
 ENTRYPOINT ["./ambient-mcp"]
 CMD []
-
