@@ -93,6 +93,7 @@ export function OverviewTab({ session }: { session: DomainSession }) {
             <MetaRow label="Session ID" value={session.id} mono />
             <MetaRow label="Project" value={session.projectId ?? <NoValue />} />
             <MetaRow label="Agent" value={session.agentName ?? session.agentId ?? <NoValue />} />
+            <MetaRow label="Created" value={formatAbsoluteTime(session.createdAt)} />
             <MetaRow label="Started" value={session.startTime ? formatAbsoluteTime(session.startTime) : <NoValue />} />
             <MetaRow label="Completed" value={session.completionTime ? formatAbsoluteTime(session.completionTime) : <NoValue />} />
           </dl>

@@ -2,17 +2,18 @@ import { AlertTriangle } from 'lucide-react'
 import type { DomainCondition } from '@/domain/types'
 
 const CONDITION_TITLES: Record<string, string> = {
-  SetupFailed: 'Setup failed',
-  StartupFailed: 'Session failed to start',
-  Error: 'Session error',
-  OOMKilled: 'Session ran out of memory',
+  SetupFailed: 'Setup Failed',
+  StartupFailed: 'Startup Failed',
+  Error: 'Error',
+  OOMKilled: 'Out of Memory',
 }
 
 function formatConditionTitle(condition: DomainCondition): string {
-  if (condition.reason && CONDITION_TITLES[condition.reason]) {
-    return CONDITION_TITLES[condition.reason]
+  const title = (condition.reason && CONDITION_TITLES[condition.reason]) || 'Error'
+  if (condition.message) {
+    return `${title}: ${condition.message}`
   }
-  return 'Session error'
+  return title
 }
 
 type SessionConditionsProps = {
@@ -33,16 +34,9 @@ export function SessionConditions({ conditions }: SessionConditionsProps) {
           role="alert"
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-status-error-foreground" aria-hidden="true" />
-          <div className="min-w-0 flex-1 text-sm">
-            <p className="font-medium text-status-error-foreground">
-              {formatConditionTitle(condition)}
-            </p>
-            {condition.message && (
-              <p className="mt-1 text-muted-foreground break-words">
-                {condition.message}
-              </p>
-            )}
-          </div>
+          <p className="min-w-0 flex-1 text-sm text-status-error-foreground break-words">
+            {formatConditionTitle(condition)}
+          </p>
         </div>
       ))}
     </div>
