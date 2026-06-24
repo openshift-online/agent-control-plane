@@ -26,6 +26,8 @@ spec:
           value: "http://ambient-api-server:8000"
         - name: NODE_ENV
           value: "production"
+        - name: CONTROL_PLANE_URL
+          value: "http://ambient-control-plane:8080"
         - name: SSO_ISSUER_URL
           valueFrom:
             secretKeyRef:
