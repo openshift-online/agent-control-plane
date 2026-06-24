@@ -17,7 +17,7 @@ This iteration is scoped to **scheduled agent runs** (single-run, short-lived se
 
 - **Long-running / steerable sessions** — credential lifecycle concerns (token expiry mid-session, gateway-managed refresh via OAuth2/client-credentials flows) are deferred
 - **Gateway provisioning** — the OpenShell gateway is assumed to already be deployed in each project namespace; ACP will not create it. A future iteration should have the control plane provision and reconcile gateway lifecycle per project namespace (potentially adapting the [upstream Helm chart values](https://github.com/NVIDIA/OpenShell/blob/main/deploy/helm/openshell/values.yaml) into a managed resource)
-- **Namespace-level credential storage** — credentials remain stored in ACP, not as Kubernetes Secrets in the project namespace
+- **Namespace-level credential storage** — credentials remain stored in ACP, not as Kubernetes Secrets in the project namespace. A future iteration should store credentials as Kubernetes Secrets in each project namespace, with ACP reading them from the Secret and passing them to the gateway when configuring providers. This indirection is necessary because the gateway does not yet support loading credentials directly from Kubernetes Secrets ([OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882))
 - **Network policy ownership** — OpenShell policies (including network egress rules allowing runner-to-control-plane gRPC) will be user-configurable via the Agent spec. Whether ACP auto-injects the control plane egress rule on top of the user-configured policy or requires users to include it explicitly is TBD
 
 ### Relationship to [openshell-sandbox.spec.md]
@@ -26,7 +26,7 @@ This specification defines **gateway mode** — an alternative to the **file mod
 
 **File mode** (existing, [openshell-sandbox.spec.md]): The OpenShell Supervisor binary runs inside the runner container, wrapping the Claude CLI process directly. Requires policy ConfigMap propagation, elevated container security context, and the Supervisor binary baked into the runner image.
 
-**Gateway mode** (this spec): The OpenShell gateway owns sandbox lifecycle, policy enforcement, network isolation, and credential injection. The control plane delegates to the gateway via gRPC instead of creating pods directly. Sandboxes created by the gateway contain a Supervisor, but the gateway manages its configuration and security context — the control plane does not need to propagate policy ConfigMaps, grant elevated capabilities, or configure the Supervisor.
+**Gateway mode** (this spec): The OpenShell gateway owns sandbox lifecycle, policy enforcement, network isolation, and credential injection. The control plane delegates to the gateway via gRPC instead of creating pods directly. Sandboxes created by the gateway contain a Supervisor, but the gateway manages its configuration and security context — the control plane does not need to propagate policy ConfigMaps, grant elevated capabilities, or configure the Supervisor. ACP will attach a user-configured policy (defined via the Agent spec) to each sandbox using the equivalent logic as `openshell sandbox create --policy ./my-policy.yaml -- claude`.
 
 The sandbox security guarantees (network namespace isolation, TLS proxy, Landlock filesystem isolation, process privilege drop, seccomp-BPF filtering) are equivalent in both modes. Both use an in-container Supervisor — file mode requires the control plane to configure it (policy mounts, elevated SecurityContext), while gateway mode delegates that responsibility to the gateway.
 
@@ -64,25 +64,23 @@ When `OPENSHELL_USE_GATEWAY` is true, the control plane SHALL create agent sandb
 - THEN the operation SHALL fail with an error
 - AND the control plane SHALL NOT fall back to file-mode sandbox or direct pod creation
 
-### Requirement: Gateway Discovery via Route
+### Requirement: Gateway Discovery via Service
 
-The control plane SHALL discover the OpenShell gateway in each project namespace by looking up the OpenShift Route associated with the gateway's gRPC service. This avoids hardcoding service names or ports — the gateway's [Helm chart configures a gRPC Route](https://github.com/NVIDIA/OpenShell/blob/main/deploy/helm/openshell/values.yaml#L357), and the control plane reads it at runtime.
+The control plane SHALL discover the OpenShell gateway in each project namespace by looking up the Kubernetes Service associated with the gateway's gRPC endpoint. The gateway SHALL be deployed without a Route to prevent external access from outside the cluster — all communication between ACP and the gateway is cluster-internal.
 
-#### Scenario: Route-based discovery
+#### Scenario: Service-based discovery
 
 - GIVEN an OpenShell gateway is deployed in namespace `my-project`
-- AND the gateway's Helm chart has created a Route for the gRPC service
 - WHEN the control plane needs to reach the gateway
-- THEN it SHALL list Routes in namespace `my-project` matching a well-known label (e.g., `app.kubernetes.io/name=openshell`)
-- AND it SHALL extract the gateway endpoint from the Route's `.spec.host` and `.spec.port`
+- THEN it SHALL list Services in namespace `my-project` matching a well-known label (e.g., `app.kubernetes.io/name=openshell`)
+- AND it SHALL extract the gateway endpoint from the Service's cluster DNS name and gRPC port
 
-#### Scenario: Route not found
+#### Scenario: Service not found
 
 - GIVEN `OPENSHELL_USE_GATEWAY` is `true`
-- AND no matching Route is found in the project namespace
+- AND no matching Service is found in the project namespace
 - WHEN the control plane attempts to discover the gateway
-- THEN it SHALL fail with an error indicating the gateway Route was not found
-- AND it SHALL NOT fall back to hardcoded service names
+- THEN it SHALL fail with an error indicating the gateway Service was not found
 
 ### Requirement: Sandbox Identity and Naming
 
@@ -128,7 +126,7 @@ This is a significant change from file mode, where the control plane must grant 
 
 ### Requirement: Credential Mapping to OpenShell Providers
 
-The control plane SHALL map ambient platform credentials to project-scoped OpenShell providers, replacing the credential sidecar container pattern. Providers are scoped to the project namespace — all sandboxes within a namespace share the same set of providers. The control plane ensures providers exist before creating sandboxes and updates them when credentials change.
+The control plane SHALL map ambient platform credentials to project-scoped OpenShell providers, replacing the credential sidecar container pattern. Providers are scoped to the project namespace — all sandboxes within a namespace may bind to a credential provider within the set of providers provisioned on the gateway in that namespace. The control plane ensures providers exist before creating sandboxes and updates them when credentials change.
 
 The gateway's egress proxy resolves credential placeholders to real values at request time — the agent process inside the sandbox never holds real credentials, only opaque placeholders. This means provider updates take effect immediately for subsequent requests without restarting any sandbox. If the proxy encounters a placeholder it cannot resolve, it rejects the request with HTTP 500 rather than forwarding the raw placeholder upstream (fail-closed).
 
@@ -152,11 +150,12 @@ The gateway's egress proxy resolves credential placeholders to real values at re
 
 #### Scenario: Attaching providers to sandbox
 
+In iteration 1, all providers in the namespace are attached to every sandbox. A future iteration should attach only the providers that the user has indicated the sandbox needs via the Agent configuration spec.
+
 - GIVEN project-scoped providers exist in the namespace
 - WHEN a sandbox is created for a session
 - THEN the `CreateSandboxRequest.Spec.Providers` field SHALL list all project provider names
 - AND the OpenShell gateway SHALL inject credentials transparently via its egress proxy
-- AND multiple sandboxes in the same namespace SHALL share the same providers
 
 #### Scenario: Credential rotation
 
@@ -184,7 +183,7 @@ The gateway's egress proxy resolves credential placeholders to real values at re
 
 ### Requirement: Sandbox Environment Variables
 
-The control plane SHALL pass session configuration to the sandbox as environment variables in the `CreateSandboxRequest.Spec.Template.Environment` map.
+The control plane SHALL pass session configuration to the sandbox as environment variables in the `CreateSandboxRequest.Spec.Template.Environment` map. OpenShell injects its own environment variables into the sandbox based on the attached provider types (see [supported provider types](https://docs.nvidia.com/openshell/sandboxes/manage-providers#supported-provider-types)). The control plane MUST NOT override these provider-injected variables.
 
 #### Scenario: Environment variable translation
 
@@ -192,6 +191,14 @@ The control plane SHALL pass session configuration to the sandbox as environment
 - WHEN the sandbox is created
 - THEN all environment variables from `buildEnv()` that have literal string values SHALL be included
 - AND Kubernetes-specific `valueFrom` / `fieldRef` entries (e.g., `POD_IP`) SHALL be omitted
+
+#### Scenario: Provider-injected environment variable protection
+
+- GIVEN a sandbox with attached providers that inject environment variables (e.g., `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`)
+- WHEN `buildEnv()` produces an environment variable with the same name as one injected by an attached provider
+- THEN the control plane SHALL exclude that variable from the `CreateSandboxRequest` environment
+- AND the provider-injected value SHALL take precedence
+- AND the control plane SHALL log a warning identifying the skipped variable
 
 ### Requirement: Sandbox Deprovisioning
 
