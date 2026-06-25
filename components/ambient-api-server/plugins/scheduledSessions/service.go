@@ -45,14 +45,16 @@ type sqlScheduledSessionService struct {
 	dao        ScheduledSessionDao
 	clock      clock.Clock
 	sessionSvc sessions.SessionService
+	messageSvc sessions.MessageService
 	evaluator  *rbac.Evaluator
 }
 
-func NewScheduledSessionService(dao ScheduledSessionDao, clk clock.Clock, sessionSvc sessions.SessionService, evaluator *rbac.Evaluator) ScheduledSessionService {
+func NewScheduledSessionService(dao ScheduledSessionDao, clk clock.Clock, sessionSvc sessions.SessionService, messageSvc sessions.MessageService, evaluator *rbac.Evaluator) ScheduledSessionService {
 	return &sqlScheduledSessionService{
 		dao:        dao,
 		clock:      clk,
 		sessionSvc: sessionSvc,
+		messageSvc: messageSvc,
 		evaluator:  evaluator,
 	}
 }
@@ -267,6 +269,12 @@ func (s *sqlScheduledSessionService) createSessionFromSchedule(
 	created, createErr := s.sessionSvc.Create(ctx, sess)
 	if createErr != nil {
 		return nil, createErr
+	}
+
+	if ss.SessionPrompt != nil && *ss.SessionPrompt != "" && s.messageSvc != nil {
+		if _, msgErr := s.messageSvc.Push(ctx, created.ID, "user", *ss.SessionPrompt); msgErr != nil {
+			glog.Warningf("Schedule %s: failed to push initial prompt for session %s: %v", ss.ID, created.ID, msgErr)
+		}
 	}
 
 	if _, startErr := s.sessionSvc.Start(ctx, created.ID); startErr != nil {

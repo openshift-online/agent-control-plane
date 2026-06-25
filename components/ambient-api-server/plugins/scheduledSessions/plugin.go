@@ -64,6 +64,7 @@ func init() {
 				NewScheduledSessionDao(&e.Database.SessionFactory),
 				clock.RealClock{},
 				sessions.Service(&e.Services),
+				sessions.MessageSvc(&e.Services),
 				rbac.NewEvaluator(&e.Database.SessionFactory),
 			)
 		}
