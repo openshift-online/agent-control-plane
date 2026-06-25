@@ -20,7 +20,8 @@ This spec extends the Agent concept from `data-model.spec.md` with sandbox-aware
 - **Provider** — an OpenShell Gateway-registered credential provider (e.g., `github`, `anthropic`, `jira`). The gateway's egress proxy resolves credential placeholders at the network boundary — credentials never enter the sandbox. Not to be confused with the `provider` field on the platform's `Credential` entity, which classifies the stored token type.
 - **Payload** — content (file reference or inline text) uploaded into the sandbox filesystem at a declared path. Used for CLAUDE.md, settings, MCP configs, task files.
 - **Entrypoint** — the CLI binary launched inside the sandbox (e.g., `claude`, `opencode`, `bash`).
-- **Sandbox Policy** — an OpenShell `SandboxPolicy` governing network endpoints, filesystem paths, process identity, and Landlock constraints within the sandbox.
+- **Sandbox Policy** — an OpenShell `SandboxPolicy` governing network endpoints, filesystem paths, process identity, and Landlock constraints within the sandbox. Declared as a namespace-scoped resource in a Policy ConfigMap and referenced by agents by name.
+- **Policy Declaration** — a YAML document within a ConfigMap (labeled `ambient.ai/kind: policy`) that defines a named sandbox policy with network, filesystem, process, and Landlock constraints. Policy declarations are namespace-scoped and shared across agents in the tenant namespace.
 - **Credential Source** — a reference to an external secret store (Vault path or Kubernetes Secret) attached to a provider declaration, from which the control plane resolves credentials and creates or refreshes OpenShell providers. This is a transitional mechanism — see [NVIDIA/OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882).
 - **Provider Declaration** — a YAML document within a ConfigMap (labeled `ambient.ai/kind: provider`) that defines a named provider with its type and credential source. Provider declarations are namespace-scoped and shared across agents in the tenant namespace.
 - **Sandbox Template** — compute and runtime configuration for the sandbox container: image, CPU/memory/GPU resources, runtime class, driver config.
@@ -120,87 +121,11 @@ Since agent declarations live in ConfigMaps (reconciled by ArgoCD from git), pay
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `sandbox_policy` | SandboxPolicy | no | Network, filesystem, and process constraints for the sandbox. When omitted, the platform's default policy applies. |
+| `sandbox_policy` | string | no | Name of a policy declared in a Policy ConfigMap in the same tenant namespace. When omitted, the platform's default policy applies. |
 
-**SandboxPolicy object:**
+Policies are namespace-scoped resources declared separately from agents (see [Policy Declarations](#policy-declarations)). Agents reference them by name. At sandbox creation time, the control plane resolves the referenced policy and passes it to OpenShell's `CreateSandbox` RPC, merged with platform minimums.
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `version` | integer | no | Policy schema version. Managed by the control plane (not user-set). |
-| `network_policies` | map[string]NetworkPolicyRule | no | Inline network access rules. Keys are descriptive names (e.g., `github_api`, `inference`). |
-| `filesystem` | FilesystemPolicy | no | Filesystem access constraints. |
-| `process` | ProcessPolicy | no | Process identity constraints. |
-| `landlock` | LandlockPolicy | no | Landlock LSM configuration. |
-
-> **Future consideration.** Network policies are currently defined inline within each agent declaration. A future iteration could support named, reusable network policy resources defined separately (e.g., in their own ConfigMaps) and referenced by name from agent declarations. This would reduce duplication across agents that share the same network access patterns. For this iteration, inline definition keeps the agent declaration self-contained.
-
-**NetworkPolicyRule object** (maps to OpenShell `NetworkPolicyRule` proto):
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | string | no | Display name for audit logs. If omitted, the map key is used. |
-| `endpoints` | array of NetworkEndpoint | no | Network endpoints this rule governs. |
-| `binaries` | array of NetworkBinary | no | Binaries allowed to use this rule. |
-
-**NetworkEndpoint object** (maps to OpenShell `NetworkEndpoint` proto):
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `host` | string | yes | Hostname or glob pattern (e.g., `api.github.com`, `*.example.com`). |
-| `port` | integer | no | Single port number. |
-| `ports` | array of integer | no | Multiple port numbers. Takes precedence over `port`. |
-| `protocol` | string | no | L7 protocol: `rest`, `websocket`, `graphql`, `sql`, or empty for L4-only. |
-| `tls` | string | no | TLS handling: `terminate` or `passthrough`. Default: `passthrough`. |
-| `enforcement` | string | no | `enforce` or `audit`. Default: `enforce`. |
-| `access` | string | no | Shorthand: `read-only`, `read-write`, `full`. Mutually exclusive with `rules`. |
-| `rules` | array of L7Rule | no | Explicit allow rules. Mutually exclusive with `access`. |
-| `deny_rules` | array of L7DenyRule | no | Explicit deny rules. Take precedence over allow rules. |
-| `allowed_ips` | array of string | no | IP/CIDR allowlist. |
-| `path` | string | no | HTTP path glob for scoping on shared host:port. |
-| `allow_encoded_slash` | boolean | no | Preserve `%2F` in path segments (needed for GitLab-style URLs). |
-| `websocket_credential_rewrite` | boolean | no | Rewrite credentials in WebSocket messages. |
-| `request_body_credential_rewrite` | boolean | no | Rewrite credentials in HTTP request bodies. |
-
-**L7Rule object** (wraps an `allow` sub-object matching OpenShell `L7Allow` proto):
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `allow.method` | string | no | HTTP method or `*`. |
-| `allow.path` | string | no | URL path glob pattern. |
-| `allow.command` | string | no | SQL command or `*`. |
-| `allow.query` | map[string]QueryMatcher | no | Query parameter matchers. |
-| `allow.operation_type` | string | no | GraphQL operation type or `*`. |
-| `allow.operation_name` | string | no | GraphQL operation name glob. |
-| `allow.fields` | array of string | no | GraphQL root field globs. |
-
-**L7DenyRule object:** Top-level fields (not nested under `deny`). Same fields as `L7Rule.allow`: `method`, `path`, `command`, `query`, `operation_type`, `operation_name`, `fields`.
-
-**NetworkBinary object:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `path` | string | yes | Absolute path to the binary (e.g., `/usr/bin/git`). |
-
-**FilesystemPolicy object:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `include_workdir` | boolean | no | Whether to include the working directory in the filesystem scope. |
-| `read_only` | array of string | no | Paths the sandbox can read but not write. |
-| `read_write` | array of string | no | Paths the sandbox can read and write. |
-
-**ProcessPolicy object:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `run_as_user` | string | no | User identity for the sandbox process. |
-| `run_as_group` | string | no | Group identity for the sandbox process. |
-
-**LandlockPolicy object:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `compatibility` | string | no | `best_effort` (degrade gracefully if kernel lacks support) or `hard_requirement` (fail if unsupported). |
+> **Policy merging via inheritance.** Agents reference a single policy by name. Composing multiple policies (e.g., combining a base network policy with an agent-specific overlay) is deferred to the inheritance spec (`agent-inheritance.spec.md`), where merge semantics for policy fields are defined.
 
 ### Gateway
 
@@ -279,6 +204,165 @@ When a sandbox session starts for an agent:
 4. If the provider already exists on the gateway → refresh the provider credential
 5. If the provider does not exist on the gateway → create the provider with the resolved credential
 6. The control plane calls `CreateSandbox` with all resolved provider names attached
+
+---
+
+## Policy Declarations
+
+Policies are namespace-scoped resources declared in their own ConfigMaps, separate from agent declarations. A policy defines network, filesystem, process, and Landlock constraints for sandboxes. Multiple agents in the same namespace can reference the same policy.
+
+### Discovery
+
+The control plane SHALL discover policy declarations by watching ConfigMaps with the label `ambient.ai/kind: policy` in tenant namespaces.
+
+### Structure
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: policy-declarations
+  namespace: project-{project_name}
+  labels:
+    ambient.ai/kind: policy
+data:
+  restricted.yaml: |
+    name: restricted
+    network_policies:
+      github_api:
+        endpoints:
+          - host: api.github.com
+            port: 443
+            protocol: rest
+            rules:
+              - allow:
+                  method: "*"
+                  path: "/**"
+        binaries:
+          - path: /usr/bin/git
+      inference:
+        endpoints:
+          - host: inference.local
+            port: 443
+            protocol: rest
+            rules:
+              - allow:
+                  method: POST
+                  path: "/v1/**"
+    filesystem:
+      read_write:
+        - /sandbox
+        - /tmp
+      read_only:
+        - /usr
+        - /etc
+        - /lib
+    process:
+      run_as_user: sandbox
+      run_as_group: sandbox
+    landlock:
+      compatibility: best_effort
+  permissive.yaml: |
+    name: permissive
+    filesystem:
+      read_write:
+        - /sandbox
+        - /tmp
+      read_only:
+        - /usr
+        - /etc
+    process:
+      run_as_user: sandbox
+      run_as_group: sandbox
+```
+
+### Policy Schema
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | yes | Unique policy name within the namespace. This is the name agents use to reference the policy. |
+| `version` | integer | no | Policy schema version. Managed by the control plane (not user-set). |
+| `network_policies` | map[string]NetworkPolicyRule | no | Named network access rules. Keys are descriptive names (e.g., `github_api`, `inference`). |
+| `filesystem` | FilesystemPolicy | no | Filesystem access constraints. |
+| `process` | ProcessPolicy | no | Process identity constraints. |
+| `landlock` | LandlockPolicy | no | Landlock LSM configuration. |
+
+**NetworkPolicyRule object** (maps to OpenShell `NetworkPolicyRule` proto):
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | no | Display name for audit logs. If omitted, the map key is used. |
+| `endpoints` | array of NetworkEndpoint | no | Network endpoints this rule governs. |
+| `binaries` | array of NetworkBinary | no | Binaries allowed to use this rule. |
+
+**NetworkEndpoint object** (maps to OpenShell `NetworkEndpoint` proto):
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `host` | string | yes | Hostname or glob pattern (e.g., `api.github.com`, `*.example.com`). |
+| `port` | integer | no | Single port number. |
+| `ports` | array of integer | no | Multiple port numbers. Takes precedence over `port`. |
+| `protocol` | string | no | L7 protocol: `rest`, `websocket`, `graphql`, `sql`, or empty for L4-only. |
+| `tls` | string | no | TLS handling: `terminate` or `passthrough`. Default: `passthrough`. |
+| `enforcement` | string | no | `enforce` or `audit`. Default: `enforce`. |
+| `access` | string | no | Shorthand: `read-only`, `read-write`, `full`. Mutually exclusive with `rules`. |
+| `rules` | array of L7Rule | no | Explicit allow rules. Mutually exclusive with `access`. |
+| `deny_rules` | array of L7DenyRule | no | Explicit deny rules. Take precedence over allow rules. |
+| `allowed_ips` | array of string | no | IP/CIDR allowlist. |
+| `path` | string | no | HTTP path glob for scoping on shared host:port. |
+| `allow_encoded_slash` | boolean | no | Preserve `%2F` in path segments (needed for GitLab-style URLs). |
+| `websocket_credential_rewrite` | boolean | no | Rewrite credentials in WebSocket messages. |
+| `request_body_credential_rewrite` | boolean | no | Rewrite credentials in HTTP request bodies. |
+
+**L7Rule object** (wraps an `allow` sub-object matching OpenShell `L7Allow` proto):
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `allow.method` | string | no | HTTP method or `*`. |
+| `allow.path` | string | no | URL path glob pattern. |
+| `allow.command` | string | no | SQL command or `*`. |
+| `allow.query` | map[string]QueryMatcher | no | Query parameter matchers. |
+| `allow.operation_type` | string | no | GraphQL operation type or `*`. |
+| `allow.operation_name` | string | no | GraphQL operation name glob. |
+| `allow.fields` | array of string | no | GraphQL root field globs. |
+
+**L7DenyRule object:** Top-level fields (not nested under `deny`). Same fields as `L7Rule.allow`: `method`, `path`, `command`, `query`, `operation_type`, `operation_name`, `fields`.
+
+**NetworkBinary object:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `path` | string | yes | Absolute path to the binary (e.g., `/usr/bin/git`). |
+
+**FilesystemPolicy object:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `include_workdir` | boolean | no | Whether to include the working directory in the filesystem scope. |
+| `read_only` | array of string | no | Paths the sandbox can read but not write. |
+| `read_write` | array of string | no | Paths the sandbox can read and write. |
+
+**ProcessPolicy object:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `run_as_user` | string | no | User identity for the sandbox process. |
+| `run_as_group` | string | no | Group identity for the sandbox process. |
+
+**LandlockPolicy object:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `compatibility` | string | no | `best_effort` (degrade gracefully if kernel lacks support) or `hard_requirement` (fail if unsupported). |
+
+### Policy Resolution at Sandbox Creation
+
+When building the `CreateSandbox` request:
+
+1. The control plane reads the agent's `sandbox_policy` field (a policy name)
+2. The control plane looks up the policy declaration in the tenant namespace
+3. The control plane merges the declared policy with the platform's minimum policy (platform constraints always win — see Requirement: Sandbox Policy Minimum Enforcement)
+4. The merged policy is passed to OpenShell's `CreateSandbox` RPC
 
 ---
 
@@ -425,58 +509,23 @@ The agent YAML SHALL declare payloads (file references or inline content) to upl
 
 ### Requirement: Sandbox Policy Application
 
-The agent YAML SHALL declare sandbox policies governing network access, filesystem constraints, and process identity. The control plane SHALL pass the policy to OpenShell's `CreateSandbox` RPC.
+The agent YAML SHALL reference a sandbox policy by name. The control plane SHALL resolve the named policy from the tenant namespace and pass it to OpenShell's `CreateSandbox` RPC, merged with platform minimum constraints.
 
-#### Scenario: Inline network policy
+#### Scenario: Policy declaration exists in namespace
 
-- GIVEN an agent declares:
-  ```yaml
-  sandbox_policy:
-    network_policies:
-      github_api:
-        endpoints:
-          - host: api.github.com
-            port: 443
-            protocol: rest
-            rules:
-              - allow:
-                  method: "*"
-                  path: "/**"
-        binaries:
-          - path: /usr/bin/git
-  ```
-- WHEN a session starts
-- THEN the sandbox SHALL allow network access to `api.github.com:443` for the `git` binary
-- AND all other network endpoints SHALL be blocked
+- GIVEN an agent declares `sandbox_policy: restricted`
+- AND a policy declaration named `restricted` exists in the tenant namespace (ConfigMap labeled `ambient.ai/kind: policy`)
+- WHEN a session starts for this agent
+- THEN the control plane SHALL resolve the `restricted` policy
+- AND pass the policy's network, filesystem, process, and Landlock constraints to `CreateSandbox`
 
-#### Scenario: Filesystem policy
+#### Scenario: Policy declaration not found
 
-- GIVEN an agent declares:
-  ```yaml
-  sandbox_policy:
-    filesystem:
-      read_write:
-        - /sandbox
-        - /tmp
-      read_only:
-        - /usr
-        - /etc
-  ```
-- WHEN the sandbox starts
-- THEN the agent process SHALL be able to write to `/sandbox` and `/tmp`
-- AND the agent process SHALL be able to read but not write to `/usr` and `/etc`
-
-#### Scenario: Process policy
-
-- GIVEN an agent declares:
-  ```yaml
-  sandbox_policy:
-    process:
-      run_as_user: sandbox
-      run_as_group: sandbox
-  ```
-- WHEN the sandbox starts
-- THEN the entrypoint process SHALL run as user `sandbox` and group `sandbox`
+- GIVEN an agent declares `sandbox_policy: nonexistent-policy`
+- AND no policy declaration named `nonexistent-policy` exists in the tenant namespace
+- WHEN a session starts for this agent
+- THEN the session start SHALL fail
+- AND the error SHALL identify the missing policy declaration by name
 
 #### Scenario: No sandbox policy (default applied)
 
@@ -485,10 +534,17 @@ The agent YAML SHALL declare sandbox policies governing network access, filesyst
 - THEN the platform's default sandbox policy SHALL be applied
 - AND the default policy SHALL restrict network access to the minimum required for the declared providers
 
+#### Scenario: Policy shared across agents
+
+- GIVEN policy declaration `restricted` exists in namespace `project-alpha`
+- AND agents `reviewer` and `builder` both declare `sandbox_policy: restricted`
+- WHEN sessions start for both agents
+- THEN both sessions SHALL use the same resolved policy constraints
+
 #### Scenario: Deny rules take precedence
 
-- GIVEN a network policy with an allow rule for `*.github.com:443` and a deny rule for `raw.githubusercontent.com:443`
-- WHEN the agent attempts to connect to `raw.githubusercontent.com:443`
+- GIVEN a policy declaration with a network policy containing an allow rule for `*.github.com:443` and a deny rule for `raw.githubusercontent.com:443`
+- WHEN an agent referencing this policy attempts to connect to `raw.githubusercontent.com:443`
 - THEN the connection SHALL be blocked (deny rule takes precedence)
 
 ---
@@ -581,20 +637,22 @@ The control plane SHALL validate agent YAML against the schema before reconcilin
 
 ### Requirement: Sandbox Policy Minimum Enforcement
 
-The platform SHALL enforce minimum sandbox policy constraints regardless of what an agent declaration specifies. Agent-declared policies are additive on top of platform minimums — they cannot weaken them.
+The platform SHALL enforce minimum sandbox policy constraints regardless of what a policy declaration specifies. Policy declarations are additive on top of platform minimums — they cannot weaken them.
 
-**Enforcement mechanism:** The control plane SHALL maintain a platform-level default sandbox policy (loaded from configuration or a ConfigMap in the control plane namespace). When building the `CreateSandbox` request, the control plane merges the agent-declared policy with the platform default. For fields where the agent-declared value is less restrictive than the platform default, the platform value wins. For network policies, the agent's declared endpoints are intersected with the platform's allowed set — agents cannot grant access to endpoints the platform does not permit.
+**Enforcement mechanism:** The control plane SHALL maintain a platform-level default sandbox policy (loaded from configuration or a ConfigMap in the control plane namespace). When building the `CreateSandbox` request, the control plane merges the resolved policy declaration with the platform default. For fields where the declared value is less restrictive than the platform default, the platform value wins. For network policies, the declared endpoints are intersected with the platform's allowed set — policies cannot grant access to endpoints the platform does not permit.
 
-#### Scenario: Agent cannot disable network isolation
+#### Scenario: Policy cannot disable network isolation
 
-- GIVEN an agent declares a sandbox_policy with a wildcard network rule allowing all hosts on all ports
+- GIVEN a policy declaration contains a wildcard network rule allowing all hosts on all ports
+- AND an agent references this policy
 - WHEN the control plane applies the policy
 - THEN the platform's minimum network restrictions SHALL still be enforced
 - AND the agent SHALL NOT have unrestricted internet access
 
-#### Scenario: Agent cannot escalate process privileges
+#### Scenario: Policy cannot escalate process privileges
 
-- GIVEN an agent declares `sandbox_policy.process.run_as_user: root`
+- GIVEN a policy declaration contains `process.run_as_user: root`
+- AND an agent references this policy
 - WHEN the control plane applies the policy
 - THEN the control plane SHALL reject the declaration or override to the platform default
 - AND the sandbox SHALL NOT run as root
@@ -711,7 +769,7 @@ When persisted, the new structured fields map to columns as follows:
 | `payloads` | `payloads` | JSONB | Array of payload objects |
 | `environment` | `environment` | JSONB | Map of string → string |
 | `sandbox_template` | `sandbox_template` | JSONB | Nested object |
-| `sandbox_policy` | `sandbox_policy` | JSONB | Nested object |
+| `sandbox_policy` | `sandbox_policy` | TEXT | Nullable; name of a policy declaration in the tenant namespace. Policy declarations are resolved from namespace-scoped ConfigMaps at sandbox creation time. |
 | `gateway` | `gateway` | TEXT | Nullable |
 
 Legacy fields (`resource_overrides`, `environment_variables` as TEXT) remain in the table for backward compatibility during migration but are not populated by ConfigMap-sourced agents.
@@ -750,9 +808,11 @@ Legacy fields (`resource_overrides`, `environment_variables` as TEXT) remain in 
 | ConfigMap is the primary agent definition format | Agents will be declared via ArgoCD-managed ConfigMaps in tenant namespaces. REST API-based agent creation is a potential follow-up offering an RBAC-scoped developer path for creating agents without GitOps, but not the primary onboarding flow. This aligns with GitOps workflows and the existing Application (GitOps sync) model in `data-model.spec.md`. |
 | Providers are namespace-scoped shared resources | Providers are declared in their own ConfigMaps (labeled `ambient.ai/kind: provider`) at the tenant namespace level, not inline within agent declarations. Agents reference providers by name. This enables sharing providers across multiple agents in a namespace (e.g., a single `github` provider used by both `reviewer` and `builder` agents). The control plane handles create-or-refresh at sandbox creation time. |
 | Credential sources are attached to provider declarations | Each provider declaration includes a `credential_source` specifying where credentials come from (Vault in production, k8s Secret for local dev). This is a transitional mechanism — designed to be forward-compatible with OpenShell's planned native credential management ([NVIDIA/OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882)). Credential sources bypass the existing platform Credential/RoleBinding hierarchy. |
-| Mixed field grouping | Flat fields for `entrypoint`, `providers`, `payloads`, `environment`, `gateway` (frequently accessed, simple types). Nested JSONB for `sandbox_template` and `sandbox_policy` (complex structures that map directly to OpenShell proto messages). |
-| Base agent inheritance deferred to draft spec | See `specs/platform/agent-inheritance.spec.md`. Covers project-scoped and platform-scoped inheritance with merge semantics. Kept as a separate draft spec to allow independent scoping — agents without `base_agent` are fully self-contained. |
-| Field names align with OpenShell proto naming | `sandbox_policy.network_policies`, `sandbox_template.resources`, `sandbox_policy.filesystem` — these mirror the proto field names to minimize cognitive overhead when mapping between agent YAML and OpenShell API calls. |
+| Policies are namespace-scoped shared resources | Policies are declared in their own ConfigMaps (labeled `ambient.ai/kind: policy`) at the tenant namespace level, not inline within agent declarations. Agents reference a single policy by name. This enables sharing policies across multiple agents and keeps policy definitions DRY. Policy merging/composition is deferred to the inheritance spec. |
+| Single policy reference, not array | Agents reference one policy by name. Composing multiple policies (base network + agent-specific overlay) is deferred to the inheritance draft spec where merge semantics are already defined. This avoids merge-order ambiguity at the agent level. |
+| Mixed field grouping | Flat fields for `entrypoint`, `providers`, `payloads`, `sandbox_policy`, `environment`, `gateway` (frequently accessed, simple types or name references). Nested JSONB for `sandbox_template` (complex structure that maps directly to OpenShell proto messages). |
+| Base agent inheritance deferred to draft spec | See `specs/platform/agent-inheritance.spec.md`. Covers project-scoped and platform-scoped inheritance with merge semantics, including policy composition. Kept as a separate draft spec to allow independent scoping — agents without `base_agent` are fully self-contained. |
+| Field names align with OpenShell proto naming | Policy declaration fields (`network_policies`, `filesystem`, `process`, `landlock`) and `sandbox_template.resources` mirror the OpenShell proto field names to minimize cognitive overhead when mapping between declarations and OpenShell API calls. |
 | Unknown fields accepted with warning | Forward compatibility — newer agent YAML schemas can be applied to older control planes without hard failures. |
 | ConfigMap is the source of truth; PostgreSQL is a projection | ConfigMap-declared agents are the authoritative source. The API server's `agents` table is a read-optimized projection for queries and status reporting. The control plane reconciles ConfigMap → database, not the reverse. API PATCH operations on ConfigMap-sourced agents are not supported — changes flow through the ConfigMap (git → ArgoCD → ConfigMap → control plane). |
 | ConfigMap authorization delegates to Kubernetes RBAC | Who can create/modify agent declarations is governed by Kubernetes RBAC on the tenant namespace. The control plane trusts that any ConfigMap with the correct label in the correct namespace was applied by an authorized principal. |
@@ -807,59 +867,7 @@ sandbox_template:
   gpu:
     count: 0
 
-sandbox_policy:
-  network_policies:
-    github_api:
-      endpoints:
-        - host: api.github.com
-          port: 443
-          protocol: rest
-          rules:
-            - allow:
-                method: "*"
-                path: "/**"
-        - host: github.com
-          port: 443
-          rules:
-            - allow:
-                method: GET
-                path: "/**/info/refs*"
-            - allow:
-                method: POST
-                path: "/**/git-upload-pack"
-          deny_rules:
-            - method: POST
-              path: "/**/git-receive-pack"
-        - host: raw.githubusercontent.com
-          port: 443
-          enforcement: enforce
-          deny_rules:
-            - method: "*"
-              path: "/**"
-      binaries:
-        - path: /usr/bin/git
-    inference:
-      endpoints:
-        - host: inference.local
-          port: 443
-          protocol: rest
-          rules:
-            - allow:
-                method: POST
-                path: "/v1/**"
-  filesystem:
-    read_write:
-      - /sandbox
-      - /tmp
-    read_only:
-      - /usr
-      - /etc
-      - /lib
-  process:
-    run_as_user: sandbox
-    run_as_group: sandbox
-  landlock:
-    compatibility: best_effort
+sandbox_policy: restricted
 
 gateway: default
 
