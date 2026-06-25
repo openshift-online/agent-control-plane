@@ -81,13 +81,13 @@ def refresh_bot_token() -> str:
     if not cp_token_url:
         return get_bot_token()
 
-    public_key_pem = os.getenv("AMBIENT_CP_TOKEN_PUBLIC_KEY", "")
+    from ambient_runner._grpc_client import _decode_public_key, _fetch_token_from_cp
+
+    public_key_pem = _decode_public_key(os.getenv("AMBIENT_CP_TOKEN_PUBLIC_KEY", ""))
     session_id = os.getenv("SESSION_ID", "")
     if not public_key_pem or not session_id:
         logger.warning("refresh_bot_token: CP env vars incomplete, skipping refresh")
         return get_bot_token()
-
-    from ambient_runner._grpc_client import _fetch_token_from_cp
 
     return _fetch_token_from_cp(cp_token_url, public_key_pem, session_id)
 

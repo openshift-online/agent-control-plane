@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -419,7 +420,7 @@ func (r *SimpleKubeReconciler) buildGatewayEnv(ctx context.Context, session type
 		"DEBUG":                       "true",
 		"LOG_LEVEL":                   r.cfg.RunnerLogLevel,
 		"AMBIENT_CP_TOKEN_URL":        r.cfg.CPTokenURL,
-		"AMBIENT_CP_TOKEN_PUBLIC_KEY": r.cfg.CPTokenPublicKey,
+		"AMBIENT_CP_TOKEN_PUBLIC_KEY": base64.StdEncoding.EncodeToString([]byte(r.cfg.CPTokenPublicKey)),
 		"AMBIENT_GRPC_URL":            r.cfg.RunnerGRPCURL,
 		"AMBIENT_GRPC_ENABLED":        boolToStr(r.cfg.RunnerGRPCURL != ""),
 		"AMBIENT_GRPC_USE_TLS":        boolToStr(r.cfg.RunnerGRPCUseTLS),

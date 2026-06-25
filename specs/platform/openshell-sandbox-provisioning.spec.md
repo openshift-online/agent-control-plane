@@ -19,6 +19,7 @@ This iteration is scoped to **scheduled agent runs** (single-run, short-lived se
 
 - **Long-running / steerable sessions** — credential lifecycle concerns (token expiry mid-session, gateway-managed refresh via OAuth2/client-credentials flows) are deferred
 - **Gateway provisioning** — the OpenShell gateway is assumed to already be deployed in each project namespace; ACP will not create it. A future iteration should have the control plane provision and reconcile gateway lifecycle per project namespace (potentially adapting the [upstream Helm chart values](https://github.com/NVIDIA/OpenShell/blob/main/deploy/helm/openshell/values.yaml) into a managed resource)
+- **Namespace lifecycle** — project namespaces are created and managed externally to ACP (e.g., by the OpenShell gateway Helm install or cluster provisioning tooling). ACP assumes namespaces exist and will fail with a clear error if a required namespace is missing. See [Namespace Lifecycle](#requirement-namespace-lifecycle)
 - **Namespace-level credential storage** — credentials remain stored in ACP, not as Kubernetes Secrets in the project namespace. A future iteration should store credentials as Kubernetes Secrets in each project namespace, with ACP reading them from the Secret and passing them to the gateway when configuring providers. This indirection is necessary because the gateway does not yet support loading credentials directly from Kubernetes Secrets ([OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882))
 - **Network policy ownership** — OpenShell policies (including network egress rules allowing runner-to-control-plane gRPC) will be user-configurable via the Agent spec. Whether ACP auto-injects the control plane egress rule on top of the user-configured policy or requires users to include it explicitly is TBD
 
@@ -345,7 +346,11 @@ The control plane SHALL maintain a cache of gRPC connections to OpenShell gatewa
 
 ### Requirement: Gateway TLS and Authentication
 
-The OpenShell gateway requires mTLS for non-loopback connections. The control plane SHALL load client TLS credentials dynamically from a Kubernetes Secret in each project namespace, enabling per-namespace certificate isolation. The `openshell-client-tls` Secret (configurable via `OPENSHELL_GATEWAY_CLIENT_TLS_SECRET`) contains the client certificate, private key, and CA certificate for verifying the gateway's server certificate.
+The control plane SHALL use mTLS for transport-level security when connecting to the OpenShell gateway. The gateway SHALL be deployed with `allow_unauthenticated_users = true`, relying on mTLS alone to authenticate the control plane — no application-layer JWT or OIDC tokens are required.
+
+**Rationale:** The gateway's auth chain (`SandboxJwtAuthenticator` → `K8sServiceAccountAuthenticator` → `OidcAuthenticator`) is designed for sandbox-to-gateway and user-to-gateway authentication. ACP-to-gateway communication is a trusted cluster-internal control-plane path where mTLS provides sufficient identity verification. Adding application-layer JWT minting (reading the gateway's Ed25519 signing key, constructing SPIFFE-shaped claims) introduces complexity disproportionate to the security benefit for an already-authenticated mTLS channel. The gateway is not exposed outside the cluster (no Route), so the only clients are ACP (via mTLS) and sandboxes (via gateway-minted bootstrap JWTs managed by the gateway itself).
+
+The control plane SHALL load client TLS credentials dynamically from a Kubernetes Secret in each project namespace, enabling per-namespace certificate isolation. The `openshell-client-tls` Secret (configurable via `OPENSHELL_GATEWAY_CLIENT_TLS_SECRET`) contains the client certificate, private key, and CA certificate for verifying the gateway's server certificate.
 
 #### Scenario: mTLS connection
 
@@ -355,6 +360,15 @@ The OpenShell gateway requires mTLS for non-loopback connections. The control pl
 - AND it SHALL use `tls.crt` and `tls.key` as the client certificate
 - AND it SHALL use `ca.crt` as the root CA for server verification
 - AND TLS credentials SHALL be cached per namespace and evicted on connection errors
+- AND no application-layer authentication tokens SHALL be attached to gRPC requests
+
+#### Scenario: Gateway authentication configuration
+
+- GIVEN an OpenShell gateway deployed in a project namespace
+- WHEN the gateway is configured for ACP integration
+- THEN `allow_unauthenticated_users` SHALL be set to `true` in the gateway configuration
+- AND the gateway SHALL accept gRPC requests from mTLS-authenticated clients without requiring an `Authorization` header
+- AND sandbox-to-gateway authentication (bootstrap JWTs) remains the gateway's responsibility and is unaffected
 
 #### Scenario: TLS ServerName override
 
@@ -375,6 +389,50 @@ The OpenShell gateway requires mTLS for non-loopback connections. The control pl
 - WHEN the control plane builds the sandbox environment map
 - THEN it SHALL remove any entries whose values contain `\n` or `\r`
 - AND it SHALL log a warning for each removed entry
+
+#### Scenario: PEM key transport via base64 encoding
+
+- GIVEN `AMBIENT_CP_TOKEN_PUBLIC_KEY` contains an RSA public key in PEM format (multiline)
+- WHEN the control plane builds the gateway sandbox environment map
+- THEN it SHALL base64-encode the PEM value before including it in the `CreateSandboxRequest` environment
+- AND the encoded value SHALL be a single line with no newline characters
+- AND all consumers (runner, credential sidecar, MCP sidecar) SHALL detect the encoding format: if the value starts with `-----` it is raw PEM; otherwise it is base64-decoded before PEM parsing
+- AND this encoding is specific to the gateway code path — the direct pod creation path (`envVar()`) continues to pass the raw PEM unchanged, since Kubernetes natively supports multiline environment variable values
+
+### Requirement: Namespace Lifecycle
+
+Project namespaces are created and managed externally to ACP. The control plane SHALL NOT create or delete Kubernetes namespaces. When a project is created or a session is provisioned, the control plane SHALL verify the expected namespace exists and fail with a descriptive error if it does not. When a project is deleted or a session is cleaned up, the control plane SHALL clean up its own resources within the namespace (secrets, service accounts, services, sandboxes) but SHALL NOT delete the namespace itself.
+
+This design reflects the operational reality that project namespaces contain infrastructure managed by other systems (OpenShell gateway, TLS secrets, gateway configuration) that must not be destroyed by ACP lifecycle events.
+
+#### Scenario: Namespace exists
+
+- GIVEN a project with name `my-project`
+- WHEN the control plane provisions resources for a session in that project
+- THEN it SHALL verify namespace `my-project` exists
+- AND it SHALL proceed with resource creation within the namespace
+
+#### Scenario: Namespace does not exist
+
+- GIVEN a project with name `my-project`
+- AND namespace `my-project` does not exist on the cluster
+- WHEN the control plane attempts to provision resources
+- THEN it SHALL fail with an error: `namespace my-project does not exist and must be created externally`
+- AND it SHALL NOT attempt to create the namespace
+
+#### Scenario: Project deletion
+
+- GIVEN a project with name `my-project` and associated namespace `my-project`
+- WHEN the project is deleted from ACP
+- THEN the control plane SHALL NOT delete the namespace
+- AND ACP-managed resources within the namespace (secrets, service accounts, RBAC bindings) MAY become orphaned and should be cleaned up by external tooling or a future garbage collection mechanism
+
+#### Scenario: Session cleanup
+
+- GIVEN a session being stopped or deleted
+- WHEN the control plane cleans up session resources
+- THEN it SHALL delete session-scoped resources (secrets, service accounts, services, sandboxes) within the namespace
+- AND it SHALL NOT delete the namespace
 
 ### Requirement: Configuration
 
@@ -424,6 +482,7 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | [pod_sync.go] | Extended with sandbox sync branch for gateway mode |
 | `main.go` | Extended to create and wire `GatewayClient` when `OPENSHELL_USE_GATEWAY=true` |
 | [config.go] | Extended with `OpenShellUseGateway` field |
+| `StandardNamespaceProvisioner` | `ProvisionNamespace` now verifies namespace existence instead of creating; `DeprovisionNamespace` is a no-op. Namespaces are managed externally |
 | [openshell-sandbox.spec.md] | Unchanged — file-mode spec remains authoritative when `OPENSHELL_USE_GATEWAY=false` |
 | Runner pod | No changes — same image, same env vars, running inside OpenShell sandbox instead of bare pod |
 

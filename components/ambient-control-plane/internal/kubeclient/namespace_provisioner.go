@@ -43,41 +43,17 @@ func NewStandardNamespaceProvisioner(kube *KubeClient, logger zerolog.Logger) *S
 
 func (p *StandardNamespaceProvisioner) ProvisionNamespace(ctx context.Context, name string, labels map[string]string) error {
 	if _, err := p.kube.GetNamespace(ctx, name); err == nil {
-		p.logger.Debug().Str("namespace", name).Msg("namespace already exists")
+		p.logger.Debug().Str("namespace", name).Msg("namespace exists")
 		return nil
-	} else if !k8serrors.IsNotFound(err) {
+	} else if k8serrors.IsNotFound(err) {
+		return fmt.Errorf("namespace %s does not exist and must be created externally", name)
+	} else {
 		return fmt.Errorf("checking namespace %s: %w", name, err)
 	}
-
-	labelMap := make(map[string]interface{}, len(labels))
-	for k, v := range labels {
-		labelMap[k] = v
-	}
-
-	ns := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "v1",
-			"kind":       "Namespace",
-			"metadata": map[string]interface{}{
-				"name":   name,
-				"labels": labelMap,
-			},
-		},
-	}
-
-	if _, err := p.kube.CreateNamespace(ctx, ns); err != nil && !k8serrors.IsAlreadyExists(err) {
-		return fmt.Errorf("creating namespace %s: %w", name, err)
-	}
-
-	p.logger.Info().Str("namespace", name).Msg("namespace created")
-	return nil
 }
 
 func (p *StandardNamespaceProvisioner) DeprovisionNamespace(ctx context.Context, name string) error {
-	if err := p.kube.DeleteNamespace(ctx, name); err != nil && !k8serrors.IsNotFound(err) {
-		return fmt.Errorf("deleting namespace %s: %w", name, err)
-	}
-	p.logger.Info().Str("namespace", name).Msg("namespace deleted")
+	p.logger.Debug().Str("namespace", name).Msg("namespace lifecycle managed externally; skipping deletion")
 	return nil
 }
 
