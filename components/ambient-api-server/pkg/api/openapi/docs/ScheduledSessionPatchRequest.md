@@ -4,18 +4,18 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**Name** | Pointer to **string** |  | [optional]
-**Description** | Pointer to **string** |  | [optional]
-**AgentId** | Pointer to **string** |  | [optional]
-**Schedule** | Pointer to **string** |  | [optional]
-**Timezone** | Pointer to **string** |  | [optional]
-**Enabled** | Pointer to **bool** |  | [optional]
-**OverlapPolicy** | Pointer to **string** |  | [optional]
-**SessionPrompt** | Pointer to **string** |  | [optional]
-**Timeout** | Pointer to **int32** |  | [optional]
-**InactivityTimeout** | Pointer to **int32** |  | [optional]
-**StopOnRunFinished** | Pointer to **bool** |  | [optional]
-**RunnerType** | Pointer to **string** |  | [optional]
+**Name** | Pointer to **string** |  | [optional] 
+**Description** | Pointer to **string** |  | [optional] 
+**AgentId** | Pointer to **string** |  | [optional] 
+**Schedule** | Pointer to **string** |  | [optional] 
+**Timezone** | Pointer to **string** |  | [optional] 
+**Enabled** | Pointer to **bool** |  | [optional] 
+**OverlapPolicy** | Pointer to **string** |  | [optional] 
+**SessionPrompt** | Pointer to **string** |  | [optional] 
+**Timeout** | Pointer to **int32** |  | [optional] 
+**InactivityTimeout** | Pointer to **int32** |  | [optional] 
+**StopOnRunFinished** | Pointer to **bool** |  | [optional] 
+**RunnerType** | Pointer to **string** |  | [optional] 
 
 ## Methods
 
@@ -338,3 +338,5 @@ HasRunnerType returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
+
+

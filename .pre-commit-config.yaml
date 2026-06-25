@@ -6,7 +6,9 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
+        exclude: 'components/ambient-api-server/pkg/api/openapi/'
       - id: end-of-file-fixer
+        exclude: 'components/ambient-api-server/pkg/api/openapi/'
       - id: check-yaml
         args: ['--allow-multiple-documents']
       - id: check-added-large-files
