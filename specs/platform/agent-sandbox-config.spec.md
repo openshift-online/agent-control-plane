@@ -21,7 +21,8 @@ This spec extends the Agent concept from `data-model.spec.md` with sandbox-aware
 - **Payload** — content (file reference or inline text) uploaded into the sandbox filesystem at a declared path. Used for CLAUDE.md, settings, MCP configs, task files.
 - **Entrypoint** — the CLI binary launched inside the sandbox (e.g., `claude`, `opencode`, `bash`).
 - **Sandbox Policy** — an OpenShell `SandboxPolicy` governing network endpoints, filesystem paths, process identity, and Landlock constraints within the sandbox.
-- **Credential Source** — a reference to an external secret store (Vault path or Kubernetes Secret) from which the control plane resolves credentials and creates OpenShell providers. This is a transitional mechanism — see [NVIDIA/OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882).
+- **Credential Source** — a reference to an external secret store (Vault path or Kubernetes Secret) attached to a provider declaration, from which the control plane resolves credentials and creates or refreshes OpenShell providers. This is a transitional mechanism — see [NVIDIA/OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882).
+- **Provider Declaration** — a YAML document within a ConfigMap (labeled `ambient.ai/kind: provider`) that defines a named provider with its type and credential source. Provider declarations are namespace-scoped and shared across agents in the tenant namespace.
 - **Sandbox Template** — compute and runtime configuration for the sandbox container: image, CPU/memory/GPU resources, runtime class, driver config.
 - **Agent Declaration** vs **Agent** — an Agent Declaration is the YAML input format (the ConfigMap data); an Agent is the reconciled platform entity in the API server's database. The control plane reconciles declarations into agents.
 - **Tenant Namespace** — a Kubernetes namespace scoped to a project, named `project-{project_name}` by convention. ConfigMaps containing agent declarations are applied here by ArgoCD.
@@ -52,16 +53,9 @@ This spec extends the Agent concept from `data-model.spec.md` with sandbox-aware
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `providers` | array of Provider | no | Provider profile references. Each entry declares a provider the agent requires on the OpenShell Gateway. |
+| `providers` | array of string | no | Names of providers this agent requires. Each name references a provider declared in a Provider ConfigMap in the same tenant namespace. |
 
-**Provider object:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | string | yes | Provider type identifier (e.g., `github`, `anthropic`, `jira`, `google-vertex-ai`). Maps to the OpenShell `Provider.type` field and to entries in `SandboxSpec.providers` (repeated string). |
-| `env` | map[string]string | no | Per-provider environment variable overrides. Empty values are resolved from the host environment at deploy time. Platform-specific extension — not part of the OpenShell proto. |
-
-> **Platform abstraction.** The `providers` array is a platform-level enrichment of OpenShell's `SandboxSpec.providers` (which is a flat `repeated string`). The `name` field maps to the string entries; the `env` field is handled by the control plane outside the OpenShell API. When a `credential_sources` entry and a `providers` entry reference the same provider type, the credential source creates the provider registration on the gateway and the provider entry supplies per-provider `env` overrides.
+Providers are namespace-scoped resources declared separately from agents (see [Provider Declarations](#provider-declarations)). Agents reference them by name. At sandbox creation time, the control plane resolves each referenced provider, reads its credential source, and creates or refreshes the provider on the OpenShell Gateway.
 
 ### Payloads
 
@@ -79,25 +73,6 @@ This spec extends the Agent concept from `data-model.spec.md` with sandbox-aware
 Since agent declarations live in ConfigMaps (reconciled by ArgoCD from git), payloads use inline `content` only. For binary content, use the ConfigMap's `binaryData` field.
 
 > **Path constraints.** `sandbox_path` MUST be an absolute path within the sandbox root (`/sandbox/`). The control plane SHALL reject paths containing `..` traversal segments or paths outside `/sandbox/`.
-
-### Credential Sources
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `credential_sources` | array of CredentialSource | no | External secret references from which the control plane creates OpenShell providers. |
-
-**CredentialSource object:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | string | yes | Source type: `vault` (production) or `k8s_secret` (local development only). |
-| `path` | string | conditional | Vault secret path (e.g., `kv/data/agents/github-pat`). Required when `type=vault`. |
-| `k8s_secret_ref` | string | conditional | Kubernetes Secret reference in `namespace/secret-name` format. Required when `type=k8s_secret`. |
-| `provider_type` | string | yes | The OpenShell provider type to create from the resolved secret (e.g., `github`, `anthropic`, `claude`). |
-
-> **Transitional mechanism.** The `credential_sources` field exists to bridge the gap until OpenShell supports native credential management ([NVIDIA/OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882)). The `k8s_secret` type is strictly for local development workflows where Vault is unavailable. When OpenShell natively handles credential resolution, `credential_sources` MAY be deprecated in favor of OpenShell-native configuration.
-
-> **Scope restrictions.** For `k8s_secret` type: the control plane SHALL restrict access to secrets within the agent's own tenant namespace. Cross-namespace secret references (referencing a namespace other than the agent's tenant namespace) SHALL be rejected. For `vault` type: vault paths are scoped by the control plane's Vault policy — the control plane authenticates to Vault with a service identity whose policy governs which paths are readable. Agents cannot access vault paths outside the control plane's authorized scope.
 
 ### Environment
 
@@ -235,6 +210,78 @@ Since agent declarations live in ConfigMaps (reconciled by ArgoCD from git), pay
 
 ---
 
+## Provider Declarations
+
+Providers are namespace-scoped resources declared in their own ConfigMaps, separate from agent declarations. A provider binds a name to a credential source. Multiple agents in the same namespace can reference the same provider.
+
+### Discovery
+
+The control plane SHALL discover provider declarations by watching ConfigMaps with the label `ambient.ai/kind: provider` in tenant namespaces.
+
+### Structure
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: provider-declarations
+  namespace: project-{project_name}
+  labels:
+    ambient.ai/kind: provider
+data:
+  github.yaml: |
+    name: github
+    type: github
+    credential_source:
+      type: vault
+      path: kv/data/agents/github-pat
+  anthropic.yaml: |
+    name: anthropic
+    type: anthropic
+    credential_source:
+      type: vault
+      path: kv/data/agents/anthropic-key
+  anthropic-dev.yaml: |
+    name: anthropic-dev
+    type: anthropic
+    credential_source:
+      type: k8s_secret
+      k8s_secret_ref: anthropic-key
+```
+
+### Provider Schema
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | yes | Unique provider name within the namespace. This is the name agents use to reference the provider. |
+| `type` | string | yes | OpenShell provider type (e.g., `github`, `anthropic`, `claude`, `jira`, `google-vertex-ai`, `generic`). Maps to the OpenShell `Provider.type` field. |
+| `credential_source` | CredentialSource | yes | Where the credentials for this provider come from. |
+
+**CredentialSource object:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | yes | Source type: `vault` (production) or `k8s_secret` (local development only). |
+| `path` | string | conditional | Vault secret path (e.g., `kv/data/agents/github-pat`). Required when `type=vault`. |
+| `k8s_secret_ref` | string | conditional | Kubernetes Secret name within the tenant namespace (e.g., `anthropic-key`). Required when `type=k8s_secret`. |
+
+> **Transitional mechanism.** The credential source model exists to bridge the gap until OpenShell supports native credential management ([NVIDIA/OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882)). The `k8s_secret` type is strictly for local development workflows where Vault is unavailable. When OpenShell natively handles credential resolution, credential sources MAY be deprecated in favor of OpenShell-native configuration.
+
+> **Scope restrictions.** For `k8s_secret` type: references are scoped to the tenant namespace — only secrets within the same namespace as the provider ConfigMap can be referenced. For `vault` type: vault paths are scoped by the control plane's Vault policy — the control plane authenticates to Vault with a service identity whose policy governs which paths are readable.
+
+### Sandbox Creation Flow
+
+When a sandbox session starts for an agent:
+
+1. The control plane reads the agent's `providers` list (array of names)
+2. For each provider name, the control plane looks up the provider declaration in the namespace
+3. The control plane reads the credential from the declared source (Vault or k8s Secret)
+4. If the provider already exists on the gateway → refresh the provider credential
+5. If the provider does not exist on the gateway → create the provider with the resolved credential
+6. The control plane calls `CreateSandbox` with all resolved provider names attached
+
+---
+
 ## Requirements
 
 ### Requirement: Agent Declaration via ConfigMap
@@ -306,41 +353,48 @@ The agent YAML SHALL declare which binary runs inside the sandbox. The entrypoin
 
 ### Requirement: Provider Reference Resolution
 
-The agent YAML SHALL declare which providers the agent requires. The control plane SHALL register declared providers on the OpenShell Gateway before creating the sandbox. Providers are scoped to the namespace (one namespace → one gateway).
+The agent YAML SHALL declare which providers the agent requires as an array of provider name strings. The control plane SHALL resolve each name to a provider declaration in the tenant namespace and execute the sandbox creation flow (see Provider Declarations § Sandbox Creation Flow) before creating the sandbox.
 
-#### Scenario: Provider registered on gateway
+#### Scenario: Provider declaration exists in namespace
 
-- GIVEN an agent declares `providers: [{name: github}]`
-- AND a `github` provider is registered on the target gateway
+- GIVEN an agent declares `providers: [github]`
+- AND a provider declaration named `github` exists in the tenant namespace (ConfigMap labeled `ambient.ai/kind: provider`)
 - WHEN a session starts for this agent
-- THEN the sandbox SHALL have access to the `github` provider's credentials via the gateway egress proxy
+- THEN the control plane SHALL read the `github` provider's credential source
+- AND register or refresh the provider on the OpenShell Gateway
+- AND the sandbox SHALL have access to the `github` provider's credentials via the gateway egress proxy
 
-#### Scenario: Provider with per-provider env overrides
+#### Scenario: Provider declaration not found
 
-- GIVEN an agent declares:
-  ```yaml
-  providers:
-    - name: github
-      env:
-        GITHUB_TOKEN:
-  ```
-- WHEN a session starts for this agent
-- THEN the `GITHUB_TOKEN` environment variable SHALL be resolved from the host environment
-- AND injected into the sandbox alongside the provider registration
-
-#### Scenario: Provider not resolvable
-
-- GIVEN an agent declares `providers: [{name: nonexistent-provider}]`
-- AND no provider named `nonexistent-provider` is registered on the gateway
+- GIVEN an agent declares `providers: [nonexistent-provider]`
+- AND no provider declaration named `nonexistent-provider` exists in the tenant namespace
 - WHEN a session starts for this agent
 - THEN the session start SHALL fail
-- AND the error SHALL identify the unresolvable provider by name
+- AND the error SHALL identify the missing provider declaration by name
+
+#### Scenario: Provider credential refresh
+
+- GIVEN an agent declares `providers: [github]`
+- AND a provider named `github` already exists on the gateway from a previous session
+- WHEN a new session starts for this agent
+- THEN the control plane SHALL read the current credential from the provider declaration's credential source
+- AND refresh the provider's credential on the gateway (not create a duplicate)
 
 #### Scenario: Multiple providers
 
-- GIVEN an agent declares providers `github` and `anthropic`
+- GIVEN an agent declares `providers: [github, anthropic]`
+- AND both `github` and `anthropic` provider declarations exist in the tenant namespace
 - WHEN a session starts
-- THEN both providers SHALL be registered on the gateway for this sandbox
+- THEN both providers SHALL be resolved and registered on the gateway
+- AND failure to resolve one provider SHALL fail the session start (all declared providers are required)
+
+#### Scenario: Provider shared across agents
+
+- GIVEN provider declaration `github` exists in namespace `project-alpha`
+- AND agents `reviewer` and `builder` both declare `providers: [github]`
+- WHEN sessions start for both agents
+- THEN both sessions SHALL use the same `github` provider on the gateway
+- AND each session SHALL trigger a credential refresh for the shared provider
 
 ---
 
@@ -366,59 +420,6 @@ The agent YAML SHALL declare payloads (file references or inline content) to upl
 - GIVEN an agent declares a payload without `sandbox_path`
 - WHEN the control plane validates the agent YAML
 - THEN the declaration SHALL be rejected
-
----
-
-### Requirement: Credential Source Resolution
-
-The agent YAML SHALL declare credential sources that the control plane resolves into OpenShell providers. Credential sources bypass the existing platform Credential/RoleBinding hierarchy — they create OpenShell providers directly on the gateway.
-
-#### Scenario: Vault credential source
-
-- GIVEN an agent declares:
-  ```yaml
-  credential_sources:
-    - type: vault
-      path: kv/data/agents/github-pat
-      provider_type: github
-  ```
-- WHEN a session starts
-- THEN the control plane SHALL read the secret from Vault at `kv/data/agents/github-pat`
-- AND create an OpenShell provider of type `github` on the gateway with the resolved credentials
-
-#### Scenario: Kubernetes Secret credential source (local dev)
-
-- GIVEN an agent declares:
-  ```yaml
-  credential_sources:
-    - type: k8s_secret
-      k8s_secret_ref: dev-namespace/anthropic-key
-      provider_type: anthropic
-  ```
-- WHEN a session starts
-- THEN the control plane SHALL read the Kubernetes Secret `anthropic-key` in namespace `dev-namespace`
-- AND create an OpenShell provider of type `anthropic` on the gateway
-
-#### Scenario: Vault path not found
-
-- GIVEN an agent declares a vault credential source with path `kv/data/nonexistent`
-- WHEN a session starts
-- THEN the session start SHALL fail
-- AND the error SHALL identify the unresolvable vault path
-
-#### Scenario: Kubernetes Secret not found
-
-- GIVEN an agent declares a k8s_secret credential source referencing a non-existent secret
-- WHEN a session starts
-- THEN the session start SHALL fail
-- AND the error SHALL identify the missing secret reference
-
-#### Scenario: Multiple credential sources
-
-- GIVEN an agent declares credential sources for `github` (vault) and `anthropic` (k8s_secret)
-- WHEN a session starts
-- THEN both providers SHALL be created on the gateway independently
-- AND failure to resolve one credential source SHALL NOT prevent resolution of others
 
 ---
 
@@ -619,32 +620,6 @@ Access control for agent declarations relies on Kubernetes RBAC for the tenant n
 
 ---
 
-### Requirement: Credential Source Scope Isolation
-
-Credential source references SHALL be scoped to prevent cross-tenant access.
-
-#### Scenario: k8s_secret restricted to tenant namespace
-
-- GIVEN an agent in project `alpha` (namespace `project-alpha`) declares a k8s_secret credential source referencing `project-beta/some-secret`
-- WHEN the control plane validates the declaration
-- THEN the declaration SHALL be rejected
-- AND the error SHALL indicate that k8s_secret references must be within the agent's own tenant namespace
-
-#### Scenario: k8s_secret within tenant namespace accepted
-
-- GIVEN an agent in namespace `project-alpha` declares a k8s_secret credential source referencing `project-alpha/my-secret`
-- WHEN the control plane validates
-- THEN the reference SHALL be accepted
-
-#### Scenario: Vault path scoped by control plane policy
-
-- GIVEN the control plane authenticates to Vault with a service identity
-- WHEN an agent declares a vault credential source with a path outside the control plane's Vault policy
-- THEN Vault SHALL deny the read
-- AND the session start SHALL fail with an error identifying the unauthorized vault path
-
----
-
 ### Requirement: Feature Flag Gating
 
 ConfigMap-based agent declaration and OpenShell Gateway sandbox provisioning SHALL be gated behind feature flags. When disabled, the existing runner-based agent lifecycle remains unchanged.
@@ -697,8 +672,8 @@ data:
     prompt: |
       You are a security review agent.
     providers:
-      - name: github
-      - name: anthropic
+      - github
+      - anthropic
     # ... (full agent YAML)
   builder.yaml: |
     name: builder
@@ -732,9 +707,8 @@ When persisted, the new structured fields map to columns as follows:
 | YAML Field | Column | Type | Notes |
 |------------|--------|------|-------|
 | `entrypoint` | `entrypoint` | TEXT | Nullable; default `claude` |
-| `providers` | `providers` | JSONB | Array of provider objects |
+| `providers` | `providers` | JSONB | Array of provider name strings (e.g., `["github", "anthropic"]`). Provider declarations are resolved from namespace-scoped ConfigMaps at sandbox creation time. |
 | `payloads` | `payloads` | JSONB | Array of payload objects |
-| `credential_sources` | `credential_sources` | JSONB | Array of credential source objects |
 | `environment` | `environment` | JSONB | Map of string → string |
 | `sandbox_template` | `sandbox_template` | JSONB | Nested object |
 | `sandbox_policy` | `sandbox_policy` | JSONB | Nested object |
@@ -774,9 +748,9 @@ Legacy fields (`resource_overrides`, `environment_variables` as TEXT) remain in 
 | Decision | Rationale |
 |----------|-----------|
 | ConfigMap is the primary agent definition format | Agents will be declared via ArgoCD-managed ConfigMaps in tenant namespaces. REST API-based agent creation is a potential follow-up offering an RBAC-scoped developer path for creating agents without GitOps, but not the primary onboarding flow. This aligns with GitOps workflows and the existing Application (GitOps sync) model in `data-model.spec.md`. |
-| Credential sources bypass the existing Credential/RoleBinding system | Vault credential paths create OpenShell providers directly on the gateway. The existing Credential/RoleBinding hierarchy (agent → project → global resolution) is designed for the platform's internal credential model. Credential sources are a separate, simpler pathway for declaring how sandbox credentials are sourced. |
-| Credential sources are a transitional mechanism | The `k8s_secret` type is for local development only. The entire `credential_sources` field is designed to be forward-compatible with OpenShell's planned native credential management ([NVIDIA/OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882)). |
-| Mixed field grouping | Flat fields for `entrypoint`, `providers`, `payloads`, `credential_sources`, `environment`, `gateway` (frequently accessed, simple types). Nested JSONB for `sandbox_template` and `sandbox_policy` (complex structures that map directly to OpenShell proto messages). |
+| Providers are namespace-scoped shared resources | Providers are declared in their own ConfigMaps (labeled `ambient.ai/kind: provider`) at the tenant namespace level, not inline within agent declarations. Agents reference providers by name. This enables sharing providers across multiple agents in a namespace (e.g., a single `github` provider used by both `reviewer` and `builder` agents). The control plane handles create-or-refresh at sandbox creation time. |
+| Credential sources are attached to provider declarations | Each provider declaration includes a `credential_source` specifying where credentials come from (Vault in production, k8s Secret for local dev). This is a transitional mechanism — designed to be forward-compatible with OpenShell's planned native credential management ([NVIDIA/OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882)). Credential sources bypass the existing platform Credential/RoleBinding hierarchy. |
+| Mixed field grouping | Flat fields for `entrypoint`, `providers`, `payloads`, `environment`, `gateway` (frequently accessed, simple types). Nested JSONB for `sandbox_template` and `sandbox_policy` (complex structures that map directly to OpenShell proto messages). |
 | Base agent inheritance deferred to draft spec | See `specs/platform/agent-inheritance.spec.md`. Covers project-scoped and platform-scoped inheritance with merge semantics. Kept as a separate draft spec to allow independent scoping — agents without `base_agent` are fully self-contained. |
 | Field names align with OpenShell proto naming | `sandbox_policy.network_policies`, `sandbox_template.resources`, `sandbox_policy.filesystem` — these mirror the proto field names to minimize cognitive overhead when mapping between agent YAML and OpenShell API calls. |
 | Unknown fields accepted with warning | Forward compatibility — newer agent YAML schemas can be applied to older control planes without hard failures. |
@@ -800,10 +774,8 @@ prompt: |
 entrypoint: claude
 
 providers:
-  - name: github
-    env:
-      GITHUB_TOKEN:
-  - name: anthropic
+  - github
+  - anthropic
 
 environment:
   CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: "1"
@@ -826,14 +798,6 @@ payloads:
       {
         "mcpServers": {}
       }
-
-credential_sources:
-  - type: vault
-    path: kv/data/agents/github-pat
-    provider_type: github
-  - type: k8s_secret
-    k8s_secret_ref: dev-namespace/anthropic-key
-    provider_type: anthropic
 
 sandbox_template:
   image: ghcr.io/nvidia/openshell:sandbox-v0.2.0

@@ -22,7 +22,7 @@ Behavioral rules and versioned governance for the runner component. Inherits fro
 
 ### [Agent Sandbox Configuration](agent-sandbox-config.spec.md)
 
-Declarative agent YAML schema for ConfigMap-based agent definitions. Covers entrypoint, providers, payloads, credential sources, sandbox policies, sandbox templates, and environment variables for OpenShell Gateway-managed sandboxes.
+Declarative agent YAML schema for ConfigMap-based agent definitions. Covers entrypoint, providers (namespace-scoped shared resources), payloads, sandbox policies, sandbox templates, and environment variables for OpenShell Gateway-managed sandboxes.
 
 ### [Agent Base Inheritance](agent-inheritance.spec.md) *(Draft)*
 
