@@ -158,6 +158,8 @@ func (r *SimpleKubeReconciler) Reconcile(ctx context.Context, event informer.Res
 			return r.provisionSession(ctx, session)
 		case PhaseStopping:
 			return r.deprovisionSession(ctx, session, PhaseStopped)
+		case PhaseCompleted, PhaseFailed:
+			return r.deprovisionSession(ctx, session, session.Phase)
 		}
 	case informer.EventDeleted:
 		return r.cleanupSession(ctx, session)
