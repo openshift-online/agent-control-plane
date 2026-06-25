@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { AlertTriangle, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import type { DomainCondition } from '@/domain/types'
 
 const CONDITION_TITLES: Record<string, string> = {
@@ -41,14 +42,15 @@ export function SessionConditions({ conditions }: SessionConditionsProps) {
           <p className="min-w-0 flex-1 text-sm text-status-error-foreground break-words">
             {formatConditionTitle(condition)}
           </p>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setDismissed(true)}
-            className="mt-0.5 shrink-0 rounded p-0.5 text-status-error-foreground/60 hover:text-status-error-foreground hover:bg-status-error/20"
+            className="mt-0.5 h-6 w-6 shrink-0 text-status-error-foreground/60 hover:text-status-error-foreground hover:bg-status-error/20"
             aria-label="Dismiss"
           >
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
       ))}
     </div>
