@@ -1,8 +1,6 @@
 package sessions
 
 import (
-	"time"
-
 	"gorm.io/gorm"
 
 	"github.com/go-gormigrate/gormigrate/v2"
@@ -145,17 +143,20 @@ func lastActivityAtMigration() *gormigrate.Migration {
 }
 
 func scheduledSessionLinkMigration() *gormigrate.Migration {
-	type Session struct {
-		SourceScheduledSessionId *string    `gorm:"column:source_scheduled_session_id"`
-		ScheduledFor             *time.Time `gorm:"column:scheduled_for"`
-	}
 	return &gormigrate.Migration{
 		ID: "202606230002",
 		Migrate: func(tx *gorm.DB) error {
-			if err := tx.Table("sessions").AutoMigrate(&Session{}); err != nil {
-				return err
+			stmts := []string{
+				`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS source_scheduled_session_id TEXT`,
+				`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMPTZ`,
+				`CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_schedule_idempotency ON sessions(source_scheduled_session_id, scheduled_for) WHERE source_scheduled_session_id IS NOT NULL`,
 			}
-			return tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_schedule_idempotency ON sessions(source_scheduled_session_id, scheduled_for) WHERE source_scheduled_session_id IS NOT NULL`).Error
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
 		},
 		Rollback: func(tx *gorm.DB) error {
 			tx.Exec(`DROP INDEX IF EXISTS idx_sessions_schedule_idempotency`)

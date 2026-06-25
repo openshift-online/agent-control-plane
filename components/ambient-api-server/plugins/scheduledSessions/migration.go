@@ -59,17 +59,20 @@ func executionFieldsMigration() *gormigrate.Migration {
 }
 
 func schedulerFieldsMigration() *gormigrate.Migration {
-	type ScheduledSession struct {
-		CreatedByUserId *string `gorm:"column:created_by_user_id"`
-		OverlapPolicy   string  `gorm:"column:overlap_policy;default:skip;not null"`
-	}
 	return &gormigrate.Migration{
 		ID: "202606230001",
 		Migrate: func(tx *gorm.DB) error {
-			if err := tx.Table("scheduled_sessions").AutoMigrate(&ScheduledSession{}); err != nil {
-				return err
+			stmts := []string{
+				`ALTER TABLE scheduled_sessions ADD COLUMN IF NOT EXISTS created_by_user_id TEXT`,
+				`ALTER TABLE scheduled_sessions ADD COLUMN IF NOT EXISTS overlap_policy TEXT NOT NULL DEFAULT 'skip'`,
+				`CREATE INDEX IF NOT EXISTS idx_ss_due ON scheduled_sessions(next_run_at) WHERE enabled = true AND deleted_at IS NULL`,
 			}
-			return tx.Exec(`CREATE INDEX IF NOT EXISTS idx_ss_due ON scheduled_sessions(next_run_at) WHERE enabled = true AND deleted_at IS NULL`).Error
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
 		},
 		Rollback: func(tx *gorm.DB) error {
 			tx.Exec(`DROP INDEX IF EXISTS idx_ss_due`)
