@@ -213,7 +213,7 @@ func TestScheduler_OverlapSkip(t *testing.T) {
 		Phase:                    &running,
 	}
 	activeSession.ProjectId = &ss.ProjectId
-	sessionSvc.Create(context.Background(), activeSession)
+	_, _ = sessionSvc.Create(context.Background(), activeSession)
 
 	scheduler.Tick(context.Background())
 
@@ -243,7 +243,7 @@ func TestScheduler_OverlapAllow(t *testing.T) {
 		Phase:                    &running,
 	}
 	activeSession.ProjectId = &ss.ProjectId
-	sessionSvc.Create(context.Background(), activeSession)
+	_, _ = sessionSvc.Create(context.Background(), activeSession)
 
 	scheduler.Tick(context.Background())
 
