@@ -110,7 +110,7 @@ func (d *sqlSessionDao) ActiveByAgentID(ctx context.Context, agentID string) (*S
 func (d *sqlSessionDao) ByScheduledSessionID(ctx context.Context, scheduledSessionID string) (SessionList, error) {
 	g2 := (*d.sessionFactory).New(ctx)
 	var list SessionList
-	err := g2.Where("source_scheduled_session_id = ?", scheduledSessionID).
+	err := g2.Unscoped().Where("source_scheduled_session_id = ?", scheduledSessionID).
 		Order("created_at DESC").
 		Find(&list).Error
 	return list, err
