@@ -4,6 +4,8 @@
 **Status:** Draft
 **Related:** `specs/platform/agent-sandbox-config.spec.md` (agent YAML schema), `specs/platform/data-model.spec.md` (Agent entity)
 
+> **Draft — not in scope for current implementation.** This spec captures future thinking for agent configuration inheritance. It is not a deliverable of the current agent sandbox configuration work and should not be referenced as committed design. It may be promoted to a full spec in a future iteration.
+
 ---
 
 ## Purpose
@@ -11,6 +13,8 @@
 Base agent inheritance enables configuration reuse across agent declarations. An agent MAY reference a `base_agent` whose fields are merged with the child agent's declaration. This supports fleet-wide defaults (e.g., a global base providing `google-vertex-ai` and `anthropic` providers to all agents across projects) and team-level configuration baselines.
 
 This spec is a draft extension to `agent-sandbox-config.spec.md`. Agents without `base_agent` are fully self-contained and unaffected by this feature.
+
+> **Implementation note: additional watch scope.** Platform-scoped base agents require the control plane to watch a ConfigMap in the control plane namespace (`ambient-code`), not just tenant namespaces. This is an additional watch scope beyond what the agent and provider ConfigMap watches require.
 
 ---
 

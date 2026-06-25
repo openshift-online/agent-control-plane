@@ -581,7 +581,14 @@ The control plane SHALL validate agent YAML against the schema before reconcilin
 
 The platform SHALL enforce minimum sandbox policy constraints regardless of what a policy declaration specifies. Policy declarations are additive on top of platform minimums — they cannot weaken them.
 
-**Enforcement mechanism:** The control plane SHALL maintain a platform-level default sandbox policy (loaded from configuration or a ConfigMap in the control plane namespace). When building the `CreateSandbox` request, the control plane merges the resolved policy declaration with the platform default. For fields where the declared value is less restrictive than the platform default, the platform value wins. For network policies, the declared endpoints are intersected with the platform's allowed set — policies cannot grant access to endpoints the platform does not permit.
+**Where minimums live:** The platform-level default sandbox policy SHALL be declared in a ConfigMap labeled `ambient.ai/kind: platform-policy` in the control plane namespace (`ambient-code`). This ConfigMap uses the same upstream OpenShell `SandboxPolicy` YAML format as tenant-scoped policy declarations (stored as a `binaryData` entry). The control plane reads this ConfigMap at startup and watches it for changes. If no platform policy ConfigMap exists, the control plane SHALL use a hardcoded fallback that enforces `runAsNonRoot`, drops all capabilities, and denies all network egress except provider-registered endpoints.
+
+**Enforcement mechanism:** When building the `CreateSandbox` request, the control plane merges the resolved tenant policy declaration with the platform minimum policy:
+
+- **Network policies:** The declared endpoints are intersected with the platform's allowed set — tenant policies cannot grant access to endpoints the platform does not permit. If the platform policy defines no allowed endpoints, only provider-registered endpoints are reachable.
+- **Process policy:** If the tenant policy declares `run_as_user: root` or any UID < 1000, the platform value wins. The platform minimum SHALL enforce non-root execution.
+- **Filesystem policy:** The platform minimum's read-only paths cannot be made read-write by a tenant policy. Tenant policies can only add additional paths within the allowed scope.
+- **Landlock policy:** If the platform requires `hard_requirement`, a tenant policy declaring `best_effort` is overridden to `hard_requirement`.
 
 #### Scenario: Policy cannot disable network isolation
 
