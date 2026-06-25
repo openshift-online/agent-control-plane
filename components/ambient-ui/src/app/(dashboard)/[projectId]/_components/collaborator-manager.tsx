@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2, Users } from 'lucide-react'
@@ -166,11 +166,21 @@ function UserSearchInput({
   projectId: string
   existingUsernames: Set<string>
 }) {
-  const [searchQuery, setSearchQuery] = useState('')
+  const [inputValue, setInputValue] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
   const [open, setOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const { data: searchResults, isLoading: isSearching } = useUserSearch(searchQuery)
+  useEffect(() => {
+    if (inputValue.trim() === '') {
+      setDebouncedQuery('')
+      return
+    }
+    const id = setTimeout(() => setDebouncedQuery(inputValue.trim()), 300)
+    return () => clearTimeout(id)
+  }, [inputValue])
+
+  const { data: searchResults, isLoading: isSearching } = useUserSearch(debouncedQuery)
   const createBinding = useCreateRoleBinding()
 
   const filteredResults = useMemo(
@@ -196,7 +206,7 @@ function UserSearchInput({
       {
         onSuccess: () => {
           toast.success(`Added ${user.name || user.username}`)
-          setSearchQuery('')
+          setInputValue('')
           setOpen(false)
         },
         onError: (error) => {
@@ -211,22 +221,22 @@ function UserSearchInput({
     )
   }, [defaultRoleId, projectId, createBinding])
 
-  const showDropdown = searchQuery.length > 0 && (filteredResults.length > 0 || isSearching)
+  const showDropdown = inputValue.length > 0 && (filteredResults.length > 0 || isSearching)
 
   return (
-    <Popover open={open && showDropdown} onOpenChange={setOpen}>
+    <Popover open={open && showDropdown} onOpenChange={(v) => { if (!v) setOpen(false) }}>
       <PopoverAnchor asChild>
         <div className="relative">
           <Command shouldFilter={false} className="border rounded-md">
             <CommandInput
               ref={inputRef}
               placeholder="Add people..."
-              value={searchQuery}
+              value={inputValue}
               onValueChange={(v) => {
-                setSearchQuery(v)
+                setInputValue(v)
                 if (v.length > 0) setOpen(true)
               }}
-              onFocus={() => { if (searchQuery.length > 0) setOpen(true) }}
+              onFocus={() => { if (inputValue.length > 0) setOpen(true) }}
               className="h-11"
             />
           </Command>
@@ -244,7 +254,7 @@ function UserSearchInput({
                 <Loader2 className="size-4 animate-spin text-muted-foreground" />
               </div>
             )}
-            {!isSearching && filteredResults.length === 0 && searchQuery.length > 0 && (
+            {!isSearching && filteredResults.length === 0 && debouncedQuery.length > 0 && (
               <CommandEmpty>No users found.</CommandEmpty>
             )}
             {filteredResults.length > 0 && (

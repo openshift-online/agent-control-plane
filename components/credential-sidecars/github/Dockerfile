@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi9/go-toolset:1.24 AS entrypoint-builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.25 AS entrypoint-builder
 
 USER 0
 WORKDIR /build
@@ -11,14 +11,11 @@ RUN go mod edit -replace github.com/ambient-code/platform/components/ambient-mcp
     CGO_ENABLED=0 go build -o /credential-entrypoint .
 
 # Build github-mcp-server from source at a pinned tag.
-# Upstream requires Go 1.25+; UBI go-toolset ships 1.24, so we let Go's
-# built-in toolchain management fetch the right version for any arch.
-FROM registry.access.redhat.com/ubi9/go-toolset:1.24 AS mcp-builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.25 AS mcp-builder
 
 ARG GITHUB_MCP_VERSION=v1.3.0
 
 USER 0
-ENV GOTOOLCHAIN=go1.25.11
 
 WORKDIR /build
 RUN git clone --depth 1 --branch "${GITHUB_MCP_VERSION}" \
@@ -45,5 +42,3 @@ EXPOSE 8091
 ENTRYPOINT ["credential-entrypoint", "mcp-proxy", "--pass-environment", "--port", "8091", "--"]
 CMD ["github-mcp-server", "stdio"]
 
-ARG IMAGE_EXPIRY=
-LABEL quay.expires-after=${IMAGE_EXPIRY}

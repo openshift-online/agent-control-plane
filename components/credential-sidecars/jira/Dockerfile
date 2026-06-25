@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi9/go-toolset:1.24 AS builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.25 AS builder
 
 USER 0
 WORKDIR /build
@@ -27,5 +27,3 @@ EXPOSE 8092
 ENTRYPOINT ["credential-entrypoint", "mcp-atlassian"]
 CMD ["--transport", "sse", "--port", "8092"]
 
-ARG IMAGE_EXPIRY=
-LABEL quay.expires-after=${IMAGE_EXPIRY}

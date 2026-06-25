@@ -1,5 +1,5 @@
-# Use Red Hat UBI Node.js 20 minimal image for dependencies
-FROM registry.access.redhat.com/ubi9/nodejs-20-minimal AS deps
+# Use Red Hat UBI Node.js 22 minimal image for dependencies
+FROM registry.access.redhat.com/ubi9/nodejs-22-minimal AS deps
 
 WORKDIR /app
 
@@ -15,9 +15,9 @@ COPY ambient-ui/package.json ambient-ui/package-lock.json* ./
 RUN npm ci
 
 # Rebuild the source code only when needed
-# Use the full nodejs-20 image (not minimal) for the build stage because
+# Use the full nodejs-22 image (not minimal) for the build stage because
 # Next.js 16 Turbopack requires native SWC binaries that depend on glibc.
-FROM registry.access.redhat.com/ubi9/nodejs-20 AS builder
+FROM registry.access.redhat.com/ubi9/nodejs-22 AS builder
 
 USER 0
 
@@ -73,5 +73,3 @@ LABEL org.opencontainers.image.revision=$GIT_COMMIT
 
 CMD ["node", "server.js"]
 
-ARG IMAGE_EXPIRY=
-LABEL quay.expires-after=${IMAGE_EXPIRY}

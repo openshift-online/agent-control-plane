@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi10/ubi@sha256:116d8cffea1e453e56e0aa5d33253c6d376bc770e4645770a8e73c63d9f7e320
+FROM registry.access.redhat.com/ubi10/ubi@sha256:516ef28e78e388d12e31618326da68e21dcfc40f767f0c37c3b57059c642a4f0
 
 ARG GIT_COMMIT=unknown
 
@@ -34,7 +34,7 @@ RUN uv tool install mcp-server-fetch==2025.4.7
 
 # OpenShell supervisor binary for sandbox isolation (file mode, no Gateway required)
 # libcap used for setcap to grant NET_ADMIN file capability to non-root binary
-COPY --from=ghcr.io/nvidia/openshell/supervisor:0.0.67 /openshell-sandbox /openshell-sandbox
+COPY --from=ghcr.io/nvidia/openshell/supervisor:0.0.69 /openshell-sandbox /openshell-sandbox
 RUN chmod +x /openshell-sandbox && \
     mkdir -p /var/run/netns && chmod 777 /var/run/netns
 
@@ -101,5 +101,3 @@ LABEL org.opencontainers.image.revision=$GIT_COMMIT
 
 CMD ["/bin/bash", "-c", "umask 0022 && cd /app/ambient-runner && uvicorn main:app --host 0.0.0.0 --port 8001"]
 
-ARG IMAGE_EXPIRY=
-LABEL quay.expires-after=${IMAGE_EXPIRY}

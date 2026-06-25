@@ -47,18 +47,29 @@ jobs:
               - 'components/ambient-api-server/**'
             ambient-control-plane:
               - 'components/ambient-control-plane/**'
+              - 'components/ambient-api-server/**'
+              - 'components/ambient-sdk/go-sdk/**'
             ambient-mcp:
               - 'components/ambient-mcp/**'
             ambient-ui:
               - 'components/ambient-ui/**'
+              - 'components/ambient-sdk/ts-sdk/**'
             credential-github:
               - 'components/credential-sidecars/github/**'
+              - 'components/credential-sidecars/entrypoint/**'
+              - 'components/ambient-mcp/**'
             credential-jira:
               - 'components/credential-sidecars/jira/**'
+              - 'components/credential-sidecars/entrypoint/**'
+              - 'components/ambient-mcp/**'
             credential-k8s:
               - 'components/credential-sidecars/k8s/**'
+              - 'components/credential-sidecars/entrypoint/**'
+              - 'components/ambient-mcp/**'
             credential-google:
               - 'components/credential-sidecars/google/**'
+              - 'components/credential-sidecars/entrypoint/**'
+              - 'components/ambient-mcp/**'
 
       - name: Build component matrices
         id: matrix

@@ -36,5 +36,3 @@ USER 1001
 ENTRYPOINT ["./ambient-mcp"]
 CMD []
 
-ARG IMAGE_EXPIRY=
-LABEL quay.expires-after=${IMAGE_EXPIRY}
