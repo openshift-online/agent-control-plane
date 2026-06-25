@@ -1,7 +1,9 @@
 # OpenShell Sandbox Provisioning Specification
 
 **Date:** 2026-06-23
-**Status:** Draft — proposed addition to control plane provisioning
+**Status:** Design
+**Related:** `control-plane.spec.md` — CP provisioning; `openshell-sandbox.spec.md` — file-mode sandbox
+**Skill:** `skills/build/full-stack-pipeline/` — wave-based implementation pipeline
 
 ---
 
