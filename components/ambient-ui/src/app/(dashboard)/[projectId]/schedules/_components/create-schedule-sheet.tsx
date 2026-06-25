@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import cronstrue from 'cronstrue'
 import { Button } from '@/components/ui/button'
@@ -54,6 +54,22 @@ export function CreateScheduleSheet({ open, onOpenChange, editTarget }: CreateSc
   const [error, setError] = useState<string | null>(null)
 
   const agents = agentsData?.items ?? []
+
+  useEffect(() => {
+    setName(editTarget?.name ?? '')
+    setAgentId(editTarget?.agentId ?? '')
+    setSchedule(editTarget?.schedule ?? '')
+    setTimezone(editTarget?.timezone ?? 'UTC')
+    setPrompt(editTarget?.sessionPrompt ?? '')
+    setEnabled(editTarget?.enabled ?? true)
+    setOverlapPolicy(editTarget?.overlapPolicy ?? 'skip')
+    setTimeout(editTarget?.timeout?.toString() ?? '')
+    setInactivityTimeout(editTarget?.inactivityTimeout?.toString() ?? '')
+    setStopOnRunFinished(editTarget?.stopOnRunFinished ?? true)
+    setDescription(editTarget?.description ?? '')
+    setShowAdvanced(false)
+    setError(null)
+  }, [editTarget])
 
   const cronHint = useMemo(() => {
     if (!schedule.trim()) return null
