@@ -23,41 +23,42 @@ const (
 )
 
 type Session struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	Metadata             *ObjectReference       `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	Name                 string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	RepoUrl              *string                `protobuf:"bytes,3,opt,name=repo_url,json=repoUrl,proto3,oneof" json:"repo_url,omitempty"`
-	Prompt               *string                `protobuf:"bytes,4,opt,name=prompt,proto3,oneof" json:"prompt,omitempty"`
-	CreatedByUserId      *string                `protobuf:"bytes,5,opt,name=created_by_user_id,json=createdByUserId,proto3,oneof" json:"created_by_user_id,omitempty"`
-	AssignedUserId       *string                `protobuf:"bytes,6,opt,name=assigned_user_id,json=assignedUserId,proto3,oneof" json:"assigned_user_id,omitempty"`
-	WorkflowId           *string                `protobuf:"bytes,7,opt,name=workflow_id,json=workflowId,proto3,oneof" json:"workflow_id,omitempty"`
-	Repos                *string                `protobuf:"bytes,8,opt,name=repos,proto3,oneof" json:"repos,omitempty"`
-	Timeout              *int32                 `protobuf:"varint,10,opt,name=timeout,proto3,oneof" json:"timeout,omitempty"`
-	LlmModel             *string                `protobuf:"bytes,11,opt,name=llm_model,json=llmModel,proto3,oneof" json:"llm_model,omitempty"`
-	LlmTemperature       *float64               `protobuf:"fixed64,12,opt,name=llm_temperature,json=llmTemperature,proto3,oneof" json:"llm_temperature,omitempty"`
-	LlmMaxTokens         *int32                 `protobuf:"varint,13,opt,name=llm_max_tokens,json=llmMaxTokens,proto3,oneof" json:"llm_max_tokens,omitempty"`
-	ParentSessionId      *string                `protobuf:"bytes,14,opt,name=parent_session_id,json=parentSessionId,proto3,oneof" json:"parent_session_id,omitempty"`
-	BotAccountName       *string                `protobuf:"bytes,15,opt,name=bot_account_name,json=botAccountName,proto3,oneof" json:"bot_account_name,omitempty"`
-	ResourceOverrides    *string                `protobuf:"bytes,16,opt,name=resource_overrides,json=resourceOverrides,proto3,oneof" json:"resource_overrides,omitempty"`
-	EnvironmentVariables *string                `protobuf:"bytes,17,opt,name=environment_variables,json=environmentVariables,proto3,oneof" json:"environment_variables,omitempty"`
-	Labels               *string                `protobuf:"bytes,18,opt,name=labels,proto3,oneof" json:"labels,omitempty"`
-	Annotations          *string                `protobuf:"bytes,19,opt,name=annotations,proto3,oneof" json:"annotations,omitempty"`
-	ProjectId            *string                `protobuf:"bytes,20,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
-	Phase                *string                `protobuf:"bytes,21,opt,name=phase,proto3,oneof" json:"phase,omitempty"`
-	StartTime            *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=start_time,json=startTime,proto3,oneof" json:"start_time,omitempty"`
-	CompletionTime       *timestamppb.Timestamp `protobuf:"bytes,23,opt,name=completion_time,json=completionTime,proto3,oneof" json:"completion_time,omitempty"`
-	SdkSessionId         *string                `protobuf:"bytes,24,opt,name=sdk_session_id,json=sdkSessionId,proto3,oneof" json:"sdk_session_id,omitempty"`
-	SdkRestartCount      *int32                 `protobuf:"varint,25,opt,name=sdk_restart_count,json=sdkRestartCount,proto3,oneof" json:"sdk_restart_count,omitempty"`
-	Conditions           *string                `protobuf:"bytes,26,opt,name=conditions,proto3,oneof" json:"conditions,omitempty"`
-	ReconciledRepos      *string                `protobuf:"bytes,27,opt,name=reconciled_repos,json=reconciledRepos,proto3,oneof" json:"reconciled_repos,omitempty"`
-	ReconciledWorkflow   *string                `protobuf:"bytes,28,opt,name=reconciled_workflow,json=reconciledWorkflow,proto3,oneof" json:"reconciled_workflow,omitempty"`
-	KubeCrName           *string                `protobuf:"bytes,29,opt,name=kube_cr_name,json=kubeCrName,proto3,oneof" json:"kube_cr_name,omitempty"`
-	KubeCrUid            *string                `protobuf:"bytes,30,opt,name=kube_cr_uid,json=kubeCrUid,proto3,oneof" json:"kube_cr_uid,omitempty"`
-	KubeNamespace        *string                `protobuf:"bytes,31,opt,name=kube_namespace,json=kubeNamespace,proto3,oneof" json:"kube_namespace,omitempty"`
-	AgentId              *string                `protobuf:"bytes,32,opt,name=agent_id,json=agentId,proto3,oneof" json:"agent_id,omitempty"`
-	LastActivityAt       *timestamppb.Timestamp `protobuf:"bytes,33,opt,name=last_activity_at,json=lastActivityAt,proto3,oneof" json:"last_activity_at,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	Metadata                 *ObjectReference       `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	Name                     string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	RepoUrl                  *string                `protobuf:"bytes,3,opt,name=repo_url,json=repoUrl,proto3,oneof" json:"repo_url,omitempty"`
+	Prompt                   *string                `protobuf:"bytes,4,opt,name=prompt,proto3,oneof" json:"prompt,omitempty"`
+	CreatedByUserId          *string                `protobuf:"bytes,5,opt,name=created_by_user_id,json=createdByUserId,proto3,oneof" json:"created_by_user_id,omitempty"`
+	AssignedUserId           *string                `protobuf:"bytes,6,opt,name=assigned_user_id,json=assignedUserId,proto3,oneof" json:"assigned_user_id,omitempty"`
+	WorkflowId               *string                `protobuf:"bytes,7,opt,name=workflow_id,json=workflowId,proto3,oneof" json:"workflow_id,omitempty"`
+	Repos                    *string                `protobuf:"bytes,8,opt,name=repos,proto3,oneof" json:"repos,omitempty"`
+	Timeout                  *int32                 `protobuf:"varint,10,opt,name=timeout,proto3,oneof" json:"timeout,omitempty"`
+	LlmModel                 *string                `protobuf:"bytes,11,opt,name=llm_model,json=llmModel,proto3,oneof" json:"llm_model,omitempty"`
+	LlmTemperature           *float64               `protobuf:"fixed64,12,opt,name=llm_temperature,json=llmTemperature,proto3,oneof" json:"llm_temperature,omitempty"`
+	LlmMaxTokens             *int32                 `protobuf:"varint,13,opt,name=llm_max_tokens,json=llmMaxTokens,proto3,oneof" json:"llm_max_tokens,omitempty"`
+	ParentSessionId          *string                `protobuf:"bytes,14,opt,name=parent_session_id,json=parentSessionId,proto3,oneof" json:"parent_session_id,omitempty"`
+	BotAccountName           *string                `protobuf:"bytes,15,opt,name=bot_account_name,json=botAccountName,proto3,oneof" json:"bot_account_name,omitempty"`
+	ResourceOverrides        *string                `protobuf:"bytes,16,opt,name=resource_overrides,json=resourceOverrides,proto3,oneof" json:"resource_overrides,omitempty"`
+	EnvironmentVariables     *string                `protobuf:"bytes,17,opt,name=environment_variables,json=environmentVariables,proto3,oneof" json:"environment_variables,omitempty"`
+	Labels                   *string                `protobuf:"bytes,18,opt,name=labels,proto3,oneof" json:"labels,omitempty"`
+	Annotations              *string                `protobuf:"bytes,19,opt,name=annotations,proto3,oneof" json:"annotations,omitempty"`
+	ProjectId                *string                `protobuf:"bytes,20,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
+	Phase                    *string                `protobuf:"bytes,21,opt,name=phase,proto3,oneof" json:"phase,omitempty"`
+	StartTime                *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=start_time,json=startTime,proto3,oneof" json:"start_time,omitempty"`
+	CompletionTime           *timestamppb.Timestamp `protobuf:"bytes,23,opt,name=completion_time,json=completionTime,proto3,oneof" json:"completion_time,omitempty"`
+	SdkSessionId             *string                `protobuf:"bytes,24,opt,name=sdk_session_id,json=sdkSessionId,proto3,oneof" json:"sdk_session_id,omitempty"`
+	SdkRestartCount          *int32                 `protobuf:"varint,25,opt,name=sdk_restart_count,json=sdkRestartCount,proto3,oneof" json:"sdk_restart_count,omitempty"`
+	Conditions               *string                `protobuf:"bytes,26,opt,name=conditions,proto3,oneof" json:"conditions,omitempty"`
+	ReconciledRepos          *string                `protobuf:"bytes,27,opt,name=reconciled_repos,json=reconciledRepos,proto3,oneof" json:"reconciled_repos,omitempty"`
+	ReconciledWorkflow       *string                `protobuf:"bytes,28,opt,name=reconciled_workflow,json=reconciledWorkflow,proto3,oneof" json:"reconciled_workflow,omitempty"`
+	KubeCrName               *string                `protobuf:"bytes,29,opt,name=kube_cr_name,json=kubeCrName,proto3,oneof" json:"kube_cr_name,omitempty"`
+	KubeCrUid                *string                `protobuf:"bytes,30,opt,name=kube_cr_uid,json=kubeCrUid,proto3,oneof" json:"kube_cr_uid,omitempty"`
+	KubeNamespace            *string                `protobuf:"bytes,31,opt,name=kube_namespace,json=kubeNamespace,proto3,oneof" json:"kube_namespace,omitempty"`
+	AgentId                  *string                `protobuf:"bytes,32,opt,name=agent_id,json=agentId,proto3,oneof" json:"agent_id,omitempty"`
+	LastActivityAt           *timestamppb.Timestamp `protobuf:"bytes,33,opt,name=last_activity_at,json=lastActivityAt,proto3,oneof" json:"last_activity_at,omitempty"`
+	SourceScheduledSessionId *string                `protobuf:"bytes,34,opt,name=source_scheduled_session_id,json=sourceScheduledSessionId,proto3,oneof" json:"source_scheduled_session_id,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *Session) Reset() {
@@ -312,6 +313,13 @@ func (x *Session) GetLastActivityAt() *timestamppb.Timestamp {
 		return x.LastActivityAt
 	}
 	return nil
+}
+
+func (x *Session) GetSourceScheduledSessionId() string {
+	if x != nil && x.SourceScheduledSessionId != nil {
+		return *x.SourceScheduledSessionId
+	}
+	return ""
 }
 
 type CreateSessionRequest struct {
@@ -1323,7 +1331,7 @@ var File_ambient_v1_sessions_proto protoreflect.FileDescriptor
 const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\n" +
 	"\x19ambient/v1/sessions.proto\x12\n" +
-	"ambient.v1\x1a\x17ambient/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x94\x0f\n" +
+	"ambient.v1\x1a\x17ambient/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf8\x0f\n" +
 	"\aSession\x127\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x1b.ambient.v1.ObjectReferenceR\bmetadata\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1e\n" +
@@ -1364,7 +1372,8 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\vkube_cr_uid\x18\x1e \x01(\tH\x1aR\tkubeCrUid\x88\x01\x01\x12*\n" +
 	"\x0ekube_namespace\x18\x1f \x01(\tH\x1bR\rkubeNamespace\x88\x01\x01\x12\x1e\n" +
 	"\bagent_id\x18  \x01(\tH\x1cR\aagentId\x88\x01\x01\x12I\n" +
-	"\x10last_activity_at\x18! \x01(\v2\x1a.google.protobuf.TimestampH\x1dR\x0elastActivityAt\x88\x01\x01B\v\n" +
+	"\x10last_activity_at\x18! \x01(\v2\x1a.google.protobuf.TimestampH\x1dR\x0elastActivityAt\x88\x01\x01\x12B\n" +
+	"\x1bsource_scheduled_session_id\x18\" \x01(\tH\x1eR\x18sourceScheduledSessionId\x88\x01\x01B\v\n" +
 	"\t_repo_urlB\t\n" +
 	"\a_promptB\x15\n" +
 	"\x13_created_by_user_idB\x13\n" +
@@ -1396,7 +1405,8 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\f_kube_cr_uidB\x11\n" +
 	"\x0f_kube_namespaceB\v\n" +
 	"\t_agent_idB\x13\n" +
-	"\x11_last_activity_atJ\x04\b\t\x10\n" +
+	"\x11_last_activity_atB\x1e\n" +
+	"\x1c_source_scheduled_session_idJ\x04\b\t\x10\n" +
 	"R\vinteractive\"\x91\b\n" +
 	"\x14CreateSessionRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1e\n" +
