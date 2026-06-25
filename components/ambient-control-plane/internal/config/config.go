@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -46,9 +47,15 @@ type ControlPlaneConfig struct {
 	HTTPSProxy            string
 	NoProxy               string
 	ImagePullSecret       string
-	OpenShellEnabled      bool
-	OpenShellPolicyName   string
-	ServiceIdentity       string
+	OpenShellEnabled            bool
+	OpenShellUseGateway         bool
+	OpenShellPolicyName         string
+	OpenShellGatewayServiceName    string
+	OpenShellGatewayGRPCPort       int
+	OpenShellGatewayTLSEnabled      bool
+	OpenShellGatewayClientTLSSecret string
+	OpenShellGatewayTLSServerName   string
+	ServiceIdentity                 string
 }
 
 func Load() (*ControlPlaneConfig, error) {
@@ -92,9 +99,15 @@ func Load() (*ControlPlaneConfig, error) {
 		HTTPSProxy:            os.Getenv("HTTPS_PROXY"),
 		NoProxy:               os.Getenv("NO_PROXY"),
 		ImagePullSecret:       os.Getenv("IMAGE_PULL_SECRET"),
-		OpenShellEnabled:      os.Getenv("OPENSHELL_ENABLED") == "true",
-		OpenShellPolicyName:   envOrDefault("OPENSHELL_POLICY_CONFIGMAP", "openshell-policy"),
-		ServiceIdentity:       strings.TrimSpace(os.Getenv("GRPC_SERVICE_ACCOUNT")),
+		OpenShellEnabled:            os.Getenv("OPENSHELL_ENABLED") == "true",
+		OpenShellUseGateway:         os.Getenv("OPENSHELL_USE_GATEWAY") == "true",
+		OpenShellPolicyName:         envOrDefault("OPENSHELL_POLICY_CONFIGMAP", "openshell-policy"),
+		OpenShellGatewayServiceName:     envOrDefault("OPENSHELL_GATEWAY_SERVICE_NAME", "openshell-gateway"),
+		OpenShellGatewayGRPCPort:       envOrDefaultInt("OPENSHELL_GATEWAY_GRPC_PORT", 8080),
+		OpenShellGatewayTLSEnabled:      os.Getenv("OPENSHELL_GATEWAY_TLS") != "false",
+		OpenShellGatewayClientTLSSecret: envOrDefault("OPENSHELL_GATEWAY_CLIENT_TLS_SECRET", "openshell-client-tls"),
+		OpenShellGatewayTLSServerName:   os.Getenv("OPENSHELL_GATEWAY_TLS_SERVER_NAME"),
+		ServiceIdentity:             strings.TrimSpace(os.Getenv("GRPC_SERVICE_ACCOUNT")),
 	}
 
 	if cfg.MCPAPIServerURL == "" {
@@ -125,6 +138,18 @@ func envOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func envOrDefaultInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
 }
 
 func parseReconcilers(reconcilersStr string) []string {

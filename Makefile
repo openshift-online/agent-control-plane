@@ -565,18 +565,29 @@ clean: ## Clean up Kubernetes resources
 	@kubectl delete -k components/manifests/overlays/production -n $(NAMESPACE) --ignore-not-found
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Cleanup complete"
 
-# kind-reload-component: tag, load into kind, and restart a single component
-# Usage: $(call kind-reload-component,IMAGE,DEPLOYMENT_NAME,DISPLAY_NAME)
+# kind-reload-component: build unique tag, load into kind, and update deployment image
+# Usage: $(call kind-reload-component,IMAGE,DEPLOYMENT_NAME,DISPLAY_NAME,CONTAINER_NAME)
+#
+# Uses a unique tag (git-short-hash + epoch) so the Deployment spec changes on every
+# reload, guaranteeing a rollout even with imagePullPolicy: IfNotPresent.
+#
+# IMPORTANT: kind clusters do NOT run a container registry. Images are loaded directly
+# into the node's containerd via `ctr images import`. The kustomize kind-local overlay
+# sets imagePullPolicy: IfNotPresent so kubelet uses the pre-loaded image instead of
+# trying to pull from a registry. If imagePullPolicy is set to Always, pods will fail
+# with ErrImagePull because there is no registry at localhost:443.
 define kind-reload-component
-	@$(CONTAINER_ENGINE) tag $(1) localhost/$(1) 2>/dev/null || true
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading image into kind cluster ($(KIND_CLUSTER_NAME))..."
-	@$(CONTAINER_ENGINE) save localhost/$(1) | \
+	@_TAG=$$(git rev-parse --short HEAD)-$$(date +%s) && \
+	_IMG=$$(echo "$(1)" | cut -d: -f1) && \
+	$(CONTAINER_ENGINE) tag $(1) localhost/$$_IMG:$$_TAG && \
+	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading localhost/$$_IMG:$$_TAG into kind cluster ($(KIND_CLUSTER_NAME))..." && \
+	$(CONTAINER_ENGINE) save localhost/$$_IMG:$$_TAG | \
 		$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
-		ctr --namespace=k8s.io images import -
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting $(2)..."
-	@kubectl rollout restart deployment/$(2) -n $(NAMESPACE) $(QUIET_REDIRECT)
-	@kubectl rollout status deployment/$(2) -n $(NAMESPACE) --timeout=60s
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) $(3) reloaded"
+		ctr --namespace=k8s.io images import - && \
+	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Updating $(2) to localhost/$$_IMG:$$_TAG..." && \
+	kubectl set image deployment/$(2) -n $(NAMESPACE) $(4)=localhost/$$_IMG:$$_TAG $(QUIET_REDIRECT) && \
+	kubectl rollout status deployment/$(2) -n $(NAMESPACE) --timeout=60s && \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) $(3) reloaded (tag: $$_TAG)"
 endef
 
 ##@ Kind Local Development
@@ -1058,7 +1069,7 @@ kind-reload-ambient-ui: check-kind check-kubectl check-local-context ## Rebuild 
 		-f ambient-ui/Dockerfile \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(AMBIENT_UI_IMAGE) . $(QUIET_REDIRECT)
-	$(call kind-reload-component,$(AMBIENT_UI_IMAGE),ambient-ui,Ambient UI)
+	$(call kind-reload-component,$(AMBIENT_UI_IMAGE),ambient-ui,Ambient UI,ambient-ui)
 
 kind-reload-ambient-control-plane: check-kind check-kubectl check-local-context ## Rebuild and reload ambient-control-plane only (kind)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding ambient-control-plane..."
@@ -1066,14 +1077,14 @@ kind-reload-ambient-control-plane: check-kind check-kubectl check-local-context 
 		-f components/ambient-control-plane/Dockerfile \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(CONTROL_PLANE_IMAGE) components $(QUIET_REDIRECT)
-	$(call kind-reload-component,$(CONTROL_PLANE_IMAGE),ambient-control-plane,Ambient control plane)
+	$(call kind-reload-component,$(CONTROL_PLANE_IMAGE),ambient-control-plane,Ambient control plane,ambient-control-plane)
 
 kind-reload-ambient-api-server: check-kind check-kubectl check-local-context ## Rebuild and reload ambient-api-server only (kind)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding ambient-api-server..."
 	@cd components/ambient-api-server && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(API_SERVER_IMAGE) . $(QUIET_REDIRECT)
-	$(call kind-reload-component,$(API_SERVER_IMAGE),ambient-api-server,Ambient API server)
+	$(call kind-reload-component,$(API_SERVER_IMAGE),ambient-api-server,Ambient API server,api-server)
 
 kind-sso-toggle: check-kubectl ## Toggle SSO auth on/off in Kind (affects both frontend and backend)
 	@UNLEASH_ADMIN_TOKEN=$$(kubectl get secret unleash-credentials -n $(NAMESPACE) -o jsonpath='{.data.admin-api-token}' | base64 -d); \

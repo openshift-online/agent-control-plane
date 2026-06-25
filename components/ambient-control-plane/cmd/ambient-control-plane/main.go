@@ -17,6 +17,7 @@ import (
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/informer"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/keypair"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/reconciler"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/tokenserver"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/watcher"
@@ -158,6 +159,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		PlatformMode:          cfg.PlatformMode,
 		MPPConfigNamespace:    cfg.MPPConfigNamespace,
 		OpenShellEnabled:      cfg.OpenShellEnabled,
+		OpenShellUseGateway:   cfg.OpenShellUseGateway,
 		OpenShellPolicyName:   cfg.OpenShellPolicyName,
 		ServiceIdentity:       cfg.ServiceIdentity,
 	}
@@ -195,12 +197,32 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	inf.RegisterHandler("projects", projectReconciler.Reconcile)
 	inf.RegisterHandler("project_settings", projectSettingsReconciler.Reconcile)
 
-	sessionReconcilers := createSessionReconcilers(cfg.Reconcilers, factory, kube, projectKube, provisioner, kubeReconcilerCfg, log.Logger)
+	var gateway *openshell.GatewayClient
+	if cfg.OpenShellUseGateway {
+		var resolveCred openshell.CredentialResolver
+		if cfg.OpenShellGatewayTLSEnabled {
+			tlsResolver := openshell.NewTLSResolver(provisionerKube, cfg.OpenShellGatewayClientTLSSecret, cfg.OpenShellGatewayTLSServerName, log.Logger)
+			resolveCred = tlsResolver.CredentialsForNamespace
+			log.Info().Str("secret", cfg.OpenShellGatewayClientTLSSecret).Str("server_name", cfg.OpenShellGatewayTLSServerName).Msg("OpenShell gateway TLS enabled")
+		} else {
+			resolveCred = openshell.InsecureResolver()
+			log.Info().Msg("OpenShell gateway TLS disabled (plaintext)")
+		}
+		gateway = openshell.NewGatewayClient(cfg.OpenShellGatewayServiceName, cfg.OpenShellGatewayGRPCPort, resolveCred, log.Logger)
+		defer func() {
+			if err := gateway.Close(); err != nil {
+				log.Warn().Err(err).Msg("failed to close gateway client")
+			}
+		}()
+		log.Info().Msg("OpenShell gateway mode enabled")
+	}
+
+	sessionReconcilers := createSessionReconcilers(cfg.Reconcilers, factory, kube, projectKube, provisioner, gateway, kubeReconcilerCfg, log.Logger)
 	for _, sessionRec := range sessionReconcilers {
 		inf.RegisterHandler("sessions", sessionRec.Reconcile)
 	}
 
-	podSyncer := reconciler.NewPodStatusSyncer(factory, provisionerKube, cfg.PlatformMode, cfg.MPPConfigNamespace, log.Logger)
+	podSyncer := reconciler.NewPodStatusSyncer(factory, provisionerKube, gateway, cfg.OpenShellUseGateway, cfg.PlatformMode, cfg.MPPConfigNamespace, log.Logger)
 
 	tsErrCh := make(chan error, 1)
 	go func() {
@@ -242,13 +264,13 @@ func startTokenServer(ctx context.Context, cfg *config.ControlPlaneConfig, token
 	return ts.Start(ctx)
 }
 
-func createSessionReconcilers(reconcilerTypes []string, factory *reconciler.SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, cfg reconciler.KubeReconcilerConfig, logger zerolog.Logger) []reconciler.Reconciler {
+func createSessionReconcilers(reconcilerTypes []string, factory *reconciler.SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, gateway *openshell.GatewayClient, cfg reconciler.KubeReconcilerConfig, logger zerolog.Logger) []reconciler.Reconciler {
 	var reconcilers []reconciler.Reconciler
 
 	for _, reconcilerType := range reconcilerTypes {
 		switch reconcilerType {
 		case "kube":
-			kubeReconciler := reconciler.NewKubeReconciler(factory, kube, projectKube, provisioner, cfg, logger)
+			kubeReconciler := reconciler.NewKubeReconciler(factory, kube, projectKube, provisioner, gateway, cfg, logger)
 			reconcilers = append(reconcilers, kubeReconciler)
 			log.Info().Str("type", "kube").Msg("enabled direct Kubernetes session reconciler")
 		case "tally":

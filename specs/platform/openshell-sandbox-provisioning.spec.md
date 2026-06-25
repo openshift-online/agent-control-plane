@@ -47,7 +47,8 @@ When `OPENSHELL_USE_GATEWAY` is true, the control plane SHALL create agent sandb
 - GIVEN `OPENSHELL_USE_GATEWAY` is `true`
 - AND an OpenShell gateway is running in the project namespace
 - WHEN a session transitions to `Pending` phase
-- THEN the control plane SHALL call `CreateSandbox` on the gateway in the session's project namespace
+- THEN the control plane SHALL look up the project by `session.ProjectID` and resolve the gateway namespace from the project's **Name** field (lowercased via `NamespaceName()`), not from `session.ProjectID` directly
+- AND it SHALL call `CreateSandbox` on the gateway in that namespace
 - AND the sandbox SHALL be created with the runner image, session environment variables, and attached credential providers
 - AND the session phase SHALL transition to `Running`
 
@@ -72,10 +73,10 @@ The control plane SHALL discover the OpenShell gateway in each project namespace
 
 #### Scenario: Service-based discovery
 
-- GIVEN an OpenShell gateway is deployed in namespace `my-project`
+- GIVEN an OpenShell gateway is deployed in a namespace matching the project's Name (e.g., project Name `my-project` → namespace `my-project`)
 - WHEN the control plane needs to reach the gateway
-- THEN it SHALL list Services in namespace `my-project` matching a well-known label (e.g., `app.kubernetes.io/name=openshell`)
-- AND it SHALL extract the gateway endpoint from the Service's cluster DNS name and gRPC port
+- THEN it SHALL resolve the namespace from the project's Name field (not the session's `ProjectID`)
+- AND it SHALL connect to the gateway at `<service-name>.<namespace>.svc.cluster.local:<grpc-port>` (configurable via `OPENSHELL_GATEWAY_SERVICE_NAME` and `OPENSHELL_GATEWAY_GRPC_PORT`)
 
 #### Scenario: Service not found
 
@@ -342,6 +343,39 @@ The control plane SHALL maintain a cache of gRPC connections to OpenShell gatewa
 - WHEN the control plane shuts down
 - THEN it SHALL close all cached gRPC connections
 
+### Requirement: Gateway TLS and Authentication
+
+The OpenShell gateway requires mTLS for non-loopback connections. The control plane SHALL load client TLS credentials dynamically from a Kubernetes Secret in each project namespace, enabling per-namespace certificate isolation. The `openshell-client-tls` Secret (configurable via `OPENSHELL_GATEWAY_CLIENT_TLS_SECRET`) contains the client certificate, private key, and CA certificate for verifying the gateway's server certificate.
+
+#### Scenario: mTLS connection
+
+- GIVEN `OPENSHELL_GATEWAY_TLS` is not set to `false`
+- WHEN the control plane connects to a gateway in a project namespace
+- THEN it SHALL read the `openshell-client-tls` Secret from that namespace
+- AND it SHALL use `tls.crt` and `tls.key` as the client certificate
+- AND it SHALL use `ca.crt` as the root CA for server verification
+- AND TLS credentials SHALL be cached per namespace and evicted on connection errors
+
+#### Scenario: TLS ServerName override
+
+- GIVEN the gateway's server certificate SANs do not include the Service DNS name (e.g., cert is valid for `openshell` but the Service is named `openshell-gateway`)
+- WHEN `OPENSHELL_GATEWAY_TLS_SERVER_NAME` is set
+- THEN the TLS handshake SHALL use the override value for server name verification instead of the DNS name
+
+#### Scenario: Plaintext connections (development)
+
+- GIVEN `OPENSHELL_GATEWAY_TLS` is set to `false`
+- WHEN the control plane connects to a gateway
+- THEN it SHALL use insecure (plaintext) gRPC credentials
+- AND no TLS Secret lookups SHALL occur
+
+#### Scenario: Multiline environment variable filtering
+
+- GIVEN the OpenShell gateway rejects environment variable values containing newline or carriage return characters
+- WHEN the control plane builds the sandbox environment map
+- THEN it SHALL remove any entries whose values contain `\n` or `\r`
+- AND it SHALL log a warning for each removed entry
+
 ### Requirement: Configuration
 
 The control plane SHALL expose configuration for OpenShell gateway mode alongside the existing `OPENSHELL_ENABLED` flag. `OPENSHELL_ENABLED` continues to control file-mode sandbox activation as defined in [openshell-sandbox.spec.md]. `OPENSHELL_USE_GATEWAY` is an independent flag that selects gateway-based provisioning.
@@ -356,6 +390,11 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | Variable | Default | Purpose |
 |---|---|---|
 | `OPENSHELL_USE_GATEWAY` | `false` | Enable gateway-based sandbox provisioning (this spec) |
+| `OPENSHELL_GATEWAY_SERVICE_NAME` | `openshell-gateway` | Kubernetes Service name for the OpenShell gateway in each project namespace |
+| `OPENSHELL_GATEWAY_GRPC_PORT` | `8080` | gRPC port on the gateway Service |
+| `OPENSHELL_GATEWAY_TLS` | `true` (enabled unless set to `false`) | Enable mTLS when connecting to the gateway |
+| `OPENSHELL_GATEWAY_CLIENT_TLS_SECRET` | `openshell-client-tls` | Name of the Kubernetes TLS Secret (per project namespace) containing `tls.crt`, `tls.key`, and `ca.crt` for mTLS client authentication |
+| `OPENSHELL_GATEWAY_TLS_SERVER_NAME` | (empty — uses actual DNS name) | Override TLS ServerName for certificate verification; set when the gateway's server certificate SANs don't match the Service DNS name |
 
 #### Scenario: Mode interaction
 
