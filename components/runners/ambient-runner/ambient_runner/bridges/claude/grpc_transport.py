@@ -22,7 +22,6 @@ import os
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
 import grpc
@@ -74,9 +73,7 @@ def _synthesize_run_error(
 
     def _log_write_error(f: asyncio.Future) -> None:
         if not f.cancelled() and f.exception() is not None:
-            logger.warning(
-                "[GRPC LISTENER] push_error failed: %s", f.exception()
-            )
+            logger.warning("[GRPC LISTENER] push_error failed: %s", f.exception())
 
     task.add_done_callback(_log_write_error)
 
