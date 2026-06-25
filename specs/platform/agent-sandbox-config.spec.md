@@ -904,7 +904,7 @@ labels:
   tier: review
 
 annotations:
-  owner: kyle.squizzato@example.com
+  owner: foo.bar@example.com
 ```
 
 ---
