@@ -24,9 +24,9 @@ Behavioral rules and versioned governance for the runner component. Inherits fro
 
 Declarative agent YAML schema for ConfigMap-based agent definitions. Covers entrypoint, providers (namespace-scoped shared resources), payloads, sandbox policies, sandbox templates, and environment variables for OpenShell Gateway-managed sandboxes.
 
-### [Agent Base Inheritance](agent-inheritance.spec.md) *(Draft)*
+### [Agent Configuration Reuse via Kustomize Overlays](agent-inheritance.spec.md) *(Draft)*
 
-Base agent inheritance for configuration reuse across agent declarations. Covers project-scoped and platform-scoped inheritance with merge semantics. Extension to the Agent Sandbox Configuration spec.
+Configuration reuse patterns using Kustomize bases and overlays for agent, provider, and policy composition. Composition happens at apply time — the control plane only sees fully-resolved ConfigMaps. Extension to the Agent Sandbox Configuration spec.
 
 ### [MCP Server](mcp-server.spec.md)
 

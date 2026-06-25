@@ -1,221 +1,221 @@
-# Agent Base Inheritance
+# Agent Configuration Reuse via Kustomize Overlays
 
 **Date:** 2026-06-25
 **Status:** Draft
 **Related:** `specs/platform/agent-sandbox-config.spec.md` (agent YAML schema), `specs/platform/data-model.spec.md` (Agent entity)
 
-> **Draft — not in scope for current implementation.** This spec captures future thinking for agent configuration inheritance. It is not a deliverable of the current agent sandbox configuration work and should not be referenced as committed design. It may be promoted to a full spec in a future iteration.
+> **Draft — not in scope for current implementation.** This spec captures future thinking for agent configuration reuse. It is not a deliverable of the current agent sandbox configuration work and should not be referenced as committed design. It may be promoted to a full spec in a future iteration.
 
 ---
 
 ## Purpose
 
-Base agent inheritance enables configuration reuse across agent declarations. An agent MAY reference a `base_agent` whose fields are merged with the child agent's declaration. This supports fleet-wide defaults (e.g., a global base providing `google-vertex-ai` and `anthropic` providers to all agents across projects) and team-level configuration baselines.
+Agent configuration reuse enables teams to define shared baselines (providers, policies, sandbox templates, environment) and compose them with per-agent overrides. Rather than building a custom inheritance engine in the control plane, this spec uses Kustomize — the same tool already used by `acpctl apply` — to merge base and overlay YAML at apply time. The control plane only ever sees fully-resolved, flattened ConfigMaps.
 
-This spec is a draft extension to `agent-sandbox-config.spec.md`. Agents without `base_agent` are fully self-contained and unaffected by this feature.
-
-> **Implementation note: additional watch scope.** Platform-scoped base agents require the control plane to watch a ConfigMap in the control plane namespace (`ambient-code`), not just tenant namespaces. This is an additional watch scope beyond what the agent and provider ConfigMap watches require.
+This approach follows the existing project pattern of using Kustomize bases and overlays for manifest composition, and avoids adding merge logic to the control plane reconciler.
 
 ---
 
-## Schema
+## How It Works
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `base_agent` | string | no | Reference to a base agent whose configuration this agent inherits from. Two scopes are supported: project-scoped (`agent-name`) resolves within the same project, platform-scoped (`platform/agent-name`) resolves from the platform-level base agent ConfigMap. |
+```
+Git repo (base + overlays) → Kustomize merge → Flattened ConfigMaps → ArgoCD sync → Cluster → Control plane reads
+```
 
-**Merge semantics:**
+1. Teams maintain agent, provider, and policy YAML in git using Kustomize directory structure
+2. `acpctl apply` (or ArgoCD with Kustomize) runs `kustomize build`, which merges bases with overlays
+3. The output is a set of fully-resolved ConfigMaps — no `base_agent` field, no merge semantics
+4. ArgoCD syncs the ConfigMaps to tenant namespaces
+5. The control plane reads the flattened ConfigMaps — it has no awareness of inheritance
 
-| Field category | Merge behavior | Example |
-|----------------|---------------|---------|
-| Scalar fields | Child wins when set; base value used when child omits the field | `entrypoint`, `gateway`, `sandbox_template.image`, `prompt` |
-| Array fields | Child entries appended after base entries; duplicates (by `name` or `sandbox_path`) are deduplicated with child winning | `providers`, `payloads`, `credential_sources` |
-| Map fields | Merged key-by-key; child values take precedence on key collision | `environment`, `labels`, `annotations` |
-| Nested objects | Merged field-by-field (same scalar/array/map rules apply recursively) | `sandbox_template`, `sandbox_policy` |
+The control plane never performs merge operations. All composition happens before the ConfigMap reaches the cluster.
 
-### Platform Base Agents
+---
 
-Platform base agents are declared in a ConfigMap labeled `ambient.ai/kind: base-agent` in the control plane namespace (not a tenant namespace). They are referenced via the `platform/` prefix:
+## Directory Structure
+
+### Platform base (shared across projects)
+
+```
+agents/
+  base/
+    kustomization.yaml
+    agent-defaults.yaml       # Base agent YAML (shared entrypoint, sandbox_template, etc.)
+    providers.yaml            # Shared provider declarations
+    policies.yaml             # Shared policy declarations
+```
 
 ```yaml
-# Platform-level base agent ConfigMap (in control plane namespace)
+# agents/base/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - agent-defaults.yaml
+  - providers.yaml
+  - policies.yaml
+```
+
+```yaml
+# agents/base/agent-defaults.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: platform-base-agents
-  namespace: ambient-code
+  name: agent-defaults
   labels:
-    ambient.ai/kind: base-agent
+    ambient.ai/kind: agent
 data:
-  default.yaml: |
-    name: default
+  defaults.yaml: |
+    name: defaults
+    entrypoint: claude
     providers:
-      - name: google-vertex-ai
-      - name: anthropic
+      - google-vertex-ai
+      - anthropic
+    sandbox_policy: standard
     sandbox_template:
+      image: ghcr.io/nvidia/openshell:sandbox-v0.2.0
       resources:
         cpu: "2"
         memory: 4Gi
-    sandbox_policy:
-      process:
-        run_as_user: sandbox
-        run_as_group: sandbox
-      landlock:
-        compatibility: best_effort
+    environment:
+      LOG_LEVEL: info
+```
+
+### Project overlay (per-team customization)
+
+```
+agents/
+  overlays/
+    project-alpha/
+      kustomization.yaml
+      security-reviewer.yaml  # Project-specific agent overrides
+      providers.yaml          # Additional project providers
 ```
 
 ```yaml
-# Project agent inheriting from platform base
-name: security-reviewer
-base_agent: platform/default
-entrypoint: claude
-providers:
-  - name: github
-# Inherits google-vertex-ai and anthropic from platform/default
-# Inherits sandbox_template.resources, sandbox_policy.process, etc.
+# agents/overlays/project-alpha/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: project-alpha
+resources:
+  - ../../base
+  - security-reviewer.yaml
+  - providers.yaml
+patches:
+  - target:
+      kind: ConfigMap
+      name: agent-defaults
+    patch: |
+      - op: replace
+        path: /data/defaults.yaml
+        value: |
+          name: security-reviewer
+          description: Reviews PRs for OWASP top 10 vulnerabilities
+          prompt: |
+            You are a security review agent specializing in OWASP top 10.
+          entrypoint: claude
+          providers:
+            - google-vertex-ai
+            - anthropic
+            - github
+          sandbox_policy: restricted
+          sandbox_template:
+            image: ghcr.io/nvidia/openshell:sandbox-v0.2.0
+            resources:
+              cpu: "2"
+              memory: 8Gi
+          environment:
+            LOG_LEVEL: info
+            CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: "1"
+          labels:
+            team: platform-security
 ```
 
-### Storage
+### What `kustomize build` produces
 
-When persisted to the API server's `agents` table:
-
-| YAML Field | Column | Type | Notes |
-|------------|--------|------|-------|
-| `base_agent` | `base_agent` | TEXT | Nullable; `platform/name` or `name` |
+Running `kustomize build agents/overlays/project-alpha/` outputs fully-resolved ConfigMaps with all values merged. The control plane sees only the final result — no `base_agent` field, no layering metadata.
 
 ---
 
-## Requirements
+## Patterns
 
-### Requirement: Base Agent Inheritance
+### Pattern: Shared providers across projects
 
-The agent YAML SHALL support a `base_agent` field for configuration inheritance. Two scopes are supported:
+Define provider ConfigMaps in a Kustomize base. Each project overlay inherits the base providers and can add project-specific ones.
 
-- **Project-scoped**: `base_agent: agent-name` — resolves to a named agent within the same project (same tenant namespace).
-- **Platform-scoped**: `base_agent: platform/agent-name` — resolves to a named base agent declared in the control plane namespace via a ConfigMap labeled `ambient.ai/kind: base-agent`.
+```yaml
+# agents/base/providers.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shared-providers
+  labels:
+    ambient.ai/kind: provider
+data:
+  google-vertex-ai.yaml: |
+    name: google-vertex-ai
+    type: google-vertex-ai
+    credential_source:
+      type: vault
+      path: kv/data/platform/google-vertex-ai
+  anthropic.yaml: |
+    name: anthropic
+    type: anthropic
+    credential_source:
+      type: vault
+      path: kv/data/platform/anthropic-key
+```
 
-Platform-scoped base agents enable fleet-wide defaults (e.g., a `default` base providing `google-vertex-ai` and `anthropic` providers to all agents across projects).
+```yaml
+# agents/overlays/project-alpha/providers.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: project-providers
+  labels:
+    ambient.ai/kind: provider
+data:
+  github.yaml: |
+    name: github
+    type: github
+    credential_source:
+      type: vault
+      path: kv/data/agents/github-pat
+```
 
-#### Scenario: Scalar field override
+The project overlay's `kustomization.yaml` includes both — `kustomize build` produces two ConfigMaps, both applied to the namespace.
 
-- GIVEN a platform base agent `default` declares `entrypoint: claude` and `gateway: primary`
-- AND a child agent declares `base_agent: platform/default` and `gateway: secondary`
-- WHEN the control plane resolves the effective configuration
-- THEN the effective `entrypoint` SHALL be `claude` (inherited from base)
-- AND the effective `gateway` SHALL be `secondary` (overridden by child)
+### Pattern: Shared policies across projects
 
-#### Scenario: Array concatenation with deduplication
+Same approach — define policy ConfigMaps in the base, override or add in overlays.
 
-- GIVEN a platform base agent `default` declares:
-  ```yaml
-  providers:
-    - name: google-vertex-ai
-    - name: anthropic
-  ```
-- AND a child agent declares:
-  ```yaml
-  base_agent: platform/default
-  providers:
-    - name: github
-    - name: anthropic
-      env:
-        ANTHROPIC_MODEL: claude-sonnet-4-20250514
-  ```
-- WHEN the control plane resolves the effective configuration
-- THEN the effective `providers` SHALL be `[google-vertex-ai, github, anthropic]`
-- AND the `anthropic` provider SHALL use the child's `env` overrides (child wins on duplicate by `name`)
+### Pattern: Local development overrides
 
-#### Scenario: Map merging
+For local development where Vault is unavailable, use a dev-specific overlay that swaps credential sources to `k8s_secret`:
 
-- GIVEN a base agent declares:
-  ```yaml
-  environment:
-    LOG_LEVEL: info
-    TIMEOUT: "30"
-  ```
-- AND a child agent declares:
-  ```yaml
-  base_agent: shared-config
-  environment:
-    LOG_LEVEL: debug
-    NEW_VAR: value
-  ```
-- WHEN the control plane resolves the effective configuration
-- THEN the effective `environment` SHALL be `{LOG_LEVEL: debug, TIMEOUT: "30", NEW_VAR: value}`
+```yaml
+# agents/overlays/dev/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../project-alpha
+patches:
+  - target:
+      kind: ConfigMap
+      name: shared-providers
+    patch: |
+      - op: replace
+        path: /data/anthropic.yaml
+        value: |
+          name: anthropic
+          type: anthropic
+          credential_source:
+            type: k8s_secret
+            k8s_secret_ref: anthropic-key
+```
 
-#### Scenario: Nested object merging
+### Pattern: Policy composition
 
-- GIVEN a platform base agent declares:
-  ```yaml
-  sandbox_template:
-    image: ghcr.io/nvidia/openshell:sandbox-v0.2.0
-    resources:
-      cpu: "2"
-      memory: 4Gi
-  ```
-- AND a child agent declares:
-  ```yaml
-  base_agent: platform/default
-  sandbox_template:
-    resources:
-      memory: 8Gi
-  ```
-- WHEN the control plane resolves the effective configuration
-- THEN the effective `sandbox_template.image` SHALL be `ghcr.io/nvidia/openshell:sandbox-v0.2.0` (inherited)
-- AND the effective `sandbox_template.resources.cpu` SHALL be `"2"` (inherited)
-- AND the effective `sandbox_template.resources.memory` SHALL be `8Gi` (overridden)
-
-#### Scenario: Platform base agent for shared providers
-
-- GIVEN a platform base agent `default` is declared in the `ambient-code` namespace:
-  ```yaml
-  name: default
-  providers:
-    - name: google-vertex-ai
-    - name: anthropic
-  sandbox_policy:
-    process:
-      run_as_user: sandbox
-      run_as_group: sandbox
-    landlock:
-      compatibility: best_effort
-  ```
-- AND multiple project agents across different namespaces reference `base_agent: platform/default`
-- WHEN sessions start for any of these agents
-- THEN each sandbox SHALL have `google-vertex-ai` and `anthropic` providers registered
-- AND each sandbox SHALL inherit the shared process and landlock policies
-
-#### Scenario: Circular inheritance detection
-
-- GIVEN agent `alpha` declares `base_agent: beta`
-- AND agent `beta` declares `base_agent: alpha`
-- WHEN the control plane validates the agent declarations
-- THEN both declarations SHALL be rejected with a circular inheritance error
-- AND no sessions SHALL be created for either agent until the cycle is resolved
-
-#### Scenario: Base agent not found
-
-- GIVEN an agent declares `base_agent: platform/nonexistent`
-- AND no base agent named `nonexistent` exists in the control plane namespace
-- WHEN the control plane validates the agent declaration
-- THEN the declaration SHALL be rejected with a clear error identifying the missing base agent
-- AND no sessions SHALL be created for the agent
-
-#### Scenario: Multi-level inheritance
-
-- GIVEN a platform base agent `minimal` declares default sandbox policy
-- AND a project agent `team-base` declares `base_agent: platform/minimal` and adds team-specific providers
-- AND an agent `reviewer` declares `base_agent: team-base`
-- WHEN the control plane resolves the effective configuration for `reviewer`
-- THEN the merge SHALL apply at each level: `minimal` → `team-base` → `reviewer`
-- AND scalar/array/map merge rules SHALL apply consistently at each level
-
-#### Scenario: Multi-level inheritance depth limit
-
-- GIVEN a chain of base agent references exceeds 5 levels deep
-- WHEN the control plane validates the agent declaration
-- THEN the declaration SHALL be rejected with a depth limit error
-- AND the error SHALL identify the chain that exceeds the limit
+To compose multiple policy concerns (e.g., base network restrictions + agent-specific endpoints), define separate policy files in the base and merge them in the overlay using Kustomize's ConfigMapGenerator or JSON patches. The final ConfigMap delivered to the cluster contains the fully-merged policy YAML.
 
 ---
 
@@ -223,86 +223,22 @@ Platform-scoped base agents enable fleet-wide defaults (e.g., a `default` base p
 
 | Decision | Rationale |
 |----------|-----------|
-| Two resolution scopes (project and platform) | Project scope enables team-level baselines; platform scope enables fleet-wide defaults such as shared providers (`google-vertex-ai`, `anthropic`) and security baselines. |
-| Merge model: scalar override / array concatenate / map merge | Matches intuitive "child overrides base" semantics. Array deduplication by `name` or `sandbox_path` prevents duplicate providers or payloads. Recursive merge for nested objects enables granular overrides (e.g., override only `sandbox_template.resources.memory` while inheriting the rest). |
-| Depth limit of 5 levels | Prevents unbounded recursion and keeps configuration traceable. Five levels accommodates platform → team → role → agent chains with room to spare. |
+| Kustomize over custom merge engine | The project already uses Kustomize for manifest composition and `acpctl apply` invokes it. Building a `base_agent` merge engine in the control plane duplicates functionality, adds complexity (circular detection, depth limits, merge semantics), and creates a divergent composition model. Kustomize is a known tool with established patterns. |
+| Composition happens at apply time, not runtime | The control plane reads fully-resolved ConfigMaps — no merge logic, no base agent resolution, no additional watch scopes. This simplifies the control plane reconciler and makes agent configurations inspectable via `kubectl get configmap`. |
+| No `base_agent` field in agent schema | With Kustomize handling composition, agents don't need a `base_agent` field. The agent YAML schema remains flat and self-contained. Inheritance is a property of the git repo structure, not the agent declaration format. |
+| Git repo structure encodes the hierarchy | Platform base → team overlay → agent overlay maps naturally to Kustomize's base/overlay directory structure. Teams can see exactly what they inherit by reading the `kustomization.yaml`. |
 
 ---
 
-## Example: Platform Base Agent + Inheritance
+## Comparison with Custom Inheritance
 
-A platform base agent declared in the control plane namespace providing shared providers and security defaults:
-
-```yaml
-# ConfigMap in ambient-code namespace, labeled ambient.ai/kind: base-agent
-# data key: default.yaml
-name: default
-providers:
-  - name: google-vertex-ai
-  - name: anthropic
-
-sandbox_template:
-  image: ghcr.io/nvidia/openshell:sandbox-v0.2.0
-  resources:
-    cpu: "2"
-    memory: 4Gi
-
-sandbox_policy:
-  process:
-    run_as_user: sandbox
-    run_as_group: sandbox
-  landlock:
-    compatibility: best_effort
-
-environment:
-  LOG_LEVEL: info
-```
-
-A project agent inheriting from the platform base — only declares what differs:
-
-```yaml
-name: security-reviewer
-base_agent: platform/default
-description: Reviews PRs for OWASP top 10 vulnerabilities
-prompt: |
-  You are a security review agent specializing in OWASP top 10.
-entrypoint: claude
-
-providers:
-  - name: github
-
-credential_sources:
-  - type: vault
-    path: kv/data/agents/github-pat
-    provider_type: github
-
-sandbox_template:
-  resources:
-    memory: 8Gi
-
-sandbox_policy:
-  network_policies:
-    github_api:
-      endpoints:
-        - host: api.github.com
-          port: 443
-          protocol: rest
-          rules:
-            - allow:
-                method: "*"
-                path: "/**"
-
-labels:
-  team: platform-security
-```
-
-**Effective configuration** after merge:
-
-- `providers`: `[google-vertex-ai, anthropic, github]` (base + child, no duplicates)
-- `sandbox_template.image`: `ghcr.io/nvidia/openshell:sandbox-v0.2.0` (inherited)
-- `sandbox_template.resources`: `{cpu: "2", memory: 8Gi}` (cpu inherited, memory overridden)
-- `sandbox_policy.process`: inherited from base
-- `sandbox_policy.network_policies`: from child (base had none)
-- `environment`: `{LOG_LEVEL: info}` (inherited)
+| Aspect | Custom `base_agent` field | Kustomize overlays |
+|--------|--------------------------|-------------------|
+| Merge engine | Built into control plane | Kustomize (external, well-tested) |
+| Control plane complexity | Must resolve inheritance chains, detect cycles, enforce depth limits | Reads flat ConfigMaps only |
+| Debuggability | Must reconstruct effective config from chain | `kustomize build` shows the exact output |
+| Tooling | Custom — must build resolution logic | Standard — Kustomize, `acpctl apply`, ArgoCD |
+| Watch scope | Control plane must watch base agent ConfigMaps in its own namespace | No additional watch scopes |
+| Policy composition | Custom merge rules for policy fields | Kustomize patches on policy ConfigMaps |
 
 ---
