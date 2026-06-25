@@ -617,7 +617,7 @@ The agent YAML SHALL declare environment variables as a structured `map[string]s
 
 #### Scenario: Provider-injected variables take precedence
 
-- GIVEN an agent declares `environment: {ANTHROPIC_API_KEY: "my-key"}`
+- GIVEN an agent declares `environment: {ANTHROPIC_API_KEY: "user-supplied-value"}`
 - AND the `anthropic` provider injects `ANTHROPIC_API_KEY` via the gateway
 - WHEN a session starts
 - THEN the provider-injected value SHALL take precedence over the agent-declared value
