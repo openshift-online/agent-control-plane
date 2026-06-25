@@ -1,7 +1,7 @@
 # Agent Sandbox Configuration
 
 **Date:** 2026-06-25
-**Status:** Draft
+**Status:** Proposed
 **Related:** `specs/platform/data-model.spec.md` (Agent entity), `specs/security/openshell-sandbox.spec.md` (file-mode sandbox isolation), `specs/security/credential-binding.spec.md` (credential resolution), `specs/platform/control-plane.spec.md` (session provisioning), `specs/platform/runner.spec.md` (runner lifecycle — being replaced)
 
 ---
@@ -10,7 +10,7 @@
 
 Agent definitions SHALL be expressed as declarative YAML documents in ConfigMaps, applied by ArgoCD into tenant namespaces and reconciled by the ACP control plane. The YAML schema SHALL support the full range of OpenShell sandbox configuration: what binary runs inside the sandbox, what credentials it has access to, what network and filesystem policies constrain it, what content is pre-loaded, and what compute resources are allocated.
 
-This spec extends the Agent concept from `data-model.spec.md` with sandbox-aware configuration fields aligned to NVIDIA OpenShell's `SandboxSpec`, `SandboxPolicy`, and `Provider` protobuf definitions. It supersedes the custom Python Runner model — agents are no longer executed via Kubernetes Jobs with a runner container but via OpenShell Gateway-managed sandboxes.
+This spec extends the Agent concept from `data-model.spec.md` with sandbox-aware configuration fields aligned to NVIDIA OpenShell's `SandboxSpec`, `SandboxPolicy`, and `Provider` protobuf definitions. When gateway mode is enabled (`OPENSHELL_ENABLED=true` and `OPENSHELL_GATEWAY_ENABLED=true`), agents using this schema are executed via OpenShell Gateway-managed sandboxes instead of the existing Kubernetes Job runner model.
 
 ---
 
@@ -74,12 +74,11 @@ This spec extends the Agent concept from `data-model.spec.md` with sandbox-aware
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `sandbox_path` | string | yes | Absolute path inside the sandbox where the content is mounted. |
-| `local_path` | string | conditional | Path to a file on the host/source system. Mutually exclusive with `content`. |
-| `content` | string | conditional | Inline string content. Mutually exclusive with `local_path`. |
+| `content` | string | yes | Inline string content to place at the sandbox path. |
 
-Exactly one of `local_path` or `content` MUST be set per payload entry.
+Since agent declarations live in ConfigMaps (reconciled by ArgoCD from git), payloads use inline `content` only. For binary content, use the ConfigMap's `binaryData` field.
 
-> **Path constraints.** `sandbox_path` MUST be an absolute path within the sandbox root (`/sandbox/`). The control plane SHALL reject paths containing `..` traversal segments or paths outside `/sandbox/`. `local_path` MUST be a relative path within the agent's source repository or payload directory — absolute paths and `..` traversal are rejected.
+> **Path constraints.** `sandbox_path` MUST be an absolute path within the sandbox root (`/sandbox/`). The control plane SHALL reject paths containing `..` traversal segments or paths outside `/sandbox/`.
 
 ### Credential Sources
 
@@ -126,6 +125,8 @@ Exactly one of `local_path` or `content` MUST be set per payload entry.
 | `log_level` | string | no | Sandbox supervisor log verbosity: `debug`, `info`, `warn`, `error`. Default: `warn`. |
 
 > **Platform abstraction.** The `resources` and `gpu` fields are platform-level abstractions. In the OpenShell proto, `SandboxTemplate.resources` is a `google.protobuf.Struct` (opaque JSON) and GPU is a separate field on `SandboxSpec`. The control plane maps these user-friendly fields to the appropriate proto structures when calling `CreateSandbox`.
+>
+> **Initial support.** Not all sandbox template fields may be supported in the initial platform implementation. The schema includes them for forward compatibility with OpenShell capabilities. Fields like `gpu`, `runtime_class_name`, and `driver_config` may be accepted but ignored until the platform adds support.
 
 **ResourceRequirements object:**
 
@@ -151,10 +152,12 @@ Exactly one of `local_path` or `content` MUST be set per payload entry.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `version` | integer | no | Policy schema version. Managed by the control plane (not user-set). |
-| `network_policies` | map[string]NetworkPolicyRule | no | Named network access rules. Keys are policy names (e.g., `github_api`, `inference`). |
+| `network_policies` | map[string]NetworkPolicyRule | no | Inline network access rules. Keys are descriptive names (e.g., `github_api`, `inference`). |
 | `filesystem` | FilesystemPolicy | no | Filesystem access constraints. |
 | `process` | ProcessPolicy | no | Process identity constraints. |
 | `landlock` | LandlockPolicy | no | Landlock LSM configuration. |
+
+> **Future consideration.** Network policies are currently defined inline within each agent declaration. A future iteration could support named, reusable network policy resources defined separately (e.g., in their own ConfigMaps) and referenced by name from agent declarations. This would reduce duplication across agents that share the same network access patterns. For this iteration, inline definition keeps the agent declaration self-contained.
 
 **NetworkPolicyRule object** (maps to OpenShell `NetworkPolicyRule` proto):
 
@@ -230,63 +233,6 @@ Exactly one of `local_path` or `content` MUST be set per payload entry.
 |-------|------|----------|-------------|
 | `gateway` | string | no | OpenShell Gateway name to target. For multi-gateway deployments. Defaults to the gateway discovered via Kubernetes Service DNS in the tenant namespace. |
 
-### Inheritance
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `base_agent` | string | no | Reference to a base agent whose configuration this agent inherits from. Two scopes are supported: project-scoped (`agent-name`) resolves within the same project, platform-scoped (`platform/agent-name`) resolves from the platform-level base agent ConfigMap. |
-
-> **Scope candidate.** Base agent inheritance is a requirement for fleet management (e.g., a global base providing `google-vertex-ai` and shared sandbox defaults). If implementation scope must be trimmed, this feature can be deferred without breaking the rest of the spec — agents without `base_agent` are fully self-contained.
-
-**Merge semantics:**
-
-| Field category | Merge behavior | Example |
-|----------------|---------------|---------|
-| Scalar fields | Child wins when set; base value used when child omits the field | `entrypoint`, `gateway`, `sandbox_template.image`, `prompt` |
-| Array fields | Child entries appended after base entries; duplicates (by `name` or `sandbox_path`) are deduplicated with child winning | `providers`, `payloads`, `credential_sources` |
-| Map fields | Merged key-by-key; child values take precedence on key collision | `environment`, `labels`, `annotations` |
-| Nested objects | Merged field-by-field (same scalar/array/map rules apply recursively) | `sandbox_template`, `sandbox_policy` |
-
-**Platform base agents** are declared in a ConfigMap labeled `ambient.ai/kind: base-agent` in the control plane namespace (not a tenant namespace). They are referenced via the `platform/` prefix:
-
-```yaml
-# Platform-level base agent ConfigMap (in control plane namespace)
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: platform-base-agents
-  namespace: ambient-code
-  labels:
-    ambient.ai/kind: base-agent
-data:
-  default.yaml: |
-    name: default
-    providers:
-      - name: google-vertex-ai
-      - name: anthropic
-    sandbox_template:
-      resources:
-        cpu: "2"
-        memory: 4Gi
-    sandbox_policy:
-      process:
-        run_as_user: sandbox
-        run_as_group: sandbox
-      landlock:
-        compatibility: best_effort
-```
-
-```yaml
-# Project agent inheriting from platform base
-name: security-reviewer
-base_agent: platform/default
-entrypoint: claude
-providers:
-  - name: github
-# Inherits google-vertex-ai and anthropic from platform/default
-# Inherits sandbox_template.resources, sandbox_policy.process, etc.
-```
-
 ---
 
 ## Requirements
@@ -360,7 +306,7 @@ The agent YAML SHALL declare which binary runs inside the sandbox. The entrypoin
 
 ### Requirement: Provider Reference Resolution
 
-The agent YAML SHALL declare which providers the agent requires. The control plane SHALL register declared providers on the OpenShell Gateway before creating the sandbox.
+The agent YAML SHALL declare which providers the agent requires. The control plane SHALL register declared providers on the OpenShell Gateway before creating the sandbox. Providers are scoped to the namespace (one namespace → one gateway).
 
 #### Scenario: Provider registered on gateway
 
@@ -414,24 +360,6 @@ The agent YAML SHALL declare payloads (file references or inline content) to upl
 - WHEN a session starts
 - THEN the file `/sandbox/.claude/CLAUDE.md` SHALL exist in the sandbox with the declared content
 - AND the file SHALL be available before the entrypoint process starts
-
-#### Scenario: File reference payload
-
-- GIVEN an agent declares:
-  ```yaml
-  payloads:
-    - sandbox_path: /sandbox/.claude/settings.json
-      local_path: profiles/security-reviewer/settings.json
-  ```
-- WHEN a session starts
-- THEN the content of `profiles/security-reviewer/settings.json` SHALL be uploaded to `/sandbox/.claude/settings.json` in the sandbox
-
-#### Scenario: Both local_path and content set (validation error)
-
-- GIVEN an agent declares a payload with both `local_path` and `content` set
-- WHEN the control plane validates the agent YAML
-- THEN the declaration SHALL be rejected
-- AND the error SHALL indicate that `local_path` and `content` are mutually exclusive
 
 #### Scenario: Missing sandbox_path (validation error)
 
@@ -624,149 +552,6 @@ The agent YAML SHALL declare environment variables as a structured `map[string]s
 
 ---
 
-### Requirement: Base Agent Inheritance
-
-The agent YAML SHALL support a `base_agent` field for configuration inheritance. Two scopes are supported:
-
-- **Project-scoped**: `base_agent: agent-name` — resolves to a named agent within the same project (same tenant namespace).
-- **Platform-scoped**: `base_agent: platform/agent-name` — resolves to a named base agent declared in the control plane namespace via a ConfigMap labeled `ambient.ai/kind: base-agent`.
-
-Platform-scoped base agents enable fleet-wide defaults (e.g., a `default` base providing `google-vertex-ai` and `anthropic` providers to all agents across projects).
-
-> **Scope candidate.** This requirement MAY be descoped to a follow-up if implementation bandwidth requires trimming. Agents without `base_agent` are fully self-contained and unaffected.
-
-**Merge rules:**
-
-| Category | Behavior |
-|----------|----------|
-| Scalar fields | Child wins when set; base value used when child omits the field |
-| Array fields | Child entries appended after base entries; duplicates (by `name` or `sandbox_path`) are deduplicated with child winning |
-| Map fields | Merged key-by-key; child values take precedence on key collision |
-| Nested objects | Merged field-by-field recursively using the same scalar/array/map rules |
-
-#### Scenario: Scalar field override
-
-- GIVEN a platform base agent `default` declares `entrypoint: claude` and `gateway: primary`
-- AND a child agent declares `base_agent: platform/default` and `gateway: secondary`
-- WHEN the control plane resolves the effective configuration
-- THEN the effective `entrypoint` SHALL be `claude` (inherited from base)
-- AND the effective `gateway` SHALL be `secondary` (overridden by child)
-
-#### Scenario: Array concatenation with deduplication
-
-- GIVEN a platform base agent `default` declares:
-  ```yaml
-  providers:
-    - name: google-vertex-ai
-    - name: anthropic
-  ```
-- AND a child agent declares:
-  ```yaml
-  base_agent: platform/default
-  providers:
-    - name: github
-    - name: anthropic
-      env:
-        ANTHROPIC_MODEL: claude-sonnet-4-20250514
-  ```
-- WHEN the control plane resolves the effective configuration
-- THEN the effective `providers` SHALL be `[google-vertex-ai, github, anthropic]`
-- AND the `anthropic` provider SHALL use the child's `env` overrides (child wins on duplicate by `name`)
-
-#### Scenario: Map merging
-
-- GIVEN a base agent declares:
-  ```yaml
-  environment:
-    LOG_LEVEL: info
-    TIMEOUT: "30"
-  ```
-- AND a child agent declares:
-  ```yaml
-  base_agent: shared-config
-  environment:
-    LOG_LEVEL: debug
-    NEW_VAR: value
-  ```
-- WHEN the control plane resolves the effective configuration
-- THEN the effective `environment` SHALL be `{LOG_LEVEL: debug, TIMEOUT: "30", NEW_VAR: value}`
-
-#### Scenario: Nested object merging
-
-- GIVEN a platform base agent declares:
-  ```yaml
-  sandbox_template:
-    image: ghcr.io/nvidia/openshell:sandbox-v0.2.0
-    resources:
-      cpu: "2"
-      memory: 4Gi
-  ```
-- AND a child agent declares:
-  ```yaml
-  base_agent: platform/default
-  sandbox_template:
-    resources:
-      memory: 8Gi
-  ```
-- WHEN the control plane resolves the effective configuration
-- THEN the effective `sandbox_template.image` SHALL be `ghcr.io/nvidia/openshell:sandbox-v0.2.0` (inherited)
-- AND the effective `sandbox_template.resources.cpu` SHALL be `"2"` (inherited)
-- AND the effective `sandbox_template.resources.memory` SHALL be `8Gi` (overridden)
-
-#### Scenario: Platform base agent for shared providers
-
-- GIVEN a platform base agent `default` is declared in the `ambient-code` namespace:
-  ```yaml
-  name: default
-  providers:
-    - name: google-vertex-ai
-    - name: anthropic
-  sandbox_policy:
-    process:
-      run_as_user: sandbox
-      run_as_group: sandbox
-    landlock:
-      compatibility: best_effort
-  ```
-- AND multiple project agents across different namespaces reference `base_agent: platform/default`
-- WHEN sessions start for any of these agents
-- THEN each sandbox SHALL have `google-vertex-ai` and `anthropic` providers registered
-- AND each sandbox SHALL inherit the shared process and landlock policies
-
-#### Scenario: Circular inheritance detection
-
-- GIVEN agent `alpha` declares `base_agent: beta`
-- AND agent `beta` declares `base_agent: alpha`
-- WHEN the control plane validates the agent declarations
-- THEN both declarations SHALL be rejected with a circular inheritance error
-- AND no sessions SHALL be created for either agent until the cycle is resolved
-
-#### Scenario: Base agent not found
-
-- GIVEN an agent declares `base_agent: platform/nonexistent`
-- AND no base agent named `nonexistent` exists in the control plane namespace
-- WHEN the control plane validates the agent declaration
-- THEN the declaration SHALL be rejected with a clear error identifying the missing base agent
-- AND no sessions SHALL be created for the agent
-
-#### Scenario: Multi-level inheritance
-
-- GIVEN a platform base agent `minimal` declares default sandbox policy
-- AND a project agent `team-base` declares `base_agent: platform/minimal` and adds team-specific providers
-- AND an agent `reviewer` declares `base_agent: team-base`
-- WHEN the control plane resolves the effective configuration for `reviewer`
-- THEN the merge SHALL apply at each level: `minimal` → `team-base` → `reviewer`
-- AND scalar/array/map merge rules SHALL apply consistently at each level
-
-#### Scenario: Multi-level inheritance depth limit
-
-- GIVEN a chain of base agent references exceeds 5 levels deep
-- WHEN the control plane validates the agent declaration
-- THEN the declaration SHALL be rejected with a depth limit error
-- AND the error SHALL identify the chain that exceeds the limit
-
----
-
 ### Requirement: Schema Validation
 
 The control plane SHALL validate agent YAML against the schema before reconciling. Invalid declarations SHALL be rejected with clear error messages.
@@ -796,6 +581,8 @@ The control plane SHALL validate agent YAML against the schema before reconcilin
 ### Requirement: Sandbox Policy Minimum Enforcement
 
 The platform SHALL enforce minimum sandbox policy constraints regardless of what an agent declaration specifies. Agent-declared policies are additive on top of platform minimums — they cannot weaken them.
+
+**Enforcement mechanism:** The control plane SHALL maintain a platform-level default sandbox policy (loaded from configuration or a ConfigMap in the control plane namespace). When building the `CreateSandbox` request, the control plane merges the agent-declared policy with the platform default. For fields where the agent-declared value is less restrictive than the platform default, the platform value wins. For network policies, the agent's declared endpoints are intersected with the platform's allowed set — agents cannot grant access to endpoints the platform does not permit.
 
 #### Scenario: Agent cannot disable network isolation
 
@@ -858,6 +645,34 @@ Credential source references SHALL be scoped to prevent cross-tenant access.
 
 ---
 
+### Requirement: Feature Flag Gating
+
+ConfigMap-based agent declaration and OpenShell Gateway sandbox provisioning SHALL be gated behind feature flags. When disabled, the existing runner-based agent lifecycle remains unchanged.
+
+#### Scenario: Gateway mode enabled
+
+- GIVEN `OPENSHELL_ENABLED=true` AND `OPENSHELL_GATEWAY_ENABLED=true` in the control plane configuration
+- WHEN the control plane starts
+- THEN the control plane SHALL watch for agent declaration ConfigMaps in tenant namespaces
+- AND provision sandboxes via the OpenShell Gateway for sessions using ConfigMap-declared agents
+
+#### Scenario: Gateway mode disabled (default)
+
+- GIVEN `OPENSHELL_ENABLED=false` OR `OPENSHELL_GATEWAY_ENABLED=false` (or unset) in the control plane configuration
+- WHEN the control plane starts
+- THEN the control plane SHALL NOT watch for agent declaration ConfigMaps
+- AND the existing runner-based session provisioning SHALL remain the active path
+
+#### Scenario: Mixed mode
+
+- GIVEN `OPENSHELL_ENABLED=true` AND `OPENSHELL_GATEWAY_ENABLED=true`
+- AND agents created via the existing REST API still exist in the database
+- WHEN a session starts for a REST API-created agent
+- THEN the control plane SHALL use the existing runner-based provisioning path for that agent
+- AND ConfigMap-declared agents SHALL use the gateway path
+
+---
+
 ## ConfigMap Format
 
 ### Discovery
@@ -910,7 +725,7 @@ data:
 
 ## Storage Model
 
-The control plane reads agent declarations from ConfigMaps as the source of truth. For API query and status reporting, the control plane MAY persist agent state in the API server's PostgreSQL database using the existing `agents` table.
+The control plane reads agent declarations from ConfigMaps as the source of truth. The control plane SHALL persist agent state in the API server's PostgreSQL database using the existing `agents` table so that agent configurations remain visible and queryable via the REST API and UI. The UI SHALL display ConfigMap-sourced agents the same way it displays API-created agents — the source of the agent declaration is transparent to the user.
 
 When persisted, the new structured fields map to columns as follows:
 
@@ -924,7 +739,6 @@ When persisted, the new structured fields map to columns as follows:
 | `sandbox_template` | `sandbox_template` | JSONB | Nested object |
 | `sandbox_policy` | `sandbox_policy` | JSONB | Nested object |
 | `gateway` | `gateway` | TEXT | Nullable |
-| `base_agent` | `base_agent` | TEXT | Nullable; `platform/name` or `name` |
 
 Legacy fields (`resource_overrides`, `environment_variables` as TEXT) remain in the table for backward compatibility during migration but are not populated by ConfigMap-sourced agents.
 
@@ -939,7 +753,7 @@ Legacy fields (`resource_overrides`, `environment_variables` as TEXT) remain in 
 | Control plane reconciler | Watches API server for sessions, provisions K8s Jobs with runner containers | Watch ConfigMaps for agent declarations; provision OpenShell sandboxes via Gateway gRPC instead of K8s Jobs |
 | API server (agents plugin) | Full CRUD for Agent resource via REST API | May become read-only consumer of ConfigMap-sourced agents; retain for status/query; add JSONB columns for new fields |
 | CLI (`acpctl apply`) | Submits agent YAML to API server | May write ConfigMaps directly to tenant namespaces or continue via API |
-| Runner (Python) | Executes Claude Code CLI in K8s Job pod | Removed — replaced by OpenShell sandbox |
+| Runner (Python) | Executes Claude Code CLI in K8s Job pod | Bypassed when `OPENSHELL_ENABLED` and `OPENSHELL_GATEWAY_ENABLED` are true — sessions for ConfigMap-declared agents use OpenShell sandboxes instead. Runner remains active for REST API-created agents and when gateway mode is disabled. |
 | UI agent editor | Full CRUD via REST API | May become read-only view of ConfigMap-declared agents; editing requires ConfigMap update flow |
 | Go/Python/TS SDKs | Generated from OpenAPI Agent schema | Regenerate if API schema changes to include new fields |
 | ArgoCD | Not involved in agent lifecycle | Must be configured to sync agent declaration ConfigMaps into tenant namespaces (prerequisite) |
@@ -950,7 +764,7 @@ Legacy fields (`resource_overrides`, `environment_variables` as TEXT) remain in 
 |------|-----------|
 | `specs/platform/data-model.spec.md` | Update Agent entity fields; document ConfigMap as source of truth for agent declarations |
 | `specs/platform/control-plane.spec.md` | Add ConfigMap watching; replace Job provisioning with OpenShell Gateway sandbox creation |
-| `specs/platform/runner.spec.md` | Mark as superseded by OpenShell sandbox execution |
+| `specs/platform/runner.spec.md` | Document feature-flag gating; runner is bypassed when gateway mode is enabled but remains active otherwise |
 | `specs/security/openshell-sandbox.spec.md` | Extend from file-mode to gateway-mode; reference per-agent sandbox policies from this spec |
 
 ---
@@ -959,16 +773,17 @@ Legacy fields (`resource_overrides`, `environment_variables` as TEXT) remain in 
 
 | Decision | Rationale |
 |----------|-----------|
-| ConfigMap is the primary agent definition format | Agents will be declared via ArgoCD-managed ConfigMaps in tenant namespaces. REST API-based agent creation is a potential follow-up, not the primary path. This aligns with GitOps workflows and the existing Application (GitOps sync) model in `data-model.spec.md`. |
+| ConfigMap is the primary agent definition format | Agents will be declared via ArgoCD-managed ConfigMaps in tenant namespaces. REST API-based agent creation is a potential follow-up offering an RBAC-scoped developer path for creating agents without GitOps, but not the primary onboarding flow. This aligns with GitOps workflows and the existing Application (GitOps sync) model in `data-model.spec.md`. |
 | Credential sources bypass the existing Credential/RoleBinding system | Vault credential paths create OpenShell providers directly on the gateway. The existing Credential/RoleBinding hierarchy (agent → project → global resolution) is designed for the platform's internal credential model. Credential sources are a separate, simpler pathway for declaring how sandbox credentials are sourced. |
 | Credential sources are a transitional mechanism | The `k8s_secret` type is for local development only. The entire `credential_sources` field is designed to be forward-compatible with OpenShell's planned native credential management ([NVIDIA/OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882)). |
 | Mixed field grouping | Flat fields for `entrypoint`, `providers`, `payloads`, `credential_sources`, `environment`, `gateway` (frequently accessed, simple types). Nested JSONB for `sandbox_template` and `sandbox_policy` (complex structures that map directly to OpenShell proto messages). |
-| Base agent inheritance supports project and platform scope | Two resolution scopes: project-scoped (`agent-name`, same namespace) and platform-scoped (`platform/agent-name`, control plane namespace). Platform scope enables fleet-wide defaults such as shared providers (`google-vertex-ai`, `anthropic`) and security baselines. Merge semantics follow a scalar-override / array-concatenate / map-merge model applied recursively, with a depth limit of 5 levels. This requirement MAY be descoped to a follow-up if implementation bandwidth requires trimming — agents without `base_agent` are fully self-contained. |
+| Base agent inheritance deferred to draft spec | See `specs/platform/agent-inheritance.spec.md`. Covers project-scoped and platform-scoped inheritance with merge semantics. Kept as a separate draft spec to allow independent scoping — agents without `base_agent` are fully self-contained. |
 | Field names align with OpenShell proto naming | `sandbox_policy.network_policies`, `sandbox_template.resources`, `sandbox_policy.filesystem` — these mirror the proto field names to minimize cognitive overhead when mapping between agent YAML and OpenShell API calls. |
 | Unknown fields accepted with warning | Forward compatibility — newer agent YAML schemas can be applied to older control planes without hard failures. |
 | ConfigMap is the source of truth; PostgreSQL is a projection | ConfigMap-declared agents are the authoritative source. The API server's `agents` table is a read-optimized projection for queries and status reporting. The control plane reconciles ConfigMap → database, not the reverse. API PATCH operations on ConfigMap-sourced agents are not supported — changes flow through the ConfigMap (git → ArgoCD → ConfigMap → control plane). |
 | ConfigMap authorization delegates to Kubernetes RBAC | Who can create/modify agent declarations is governed by Kubernetes RBAC on the tenant namespace. The control plane trusts that any ConfigMap with the correct label in the correct namespace was applied by an authorized principal. |
 | Sandbox policy minimums are platform-enforced | Agent-declared sandbox policies cannot weaken platform-level security minimums. The control plane merges agent policies with platform defaults, and platform constraints always win. |
+| Feature flag gating | All ConfigMap-based agent declaration and OpenShell Gateway provisioning is gated behind `OPENSHELL_ENABLED=true` and `OPENSHELL_GATEWAY_ENABLED=true`. When disabled, the existing runner-based lifecycle is unchanged. This allows incremental rollout and rollback. |
 
 ---
 
@@ -1001,9 +816,16 @@ payloads:
       - XSS in rendered templates
       - Authentication bypass in middleware
   - sandbox_path: /sandbox/.claude/settings.json
-    local_path: profiles/security-reviewer/settings.json
+    content: |
+      {
+        "permissions": {"allow": ["Bash", "Read", "Edit"]},
+        "model": "claude-sonnet-4-20250514"
+      }
   - sandbox_path: /sandbox/.mcp.json
-    local_path: profiles/security-reviewer/mcp.json
+    content: |
+      {
+        "mcpServers": {}
+      }
 
 credential_sources:
   - type: vault
@@ -1084,83 +906,5 @@ labels:
 annotations:
   owner: kyle.squizzato@example.com
 ```
-
----
-
-## Example: Platform Base Agent + Inheritance
-
-A platform base agent declared in the control plane namespace providing shared providers and security defaults:
-
-```yaml
-# ConfigMap in ambient-code namespace, labeled ambient.ai/kind: base-agent
-# data key: default.yaml
-name: default
-providers:
-  - name: google-vertex-ai
-  - name: anthropic
-
-sandbox_template:
-  image: ghcr.io/nvidia/openshell:sandbox-v0.2.0
-  resources:
-    cpu: "2"
-    memory: 4Gi
-
-sandbox_policy:
-  process:
-    run_as_user: sandbox
-    run_as_group: sandbox
-  landlock:
-    compatibility: best_effort
-
-environment:
-  LOG_LEVEL: info
-```
-
-A project agent inheriting from the platform base — only declares what differs:
-
-```yaml
-name: security-reviewer
-base_agent: platform/default
-description: Reviews PRs for OWASP top 10 vulnerabilities
-prompt: |
-  You are a security review agent specializing in OWASP top 10.
-entrypoint: claude
-
-providers:
-  - name: github
-
-credential_sources:
-  - type: vault
-    path: kv/data/agents/github-pat
-    provider_type: github
-
-sandbox_template:
-  resources:
-    memory: 8Gi
-
-sandbox_policy:
-  network_policies:
-    github_api:
-      endpoints:
-        - host: api.github.com
-          port: 443
-          protocol: rest
-          rules:
-            - allow:
-                method: "*"
-                path: "/**"
-
-labels:
-  team: platform-security
-```
-
-**Effective configuration** after merge:
-
-- `providers`: `[google-vertex-ai, anthropic, github]` (base + child, no duplicates)
-- `sandbox_template.image`: `ghcr.io/nvidia/openshell:sandbox-v0.2.0` (inherited)
-- `sandbox_template.resources`: `{cpu: "2", memory: 8Gi}` (cpu inherited, memory overridden)
-- `sandbox_policy.process`: inherited from base
-- `sandbox_policy.network_policies`: from child (base had none)
-- `environment`: `{LOG_LEVEL: info}` (inherited)
 
 ---

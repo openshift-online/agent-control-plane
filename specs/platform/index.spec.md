@@ -24,6 +24,10 @@ Behavioral rules and versioned governance for the runner component. Inherits fro
 
 Declarative agent YAML schema for ConfigMap-based agent definitions. Covers entrypoint, providers, payloads, credential sources, sandbox policies, sandbox templates, and environment variables for OpenShell Gateway-managed sandboxes.
 
+### [Agent Base Inheritance](agent-inheritance.spec.md) *(Draft)*
+
+Base agent inheritance for configuration reuse across agent declarations. Covers project-scoped and platform-scoped inheritance with merge semantics. Extension to the Agent Sandbox Configuration spec.
+
 ### [MCP Server](mcp-server.spec.md)
 
 Model Context Protocol server that exposes platform resources as MCP tools. Covers tool definitions, transport, authentication, @mention resolution, and sidecar deployment.
