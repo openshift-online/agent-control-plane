@@ -18,6 +18,8 @@ type SessionDao interface {
 	All(ctx context.Context) (SessionList, error)
 	AllByProjectId(ctx context.Context, projectId string) (SessionList, error)
 	ActiveByAgentID(ctx context.Context, agentID string) (*Session, error)
+	ByScheduledSessionID(ctx context.Context, scheduledSessionID string) (SessionList, error)
+	ActiveByScheduledSessionID(ctx context.Context, scheduledSessionID string) (*Session, error)
 }
 
 var _ SessionDao = &sqlSessionDao{}
@@ -97,6 +99,27 @@ func (d *sqlSessionDao) ActiveByAgentID(ctx context.Context, agentID string) (*S
 	g2 := (*d.sessionFactory).New(ctx)
 	var session Session
 	err := g2.Where("agent_id = ? AND phase IN (?)", agentID, []string{"Pending", "Creating", "Running"}).
+		Order("created_at DESC").
+		Take(&session).Error
+	if err != nil {
+		return nil, err
+	}
+	return &session, nil
+}
+
+func (d *sqlSessionDao) ByScheduledSessionID(ctx context.Context, scheduledSessionID string) (SessionList, error) {
+	g2 := (*d.sessionFactory).New(ctx)
+	var list SessionList
+	err := g2.Unscoped().Where("source_scheduled_session_id = ?", scheduledSessionID).
+		Order("created_at DESC").
+		Find(&list).Error
+	return list, err
+}
+
+func (d *sqlSessionDao) ActiveByScheduledSessionID(ctx context.Context, scheduledSessionID string) (*Session, error) {
+	g2 := (*d.sessionFactory).New(ctx)
+	var session Session
+	err := g2.Where("source_scheduled_session_id = ? AND phase NOT IN (?)", scheduledSessionID, []string{"Completed", "Failed", "Stopped"}).
 		Order("created_at DESC").
 		Take(&session).Error
 	if err != nil {

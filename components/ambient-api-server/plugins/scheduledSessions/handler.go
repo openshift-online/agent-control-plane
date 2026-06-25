@@ -4,17 +4,20 @@ import (
 	"net/http"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 	"github.com/gorilla/mux"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 )
 
 type scheduledSessionHandler struct {
-	svc ScheduledSessionService
+	svc        ScheduledSessionService
+	sessionSvc sessions.SessionService
 }
 
-func NewScheduledSessionHandler(svc ScheduledSessionService) *scheduledSessionHandler {
-	return &scheduledSessionHandler{svc: svc}
+func NewScheduledSessionHandler(svc ScheduledSessionService, sessionSvc sessions.SessionService) *scheduledSessionHandler {
+	return &scheduledSessionHandler{svc: svc, sessionSvc: sessionSvc}
 }
 
 // List — GET /api/ambient/v1/projects/{project_id}/scheduled-sessions
@@ -70,6 +73,7 @@ type scheduledSessionCreateRequest struct {
 	Schedule          string  `json:"schedule"`
 	Timezone          *string `json:"timezone,omitempty"`
 	Enabled           *bool   `json:"enabled,omitempty"`
+	OverlapPolicy     *string `json:"overlap_policy,omitempty"`
 	SessionPrompt     *string `json:"session_prompt,omitempty"`
 	Timeout           *int32  `json:"timeout,omitempty"`
 	InactivityTimeout *int32  `json:"inactivity_timeout,omitempty"`
@@ -101,6 +105,7 @@ func (h *scheduledSessionHandler) Create(w http.ResponseWriter, r *http.Request)
 			},
 		},
 		Action: func() (interface{}, *errors.ServiceError) {
+			ctx := r.Context()
 			oaBody := openapi.ScheduledSession{
 				Name:              body.Name,
 				Description:       body.Description,
@@ -109,6 +114,7 @@ func (h *scheduledSessionHandler) Create(w http.ResponseWriter, r *http.Request)
 				Schedule:          body.Schedule,
 				Timezone:          body.Timezone,
 				Enabled:           body.Enabled,
+				OverlapPolicy:     body.OverlapPolicy,
 				SessionPrompt:     body.SessionPrompt,
 				Timeout:           body.Timeout,
 				InactivityTimeout: body.InactivityTimeout,
@@ -116,7 +122,10 @@ func (h *scheduledSessionHandler) Create(w http.ResponseWriter, r *http.Request)
 				RunnerType:        body.RunnerType,
 			}
 			ss := ConvertScheduledSession(oaBody)
-			created, err := h.svc.Create(r.Context(), ss)
+			if username := auth.GetUsernameFromContext(ctx); username != "" {
+				ss.CreatedByUserId = &username
+			}
+			created, err := h.svc.Create(ctx, ss)
 			if err != nil {
 				return nil, err
 			}
@@ -142,6 +151,7 @@ func (h *scheduledSessionHandler) Patch(w http.ResponseWriter, r *http.Request) 
 				Schedule:          body.Schedule,
 				Timezone:          body.Timezone,
 				Enabled:           body.Enabled,
+				OverlapPolicy:     body.OverlapPolicy,
 				SessionPrompt:     body.SessionPrompt,
 				Timeout:           body.Timeout,
 				InactivityTimeout: body.InactivityTimeout,
@@ -208,10 +218,15 @@ func (h *scheduledSessionHandler) Trigger(w http.ResponseWriter, r *http.Request
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
 			id := mux.Vars(r)["id"]
-			if err := h.svc.Trigger(r.Context(), id); err != nil {
+			created, err := h.svc.Trigger(r.Context(), id)
+			if err != nil {
 				return nil, err
 			}
-			return map[string]string{"status": "triggered"}, nil
+			if created == nil {
+				return map[string]string{"status": "skipped"}, nil
+			}
+			w.WriteHeader(http.StatusCreated)
+			return sessions.PresentSession(created), nil
 		},
 	}
 	handlers.HandleGet(w, r, cfg)
@@ -221,15 +236,24 @@ func (h *scheduledSessionHandler) Trigger(w http.ResponseWriter, r *http.Request
 func (h *scheduledSessionHandler) Runs(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
-			// Returns sessions triggered by this scheduled session.
-			// In production, query sessions where source_scheduled_session_id = id.
-			// For now, return empty list so the endpoint works and is testable.
-			return map[string]interface{}{
-				"kind":  "SessionList",
-				"page":  1,
-				"size":  0,
-				"total": 0,
-				"items": []interface{}{},
+			id := mux.Vars(r)["id"]
+			if _, svcErr := h.svc.Get(r.Context(), id); svcErr != nil {
+				return nil, svcErr
+			}
+			runs, svcErr := h.sessionSvc.ByScheduledSessionID(r.Context(), id)
+			if svcErr != nil {
+				return nil, svcErr
+			}
+			items := make([]openapi.Session, 0, len(runs))
+			for _, s := range runs {
+				items = append(items, sessions.PresentSession(s))
+			}
+			return openapi.SessionList{
+				Kind:  "SessionList",
+				Page:  1,
+				Size:  int32(len(runs)),
+				Total: int32(len(runs)),
+				Items: items,
 			}, nil
 		},
 	}

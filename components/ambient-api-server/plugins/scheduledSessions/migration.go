@@ -58,6 +58,54 @@ func executionFieldsMigration() *gormigrate.Migration {
 	}
 }
 
+func schedulerFieldsMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202606230001",
+		Migrate: func(tx *gorm.DB) error {
+			stmts := []string{
+				`ALTER TABLE scheduled_sessions ADD COLUMN IF NOT EXISTS created_by_user_id TEXT`,
+				`ALTER TABLE scheduled_sessions ADD COLUMN IF NOT EXISTS overlap_policy TEXT NOT NULL DEFAULT 'skip'`,
+				`CREATE INDEX IF NOT EXISTS idx_ss_due ON scheduled_sessions(next_run_at) WHERE enabled = true AND deleted_at IS NULL`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx.Exec(`DROP INDEX IF EXISTS idx_ss_due`)
+			return nil
+		},
+	}
+}
+
+func backfillNextRunAtMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202606230003",
+		Migrate: func(tx *gorm.DB) error {
+			var schedules []*ScheduledSession
+			if err := tx.Where("enabled = true AND next_run_at IS NULL AND deleted_at IS NULL").Find(&schedules).Error; err != nil {
+				return err
+			}
+			now := time.Now()
+			for _, ss := range schedules {
+				next, err := NextRunAtFrom(now, ss.Schedule, ss.Timezone)
+				if err != nil {
+					tx.Model(ss).Updates(map[string]interface{}{"enabled": false, "next_run_at": nil})
+					continue
+				}
+				tx.Model(ss).Update("next_run_at", next)
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return nil
+		},
+	}
+}
+
 func indexMigration() *gormigrate.Migration {
 	stmts := []string{
 		`CREATE INDEX IF NOT EXISTS idx_scheduled_sessions_project ON scheduled_sessions(project_id)`,

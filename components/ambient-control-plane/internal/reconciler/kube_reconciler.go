@@ -158,6 +158,8 @@ func (r *SimpleKubeReconciler) Reconcile(ctx context.Context, event informer.Res
 			return r.provisionSession(ctx, session)
 		case PhaseStopping:
 			return r.deprovisionSession(ctx, session, PhaseStopped)
+		case PhaseCompleted, PhaseFailed:
+			return r.deprovisionSession(ctx, session, session.Phase)
 		}
 	case informer.EventDeleted:
 		return r.cleanupSession(ctx, session)
@@ -941,6 +943,10 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 	}
 	if r.cfg.NoProxy != "" {
 		env = append(env, envVar("NO_PROXY", r.cfg.NoProxy))
+	}
+
+	if session.SourceScheduledSessionID != "" {
+		env = append(env, envVar("STOP_ON_RUN_FINISHED", "true"))
 	}
 
 	if r.cfg.OpenShellEnabled {

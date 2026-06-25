@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { AppSidebar } from '@/components/app-sidebar'
 import { NavHeader } from '@/components/nav-header'
 import { StatusBar } from '@/components/status-bar'
+import { PlatformHealthBanner } from '@/components/platform-health-banner'
 import { ChatSidebar } from '@/components/chat-sidebar'
 import { ChatSidebarProvider } from '@/components/chat-sidebar-context'
 import { CommandPalette } from '@/components/command-palette'
@@ -102,6 +103,7 @@ export default function DashboardLayout({
             sessionName={sessionId ? (session?.name ?? sessionId) : null}
             detailName={agentId ? (agent?.displayName ?? agent?.name ?? agentId) : null}
           />
+          <PlatformHealthBanner />
           <div className="flex-1 p-6 pb-10 max-w-7xl">{children}</div>
           <StatusBar />
           <CommandPalette />

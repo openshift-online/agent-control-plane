@@ -93,3 +93,25 @@ func (d *sessionDaoMock) ActiveByAgentID(ctx context.Context, agentID string) (*
 	}
 	return nil, gorm.ErrRecordNotFound
 }
+
+func (d *sessionDaoMock) ByScheduledSessionID(ctx context.Context, scheduledSessionID string) (SessionList, error) {
+	var list SessionList
+	for _, s := range d.sessions {
+		if s.SourceScheduledSessionId != nil && *s.SourceScheduledSessionId == scheduledSessionID {
+			list = append(list, s)
+		}
+	}
+	return list, nil
+}
+
+func (d *sessionDaoMock) ActiveByScheduledSessionID(ctx context.Context, scheduledSessionID string) (*Session, error) {
+	terminalPhases := map[string]bool{"Completed": true, "Failed": true, "Stopped": true}
+	for _, s := range d.sessions {
+		if s.SourceScheduledSessionId != nil && *s.SourceScheduledSessionId == scheduledSessionID {
+			if s.Phase == nil || !terminalPhases[*s.Phase] {
+				return s, nil
+			}
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
+}

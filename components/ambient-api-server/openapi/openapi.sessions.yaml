@@ -429,6 +429,15 @@ components:
               type: integer
             parent_session_id:
               type: string
+            source_scheduled_session_id:
+              type: string
+              readOnly: true
+              description: ID of the ScheduledSession that created this session.
+            scheduled_for:
+              type: string
+              format: date-time
+              readOnly: true
+              description: The cron tick time this session was created for.
             bot_account_name:
               type: string
             resource_overrides:

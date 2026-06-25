@@ -1,16 +1,25 @@
 package scheduledSessions
 
 import (
+	"context"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 
+	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
+	"github.com/openshift-online/rh-trex-ai/pkg/controllers"
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
 	"github.com/openshift-online/rh-trex-ai/pkg/environments"
 	"github.com/openshift-online/rh-trex-ai/pkg/registry"
 	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
 
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/clock"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/plugins/rbac"
+	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 )
 
 func init() {
@@ -18,7 +27,7 @@ func init() {
 		envServices := services.(*environments.Services)
 
 		var svc ScheduledSessionService
-		if obj := envServices.GetService("ScheduledSessions"); obj != nil {
+		if obj := envServices.GetService("ScheduledSessionsSQL"); obj != nil {
 			svc = obj.(func() ScheduledSessionService)()
 		} else {
 			svc = NewInMemoryService()
@@ -28,7 +37,8 @@ func init() {
 			authzMiddleware = dbAuthz
 		}
 
-		h := NewScheduledSessionHandler(svc)
+		sessionSvc := sessions.Service(envServices)
+		h := NewScheduledSessionHandler(svc, sessionSvc)
 
 		projectRouter := apiV1Router.PathPrefix("/projects/{project_id}").Subrouter()
 		schedRouter := projectRouter.PathPrefix("/scheduled-sessions").Subrouter()
@@ -52,11 +62,44 @@ func init() {
 		return func() ScheduledSessionService {
 			return NewScheduledSessionService(
 				NewScheduledSessionDao(&e.Database.SessionFactory),
+				clock.RealClock{},
+				sessions.Service(&e.Services),
+				sessions.MessageSvc(&e.Services),
+				rbac.NewEvaluator(&e.Database.SessionFactory),
 			)
 		}
+	})
+
+	pkgserver.RegisterController("ScheduledSessionScheduler", func(_ *controllers.KindControllerManager, services pkgserver.ServicesInterface) {
+		envServices := services.(*environments.Services)
+
+		var svc ScheduledSessionService
+		if obj := envServices.GetService("ScheduledSessionsSQL"); obj != nil {
+			svc = obj.(func() ScheduledSessionService)()
+		}
+		if svc == nil {
+			return
+		}
+		sqlSvc, ok := svc.(*sqlScheduledSessionService)
+		if !ok {
+			return
+		}
+
+		env := environments.Environment()
+		dao := NewScheduledSessionDao(&env.Database.SessionFactory)
+		lockFactory := db.NewAdvisoryLockFactory(env.Database.SessionFactory)
+		clk := clock.RealClock{}
+
+		scheduler := NewScheduler(sqlSvc, dao, lockFactory, clk, SchedulerConfig{})
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		_ = stop
+		scheduler.Start(ctx)
+		glog.Info("Scheduled session scheduler started")
 	})
 
 	db.RegisterMigration(migration())
 	db.RegisterMigration(indexMigration())
 	db.RegisterMigration(executionFieldsMigration())
+	db.RegisterMigration(schedulerFieldsMigration())
+	db.RegisterMigration(backfillNextRunAtMigration())
 }

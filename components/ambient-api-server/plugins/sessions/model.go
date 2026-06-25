@@ -16,19 +16,21 @@ type Session struct {
 	AssignedUserId  *string `json:"assigned_user_id"`
 	WorkflowId      *string `json:"workflow_id"`
 
-	Repos                *string  `json:"repos"`
-	Timeout              *int32   `json:"timeout"`
-	LlmModel             *string  `json:"llm_model"`
-	LlmTemperature       *float64 `json:"llm_temperature"`
-	LlmMaxTokens         *int32   `json:"llm_max_tokens"`
-	ParentSessionId      *string  `json:"parent_session_id"`
-	BotAccountName       *string  `json:"bot_account_name"`
-	ResourceOverrides    *string  `json:"resource_overrides"`
-	EnvironmentVariables *string  `json:"environment_variables"`
-	SessionLabels        *string  `json:"labels" gorm:"column:labels"`
-	SessionAnnotations   *string  `json:"annotations" gorm:"column:annotations"`
-	ProjectId            *string  `json:"project_id"`
-	AgentId              *string  `json:"agent_id"`
+	Repos                    *string    `json:"repos"`
+	Timeout                  *int32     `json:"timeout"`
+	LlmModel                 *string    `json:"llm_model"`
+	LlmTemperature           *float64   `json:"llm_temperature"`
+	LlmMaxTokens             *int32     `json:"llm_max_tokens"`
+	ParentSessionId          *string    `json:"parent_session_id"`
+	SourceScheduledSessionId *string    `json:"source_scheduled_session_id,omitempty"`
+	ScheduledFor             *time.Time `json:"scheduled_for,omitempty"`
+	BotAccountName           *string    `json:"bot_account_name"`
+	ResourceOverrides        *string    `json:"resource_overrides"`
+	EnvironmentVariables     *string    `json:"environment_variables"`
+	SessionLabels            *string    `json:"labels" gorm:"column:labels"`
+	SessionAnnotations       *string    `json:"annotations" gorm:"column:annotations"`
+	ProjectId                *string    `json:"project_id"`
+	AgentId                  *string    `json:"agent_id"`
 
 	Phase              *string    `json:"phase"`
 	StartTime          *time.Time `json:"start_time"`

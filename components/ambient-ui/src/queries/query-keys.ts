@@ -65,4 +65,15 @@ export const queryKeys = {
     list: (params?: ListParams) =>
       [...queryKeys.users.lists(), params] as const,
   },
+  scheduledSessions: {
+    all: ['scheduledSessions'] as const,
+    lists: () => [...queryKeys.scheduledSessions.all, 'list'] as const,
+    list: (projectId: string, params?: ListParams) =>
+      [...queryKeys.scheduledSessions.lists(), projectId, params] as const,
+    details: () => [...queryKeys.scheduledSessions.all, 'detail'] as const,
+    detail: (projectId: string, id: string) =>
+      [...queryKeys.scheduledSessions.details(), projectId, id] as const,
+    runs: (projectId: string, id: string) =>
+      [...queryKeys.scheduledSessions.all, 'runs', projectId, id] as const,
+  },
 } as const

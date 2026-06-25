@@ -16,6 +16,8 @@ Name | Type | Description | Notes
 **Schedule** | **string** | Cron expression defining the schedule | 
 **Timezone** | Pointer to **string** | IANA timezone for the schedule (default UTC) | [optional] 
 **Enabled** | Pointer to **bool** | Whether the schedule is active | [optional] 
+**OverlapPolicy** | Pointer to **string** | Behavior when a previous session from this schedule is still active. Defaults to skip. | [optional] 
+**CreatedByUserId** | Pointer to **string** | User who created this schedule. Set from JWT on create. Immutable. | [optional] [readonly] 
 **SessionPrompt** | Pointer to **string** | Prompt passed to each triggered session | [optional] 
 **LastRunAt** | Pointer to **time.Time** |  | [optional] 
 **NextRunAt** | Pointer to **time.Time** |  | [optional] 
@@ -327,6 +329,56 @@ SetEnabled sets Enabled field to given value.
 `func (o *ScheduledSession) HasEnabled() bool`
 
 HasEnabled returns a boolean if a field has been set.
+
+### GetOverlapPolicy
+
+`func (o *ScheduledSession) GetOverlapPolicy() string`
+
+GetOverlapPolicy returns the OverlapPolicy field if non-nil, zero value otherwise.
+
+### GetOverlapPolicyOk
+
+`func (o *ScheduledSession) GetOverlapPolicyOk() (*string, bool)`
+
+GetOverlapPolicyOk returns a tuple with the OverlapPolicy field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetOverlapPolicy
+
+`func (o *ScheduledSession) SetOverlapPolicy(v string)`
+
+SetOverlapPolicy sets OverlapPolicy field to given value.
+
+### HasOverlapPolicy
+
+`func (o *ScheduledSession) HasOverlapPolicy() bool`
+
+HasOverlapPolicy returns a boolean if a field has been set.
+
+### GetCreatedByUserId
+
+`func (o *ScheduledSession) GetCreatedByUserId() string`
+
+GetCreatedByUserId returns the CreatedByUserId field if non-nil, zero value otherwise.
+
+### GetCreatedByUserIdOk
+
+`func (o *ScheduledSession) GetCreatedByUserIdOk() (*string, bool)`
+
+GetCreatedByUserIdOk returns a tuple with the CreatedByUserId field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetCreatedByUserId
+
+`func (o *ScheduledSession) SetCreatedByUserId(v string)`
+
+SetCreatedByUserId sets CreatedByUserId field to given value.
+
+### HasCreatedByUserId
+
+`func (o *ScheduledSession) HasCreatedByUserId() bool`
+
+HasCreatedByUserId returns a boolean if a field has been set.
 
 ### GetSessionPrompt
 

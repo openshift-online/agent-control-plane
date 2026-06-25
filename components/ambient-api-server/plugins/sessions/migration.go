@@ -142,6 +142,29 @@ func lastActivityAtMigration() *gormigrate.Migration {
 	}
 }
 
+func scheduledSessionLinkMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202606230002",
+		Migrate: func(tx *gorm.DB) error {
+			stmts := []string{
+				`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS source_scheduled_session_id TEXT`,
+				`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMPTZ`,
+				`CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_schedule_idempotency ON sessions(source_scheduled_session_id, scheduled_for) WHERE source_scheduled_session_id IS NOT NULL`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx.Exec(`DROP INDEX IF EXISTS idx_sessions_schedule_idempotency`)
+			return nil
+		},
+	}
+}
+
 func schemaExpansionMigration() *gormigrate.Migration {
 	migrateStatements := []string{
 		`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS repos TEXT`,

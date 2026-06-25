@@ -6854,7 +6854,7 @@ type ApiApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPostRequest struct {
 	ssId       string
 }
 
-func (r ApiApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPostRequest) Execute() (*ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response, *http.Response, error) {
+func (r ApiApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPostRequest) Execute() (*Session, *http.Response, error) {
 	return r.ApiService.ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPostExecute(r)
 }
 
@@ -6877,13 +6877,13 @@ func (a *DefaultAPIService) ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPo
 
 // Execute executes the request
 //
-//	@return ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response
-func (a *DefaultAPIService) ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPostExecute(r ApiApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPostRequest) (*ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response, *http.Response, error) {
+//	@return Session
+func (a *DefaultAPIService) ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPostExecute(r ApiApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPostRequest) (*Session, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodPost
 		localVarPostBody    interface{}
 		formFiles           []formFile
-		localVarReturnValue *ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost200Response
+		localVarReturnValue *Session
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultAPIService.ApiAmbientV1ProjectsIdScheduledSessionsSsIdTriggerPost")

@@ -1,5 +1,5 @@
 import type { AmbientClientConfig } from 'ambient-sdk'
-import { SessionAPI, ProjectAPI } from 'ambient-sdk'
+import { SessionAPI, ProjectAPI, ScheduledSessionAPI } from 'ambient-sdk'
 
 // BFF proxy config: empty baseUrl produces relative URLs like /api/ambient/v1/sessions
 // which hit the Next.js BFF proxy. No token needed — the proxy adds it server-side.
@@ -25,6 +25,10 @@ export function getProjectAPI(): ProjectAPI {
     projects = new ProjectAPI(bffConfig)
   }
   return projects
+}
+
+export function getScheduledSessionAPI(projectId: string): ScheduledSessionAPI {
+  return new ScheduledSessionAPI({ ...bffConfig, project: projectId })
 }
 
 export function getConfig(): AmbientClientConfig {
