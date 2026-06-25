@@ -160,10 +160,38 @@ func (s *PodStatusSyncer) mapPodPhaseToSessionPhase(podPhase string, pod *unstru
 		if s.hasContainerCrashLoop(pod) {
 			return PhaseFailed
 		}
+		if s.hasRunnerContainerExited(pod) {
+			return PhaseCompleted
+		}
 		return ""
 	default:
 		return ""
 	}
+}
+
+func (s *PodStatusSyncer) hasRunnerContainerExited(pod *unstructured.Unstructured) bool {
+	statuses, found, _ := unstructured.NestedSlice(pod.Object, "status", "containerStatuses")
+	if !found {
+		return false
+	}
+	for _, cs := range statuses {
+		csMap, ok := cs.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		name, _, _ := unstructured.NestedString(csMap, "name")
+		if name != "ambient-code-runner" {
+			continue
+		}
+		terminated, found, _ := unstructured.NestedMap(csMap, "state", "terminated")
+		if found {
+			reason, _, _ := unstructured.NestedString(terminated, "reason")
+			if reason == "Completed" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *PodStatusSyncer) hasContainerCrashLoop(pod *unstructured.Unstructured) bool {
