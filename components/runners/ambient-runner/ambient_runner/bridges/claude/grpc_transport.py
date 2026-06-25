@@ -406,6 +406,13 @@ class GRPCSessionListener:
                 thread_id,
             )
 
+            if os.environ.get("STOP_ON_RUN_FINISHED", "").strip().lower() == "true":
+                logger.info(
+                    "[GRPC LISTENER] STOP_ON_RUN_FINISHED=true — exiting after run: session=%s",
+                    self._session_id,
+                )
+                os._exit(0)
+
 
 class GRPCMessageWriter:
     """Pushes assistant text to the session messages API in real-time.

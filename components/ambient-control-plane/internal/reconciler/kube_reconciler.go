@@ -943,6 +943,10 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 		env = append(env, envVar("NO_PROXY", r.cfg.NoProxy))
 	}
 
+	if session.SourceScheduledSessionID != "" {
+		env = append(env, envVar("STOP_ON_RUN_FINISHED", "true"))
+	}
+
 	if r.cfg.OpenShellEnabled {
 		env = append(env,
 			envVar("OPENSHELL_ENABLED", "true"),
