@@ -115,8 +115,10 @@ CLOUD_ML_REGION ?= $(shell echo $$CLOUD_ML_REGION)
 GOOGLE_APPLICATION_CREDENTIALS ?= $(or $(shell echo $$GOOGLE_APPLICATION_CREDENTIALS),$(HOME)/.config/gcloud/application_default_credentials.json)
 
 # OpenShell Gateway Configuration (for OPENSHELL_USE_GATEWAY=true)
+# Provisions two tenant namespaces (tenant-a, tenant-b) with an OpenShell gateway each.
+# Override with OPENSHELL_TENANTS="ns1 ns2" to change the set of tenant namespaces.
 OPENSHELL_USE_GATEWAY ?= false
-OPENSHELL_TENANT_NAMESPACE ?= tenant
+OPENSHELL_TENANTS ?= tenant-a tenant-b
 AGENT_SANDBOX_VERSION ?= v0.4.6
 
 # Colors for output (using tput for better compatibility, with fallback to printf-compatible codes)
@@ -453,6 +455,10 @@ makefile-health: check-kind check-kubectl ## Run comprehensive Makefile health c
 local-test-dev: ## Run local developer experience tests
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running local developer experience tests..."
 	@./tests/local-dev-test.sh $(if $(filter true,$(CI_MODE)),--ci,)
+
+test-openshell-dual-tenant: ## Test dual-tenant OpenShell gateway provisioning (requires kind-up OPENSHELL_USE_GATEWAY=true)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running dual-tenant OpenShell sandbox provisioning test..."
+	@API_URL="http://localhost:$(KIND_FWD_API_SERVER_PORT)" ./tests/openshell-dual-tenant.sh
 
 local-test-quick: check-kubectl ## Quick smoke test of local environment
 	@echo "$(COLOR_BOLD)🧪 Quick Smoke Test$(COLOR_RESET)"
@@ -880,9 +886,9 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' ready!"
 	@# OpenShell gateway setup if requested
 	@if [ "$(OPENSHELL_USE_GATEWAY)" = "true" ]; then \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Installing OpenShell gateway prerequisites..."; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Installing OpenShell gateway prerequisites ($(OPENSHELL_TENANTS))..."; \
 		NAMESPACE=$(NAMESPACE) \
-		OPENSHELL_TENANT_NAMESPACE="$(OPENSHELL_TENANT_NAMESPACE)" \
+		OPENSHELL_TENANTS="$(OPENSHELL_TENANTS)" \
 		AGENT_SANDBOX_VERSION="$(AGENT_SANDBOX_VERSION)" \
 		./scripts/setup-kind-openshell.sh; \
 	fi
