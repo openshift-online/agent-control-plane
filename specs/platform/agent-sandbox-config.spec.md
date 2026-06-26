@@ -179,7 +179,7 @@ data:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `name` | string | yes | Unique provider name within the namespace. This is the name agents use to reference the provider. |
-| `type` | string | yes | OpenShell provider type (e.g., `github`, `anthropic`, `claude`, `jira`, `google-vertex-ai`, `generic`). Maps to the OpenShell `Provider.type` field. |
+| `type` | string | yes | ACP credential type (e.g., `github`, `anthropic`, `jira`, `vertex`, `kubeconfig`). The control plane maps this to the corresponding OpenShell provider type at sandbox creation time — see [Credential-to-Provider Type Mapping](#credential-to-provider-type-mapping). |
 | `credential_source` | CredentialSource | yes | Where the credentials for this provider come from. |
 
 **CredentialSource object:**
@@ -194,12 +194,12 @@ data:
 
 > **Scope restrictions.** For `k8s_secret` type: references are scoped to the tenant namespace — only secrets within the same namespace as the provider ConfigMap can be referenced. The control plane SHALL enforce this at reconcile time by rejecting provider declarations that reference secrets in other namespaces (i.e., references containing a `/` namespace qualifier). Additionally, the control plane's Kubernetes RBAC SHALL be scoped to only permit `get` on Secrets in tenant namespaces it manages. For `vault` type: vault paths are scoped by the control plane's Vault policy — the control plane authenticates to Vault with a service identity whose policy governs which paths are readable.
 
-### Provider Type Mapping
+### Credential-to-Provider Type Mapping
 
-The control plane maps ambient provider types to OpenShell provider types when creating providers on the gateway:
+When the control plane creates OpenShell providers on the gateway, it maps ACP credential types to OpenShell provider types. This is the handoff boundary — ACP resolves credentials, OpenShell manages providers:
 
-| Ambient Provider Type | OpenShell Provider Type |
-|-----------------------|------------------------|
+| ACP Credential Type | OpenShell Provider Type |
+|---------------------|------------------------|
 | `github` | `github` |
 | `anthropic` | `claude` |
 | `claude` | `claude` |
@@ -208,13 +208,13 @@ The control plane maps ambient provider types to OpenShell provider types when c
 | `vertex` | `vertex-prod` |
 | `kubeconfig` | `generic` |
 
-Types not in this table are passed through as-is. The mapping may be extended as new provider types are added.
+Credential types not in this table are mapped to `generic`. The mapping may be extended as new credential types are added.
 
-### Provider Naming on the Gateway
+### OpenShell Provider Naming
 
-When creating a provider on the OpenShell Gateway, the control plane SHALL use the naming convention `{projectName}-{ambientProviderName}`. This scopes providers to the project and avoids collisions when multiple projects share a gateway namespace.
+When the control plane creates an OpenShell provider on the gateway, it SHALL use the naming convention `{projectName}-{providerName}`. This scopes providers to the project and avoids collisions when multiple projects share a gateway namespace.
 
-For example, a provider declared as `github` in project `alpha` becomes `alpha-github` on the gateway.
+For example, a provider declaration named `github` in project `alpha` becomes OpenShell provider `alpha-github` on the gateway.
 
 ### Sandbox Creation Flow
 
@@ -223,14 +223,17 @@ When a sandbox session starts for an agent:
 1. The control plane reads the agent's `providers` list (array of names)
 2. For each provider name, the control plane looks up the provider declaration in the namespace
 3. The control plane reads the credential from the declared source (Vault or k8s Secret)
-4. If the provider already exists on the gateway (by gateway-scoped name) → refresh the provider credential
-5. If the provider does not exist on the gateway → create the provider with the resolved credential and mapped OpenShell type
-6. The control plane calls `CreateSandbox` with all resolved provider names attached
-7. The control plane tracks which environment variables each provider injects (see [Provider-Injected Environment Variables](#provider-injected-environment-variables))
+4. The control plane maps the credential type to an OpenShell provider type (see [Credential-to-Provider Type Mapping](#credential-to-provider-type-mapping))
+5. If an OpenShell provider already exists on the gateway (by gateway-scoped name) → refresh the credential
+6. If no OpenShell provider exists → create one with the resolved credential and mapped type
+7. The control plane calls `CreateSandbox` with all OpenShell provider names attached
+8. The control plane tracks which environment variables each OpenShell provider injects (see [OpenShell Provider-Injected Environment Variables](#openshell-provider-injected-environment-variables))
 
-### Provider-Injected Environment Variables
+### OpenShell Provider-Injected Environment Variables
 
-Each OpenShell provider type injects specific environment variables into the sandbox (e.g., `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`). When building the sandbox environment map, the control plane SHALL detect provider-injected variables and remove any agent-declared environment variables that would conflict — the provider-injected value takes precedence. The control plane SHALL log a warning for each skipped variable.
+OpenShell providers inject specific environment variables into the sandbox at the gateway level (e.g., `ANTHROPIC_API_KEY` for `claude` providers, `GITHUB_TOKEN` for `github` providers). This happens on the OpenShell side — the control plane does not inject these variables directly.
+
+When building the sandbox environment map, the control plane SHALL detect which variables each OpenShell provider is known to inject and remove any agent-declared environment variables that would conflict — the OpenShell provider-injected value takes precedence. The control plane SHALL log a warning for each skipped variable.
 
 ---
 
@@ -923,7 +926,7 @@ This spec describes the complete desired state. Implementation is expected to pr
 **What's implemented:**
 - Feature flag: `OPENSHELL_USE_GATEWAY=true` gates gateway mode
 - Provider resolution via the existing REST API Credential/RoleBinding system (`sdk.Credentials().Get()` → `CreateProvider` on gateway)
-- Provider type mapping (ambient → OpenShell types) and gateway naming (`{projectName}-{ambientProvider}`)
+- Credential-to-provider type mapping (ACP credential types → OpenShell provider types) and gateway naming (`{projectName}-{providerName}`)
 - `CreateSandbox` gRPC call with image, environment, and provider references
 - `ExecSandbox` to start the runner after sandbox readiness
 - Per-namespace gRPC connection cache with mTLS and K8s ServiceAccount authentication
