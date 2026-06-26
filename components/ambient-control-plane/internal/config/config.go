@@ -48,6 +48,7 @@ type ControlPlaneConfig struct {
 	ImagePullSecret       string
 	OpenShellEnabled      bool
 	OpenShellPolicyName   string
+	OpenShellUseGateway   bool
 	ServiceIdentity       string
 }
 
@@ -94,6 +95,7 @@ func Load() (*ControlPlaneConfig, error) {
 		ImagePullSecret:       os.Getenv("IMAGE_PULL_SECRET"),
 		OpenShellEnabled:      os.Getenv("OPENSHELL_ENABLED") == "true",
 		OpenShellPolicyName:   envOrDefault("OPENSHELL_POLICY_CONFIGMAP", "openshell-policy"),
+		OpenShellUseGateway:   os.Getenv("OPENSHELL_USE_GATEWAY") == "true",
 		ServiceIdentity:       strings.TrimSpace(os.Getenv("GRPC_SERVICE_ACCOUNT")),
 	}
 

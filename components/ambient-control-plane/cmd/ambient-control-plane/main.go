@@ -159,6 +159,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		MPPConfigNamespace:    cfg.MPPConfigNamespace,
 		OpenShellEnabled:      cfg.OpenShellEnabled,
 		OpenShellPolicyName:   cfg.OpenShellPolicyName,
+		OpenShellUseGateway:   cfg.OpenShellUseGateway,
 		ServiceIdentity:       cfg.ServiceIdentity,
 	}
 
