@@ -97,7 +97,7 @@ agents/
 # agents/overlays/project-alpha/kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: project-alpha
+namespace: alpha
 resources:
   - ../../base
   - providers.yaml
@@ -138,7 +138,7 @@ With `behavior: merge`, Kustomize merges the overlay's data keys into the base C
 # agents/overlays/project-alpha/kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: project-alpha
+namespace: alpha
 resources:
   - ../../base
   - providers.yaml
@@ -176,6 +176,73 @@ patches:
 
 Running `kustomize build agents/overlays/project-alpha/` outputs fully-resolved ConfigMaps with all values merged. The control plane sees only the final result — no `base_agent` field, no layering metadata.
 
+```yaml
+# $ kustomize build agents/overlays/project-alpha/
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    ambient.ai/kind: agent
+  name: agent-defaults
+  namespace: alpha
+data:
+  security-reviewer.yaml: |
+    name: security-reviewer
+    description: Reviews PRs for OWASP top 10 vulnerabilities
+    prompt: |
+      You are a security review agent specializing in OWASP top 10.
+    entrypoint: claude
+    providers:
+      - google-vertex-ai
+      - anthropic
+      - github
+    sandbox_policy: restricted
+    sandbox_template:
+      image: ghcr.io/nvidia/openshell:sandbox-v0.2.0
+      resources:
+        cpu: "2"
+        memory: 8Gi
+    environment:
+      LOG_LEVEL: info
+      CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: "1"
+    labels:
+      team: platform-security
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    ambient.ai/kind: provider
+  name: shared-providers
+  namespace: alpha
+data:
+  google-vertex-ai.yaml: |
+    name: google-vertex-ai
+    type: google-vertex-ai
+    credential_source:
+      k8s_secret_ref: google-vertex-ai-key
+  anthropic.yaml: |
+    name: anthropic
+    type: anthropic
+    credential_source:
+      k8s_secret_ref: anthropic-key
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    ambient.ai/kind: provider
+  name: project-providers
+  namespace: alpha
+data:
+  github.yaml: |
+    name: github
+    type: github
+    credential_source:
+      k8s_secret_ref: github-pat
+```
+
 ---
 
 ## Patterns
@@ -197,14 +264,12 @@ data:
     name: google-vertex-ai
     type: google-vertex-ai
     credential_source:
-      type: vault
-      path: kv/data/platform/google-vertex-ai
+      k8s_secret_ref: google-vertex-ai-key
   anthropic.yaml: |
     name: anthropic
     type: anthropic
     credential_source:
-      type: vault
-      path: kv/data/platform/anthropic-key
+      k8s_secret_ref: anthropic-key
 ```
 
 ```yaml
@@ -220,8 +285,7 @@ data:
     name: github
     type: github
     credential_source:
-      type: vault
-      path: kv/data/agents/github-pat
+      k8s_secret_ref: github-pat
 ```
 
 The project overlay's `kustomization.yaml` includes both — `kustomize build` produces two ConfigMaps, both applied to the namespace.
@@ -232,7 +296,7 @@ Same approach — define policy ConfigMaps in the base, override or add in overl
 
 ### Pattern: Local development overrides
 
-For local development where Vault is unavailable, use a dev-specific overlay that swaps credential sources to `k8s_secret`:
+For local development, use a dev-specific overlay that swaps credential sources to use dev-specific secrets:
 
 ```yaml
 # agents/overlays/dev/kustomization.yaml
@@ -251,8 +315,7 @@ patches:
           name: anthropic
           type: anthropic
           credential_source:
-            type: k8s_secret
-            k8s_secret_ref: anthropic-key
+            k8s_secret_ref: dev-anthropic-key
 ```
 
 ### Pattern: Policy composition

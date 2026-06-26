@@ -21,12 +21,12 @@ This spec extends the Agent concept from `data-model.spec.md` with sandbox-aware
 - **Payload** — content (file reference or inline text) uploaded into the sandbox filesystem at a declared path. Used for CLAUDE.md, settings, MCP configs, task files.
 - **Entrypoint** — the CLI binary launched inside the sandbox (e.g., `claude`, `opencode`, `bash`).
 - **Sandbox Policy** — an OpenShell `SandboxPolicy` governing network endpoints, filesystem paths, process identity, and Landlock constraints within the sandbox. Declared as a namespace-scoped resource in a Policy ConfigMap using the exact upstream OpenShell YAML format, and referenced by agents by name.
-- **Policy Declaration** — a `data` entry within a ConfigMap (labeled `ambient.ai/kind: policy`) containing a raw upstream OpenShell `SandboxPolicy` YAML definition. The policy name is derived from the data key filename. Policy declarations are namespace-scoped and shared across agents in the tenant namespace.
-- **Credential Source** — a reference to an external secret store (Vault path or Kubernetes Secret) attached to a provider declaration, from which the control plane reads credential values and passes them over gRPC to configure OpenShell providers. Vault is the production credential path; `k8s_secret` is not recommended for production at this time. This is a transitional mechanism — once [NVIDIA/OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882) is resolved, the gateway will load secrets directly and ACP will only need to pass references.
-- **Provider Declaration** — a YAML document within a ConfigMap (labeled `ambient.ai/kind: provider`) that defines a named provider with its type and credential source. Provider declarations are namespace-scoped and shared across agents in the tenant namespace.
+- **Policy Declaration** — a `data` entry within a ConfigMap (labeled `ambient.ai/kind: policy`) containing a raw upstream OpenShell `SandboxPolicy` YAML definition. The policy name is derived from the `name` field within the YAML content. Policy declarations are namespace-scoped and available for any agent in the tenant namespace to reference by name — they are not automatically bound to all agents.
+- **Credential Source** — a reference to a Kubernetes Secret attached to a provider declaration, from which the control plane reads credential values and passes them over gRPC to configure OpenShell providers. This is a transitional mechanism — once [NVIDIA/OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882) is resolved, the gateway will load secrets directly and ACP will only need to pass references.
+- **Provider Declaration** — a YAML document within a ConfigMap (labeled `ambient.ai/kind: provider`) that defines a named provider with its type and credential source. Provider declarations are namespace-scoped and available for any agent in the tenant namespace to reference. Agent configurations specify which of these providers they require for their workload.
 - **Sandbox Template** — compute and runtime configuration for the sandbox container: image, CPU/memory/GPU resources, runtime class, driver config.
 - **Agent Declaration** vs **Agent** — an Agent Declaration is the YAML input format (the ConfigMap data); an Agent is the reconciled platform entity in the API server's database. The control plane reconciles declarations into agents.
-- **Tenant Namespace** — a Kubernetes namespace scoped to a project, named `project-{project_name}` by convention. ConfigMaps containing agent declarations are applied here by ArgoCD.
+- **Tenant Namespace** — a Kubernetes namespace scoped to a project, named `{project_name}` by convention. ConfigMaps containing agent declarations are applied here by ArgoCD.
 - **Base Agent** — *(future)* a shared agent configuration baseline composed via Kustomize overlays at apply time. The control plane only sees the fully-resolved result. See `agent-inheritance.spec.md` (draft).
 
 ---
@@ -102,7 +102,7 @@ Since agent declarations live in ConfigMaps (reconciled by ArgoCD from git), pay
 
 > **Platform abstraction.** The `resources` and `gpu` fields are platform-level abstractions. In the OpenShell proto, `SandboxTemplate.resources` is a `google.protobuf.Struct` (opaque JSON) and GPU is a separate field on `SandboxSpec`. The control plane maps these user-friendly fields to the appropriate proto structures when calling `CreateSandbox`.
 >
-> **Initial support.** Not all sandbox template fields may be supported in the initial platform implementation. The schema includes them for forward compatibility with OpenShell capabilities. Fields like `gpu`, `runtime_class_name`, and `driver_config` may be accepted but ignored until the platform adds support.
+> **Initial support.** Not all sandbox template fields may be supported in the initial platform implementation. The schema includes them for forward compatibility with OpenShell capabilities. Fields like `gpu`, `runtime_class_name`, and `driver_config` will be accepted but SHALL be ignored until the platform adds support.
 
 **ResourceRequirements object:**
 
@@ -123,15 +123,9 @@ Since agent declarations live in ConfigMaps (reconciled by ArgoCD from git), pay
 |-------|------|----------|-------------|
 | `sandbox_policy` | string | no | Name of a policy declared in a Policy ConfigMap in the same tenant namespace. When omitted, the platform's default policy applies. |
 
-Policies are namespace-scoped resources declared separately from agents (see [Policy Declarations](#policy-declarations)). Each policy contains a raw upstream OpenShell `SandboxPolicy` YAML definition — the control plane passes it through to `CreateSandbox` as-is, only applying platform minimum enforcement on top. Agents reference policies by name.
+Policies are namespace-scoped resources declared separately from agents (see [Policy Declarations](#policy-declarations)). Each policy contains a raw upstream OpenShell `SandboxPolicy` YAML definition — the control plane passes it through to `CreateSandbox` as-is. Agents reference policies by name.
 
 > **Policy composition via Kustomize.** Agents reference a single policy by name. Composing multiple policy concerns (e.g., combining a base network policy with agent-specific endpoints) is handled via Kustomize overlays at apply time — see `agent-inheritance.spec.md` (draft). The control plane only sees the fully-resolved policy ConfigMap.
-
-### Gateway
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `gateway` | string | no | OpenShell Gateway name to target. For multi-gateway deployments. Defaults to the gateway discovered via Kubernetes Service DNS in the tenant namespace. |
 
 ---
 
@@ -150,7 +144,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: provider-declarations
-  namespace: project-{project_name}
+  namespace: {project_name}
   labels:
     ambient.ai/kind: provider
 data:
@@ -158,19 +152,11 @@ data:
     name: github
     type: github
     credential_source:
-      type: vault
-      path: kv/data/agents/github-pat
+      k8s_secret_ref: github-pat
   anthropic.yaml: |
     name: anthropic
     type: anthropic
     credential_source:
-      type: vault
-      path: kv/data/agents/anthropic-key
-  anthropic-dev.yaml: |
-    name: anthropic-dev
-    type: anthropic
-    credential_source:
-      type: k8s_secret
       k8s_secret_ref: anthropic-key
 ```
 
@@ -186,13 +172,11 @@ data:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `type` | string | yes | Source type: `vault` (production) or `k8s_secret` (local development only). |
-| `path` | string | conditional | Vault secret path (e.g., `kv/data/agents/github-pat`). Required when `type=vault`. |
-| `k8s_secret_ref` | string | conditional | Kubernetes Secret name within the tenant namespace (e.g., `anthropic-key`). Required when `type=k8s_secret`. |
+| `k8s_secret_ref` | string | yes | Kubernetes Secret name within the tenant namespace (e.g., `anthropic-key`). The Secret must exist in the same namespace as the provider ConfigMap. |
 
-> **Transitional mechanism.** Currently, ACP must read the secret from Kubernetes (or Vault), extract the credential value, and pass it over gRPC to the gateway to configure the OpenShell provider. Once [NVIDIA/OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882) is resolved, ACP should be able to pass secret references directly to the gateway, which will load and read the credentials itself — eliminating the need for ACP to handle credential values in transit. At that point, the `credential_source` model MAY be simplified to just secret references rather than resolved values. The `k8s_secret` type is not recommended for production at this time.
+> **Transitional mechanism.** Currently, ACP must read the secret from Kubernetes, extract the credential value, and pass it over gRPC to the gateway to configure the OpenShell provider. Once [NVIDIA/OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882) is resolved, ACP should be able to pass secret references directly to the gateway, which will load and read the credentials itself — eliminating the need for ACP to handle credential values in transit. At that point, the `credential_source` model MAY be simplified to just secret references rather than resolved values.
 
-> **Scope restrictions.** For `k8s_secret` type: references are scoped to the tenant namespace — only secrets within the same namespace as the provider ConfigMap can be referenced. The control plane SHALL enforce this at reconcile time by rejecting provider declarations that reference secrets in other namespaces (i.e., references containing a `/` namespace qualifier). Additionally, the control plane's Kubernetes RBAC SHALL be scoped to only permit `get` on Secrets in tenant namespaces it manages. For `vault` type: vault paths are scoped by the control plane's Vault policy — the control plane authenticates to Vault with a service identity whose policy governs which paths are readable.
+> **Scope restrictions.** References are scoped to the tenant namespace — only Secrets within the same namespace as the provider ConfigMap can be referenced. The control plane SHALL enforce this at reconcile time by rejecting provider declarations that reference Secrets in other namespaces. The control plane's Kubernetes RBAC SHALL be scoped to only permit `get` on Secrets in tenant namespaces it manages.
 
 ### Credential-to-Provider Type Mapping
 
@@ -212,7 +196,7 @@ Credential types not in this table are mapped to `generic`. The mapping may be e
 
 ### OpenShell Provider Naming
 
-When the control plane creates an OpenShell provider on the gateway, it SHALL use the naming convention `{projectName}-{providerName}`. This scopes providers to the project and avoids collisions when multiple projects share a gateway namespace.
+When the control plane creates an OpenShell provider on the gateway, it SHALL use the naming convention `{projectName}-{providerName}`. This scopes providers to the project and ensures unique provider names on the gateway.
 
 For example, a provider declaration named `github` in project `alpha` becomes OpenShell provider `alpha-github` on the gateway.
 
@@ -222,7 +206,7 @@ When a sandbox session starts for an agent:
 
 1. The control plane reads the agent's `providers` list (array of names)
 2. For each provider name, the control plane looks up the provider declaration in the namespace
-3. The control plane reads the credential from the declared source (Vault or k8s Secret)
+3. The control plane reads the credential from the declared source (k8s Secret)
 4. The control plane maps the credential type to an OpenShell provider type (see [Credential-to-Provider Type Mapping](#credential-to-provider-type-mapping))
 5. If an OpenShell provider already exists on the gateway (by gateway-scoped name) → refresh the credential
 6. If no OpenShell provider exists → create one with the resolved credential and mapped type
@@ -239,7 +223,7 @@ When building the sandbox environment map, the control plane SHALL detect which 
 
 ## Policy Declarations
 
-Policies are namespace-scoped resources declared in their own ConfigMaps, separate from agent declarations. A policy contains an upstream OpenShell `SandboxPolicy` YAML definition stored as a `data` entry. The control plane treats the policy content as an opaque passthrough — it deserializes it as an OpenShell `SandboxPolicy` proto and passes it directly to `CreateSandbox`, only applying platform minimum enforcement on top. Multiple agents in the same namespace can reference the same policy.
+Policies are namespace-scoped resources declared in their own ConfigMaps, separate from agent declarations. A policy contains an upstream OpenShell `SandboxPolicy` YAML definition stored as a `data` entry. The control plane treats the policy content as an opaque passthrough — it deserializes it as an OpenShell `SandboxPolicy` proto and passes it directly to `CreateSandbox`. Multiple agents in the same namespace can reference the same policy.
 
 ### Discovery
 
@@ -247,18 +231,19 @@ The control plane SHALL discover policy declarations by watching ConfigMaps with
 
 ### Structure
 
-Each policy is stored as a `data` entry keyed by `{policy-name}.yaml`. The YAML content uses the exact upstream OpenShell `SandboxPolicy` format — no platform-specific wrapper or additional fields. The policy name is derived from the data key filename (e.g., `restricted.yaml` → policy name `restricted`).
+Each policy is stored as a `data` entry. The data key is an arbitrary ConfigMap key (e.g., `restricted.yaml`) — it is not a filename and has no special meaning beyond serving as a unique key within the ConfigMap. The YAML content includes a `name` field (for consistency with provider declarations) followed by the upstream OpenShell `SandboxPolicy` fields. The data key and the `name` field SHOULD match by convention (e.g., `restricted.yaml` contains `name: restricted`), but agents reference the policy by the `name` field value, not the data key.
 
 ```yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: policy-declarations
-  namespace: project-{project_name}
+  namespace: {project_name}
   labels:
     ambient.ai/kind: policy
 data:
   restricted.yaml: |
+    name: restricted
     network_policies:
       github_api:
         endpoints:
@@ -294,6 +279,7 @@ data:
     landlock:
       compatibility: best_effort
   permissive.yaml: |
+    name: permissive
     filesystem:
       read_write:
         - /sandbox
@@ -315,12 +301,12 @@ This passthrough approach ensures:
 - **No schema drift** — policy authors use the exact same format documented in OpenShell, not a platform-specific subset
 - **Validation at the source** — the OpenShell Gateway validates the policy at `CreateSandbox` time; the control plane does not duplicate validation logic
 
-The control plane adds only one layer on top: platform minimum enforcement (see Requirement: Sandbox Policy Minimum Enforcement).
+Platform minimum enforcement (ensuring tenant policies cannot weaken platform-level security constraints) is planned but deferred — see [Sandbox Policy Minimum Enforcement (Deferred)](#requirement-sandbox-policy-minimum-enforcement-deferred).
 
 ### Conventions
 
-- Each `data` key is a YAML filename: `{policy-name}.yaml`
-- The policy name is derived from the filename (minus the `.yaml` extension)
+- Each `data` key is an arbitrary ConfigMap key (e.g., `restricted.yaml`) — the `.yaml` suffix is a convention, not a requirement
+- The policy name is derived from the `name` field within the YAML content, not from the data key
 - Policy names MUST be unique within a namespace (across all Policy ConfigMaps)
 - One ConfigMap MAY contain multiple policy entries
 - A tenant namespace MAY contain multiple Policy ConfigMaps
@@ -332,8 +318,7 @@ When building the `CreateSandbox` request:
 1. The control plane reads the agent's `sandbox_policy` field (a policy name)
 2. The control plane looks up the policy entry in a Policy ConfigMap in the tenant namespace
 3. The control plane deserializes the YAML content as an OpenShell `SandboxPolicy` proto message
-4. The control plane merges the deserialized policy with the platform's minimum policy (platform constraints always win — see Requirement: Sandbox Policy Minimum Enforcement)
-5. The merged policy is passed to OpenShell's `CreateSandbox` RPC
+4. The deserialized policy is passed to OpenShell's `CreateSandbox` RPC (platform minimum enforcement is deferred — see [Sandbox Policy Minimum Enforcement (Deferred)](#requirement-sandbox-policy-minimum-enforcement-deferred))
 
 ---
 
@@ -345,7 +330,7 @@ Agent definitions SHALL be expressed as YAML documents within ConfigMaps in tena
 
 #### Scenario: Single agent in a ConfigMap
 
-- GIVEN a ConfigMap with label `ambient.ai/kind: agent` exists in tenant namespace `project-alpha`
+- GIVEN a ConfigMap with label `ambient.ai/kind: agent` exists in tenant namespace `alpha`
 - AND the ConfigMap's `data` contains a key `security-reviewer.yaml` with a valid agent YAML document
 - WHEN the control plane reconciles the namespace
 - THEN an agent named `security-reviewer` SHALL be created in project `alpha`
@@ -353,7 +338,7 @@ Agent definitions SHALL be expressed as YAML documents within ConfigMaps in tena
 
 #### Scenario: Multiple agents in a single ConfigMap
 
-- GIVEN a ConfigMap with label `ambient.ai/kind: agent` exists in tenant namespace `project-alpha`
+- GIVEN a ConfigMap with label `ambient.ai/kind: agent` exists in tenant namespace `alpha`
 - AND the ConfigMap's `data` contains keys `reviewer.yaml` and `builder.yaml`
 - WHEN the control plane reconciles the namespace
 - THEN agents `reviewer` and `builder` SHALL both be created in project `alpha`
@@ -371,6 +356,7 @@ Agent definitions SHALL be expressed as YAML documents within ConfigMaps in tena
 - WHEN the ConfigMap is deleted
 - THEN the agent SHALL be removed from the project
 - AND any running session for that agent SHALL NOT be terminated (it completes normally)
+- AND the status for that running session SHALL still be available to view in the UI
 
 #### Scenario: Invalid YAML rejected
 
@@ -447,7 +433,7 @@ The agent YAML SHALL declare which providers the agent requires as an array of p
 
 #### Scenario: Provider shared across agents
 
-- GIVEN provider declaration `github` exists in namespace `project-alpha`
+- GIVEN provider declaration `github` exists in namespace `alpha`
 - AND agents `reviewer` and `builder` both declare `providers: [github]`
 - WHEN sessions start for both agents
 - THEN both sessions SHALL use the same `github` provider on the gateway
@@ -482,7 +468,7 @@ The agent YAML SHALL declare payloads (file references or inline content) to upl
 
 ### Requirement: Sandbox Policy Application
 
-The agent YAML SHALL reference a sandbox policy by name. The control plane SHALL resolve the named policy from the tenant namespace and pass it to OpenShell's `CreateSandbox` RPC, merged with platform minimum constraints.
+The agent YAML SHALL reference a sandbox policy by name. The control plane SHALL resolve the named policy from the tenant namespace and pass it to OpenShell's `CreateSandbox` RPC.
 
 #### Scenario: Policy declaration exists in namespace
 
@@ -509,16 +495,18 @@ The agent YAML SHALL reference a sandbox policy by name. The control plane SHALL
 
 #### Scenario: Policy shared across agents
 
-- GIVEN policy declaration `restricted` exists in namespace `project-alpha`
+- GIVEN policy declaration `restricted` exists in namespace `alpha`
 - AND agents `reviewer` and `builder` both declare `sandbox_policy: restricted`
 - WHEN sessions start for both agents
 - THEN both sessions SHALL use the same resolved policy constraints
 
 #### Scenario: Deny rules take precedence
 
+> **Note:** Deny rule enforcement is OpenShell's responsibility. This scenario documents the expected behavior from the platform's perspective as a test case outcome.
+
 - GIVEN a policy declaration with a network policy containing an allow rule for `*.github.com:443` and a deny rule for `raw.githubusercontent.com:443`
 - WHEN an agent referencing this policy attempts to connect to `raw.githubusercontent.com:443`
-- THEN the connection SHALL be blocked (deny rule takes precedence)
+- THEN the connection SHALL be blocked (deny rule takes precedence — enforced by OpenShell)
 
 ---
 
@@ -604,13 +592,6 @@ The control plane SHALL start the runner process inside the sandbox by calling t
 - AND if the sandbox enters `SANDBOX_PHASE_ERROR`, the control plane SHALL log an error, stop polling, and transition the session to `Failed`
 - AND if the timeout expires before `SANDBOX_PHASE_READY`, the control plane SHALL log an error and transition the session to `Failed`
 
-#### Scenario: Idempotent exec on re-reconcile
-
-- GIVEN a sandbox already exists for a session (detected via `GetSandbox` in the idempotency check)
-- WHEN the control plane reconciles the same session again
-- THEN it SHALL launch the exec-after-Ready goroutine again
-- AND this is safe because re-running the runner command in an already-running sandbox is idempotent for short-lived exec commands
-
 #### Scenario: OPENSHELL_SANDBOX_COMMAND is not used
 
 - GIVEN the control plane builds the sandbox environment map
@@ -645,34 +626,9 @@ The control plane SHALL validate agent YAML against the schema before reconcilin
 
 ---
 
-### Requirement: Sandbox Policy Minimum Enforcement
+### Requirement: Sandbox Policy Minimum Enforcement (Deferred)
 
-The platform SHALL enforce minimum sandbox policy constraints regardless of what a policy declaration specifies. Policy declarations are additive on top of platform minimums — they cannot weaken them.
-
-**Where minimums live:** The platform-level default sandbox policy SHALL be declared in a ConfigMap labeled `ambient.ai/kind: platform-policy` in the control plane namespace (`ambient-code`). This ConfigMap uses the same upstream OpenShell `SandboxPolicy` YAML format as tenant-scoped policy declarations (stored as a `data` entry). The control plane reads this ConfigMap at startup and watches it for changes. If no platform policy ConfigMap exists, the control plane SHALL use a hardcoded fallback that enforces `runAsNonRoot`, drops all capabilities, and denies all network egress except provider-registered endpoints.
-
-**Enforcement mechanism:** When building the `CreateSandbox` request, the control plane merges the resolved tenant policy declaration with the platform minimum policy:
-
-- **Network policies:** The declared endpoints are intersected with the platform's allowed set — tenant policies cannot grant access to endpoints the platform does not permit. If the platform policy defines no allowed endpoints, only provider-registered endpoints are reachable.
-- **Process policy:** If the tenant policy declares `run_as_user: root` or any UID < 1000, the platform value wins. The platform minimum SHALL enforce non-root execution.
-- **Filesystem policy:** The platform minimum's read-only paths cannot be made read-write by a tenant policy. Tenant policies can only add additional paths within the allowed scope.
-- **Landlock policy:** If the platform requires `hard_requirement`, a tenant policy declaring `best_effort` is overridden to `hard_requirement`.
-
-#### Scenario: Policy cannot disable network isolation
-
-- GIVEN a policy declaration contains a wildcard network rule allowing all hosts on all ports
-- AND an agent references this policy
-- WHEN the control plane applies the policy
-- THEN the platform's minimum network restrictions SHALL still be enforced
-- AND the agent SHALL NOT have unrestricted internet access
-
-#### Scenario: Policy cannot escalate process privileges
-
-- GIVEN a policy declaration contains `process.run_as_user: root`
-- AND an agent references this policy
-- WHEN the control plane applies the policy
-- THEN the control plane SHALL reject the declaration or override to the platform default
-- AND the sandbox SHALL NOT run as root
+> **Out of scope for this PR.** The platform SHALL enforce minimum sandbox policy constraints regardless of what a policy declaration specifies. Policy declarations are additive on top of platform minimums — they cannot weaken them. Merge semantics, enforcement mechanism, and the location of platform-level default policies will be defined in a future spec. See Iteration 4 in [Implementation Iterations](#implementation-iterations).
 
 ---
 
@@ -682,7 +638,7 @@ Access control for agent declarations relies on Kubernetes RBAC for the tenant n
 
 #### Scenario: Authorized user creates agent declaration
 
-- GIVEN user A has RBAC permission to create/update ConfigMaps in namespace `project-alpha`
+- GIVEN user A has RBAC permission to create/update ConfigMaps in namespace `alpha`
 - WHEN user A creates a ConfigMap with label `ambient.ai/kind: agent`
 - THEN the control plane SHALL reconcile the agent declaration
 
@@ -713,111 +669,6 @@ ConfigMap-based agent declaration and OpenShell Gateway sandbox provisioning SHA
 - THEN the control plane SHALL NOT watch for agent declaration ConfigMaps
 - AND the existing runner-based session provisioning SHALL remain the active path
 
-#### Scenario: Mixed mode
-
-- GIVEN `OPENSHELL_USE_GATEWAY=true`
-- AND agents created via the existing REST API still exist in the database
-- WHEN a session starts for a REST API-created agent
-- THEN the control plane SHALL use the existing runner-based provisioning path for that agent
-- AND ConfigMap-declared agents SHALL use the gateway path
-
----
-
-### Requirement: Gateway TLS and Authentication
-
-The control plane SHALL use mTLS for transport-level security when connecting to the OpenShell gateway. In addition to presenting a valid mTLS client certificate, the control plane SHALL authenticate at the application layer by presenting its Kubernetes ServiceAccount token as a Bearer token in gRPC call metadata.
-
-**Configuration flags:**
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `OPENSHELL_GATEWAY_SERVICE_NAME` | `openshell` | Kubernetes Service name of the gateway in each project namespace |
-| `OPENSHELL_GATEWAY_GRPC_PORT` | `8443` | gRPC port on the gateway Service |
-| `OPENSHELL_GATEWAY_TLS` | `true` | Enable mTLS. Set to `false` for plaintext connections in development. |
-| `OPENSHELL_GATEWAY_TLS_SERVER_NAME` | *(unset)* | Override TLS ServerName verification when the gateway's certificate SANs don't match the Service DNS name |
-| `OPENSHELL_GATEWAY_CLIENT_TLS_SECRET` | `openshell-client-tls` | Name of the Kubernetes Secret containing client TLS credentials in each project namespace |
-
-**TLS credential loading:** The control plane SHALL load client TLS credentials dynamically from a Kubernetes Secret in each project namespace. The Secret (default: `openshell-client-tls`) contains `tls.crt`, `tls.key`, and `ca.crt`. TLS credentials SHALL be cached per namespace and evicted on connection errors (e.g., `Unavailable` gRPC status).
-
-#### Scenario: mTLS connection
-
-- GIVEN `OPENSHELL_GATEWAY_TLS` is not set to `false`
-- WHEN the control plane connects to a gateway in a project namespace
-- THEN it SHALL read the `openshell-client-tls` Secret from that namespace
-- AND it SHALL use `tls.crt` and `tls.key` as the client certificate
-- AND it SHALL use `ca.crt` as the root CA for server verification
-- AND the control plane SHALL attach its Kubernetes ServiceAccount token as a Bearer token in gRPC call metadata
-
-#### Scenario: TLS ServerName override
-
-- GIVEN the gateway's server certificate SANs do not include the Service DNS name
-- WHEN `OPENSHELL_GATEWAY_TLS_SERVER_NAME` is set
-- THEN the TLS handshake SHALL use the override value for server name verification instead of the DNS name
-
-#### Scenario: Plaintext connections (development only)
-
-- GIVEN `OPENSHELL_GATEWAY_TLS` is set to `false`
-- WHEN the control plane connects to a gateway
-- THEN it SHALL use plaintext gRPC (no TLS)
-- AND no ServiceAccount token SHALL be sent (unauthenticated)
-
----
-
-### Requirement: Gateway Connection Management
-
-The control plane SHALL maintain a cache of gRPC connections to OpenShell gateways, keyed by project namespace. Connections are created on first use and reused across sessions within the same namespace.
-
-#### Scenario: Connection caching
-
-- GIVEN a session starts in project namespace `alpha`
-- AND no cached connection exists for `alpha`
-- WHEN the control plane connects to the gateway in `alpha`
-- THEN the connection SHALL be cached
-- AND subsequent sessions in `alpha` SHALL reuse the cached connection
-
-#### Scenario: Connection eviction on failure
-
-- GIVEN a cached gRPC connection to namespace `alpha` exists
-- WHEN a gRPC call returns `Unavailable` status
-- THEN the cached connection SHALL be evicted
-- AND the next request SHALL establish a new connection
-
-#### Scenario: Graceful shutdown
-
-- WHEN the control plane shuts down
-- THEN it SHALL close all cached gRPC connections
-
----
-
-### Requirement: Sandbox Status Synchronization
-
-The control plane SHALL periodically poll sandbox status from the OpenShell gateway and update session phases to reflect the sandbox lifecycle state.
-
-#### Scenario: Sandbox error detection
-
-- GIVEN a session is in `Running` or `Creating` phase
-- WHEN the control plane polls `GetSandbox` and the sandbox is in `SANDBOX_PHASE_ERROR`
-- THEN the session SHALL transition to `Failed`
-
-#### Scenario: Sandbox not found
-
-- GIVEN a session is in `Running` or `Creating` phase
-- WHEN the control plane polls `GetSandbox` and receives `NotFound`
-- THEN the session SHALL transition to `Failed`
-- AND the control plane SHALL log a warning identifying the missing sandbox
-
-#### Scenario: Sandbox deleting
-
-- GIVEN a session is in `Running` phase
-- WHEN the control plane polls `GetSandbox` and the sandbox is in `SANDBOX_PHASE_DELETING`
-- THEN the session SHALL transition to `Stopping`
-
-#### Scenario: Stopped session completion
-
-- GIVEN a session is in `Stopping` phase
-- WHEN the sandbox phase maps to `Completed`
-- THEN the session SHALL transition to `Stopped` (not `Completed`)
-
 ---
 
 ## ConfigMap Format
@@ -833,7 +684,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: agent-declarations
-  namespace: project-{project_name}
+  namespace: {project_name}
   labels:
     ambient.ai/kind: agent
 data:
@@ -854,7 +705,7 @@ data:
 
 ### Conventions
 
-- Each data key is a YAML filename: `{agent-name}.yaml`
+- Each data key is an arbitrary ConfigMap key (e.g., `reviewer.yaml`) — the `.yaml` suffix is a convention, not a requirement
 - Each data value is a complete agent YAML document
 - One ConfigMap MAY contain multiple agent declarations
 - A tenant namespace MAY contain multiple agent ConfigMaps
@@ -884,7 +735,6 @@ When persisted, the new structured fields map to columns as follows:
 | `environment` | `environment` | JSONB | Map of string → string |
 | `sandbox_template` | `sandbox_template` | JSONB | Nested object |
 | `sandbox_policy` | `sandbox_policy` | TEXT | Nullable; name of a policy declaration in the tenant namespace. Policy declarations are resolved from namespace-scoped ConfigMaps at sandbox creation time. |
-| `gateway` | `gateway` | TEXT | Nullable |
 
 Legacy fields (`resource_overrides`, `environment_variables` as TEXT) remain in the table for backward compatibility during migration but are not populated by ConfigMap-sourced agents.
 
@@ -937,10 +787,10 @@ This spec describes the complete desired state. Implementation is expected to pr
 - ConfigMap-based agent declarations (`ambient.ai/kind: agent`)
 - ConfigMap-based provider declarations (`ambient.ai/kind: provider`)
 - ConfigMap-based policy declarations (`ambient.ai/kind: policy`)
-- Sandbox policy passthrough or platform minimum enforcement
-- Vault-based credential resolution
+- Sandbox policy passthrough and platform minimum enforcement
+- ConfigMap-based credential source resolution
 
-> **Note on credential resolution.** Iteration 1 resolves credentials via the existing Credential/RoleBinding system — the control plane calls `sdk.Credentials().Get()` and `sdk.RoleBindings().List()` to find credentials for each provider, then creates providers on the gateway. The ConfigMap-based provider declarations with credential sources (Vault/k8s Secret) described in this spec are the desired future state for Iteration 2+, which decouples credential management from the REST API and aligns with the GitOps model.
+> **Note on credential resolution.** Iteration 1 resolves credentials via the existing Credential/RoleBinding system — the control plane calls `sdk.Credentials().Get()` and `sdk.RoleBindings().List()` to find credentials for each provider, then creates providers on the gateway. The ConfigMap-based provider declarations with credential sources (k8s Secret) described in this spec are the desired future state for Iteration 2+, which decouples credential management from the REST API and aligns with the GitOps model.
 
 ### Iteration 2: ConfigMap-Based Agent Declarations
 
@@ -961,7 +811,7 @@ This spec describes the complete desired state. Implementation is expected to pr
 
 **Delivers:**
 - ConfigMap watching with `ambient.ai/kind: provider` label discovery
-- Provider schema parsing with credential source resolution (Vault and k8s Secret)
+- Provider schema parsing with credential source resolution (k8s Secret)
 - Create-or-refresh provider flow using ConfigMap-declared credentials instead of SDK Credential API
 - Agents reference providers by name (string array) instead of relying on implicit Credential/RoleBinding resolution
 
@@ -974,9 +824,8 @@ This spec describes the complete desired state. Implementation is expected to pr
 **Delivers:**
 - ConfigMap watching with `ambient.ai/kind: policy` label discovery
 - Policy resolution from `data` entries containing upstream OpenShell `SandboxPolicy` YAML
-- Opaque passthrough to `CreateSandbox` with platform minimum merge
-- Platform policy ConfigMap (`ambient.ai/kind: platform-policy`) in the control plane namespace
-- Per-field merge semantics (network intersection, non-root enforcement, filesystem protection, Landlock escalation)
+- Opaque passthrough to `CreateSandbox`
+- Platform minimum enforcement (merge semantics to be defined in a future spec)
 
 **Depends on:** Iteration 2 (ConfigMap agent declarations, to provide the `sandbox_policy` name reference)
 
@@ -988,16 +837,16 @@ This spec describes the complete desired state. Implementation is expected to pr
 |----------|-----------|
 | ConfigMap is the primary agent definition format | Agents will be declared via ArgoCD-managed ConfigMaps in tenant namespaces. REST API-based agent creation is a potential follow-up offering an RBAC-scoped developer path for creating agents without GitOps, but not the primary onboarding flow. This aligns with GitOps workflows and the existing Application (GitOps sync) model in `data-model.spec.md`. |
 | Providers are namespace-scoped shared resources | Providers are declared in their own ConfigMaps (labeled `ambient.ai/kind: provider`) at the tenant namespace level, not inline within agent declarations. Agents reference providers by name. This enables sharing providers across multiple agents in a namespace (e.g., a single `github` provider used by both `reviewer` and `builder` agents). The control plane handles create-or-refresh at sandbox creation time. |
-| Credential sources are attached to provider declarations | Each provider declaration includes a `credential_source` specifying where credentials come from (Vault in production, k8s Secret not recommended for production at this time). This is a transitional mechanism — designed to be forward-compatible with OpenShell's planned native credential management ([NVIDIA/OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882)). Credential sources bypass the existing platform Credential/RoleBinding hierarchy. |
+| Credential sources are attached to provider declarations | Each provider declaration includes a `credential_source` specifying where credentials come from (k8s Secret; not recommended for production at this time). This is a transitional mechanism — designed to be forward-compatible with OpenShell's planned native credential management ([NVIDIA/OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882)). Credential sources bypass the existing platform Credential/RoleBinding hierarchy. |
 | Policies are namespace-scoped shared resources using upstream OpenShell format | Policies are declared in their own ConfigMaps (labeled `ambient.ai/kind: policy`) at the tenant namespace level as `data` entries containing the exact upstream OpenShell `SandboxPolicy` YAML format. The control plane treats policies as an opaque passthrough — no platform-specific schema on top. This guarantees compatibility with OpenShell and means new OpenShell policy fields work immediately without a platform update. Agents reference a single policy by name. |
 | Single policy reference, not array | Agents reference one policy by name. Composing multiple policy concerns is handled via Kustomize overlays at apply time (see `agent-inheritance.spec.md` draft). This avoids merge-order ambiguity at the agent level. |
-| Mixed field grouping | Flat fields for `entrypoint`, `providers`, `payloads`, `sandbox_policy`, `environment`, `gateway` (frequently accessed, simple types or name references). Nested JSONB for `sandbox_template` (complex structure that maps directly to OpenShell proto messages). |
+| Mixed field grouping | Flat fields for `entrypoint`, `providers`, `payloads`, `sandbox_policy`, `environment` (frequently accessed, simple types or name references). Nested JSONB for `sandbox_template` (complex structure that maps directly to OpenShell proto messages). |
 | Configuration reuse via Kustomize overlays (draft) | See `specs/platform/agent-inheritance.spec.md`. Uses Kustomize bases and overlays for configuration composition rather than a custom `base_agent` merge engine in the control plane. Composition happens at apply time (`acpctl apply` / ArgoCD); the control plane only sees fully-resolved ConfigMaps. Kept as a separate draft spec — agents are fully self-contained at the cluster level. |
 | Policy uses upstream OpenShell YAML verbatim | Policy declarations contain the exact OpenShell `SandboxPolicy` YAML — no platform wrapper or re-documented fields. This eliminates schema drift and ensures any OpenShell-compatible policy works without platform changes. `sandbox_template` fields continue to mirror OpenShell proto naming for consistency. |
 | Unknown fields accepted with warning | Forward compatibility — newer agent YAML schemas can be applied to older control planes without hard failures. |
 | ConfigMap is the source of truth; PostgreSQL is a projection | ConfigMap-declared agents are the authoritative source. The API server's `agents` table is a read-optimized projection for queries and status reporting. The control plane reconciles ConfigMap → database, not the reverse. API PATCH operations on ConfigMap-sourced agents are not supported — changes flow through the ConfigMap (git → ArgoCD → ConfigMap → control plane). |
 | ConfigMap authorization delegates to Kubernetes RBAC | Who can create/modify agent declarations is governed by Kubernetes RBAC on the tenant namespace. The control plane trusts that any ConfigMap with the correct label in the correct namespace was applied by an authorized principal. |
-| Sandbox policy minimums are platform-enforced | Agent-declared sandbox policies cannot weaken platform-level security minimums. The control plane merges agent policies with platform defaults, and platform constraints always win. |
+| Sandbox policy minimums are platform-enforced (out of scope for this PR) | Agent-declared sandbox policies cannot weaken platform-level security minimums. The control plane merges agent policies with platform defaults, and platform constraints always win. Merge semantics and enforcement details are deferred to a future spec. |
 | Feature flag gating | All ConfigMap-based agent declaration and OpenShell Gateway provisioning is gated behind `OPENSHELL_USE_GATEWAY=true`. When disabled, the existing runner-based lifecycle is unchanged. This allows incremental rollout and rollback. |
 
 ---
@@ -1050,8 +899,6 @@ sandbox_template:
 
 sandbox_policy: restricted
 
-gateway: default
-
 labels:
   team: platform-security
   tier: review
@@ -1059,5 +906,87 @@ labels:
 annotations:
   owner: foo.bar@example.com
 ```
+
+---
+
+## Example: All Three ConfigMap Types Together
+
+A minimal project setup with provider, policy, and agent ConfigMaps in a single tenant namespace:
+
+```yaml
+# Provider declaration — namespace: alpha
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: providers
+  namespace: alpha
+  labels:
+    ambient.ai/kind: provider
+data:
+  github.yaml: |
+    name: github
+    type: github
+    credential_source:
+      k8s_secret_ref: github-pat
+  anthropic.yaml: |
+    name: anthropic
+    type: anthropic
+    credential_source:
+      k8s_secret_ref: anthropic-key
+---
+# Policy declaration — namespace: alpha
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: policies
+  namespace: alpha
+  labels:
+    ambient.ai/kind: policy
+data:
+  restricted.yaml: |
+    name: restricted
+    network_policies:
+      github_api:
+        endpoints:
+          - host: api.github.com
+            port: 443
+            protocol: rest
+    filesystem:
+      read_write:
+        - /sandbox
+      read_only:
+        - /etc/openshell
+    process:
+      run_as_user: sandbox
+      run_as_group: sandbox
+---
+# Agent declaration — namespace: alpha
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agents
+  namespace: alpha
+  labels:
+    ambient.ai/kind: agent
+data:
+  reviewer.yaml: |
+    name: reviewer
+    description: Reviews PRs for security issues
+    prompt: Review this PR for security vulnerabilities.
+    entrypoint: claude
+    providers:
+      - github
+      - anthropic
+    sandbox_policy: restricted
+    sandbox_template:
+      image: ghcr.io/nvidia/openshell:sandbox-v0.2.0
+      resources:
+        cpu: "1"
+        memory: 2Gi
+    environment:
+      LOG_LEVEL: info
+```
+
+For configuration reuse across projects via Kustomize overlays, see `specs/platform/agent-inheritance.spec.md`.
 
 ---
