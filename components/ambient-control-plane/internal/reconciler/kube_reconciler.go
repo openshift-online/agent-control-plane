@@ -1215,7 +1215,7 @@ func (r *SimpleKubeReconciler) updateSessionPhaseWithNamespace(ctx context.Conte
 		"phase":          newPhase,
 		"kube_namespace": namespace,
 		"start_time":     &now,
-		"conditions":     "[]",
+		"conditions":     emptyConditionsJSON,
 	}
 
 	if _, err := sdk.Sessions().UpdateStatus(ctx, session.ID, patch); err != nil {

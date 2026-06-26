@@ -256,7 +256,7 @@ func (s *PodStatusSyncer) updateSessionPhase(ctx context.Context, sdk *sdkclient
 			now := time.Now()
 			patch["start_time"] = &now
 		}
-		patch["conditions"] = "[]"
+		patch["conditions"] = emptyConditionsJSON
 	}
 
 	if newPhase == PhaseCompleted || newPhase == PhaseFailed || newPhase == PhaseStopped {

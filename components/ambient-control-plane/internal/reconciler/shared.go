@@ -36,6 +36,8 @@ const (
 	PhaseStopped   = "Stopped"
 	PhaseCompleted = "Completed"
 	PhaseFailed    = "Failed"
+
+	emptyConditionsJSON = "[]"
 )
 
 var TerminalPhases = []string{
