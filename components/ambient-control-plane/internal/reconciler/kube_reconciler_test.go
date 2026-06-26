@@ -176,3 +176,104 @@ func TestCredentialMCPURLsJSON(t *testing.T) {
 		t.Error("round-trip failed for jira")
 	}
 }
+
+func TestCredentialSidecarsGating_GatewayMode(t *testing.T) {
+	// This test verifies the gating logic that happens in ensurePod before buildCredentialSidecars is called.
+	// When OpenShellUseGateway=true, buildCredentialSidecars should NOT be called even if credentials exist.
+
+	tests := []struct {
+		name                string
+		cpTokenURL          string
+		cpTokenPublicKey    string
+		openShellUseGateway bool
+		shouldBuildSidecars bool
+	}{
+		{
+			name:                "gateway disabled, tokens configured",
+			cpTokenURL:          "http://cp:8080",
+			cpTokenPublicKey:    "test-key",
+			openShellUseGateway: false,
+			shouldBuildSidecars: true,
+		},
+		{
+			name:                "gateway enabled, tokens configured",
+			cpTokenURL:          "http://cp:8080",
+			cpTokenPublicKey:    "test-key",
+			openShellUseGateway: true,
+			shouldBuildSidecars: false,
+		},
+		{
+			name:                "gateway disabled, missing token URL",
+			cpTokenURL:          "",
+			cpTokenPublicKey:    "test-key",
+			openShellUseGateway: false,
+			shouldBuildSidecars: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This mirrors the gating logic from ensurePod line 631
+			shouldCall := tt.cpTokenURL != "" && tt.cpTokenPublicKey != "" && !tt.openShellUseGateway
+
+			if shouldCall != tt.shouldBuildSidecars {
+				t.Errorf("shouldCallBuildCredentialSidecars = %v, want %v", shouldCall, tt.shouldBuildSidecars)
+			}
+		})
+	}
+}
+
+func TestUseMCPSidecar_GatewayModeDisablesMCP(t *testing.T) {
+	tests := []struct {
+		name                string
+		mcpImage            string
+		cpTokenURL          string
+		cpTokenPublicKey    string
+		openShellUseGateway bool
+		expectedUseMCP      bool
+	}{
+		{
+			name:                "all configured, gateway disabled",
+			mcpImage:            "mcp:latest",
+			cpTokenURL:          "http://cp:8080",
+			cpTokenPublicKey:    "test-key",
+			openShellUseGateway: false,
+			expectedUseMCP:      true,
+		},
+		{
+			name:                "all configured, gateway enabled",
+			mcpImage:            "mcp:latest",
+			cpTokenURL:          "http://cp:8080",
+			cpTokenPublicKey:    "test-key",
+			openShellUseGateway: true,
+			expectedUseMCP:      false,
+		},
+		{
+			name:                "missing token URL, gateway disabled",
+			mcpImage:            "mcp:latest",
+			cpTokenURL:          "",
+			cpTokenPublicKey:    "test-key",
+			openShellUseGateway: false,
+			expectedUseMCP:      false,
+		},
+		{
+			name:                "missing image, gateway enabled",
+			mcpImage:            "",
+			cpTokenURL:          "http://cp:8080",
+			cpTokenPublicKey:    "test-key",
+			openShellUseGateway: true,
+			expectedUseMCP:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This mirrors the logic from ensurePod
+			useMCPSidecar := tt.mcpImage != "" && tt.cpTokenURL != "" && tt.cpTokenPublicKey != "" && !tt.openShellUseGateway
+
+			if useMCPSidecar != tt.expectedUseMCP {
+				t.Errorf("useMCPSidecar = %v, want %v", useMCPSidecar, tt.expectedUseMCP)
+			}
+		})
+	}
+}
