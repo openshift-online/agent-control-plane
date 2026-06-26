@@ -1,0 +1,26 @@
+[
+  {
+    "input": "test the openshell gateway in kind",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "openshell-gateway" },
+    "description": "Natural language trigger for setting up gateway mode in kind"
+  },
+  {
+    "input": "bring up kind with OPENSHELL_USE_GATEWAY=true",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "openshell-gateway" },
+    "description": "Explicit gateway mode cluster setup"
+  },
+  {
+    "input": "dual-tenant sandbox provisioning isn't working",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "openshell-gateway" },
+    "description": "Troubleshooting dual-tenant gateway provisioning"
+  },
+  {
+    "input": "run the openshell dual-tenant e2e test",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "openshell-gateway" },
+    "description": "Running the gateway E2E test suite"
+  }
+]

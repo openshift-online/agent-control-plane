@@ -11,7 +11,47 @@
 
 When the platform operates in OpenShell mode, the control plane SHALL delegate agent pod creation to an OpenShell gateway running in each project namespace, instead of creating Kubernetes pods directly. This provides policy-enforced sandboxing (network, filesystem, process controls) for all agent sessions through OpenShell's security layer.
 
-The OpenShell gateway exposes a gRPC service (`openshell.v1.OpenShell`) that manages sandbox lifecycle. Each project namespace has an OpenShell gateway pre-installed via Helm chart. The control plane discovers it via Kubernetes Service DNS.
+The OpenShell gateway exposes a gRPC service (`openshell.v1.OpenShell`) that manages sandbox lifecycle. Each project namespace has an OpenShell gateway pre-installed via the [OpenShell Helm chart](https://github.com/NVIDIA/OpenShell/tree/main/deploy/helm/openshell). The control plane discovers it via Kubernetes Service DNS.
+
+#### Gateway Installation
+
+The OpenShell gateway is installed into each project namespace using the upstream Helm chart:
+
+```bash
+helm install openshell-gateway oci://ghcr.io/nvidia/openshell/helm-chart --namespace <project-namespace>
+```
+
+The Helm chart deploys a StatefulSet, Service, ConfigMap, and TLS secrets via a `certgen` pre-install hook (`openshell-gateway generate-certs`). The certgen hook generates a self-signed CA, server certificate (with SANs derived from the Helm release name and namespace), client certificate, and JWT signing keys. These are stored in `openshell-server-tls`, `openshell-client-tls`, and `openshell-gateway-jwt-keys` Secrets respectively.
+
+**Important:** The default server certificate SANs are derived from the Helm chart's `fullname` template (typically `openshell`) and the release namespace. If the Helm release name or Kubernetes Service name differs from the chart defaults, additional SANs must be provided via `pkiInitJob.serverDnsNames` to ensure sandbox-to-gateway TLS verification succeeds:
+
+```bash
+helm install openshell-gateway oci://ghcr.io/nvidia/openshell/helm-chart \
+  --namespace tenant \
+  --set "pkiInitJob.serverDnsNames={openshell-gateway.tenant.svc.cluster.local}"
+```
+
+Alternatively, cert-manager can manage TLS certificates by setting `certManager.enabled=true` in the Helm values.
+
+The ACP control plane reads the `openshell-client-tls` Secret from the project namespace to establish mTLS connections to the gateway (see [Gateway TLS and Authentication](#requirement-gateway-tls-and-authentication)).
+
+#### Sandbox CRD Installation
+
+The [Agent Sandbox CRD](https://github.com/kubernetes-sigs/agent-sandbox) (`sandboxes.agents.x-k8s.io`) and its controller must be installed cluster-wide before deploying the gateway. The CRD version must match the API version that the OpenShell gateway expects.
+
+**Version compatibility:** The OpenShell gateway 0.0.70 uses the `agents.x-k8s.io/v1alpha1` API. The agent-sandbox project graduated its API to `v1beta1` in release v0.5.0. Installing the `latest` release (v0.5.0+) will cause sandbox-to-gateway authentication failures because the gateway's K8s ServiceAccount authenticator checks for `v1alpha1` in pod ownerReferences, but the v0.5.0 controller stamps `v1beta1`.
+
+Install the CRD at the version compatible with your gateway:
+
+```bash
+# For OpenShell gateway ≤ 0.0.70 — use agent-sandbox v0.4.6 (v1alpha1)
+kubectl apply -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v0.4.6/manifest.yaml
+
+# For OpenShell gateway with v1beta1 support (future) — use agent-sandbox v0.5.0+
+kubectl apply -f https://github.com/kubernetes-sigs/agent-sandbox/releases/latest/download/manifest.yaml
+```
+
+This installs the `agent-sandbox-system` namespace, the CRD, and the sandbox controller. The controller watches for Sandbox CRs and creates pods with ownerReferences — the API version in those ownerReferences must match what the gateway authenticator expects.
 
 ### Iteration 1 Constraints
 
@@ -19,6 +59,7 @@ This iteration is scoped to **scheduled agent runs** (single-run, short-lived se
 
 - **Long-running / steerable sessions** — credential lifecycle concerns (token expiry mid-session, gateway-managed refresh via OAuth2/client-credentials flows) are deferred
 - **Gateway provisioning** — the OpenShell gateway is assumed to already be deployed in each project namespace; ACP will not create it. A future iteration should have the control plane provision and reconcile gateway lifecycle per project namespace (potentially adapting the [upstream Helm chart values](https://github.com/NVIDIA/OpenShell/blob/main/deploy/helm/openshell/values.yaml) into a managed resource)
+- **Namespace lifecycle (gateway mode)** — in gateway mode (`OPENSHELL_USE_GATEWAY=true`), project namespaces are created and managed externally to ACP (e.g., by the OpenShell gateway Helm install or cluster provisioning tooling). ACP verifies existence and fails with a clear error if a required namespace is missing. In pod mode, ACP continues to create and delete namespaces directly. See [Namespace Lifecycle](#requirement-namespace-lifecycle)
 - **Namespace-level credential storage** — credentials remain stored in ACP, not as Kubernetes Secrets in the project namespace. A future iteration should store credentials as Kubernetes Secrets in each project namespace, with ACP reading them from the Secret and passing them to the gateway when configuring providers. This indirection is necessary because the gateway does not yet support loading credentials directly from Kubernetes Secrets ([OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882))
 - **Network policy ownership** — OpenShell policies (including network egress rules allowing runner-to-control-plane gRPC) will be user-configurable via the Agent spec. Whether ACP auto-injects the control plane egress rule on top of the user-configured policy or requires users to include it explicitly is TBD
 
@@ -47,9 +88,11 @@ When `OPENSHELL_USE_GATEWAY` is true, the control plane SHALL create agent sandb
 - GIVEN `OPENSHELL_USE_GATEWAY` is `true`
 - AND an OpenShell gateway is running in the project namespace
 - WHEN a session transitions to `Pending` phase
-- THEN the control plane SHALL call `CreateSandbox` on the gateway in the session's project namespace
+- THEN the control plane SHALL look up the project by `session.ProjectID` and resolve the gateway namespace from the project's **Name** field (lowercased via `NamespaceName()`), not from `session.ProjectID` directly
+- AND it SHALL call `CreateSandbox` on the gateway in that namespace
 - AND the sandbox SHALL be created with the runner image, session environment variables, and attached credential providers
 - AND the session phase SHALL transition to `Running`
+- AND the control plane SHALL asynchronously poll `GetSandbox` until the sandbox reaches `SANDBOX_PHASE_READY`, then execute the runner start command inside the sandbox via `ExecSandbox` (see [Sandbox Command Execution](#requirement-sandbox-command-execution-via-execsandbox))
 
 #### Scenario: Session provisioning without gateway mode
 
@@ -72,10 +115,10 @@ The control plane SHALL discover the OpenShell gateway in each project namespace
 
 #### Scenario: Service-based discovery
 
-- GIVEN an OpenShell gateway is deployed in namespace `my-project`
+- GIVEN an OpenShell gateway is deployed in a namespace matching the project's Name (e.g., project Name `my-project` → namespace `my-project`)
 - WHEN the control plane needs to reach the gateway
-- THEN it SHALL list Services in namespace `my-project` matching a well-known label (e.g., `app.kubernetes.io/name=openshell`)
-- AND it SHALL extract the gateway endpoint from the Service's cluster DNS name and gRPC port
+- THEN it SHALL resolve the namespace from the project's Name field (not the session's `ProjectID`)
+- AND it SHALL connect to the gateway at `<service-name>.<namespace>.svc.cluster.local:<grpc-port>` (configurable via `OPENSHELL_GATEWAY_SERVICE_NAME` and `OPENSHELL_GATEWAY_GRPC_PORT`)
 
 #### Scenario: Service not found
 
@@ -105,7 +148,7 @@ Sandbox naming follows the same `session-<safe_name>` pattern used by pods (`pod
 
 ### Requirement: Security Context Delegation
 
-In gateway mode, the control plane SHALL NOT set a SecurityContext on the runner container. The OpenShell gateway owns pod creation and applies its own security settings — including the SCC, capabilities, and privilege configuration recommended by the [OpenShell OpenShift deployment guide](https://docs.nvidia.com/openshell/kubernetes/openshift). The gateway's sandbox service account is bound to the required SCC as part of the pre-deployed Helm installation. The [Sandbox CRD](https://docs.nvidia.com/openshell/kubernetes/setup#install-agent-sandbox) and the [privileged SCC grant for sandbox pods](https://docs.nvidia.com/openshell/kubernetes/openshift#grant-the-privileged-scc-to-sandbox-pods) are assumed to be pre-installed on the cluster.
+In gateway mode, the control plane SHALL NOT set a SecurityContext on the runner container. The OpenShell gateway owns pod creation and applies its own security settings — including the SCC, capabilities, and privilege configuration recommended by the [OpenShell OpenShift deployment guide](https://docs.nvidia.com/openshell/kubernetes/openshift). The gateway's sandbox service account is bound to the required SCC as part of the pre-deployed Helm installation. The [Sandbox CRD](#sandbox-crd-installation) and the [privileged SCC grant for sandbox pods](https://docs.nvidia.com/openshell/kubernetes/openshift#grant-the-privileged-scc-to-sandbox-pods) are assumed to be pre-installed on the cluster.
 
 This is a significant change from file mode, where the control plane must grant elevated privileges (`root`, `SYS_ADMIN`, `NET_ADMIN`, `SYS_PTRACE`, `SETUID`, `SETGID`, `CHOWN`, `DAC_OVERRIDE`, seccomp `Unconfined`) to the runner container so the in-container Supervisor can create network namespaces and drop privileges. In gateway mode, the Supervisor is still present inside the sandbox, but the gateway configures it — the control plane's [`buildRunnerSecurityContext()`][kube_reconciler.go] and `buildVolumes()` (OpenShell policy mount) are not invoked.
 
@@ -118,6 +161,7 @@ This is a significant change from file mode, where the control plane must grant 
 - AND it SHALL NOT add the `/etc/openshell` volume mount
 - AND the `CreateSandboxRequest` SHALL contain only image, environment, and provider references
 - AND all pod-level security settings SHALL be the gateway's responsibility
+- AND the gateway SHALL override the container command to its supervisor binary (`/opt/openshell/bin/openshell-sandbox`) — the runner image's `CMD`/`ENTRYPOINT` is not executed (the runner is started via `ExecSandbox` after the sandbox reaches Ready)
 
 #### Scenario: File mode — elevated SecurityContext preserved
 
@@ -201,6 +245,45 @@ The control plane SHALL pass session configuration to the sandbox as environment
 - THEN the control plane SHALL exclude that variable from the `CreateSandboxRequest` environment
 - AND the provider-injected value SHALL take precedence
 - AND the control plane SHALL log a warning identifying the skipped variable
+
+### Requirement: Sandbox Command Execution via ExecSandbox
+
+The OpenShell gateway's Kubernetes driver overrides the container entrypoint to the supervisor binary (`/opt/openshell/bin/openshell-sandbox`) and hardcodes `OPENSHELL_SANDBOX_COMMAND=sleep infinity` in the container environment. This means the sandbox always boots with `sleep infinity` as its main process — the runner image's `CMD`/`ENTRYPOINT` is never executed. This is by design: the OpenShell sandbox model treats the sandbox as a persistent workspace where user commands run via exec after provisioning completes.
+
+Setting `OPENSHELL_SANDBOX_COMMAND` in the `CreateSandboxRequest` environment is ineffective because the K8s driver's `apply_required_env()` overwrites it after applying user environment variables.
+
+The control plane SHALL start the runner process inside the sandbox by calling the `ExecSandbox` gRPC RPC after the sandbox reaches `SANDBOX_PHASE_READY`. This mirrors how the OpenShell CLI implements `openshell sandbox create -- <command>`: it creates the sandbox, watches for Ready, then runs the command via exec — the command is never part of the `CreateSandboxRequest`.
+
+The `ExecSandbox` RPC is a server-streaming call that returns stdout, stderr, and exit code events. The `ExecSandboxRequest.SandboxId` field requires the gateway's internal sandbox UUID (from `Sandbox.Metadata.Id` in the `GetSandbox` response), not the Kubernetes sandbox name.
+
+#### Scenario: Runner startup via ExecSandbox
+
+- GIVEN a sandbox has been created via `CreateSandbox`
+- WHEN the sandbox reaches `SANDBOX_PHASE_READY`
+- THEN the control plane SHALL call `ExecSandbox` with the runner start command
+- AND the `SandboxId` SHALL be the gateway's internal UUID obtained from `GetSandbox` response metadata
+- AND the exec SHALL run asynchronously (fire-and-forget) — the control plane does not block on the exec stream
+
+#### Scenario: Polling for sandbox readiness
+
+- GIVEN a sandbox was just created
+- WHEN the control plane polls `GetSandbox` for readiness
+- THEN it SHALL poll every 2 seconds with a 120-second timeout
+- AND if the sandbox enters `SANDBOX_PHASE_ERROR`, the control plane SHALL log an error and stop polling
+- AND if the timeout expires before `SANDBOX_PHASE_READY`, the control plane SHALL log an error
+
+#### Scenario: Idempotent exec on re-reconcile
+
+- GIVEN a sandbox already exists for a session (detected via `GetSandbox` in the idempotency check)
+- WHEN the control plane reconciles the same session again
+- THEN it SHALL launch the exec-after-Ready goroutine again
+- AND this is safe because re-running the runner command in an already-running sandbox is idempotent for short-lived exec commands
+
+#### Scenario: OPENSHELL_SANDBOX_COMMAND is not used
+
+- GIVEN the control plane builds the gateway environment map
+- THEN it SHALL NOT include `OPENSHELL_SANDBOX_COMMAND` in the environment
+- AND the runner start command SHALL only be delivered via `ExecSandbox` after the sandbox is ready
 
 ### Requirement: Sandbox Deprovisioning
 
@@ -306,6 +389,7 @@ The control plane SHALL vendor OpenShell proto definitions and generate Go gRPC 
 - THEN they SHALL be placed at `components/ambient-control-plane/proto/openshell/v1/`
 - AND each file SHALL have a `go_package` option added
 - AND generated Go stubs SHALL be output to `internal/openshell/grpc/` (component-scoped, matching the control plane's convention of keeping packages under `internal/`; only the control plane consumes these stubs)
+- AND the vendored proto SHALL include the `ExecSandbox` RPC (server-streaming: `ExecSandboxRequest` → `stream ExecSandboxEvent`) in addition to sandbox lifecycle and provider management RPCs
 
 ### Requirement: gRPC Connection Management
 
@@ -342,6 +426,135 @@ The control plane SHALL maintain a cache of gRPC connections to OpenShell gatewa
 - WHEN the control plane shuts down
 - THEN it SHALL close all cached gRPC connections
 
+### Requirement: Gateway TLS and Authentication
+
+The control plane SHALL use mTLS for transport-level security when connecting to the OpenShell gateway. The gateway SHALL be deployed with `allow_unauthenticated_users = false` — all clients must authenticate via one of the gateway's application-layer authenticators in addition to presenting a valid mTLS client certificate.
+
+**Authentication paths:**
+- **ACP → gateway:** The control plane presents its Kubernetes ServiceAccount token as a Bearer token in gRPC requests. The gateway validates it via the `K8sServiceAccountAuthenticator` (TokenReview API). This is the same auth path used by sandbox pods for `IssueSandboxToken` bootstrap, ensuring a consistent authentication model.
+- **Sandbox → gateway:** Sandbox pods authenticate via `IssueSandboxToken` (K8s SA token exchange for a gateway-minted JWT), then use the sandbox JWT for subsequent requests (policy fetch, log push, token refresh). This is managed entirely by the gateway and its supervisor — the control plane is not involved.
+
+The gateway is not exposed outside the cluster (no Route), so the only clients are ACP (via mTLS + K8s SA token) and sandboxes (via mTLS + gateway-minted JWTs).
+
+The control plane SHALL load client TLS credentials dynamically from a Kubernetes Secret in each project namespace, enabling per-namespace certificate isolation. The `openshell-client-tls` Secret (configurable via `OPENSHELL_GATEWAY_CLIENT_TLS_SECRET`) contains the client certificate, private key, and CA certificate for verifying the gateway's server certificate.
+
+#### Scenario: mTLS connection
+
+- GIVEN `OPENSHELL_GATEWAY_TLS` is not set to `false`
+- WHEN the control plane connects to a gateway in a project namespace
+- THEN it SHALL read the `openshell-client-tls` Secret from that namespace
+- AND it SHALL use `tls.crt` and `tls.key` as the client certificate
+- AND it SHALL use `ca.crt` as the root CA for server verification
+- AND TLS credentials SHALL be cached per namespace and evicted on connection errors
+- AND the control plane SHALL attach its Kubernetes ServiceAccount token as a Bearer token in gRPC call metadata for application-layer authentication
+
+#### Scenario: Gateway authentication configuration
+
+- GIVEN an OpenShell gateway deployed in a project namespace
+- WHEN the gateway is configured for ACP integration
+- THEN `allow_unauthenticated_users` SHALL be set to `false` in the gateway configuration
+- AND the gateway SHALL require all clients to authenticate via one of its application-layer authenticators (`SandboxJwtAuthenticator`, `K8sServiceAccountAuthenticator`, or `OidcAuthenticator`)
+- AND the control plane SHALL present its Kubernetes ServiceAccount token as a Bearer token in gRPC requests to pass the `K8sServiceAccountAuthenticator`
+- AND sandbox-to-gateway authentication (bootstrap JWTs via `IssueSandboxToken`) remains the gateway's responsibility and is unaffected
+
+#### Scenario: TLS ServerName override
+
+- GIVEN the gateway's server certificate SANs do not include the Service DNS name (e.g., cert is valid for `openshell` but the Service is named `openshell-gateway`)
+- WHEN `OPENSHELL_GATEWAY_TLS_SERVER_NAME` is set
+- THEN the TLS handshake SHALL use the override value for server name verification instead of the DNS name
+
+#### Scenario: Plaintext connections (development)
+
+- GIVEN `OPENSHELL_GATEWAY_TLS` is set to `false`
+- WHEN the control plane connects to a gateway
+- THEN it SHALL use insecure (plaintext) gRPC credentials
+- AND no TLS Secret lookups SHALL occur
+
+#### Scenario: Multiline environment variable filtering
+
+- GIVEN the OpenShell gateway rejects environment variable values containing newline or carriage return characters
+- WHEN the control plane builds the sandbox environment map
+- THEN it SHALL remove any entries whose values contain `\n` or `\r`
+- AND it SHALL log a warning for each removed entry
+
+#### Scenario: PEM key transport via base64 encoding
+
+- GIVEN `AMBIENT_CP_TOKEN_PUBLIC_KEY` contains an RSA public key in PEM format (multiline)
+- WHEN the control plane builds the gateway sandbox environment map
+- THEN it SHALL base64-encode the PEM value before including it in the `CreateSandboxRequest` environment
+- AND the encoded value SHALL be a single line with no newline characters
+- AND all consumers (runner, credential sidecar, MCP sidecar) SHALL detect the encoding format: if the value starts with `-----` it is raw PEM; otherwise it is base64-decoded before PEM parsing
+- AND this encoding is specific to the gateway code path — the direct pod creation path (`envVar()`) continues to pass the raw PEM unchanged, since Kubernetes natively supports multiline environment variable values
+
+### Requirement: Namespace Lifecycle
+
+Namespace lifecycle is mode-dependent:
+
+- **Pod mode** (`OPENSHELL_USE_GATEWAY=false`): The control plane manages namespace lifecycle directly. `StandardNamespaceProvisioner.ProvisionNamespace` creates the namespace if absent or updates its labels if it already exists. `DeprovisionNamespace` deletes the namespace on cleanup.
+- **Gateway mode** (`OPENSHELL_USE_GATEWAY=true`): Project namespaces are created and managed externally to ACP (e.g., by the OpenShell gateway Helm install or cluster provisioning tooling). The control plane verifies existence via a direct `GetNamespace` call and fails with a descriptive error if a required namespace is missing. It never creates or deletes namespaces.
+
+#### Scenario: Pod mode — namespace provisioning
+
+- GIVEN `OPENSHELL_USE_GATEWAY` is `false`
+- WHEN the control plane provisions a session
+- THEN it SHALL call `StandardNamespaceProvisioner.ProvisionNamespace`
+- AND if the namespace does not exist, it SHALL create it
+- AND if the namespace already exists, it SHALL update its labels (update-or-create)
+- AND provisioning SHALL proceed with resource creation within the namespace
+
+#### Scenario: Pod mode — namespace deprovisioning
+
+- GIVEN `OPENSHELL_USE_GATEWAY` is `false`
+- WHEN the control plane cleans up a session
+- THEN it SHALL call `StandardNamespaceProvisioner.DeprovisionNamespace`
+- AND it SHALL delete the namespace
+
+#### Scenario: Gateway mode — namespace does not exist
+
+- GIVEN `OPENSHELL_USE_GATEWAY` is `true`
+- AND namespace `my-project` does not exist on the cluster
+- WHEN the control plane attempts to provision resources
+- THEN it SHALL fail with an error: `namespace my-project does not exist; gateway-managed namespaces must be provisioned externally`
+- AND it SHALL NOT attempt to create the namespace
+
+#### Scenario: Gateway mode — direct namespace verification (no provisioner)
+
+- GIVEN `OPENSHELL_USE_GATEWAY` is `true`
+- WHEN the control plane provisions a session
+- THEN it SHALL verify the target namespace exists via a direct `GetNamespace` API call
+- AND it SHALL NOT call the provisioner's `ProvisionNamespace` method — the provisioner is bypassed entirely in gateway mode to prevent any provisioner implementation (Standard, MPP) from attempting to create or manage the namespace
+- AND if the namespace does not exist, the control plane SHALL fail with: `namespace <name> does not exist; gateway-managed namespaces must be provisioned externally`
+
+#### Scenario: Project deletion
+
+- GIVEN a project with name `my-project` and associated namespace `my-project`
+- WHEN the project is deleted from ACP
+- THEN the control plane SHALL NOT delete the namespace
+- AND ACP-managed resources within the namespace (secrets, service accounts, RBAC bindings) MAY become orphaned and should be cleaned up by external tooling or a future garbage collection mechanism
+
+#### Scenario: Session cleanup (pod mode)
+
+- GIVEN `OPENSHELL_USE_GATEWAY` is `false`
+- AND a session is being stopped or deleted
+- WHEN the control plane cleans up session resources
+- THEN it SHALL delete session-scoped resources (secrets, service accounts, services) within the namespace
+- AND it SHALL call `DeprovisionNamespace` to delete the namespace
+
+#### Scenario: Session cleanup (gateway mode)
+
+- GIVEN `OPENSHELL_USE_GATEWAY` is `true`
+- AND a session is being stopped or deleted
+- WHEN the control plane cleans up session resources
+- THEN it SHALL delete session-scoped resources (secrets, service accounts, services, sandboxes) within the namespace
+- AND it SHALL NOT delete the namespace
+
+#### Scenario: Gateway mode — no DeprovisionNamespace on cleanup
+
+- GIVEN `OPENSHELL_USE_GATEWAY` is `true`
+- WHEN the control plane cleans up a session
+- THEN it SHALL NOT call `DeprovisionNamespace` — the namespace is owned by external infrastructure (OpenShell gateway Helm install, cluster provisioning tooling) and must not be destroyed by ACP session lifecycle events
+- AND only session-scoped resources (sandbox, secrets, service accounts, services) SHALL be deleted
+
 ### Requirement: Configuration
 
 The control plane SHALL expose configuration for OpenShell gateway mode alongside the existing `OPENSHELL_ENABLED` flag. `OPENSHELL_ENABLED` continues to control file-mode sandbox activation as defined in [openshell-sandbox.spec.md]. `OPENSHELL_USE_GATEWAY` is an independent flag that selects gateway-based provisioning.
@@ -356,6 +569,11 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | Variable | Default | Purpose |
 |---|---|---|
 | `OPENSHELL_USE_GATEWAY` | `false` | Enable gateway-based sandbox provisioning (this spec) |
+| `OPENSHELL_GATEWAY_SERVICE_NAME` | `openshell-gateway` | Kubernetes Service name for the OpenShell gateway in each project namespace |
+| `OPENSHELL_GATEWAY_GRPC_PORT` | `8080` | gRPC port on the gateway Service |
+| `OPENSHELL_GATEWAY_TLS` | `true` (enabled unless set to `false`) | Enable mTLS when connecting to the gateway |
+| `OPENSHELL_GATEWAY_CLIENT_TLS_SECRET` | `openshell-client-tls` | Name of the Kubernetes TLS Secret (per project namespace) containing `tls.crt`, `tls.key`, and `ca.crt` for mTLS client authentication |
+| `OPENSHELL_GATEWAY_TLS_SERVER_NAME` | (empty — uses actual DNS name) | Override TLS ServerName for certificate verification; set when the gateway's server certificate SANs don't match the Service DNS name |
 
 #### Scenario: Mode interaction
 
@@ -385,8 +603,11 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | [pod_sync.go] | Extended with sandbox sync branch for gateway mode |
 | `main.go` | Extended to create and wire `GatewayClient` when `OPENSHELL_USE_GATEWAY=true` |
 | [config.go] | Extended with `OpenShellUseGateway` field |
+| `StandardNamespaceProvisioner` | Used only in pod mode (`OPENSHELL_USE_GATEWAY=false`). `ProvisionNamespace` creates the namespace if absent, updates labels if it exists (update-or-create). `DeprovisionNamespace` deletes the namespace |
+| `provisionSessionGateway()` | Bypasses the provisioner entirely — uses a direct `GetNamespace` check so no provisioner implementation can inadvertently create or modify the namespace |
+| `cleanupSessionGateway()` | Does not call `DeprovisionNamespace` — namespace lifecycle is fully external in gateway mode |
 | [openshell-sandbox.spec.md] | Unchanged — file-mode spec remains authoritative when `OPENSHELL_USE_GATEWAY=false` |
-| Runner pod | No changes — same image, same env vars, running inside OpenShell sandbox instead of bare pod |
+| Runner pod | Same image and env vars, but the runner process is started via `ExecSandbox` after the sandbox reaches Ready — the gateway overrides the container entrypoint to the supervisor binary with `sleep infinity`, so the image's CMD is never executed directly |
 
 ### Backward compatibility
 

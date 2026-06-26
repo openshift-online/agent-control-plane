@@ -1,0 +1,10 @@
+version: v2
+modules:
+  - path: .
+    name: buf.build/ambient/openshell-control-plane
+lint:
+  use:
+    - DEFAULT
+breaking:
+  use:
+    - WIRE_JSON

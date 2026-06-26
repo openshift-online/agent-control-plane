@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from ambient_runner._grpc_client import (
+    _decode_public_key,
     _encrypt_session_id,
     _fetch_token_from_cp,
     _validate_cp_token_url,
@@ -305,3 +306,48 @@ class TestFromEnvIntegration:
                 client = AmbientGRPCClient.from_env()
 
         assert client._token == "static-bot-token"
+
+
+class TestDecodePublicKey:
+    def test_raw_pem_returned_as_is(self):
+        _, _, public_pem = generate_keypair()
+        assert _decode_public_key(public_pem) == public_pem
+
+    def test_base64_encoded_pem_decoded(self):
+        _, _, public_pem = generate_keypair()
+        encoded = base64.b64encode(public_pem.encode()).decode()
+        assert _decode_public_key(encoded) == public_pem
+
+    def test_empty_string_returned_as_is(self):
+        assert _decode_public_key("") == ""
+
+    def test_base64_key_works_with_encrypt(self):
+        _, _, public_pem = generate_keypair()
+        encoded = base64.b64encode(public_pem.encode()).decode()
+        decoded = _decode_public_key(encoded)
+        result = _encrypt_session_id(decoded, "test-session")
+        assert len(result) > 0
+
+    def test_from_env_with_base64_key(self):
+        _, _, public_pem = generate_keypair()
+        encoded = base64.b64encode(public_pem.encode()).decode()
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"token": "b64-token"}).encode()
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        env = {
+            "AMBIENT_GRPC_URL": "localhost:9000",
+            "AMBIENT_CP_TOKEN_URL": "http://cp.svc:8080/token",
+            "AMBIENT_CP_TOKEN_PUBLIC_KEY": encoded,
+            "SESSION_ID": "session-test-b64",
+            "AMBIENT_GRPC_USE_TLS": "false",
+        }
+
+        with patch.dict(os.environ, env, clear=False):
+            with patch("urllib.request.urlopen", return_value=mock_resp):
+                from ambient_runner._grpc_client import AmbientGRPCClient
+
+                client = AmbientGRPCClient.from_env()
+
+        assert client._token == "b64-token"

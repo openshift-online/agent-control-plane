@@ -1,0 +1,26 @@
+// SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Vendored from github.com/NVIDIA/OpenShell/proto/datamodel.proto
+
+syntax = "proto3";
+
+package openshell.datamodel.v1;
+
+option go_package = "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/datamodel/v1;datamodel_v1";
+
+message ObjectMeta {
+  string id = 1;
+  string name = 2;
+  int64 created_at_ms = 3;
+  map<string, string> labels = 4;
+  uint64 resource_version = 5;
+}
+
+message Provider {
+  ObjectMeta metadata = 1;
+  string type = 2;
+  map<string, string> credentials = 3;
+  map<string, string> config = 4;
+  map<string, int64> credential_expires_at_ms = 5;
+}

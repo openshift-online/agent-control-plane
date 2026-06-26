@@ -173,6 +173,13 @@ func encryptSessionID(pubKey *rsa.PublicKey, sessionID string) (string, error) {
 }
 
 func parsePublicKey(pemStr string) (*rsa.PublicKey, error) {
+	if !strings.HasPrefix(pemStr, "-----") {
+		decoded, err := base64.StdEncoding.DecodeString(pemStr)
+		if err != nil {
+			return nil, fmt.Errorf("base64 decode public key: %w", err)
+		}
+		pemStr = string(decoded)
+	}
 	block, _ := pem.Decode([]byte(pemStr))
 	if block == nil {
 		return nil, fmt.Errorf("no PEM block found in public key")

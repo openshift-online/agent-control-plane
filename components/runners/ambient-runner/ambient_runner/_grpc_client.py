@@ -35,6 +35,13 @@ _CP_TOKEN_FETCH_ATTEMPTS = 3
 _CP_TOKEN_FETCH_TIMEOUT = 10
 
 
+def _decode_public_key(value: str) -> str:
+    """Decode base64-encoded PEM or return raw PEM as-is."""
+    if not value or value.startswith("-----"):
+        return value
+    return base64.b64decode(value).decode()
+
+
 def _encrypt_session_id(public_key_pem: str, session_id: str) -> str:
     """RSA-OAEP encrypt session_id with the CP public key, return base64-encoded ciphertext."""
     public_key = serialization.load_pem_public_key(public_key_pem.encode())
@@ -185,7 +192,7 @@ class AmbientGRPCClient:
         use_tls = os.environ.get(_ENV_USE_TLS, "").lower() in ("true", "1", "yes")
         ca_cert_file = os.environ.get(_ENV_CA_CERT)
         if cp_token_url:
-            public_key_pem = os.environ.get(_ENV_CP_TOKEN_PUBLIC_KEY, "")
+            public_key_pem = _decode_public_key(os.environ.get(_ENV_CP_TOKEN_PUBLIC_KEY, ""))
             session_id = os.environ.get(_ENV_SESSION_ID, "")
             if not public_key_pem:
                 raise RuntimeError(
@@ -219,7 +226,7 @@ class AmbientGRPCClient:
     def reconnect(self) -> None:
         """Close the existing channel and rebuild with a fresh token from the CP endpoint."""
         if self._cp_token_url:
-            public_key_pem = os.environ.get(_ENV_CP_TOKEN_PUBLIC_KEY, "")
+            public_key_pem = _decode_public_key(os.environ.get(_ENV_CP_TOKEN_PUBLIC_KEY, ""))
             session_id = os.environ.get(_ENV_SESSION_ID, "")
             fresh_token = _fetch_token_from_cp(
                 self._cp_token_url, public_key_pem, session_id

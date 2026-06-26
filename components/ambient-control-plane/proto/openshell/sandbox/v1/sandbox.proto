@@ -1,0 +1,106 @@
+// SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Vendored from github.com/NVIDIA/OpenShell/proto/sandbox.proto
+
+syntax = "proto3";
+
+package openshell.sandbox.v1;
+
+option go_package = "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/sandbox/v1;sandbox_v1";
+
+message SandboxPolicy {
+  uint32 version = 1;
+  FilesystemPolicy filesystem = 2;
+  LandlockPolicy landlock = 3;
+  ProcessPolicy process = 4;
+  map<string, NetworkPolicyRule> network_policies = 5;
+}
+
+message FilesystemPolicy {
+  bool include_workdir = 1;
+  repeated string read_only = 2;
+  repeated string read_write = 3;
+}
+
+message LandlockPolicy {
+  string compatibility = 1;
+}
+
+message ProcessPolicy {
+  string run_as_user = 1;
+  string run_as_group = 2;
+}
+
+message NetworkPolicyRule {
+  string name = 1;
+  repeated NetworkEndpoint endpoints = 2;
+  repeated NetworkBinary binaries = 3;
+}
+
+message NetworkEndpoint {
+  string host = 1;
+  uint32 port = 2;
+  string protocol = 3;
+  string tls = 4;
+  string enforcement = 5;
+  string access = 6;
+  repeated L7Rule rules = 7;
+  repeated string allowed_ips = 8;
+  repeated uint32 ports = 9;
+  repeated L7DenyRule deny_rules = 10;
+  bool allow_encoded_slash = 11;
+  string persisted_queries = 12;
+  map<string, GraphqlOperation> graphql_persisted_queries = 13;
+  uint32 graphql_max_body_bytes = 14;
+  string path = 15;
+  bool websocket_credential_rewrite = 16;
+  bool request_body_credential_rewrite = 17;
+  bool advisor_proposed = 18;
+}
+
+message GraphqlOperation {
+  string operation_type = 1;
+  string operation_name = 2;
+  repeated string fields = 3;
+}
+
+message L7DenyRule {
+  string method = 1;
+  string path = 2;
+  string command = 3;
+  map<string, L7QueryMatcher> query = 4;
+  string operation_type = 5;
+  string operation_name = 6;
+  repeated string fields = 7;
+}
+
+message L7Rule {
+  L7Allow allow = 1;
+}
+
+message L7Allow {
+  string method = 1;
+  string path = 2;
+  string command = 3;
+  map<string, L7QueryMatcher> query = 4;
+  string operation_type = 5;
+  string operation_name = 6;
+  repeated string fields = 7;
+}
+
+message L7QueryMatcher {
+  string glob = 1;
+  repeated string any = 2;
+}
+
+message NetworkBinary {
+  string path = 1;
+  bool harness = 2 [deprecated = true];
+}
+
+message GetSandboxConfigRequest {
+  string sandbox_id = 1;
+}
+
+message GetGatewayConfigRequest {}

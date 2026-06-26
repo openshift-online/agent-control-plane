@@ -1,0 +1,168 @@
+// SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Vendored from github.com/NVIDIA/OpenShell/proto/openshell.proto
+// Subset: sandbox lifecycle, exec, and provider management RPCs needed by the control plane.
+
+syntax = "proto3";
+
+package openshell.v1;
+
+import "openshell/datamodel/v1/datamodel.proto";
+import "openshell/sandbox/v1/sandbox.proto";
+
+option go_package = "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1;openshell_v1";
+
+service OpenShell {
+  rpc CreateSandbox(CreateSandboxRequest) returns (SandboxResponse);
+  rpc GetSandbox(GetSandboxRequest) returns (SandboxResponse);
+  rpc DeleteSandbox(DeleteSandboxRequest) returns (DeleteSandboxResponse);
+  rpc ExecSandbox(ExecSandboxRequest) returns (stream ExecSandboxEvent);
+  rpc CreateProvider(CreateProviderRequest) returns (ProviderResponse);
+  rpc UpdateProvider(UpdateProviderRequest) returns (ProviderResponse);
+  rpc GetProvider(GetProviderRequest) returns (ProviderResponse);
+  rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
+}
+
+message Sandbox {
+  openshell.datamodel.v1.ObjectMeta metadata = 1;
+  SandboxSpec spec = 2;
+  SandboxStatus status = 3;
+  reserved 4, 5;
+  reserved "phase", "current_policy_version";
+}
+
+message SandboxSpec {
+  string log_level = 1;
+  map<string, string> environment = 5;
+  SandboxTemplate template = 6;
+  openshell.sandbox.v1.SandboxPolicy policy = 7;
+  repeated string providers = 8;
+  bool gpu = 9;
+  reserved 10, 11;
+  reserved "gpu_device", "proposal_approval_mode";
+}
+
+message SandboxTemplate {
+  string image = 1;
+  string runtime_class_name = 2;
+  string agent_socket = 3;
+  map<string, string> labels = 4;
+  map<string, string> annotations = 5;
+  map<string, string> environment = 6;
+}
+
+message SandboxStatus {
+  string sandbox_name = 1;
+  string agent_pod = 2;
+  string agent_fd = 3;
+  string sandbox_fd = 4;
+  repeated SandboxCondition conditions = 5;
+  SandboxPhase phase = 6;
+  uint32 current_policy_version = 7;
+}
+
+message SandboxCondition {
+  string type = 1;
+  string status = 2;
+  string reason = 3;
+  string message = 4;
+  string last_transition_time = 5;
+}
+
+enum SandboxPhase {
+  SANDBOX_PHASE_UNSPECIFIED = 0;
+  SANDBOX_PHASE_PROVISIONING = 1;
+  SANDBOX_PHASE_READY = 2;
+  SANDBOX_PHASE_ERROR = 3;
+  SANDBOX_PHASE_DELETING = 4;
+  SANDBOX_PHASE_UNKNOWN = 5;
+}
+
+message CreateSandboxRequest {
+  SandboxSpec spec = 1;
+  string name = 2;
+  map<string, string> labels = 3;
+}
+
+message GetSandboxRequest {
+  string name = 1;
+}
+
+message DeleteSandboxRequest {
+  string name = 1;
+}
+
+message SandboxResponse {
+  Sandbox sandbox = 1;
+}
+
+message DeleteSandboxResponse {
+  bool deleted = 1;
+}
+
+message CreateProviderRequest {
+  openshell.datamodel.v1.Provider provider = 1;
+}
+
+message GetProviderRequest {
+  string name = 1;
+}
+
+message ListProvidersRequest {
+  uint32 limit = 1;
+  uint32 offset = 2;
+}
+
+message UpdateProviderRequest {
+  openshell.datamodel.v1.Provider provider = 1;
+  map<string, int64> credential_expires_at_ms = 2;
+}
+
+message ProviderResponse {
+  openshell.datamodel.v1.Provider provider = 1;
+}
+
+message ListProvidersResponse {
+  repeated openshell.datamodel.v1.Provider providers = 1;
+}
+
+message DeleteProviderRequest {
+  string name = 1;
+}
+
+message DeleteProviderResponse {
+  bool deleted = 1;
+}
+
+message ExecSandboxRequest {
+  string sandbox_id = 1;
+  repeated string command = 2;
+  string workdir = 3;
+  map<string, string> environment = 4;
+  uint32 timeout_seconds = 5;
+  bytes stdin = 6;
+  bool tty = 7;
+  uint32 cols = 8;
+  uint32 rows = 9;
+}
+
+message ExecSandboxEvent {
+  oneof payload {
+    ExecSandboxStdout stdout = 1;
+    ExecSandboxStderr stderr = 2;
+    ExecSandboxExit exit = 3;
+  }
+}
+
+message ExecSandboxStdout {
+  bytes data = 1;
+}
+
+message ExecSandboxStderr {
+  bytes data = 1;
+}
+
+message ExecSandboxExit {
+  int32 exit_code = 1;
+}

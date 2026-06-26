@@ -6,9 +6,13 @@ import (
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell"
+	openshellpb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/rs/zerolog"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -20,15 +24,19 @@ const (
 type PodStatusSyncer struct {
 	factory            *SDKClientFactory
 	kube               *kubeclient.KubeClient
+	gateway            *openshell.GatewayClient
+	useGateway         bool
 	platformMode       string
 	mppConfigNamespace string
 	logger             zerolog.Logger
 }
 
-func NewPodStatusSyncer(factory *SDKClientFactory, kube *kubeclient.KubeClient, platformMode, mppConfigNamespace string, logger zerolog.Logger) *PodStatusSyncer {
+func NewPodStatusSyncer(factory *SDKClientFactory, kube *kubeclient.KubeClient, gateway *openshell.GatewayClient, useGateway bool, platformMode, mppConfigNamespace string, logger zerolog.Logger) *PodStatusSyncer {
 	return &PodStatusSyncer{
 		factory:            factory,
 		kube:               kube,
+		gateway:            gateway,
+		useGateway:         useGateway,
 		platformMode:       platformMode,
 		mppConfigNamespace: mppConfigNamespace,
 		logger:             logger.With().Str("component", "pod-status-syncer").Logger(),
@@ -52,6 +60,11 @@ func (s *PodStatusSyncer) Run(ctx context.Context) error {
 }
 
 func (s *PodStatusSyncer) syncOnce(ctx context.Context) {
+	if s.useGateway {
+		s.syncGatewaySandboxes(ctx)
+		return
+	}
+
 	namespaces, err := s.listManagedNamespaces(ctx)
 	if err != nil {
 		s.logger.Warn().Err(err).Msg("failed to list managed namespaces")
@@ -101,6 +114,91 @@ func (s *PodStatusSyncer) syncNamespace(ctx context.Context, namespace string) {
 
 	for i := range pods.Items {
 		s.syncPod(ctx, namespace, &pods.Items[i])
+	}
+}
+
+func (s *PodStatusSyncer) syncGatewaySandboxes(ctx context.Context) {
+	nsList, err := s.kube.ListNamespacesByLabel(ctx, managedLabelFilter)
+	if err != nil {
+		s.logger.Warn().Err(err).Msg("failed to list managed namespaces for sandbox sync")
+		return
+	}
+
+	for _, ns := range nsList.Items {
+		namespace := ns.GetName()
+		projectID := ns.GetLabels()[LabelProjectID]
+		if projectID == "" {
+			continue
+		}
+		s.syncProjectSandboxes(ctx, namespace, projectID)
+	}
+}
+
+func (s *PodStatusSyncer) syncProjectSandboxes(ctx context.Context, namespace, projectID string) {
+	sdk, err := s.factory.ForProject(ctx, projectID)
+	if err != nil {
+		s.logger.Warn().Err(err).Str("project_id", projectID).Msg("failed to get SDK client for sandbox sync")
+		return
+	}
+
+	opts := types.NewListOptions().Size(100).Build()
+	sessionList, err := sdk.Sessions().List(ctx, opts)
+	if err != nil {
+		s.logger.Warn().Err(err).Str("project_id", projectID).Msg("failed to list sessions for sandbox sync")
+		return
+	}
+
+	for i := range sessionList.Items {
+		session := &sessionList.Items[i]
+		if session.Phase == PhaseRunning || session.Phase == PhaseCreating {
+			s.syncSandboxStatus(ctx, sdk, namespace, session)
+		}
+	}
+}
+
+func (s *PodStatusSyncer) syncSandboxStatus(ctx context.Context, sdk *sdkclient.Client, namespace string, session *types.Session) {
+	if isTerminalPhase(session.Phase) {
+		return
+	}
+
+	sbxName := openshell.SandboxName(session.ID)
+	resp, err := s.gateway.GetSandbox(ctx, namespace, sbxName)
+	if err != nil {
+		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+			if session.Phase == PhaseRunning || session.Phase == PhaseCreating {
+				s.logger.Warn().Str("session_id", session.ID).Str("sandbox", sbxName).Msg("sandbox not found, marking session failed")
+				s.updateSessionPhase(ctx, sdk, session, PhaseFailed)
+			}
+			return
+		}
+		s.logger.Warn().Err(err).Str("session_id", session.ID).Str("sandbox", sbxName).Msg("failed to get sandbox status")
+		return
+	}
+
+	desiredPhase := mapSandboxPhaseToSessionPhase(resp.Sandbox.Status.Phase)
+	if desiredPhase == "" {
+		return
+	}
+
+	if session.Phase == desiredPhase {
+		return
+	}
+
+	if session.Phase == PhaseStopping && desiredPhase == PhaseCompleted {
+		desiredPhase = PhaseStopped
+	}
+
+	s.updateSessionPhase(ctx, sdk, session, desiredPhase)
+}
+
+func mapSandboxPhaseToSessionPhase(phase openshellpb.SandboxPhase) string {
+	switch phase {
+	case openshellpb.SandboxPhase_SANDBOX_PHASE_ERROR:
+		return PhaseFailed
+	case openshellpb.SandboxPhase_SANDBOX_PHASE_DELETING:
+		return PhaseStopping
+	default:
+		return ""
 	}
 }
 
