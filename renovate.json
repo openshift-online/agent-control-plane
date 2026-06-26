@@ -1,7 +1,19 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "group:all"
+  "extends": ["config:recommended"],
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 5,
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "squash"
+    },
+    {
+      "matchDepTypes": ["indirect"],
+      "enabled": false
+    }
   ],
-  "postUpdateOptions": ["gomodTidy"]
+  "postUpdateOptions": ["gomodTidy"],
+  "labels": ["dependencies", "renovate"]
 }
