@@ -19,7 +19,7 @@ require (
 
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0 // indirect
-	github.com/ambient-code/platform/components/ambient-api-server v0.0.0-20260304211549-047314a7664b // indirect
+	github.com/ambient-code/platform/components/ambient-api-server v0.0.0-20260620161847-3215c8adb98a // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/catppuccin/go v0.3.0 // indirect
