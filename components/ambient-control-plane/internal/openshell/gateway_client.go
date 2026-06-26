@@ -227,7 +227,7 @@ func (g *GatewayClient) gatewayEndpoint(namespace string) string {
 	return fmt.Sprintf("dns:///%s.%s.svc.cluster.local:%d", g.serviceName, namespace, g.grpcPort)
 }
 
-func sandboxName(sessionID string) string {
+func SandboxName(sessionID string) string {
 	name := sessionID
 	if len(name) > 40 {
 		name = name[:40]
@@ -241,8 +241,4 @@ func sandboxName(sessionID string) string {
 		result[i] = c
 	}
 	return "session-" + string(result)
-}
-
-func SandboxName(sessionID string) string {
-	return sandboxName(sessionID)
 }
