@@ -220,13 +220,11 @@ data:
   google-vertex-ai.yaml: |
     name: google-vertex-ai
     type: google-vertex-ai
-    credential_source:
-      k8s_secret_ref: google-vertex-ai-key
+    secret: google-vertex-ai-key
   anthropic.yaml: |
     name: anthropic
     type: anthropic
-    credential_source:
-      k8s_secret_ref: anthropic-key
+    secret: anthropic-key
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -239,8 +237,7 @@ data:
   github.yaml: |
     name: github
     type: github
-    credential_source:
-      k8s_secret_ref: github-pat
+    secret: github-pat
 ```
 
 ---
@@ -263,13 +260,11 @@ data:
   google-vertex-ai.yaml: |
     name: google-vertex-ai
     type: google-vertex-ai
-    credential_source:
-      k8s_secret_ref: google-vertex-ai-key
+    secret: google-vertex-ai-key
   anthropic.yaml: |
     name: anthropic
     type: anthropic
-    credential_source:
-      k8s_secret_ref: anthropic-key
+    secret: anthropic-key
 ```
 
 ```yaml
@@ -284,8 +279,7 @@ data:
   github.yaml: |
     name: github
     type: github
-    credential_source:
-      k8s_secret_ref: github-pat
+    secret: github-pat
 ```
 
 The project overlay's `kustomization.yaml` includes both — `kustomize build` produces two ConfigMaps, both applied to the namespace.
@@ -296,7 +290,7 @@ Same approach — define policy ConfigMaps in the base, override or add in overl
 
 ### Pattern: Local development overrides
 
-For local development, use a dev-specific overlay that swaps credential sources to use dev-specific secrets:
+For local development, use a dev-specific overlay that swaps provider secrets to dev-specific ones:
 
 ```yaml
 # agents/overlays/dev/kustomization.yaml
@@ -314,8 +308,7 @@ patches:
         value: |
           name: anthropic
           type: anthropic
-          credential_source:
-            k8s_secret_ref: dev-anthropic-key
+          secret: dev-anthropic-key
 ```
 
 ### Pattern: Policy composition
