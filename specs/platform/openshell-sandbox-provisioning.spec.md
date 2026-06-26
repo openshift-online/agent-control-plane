@@ -59,7 +59,7 @@ This iteration is scoped to **scheduled agent runs** (single-run, short-lived se
 
 - **Long-running / steerable sessions** — credential lifecycle concerns (token expiry mid-session, gateway-managed refresh via OAuth2/client-credentials flows) are deferred
 - **Gateway provisioning** — the OpenShell gateway is assumed to already be deployed in each project namespace; ACP will not create it. A future iteration should have the control plane provision and reconcile gateway lifecycle per project namespace (potentially adapting the [upstream Helm chart values](https://github.com/NVIDIA/OpenShell/blob/main/deploy/helm/openshell/values.yaml) into a managed resource)
-- **Namespace lifecycle** — project namespaces are created and managed externally to ACP (e.g., by the OpenShell gateway Helm install or cluster provisioning tooling). ACP assumes namespaces exist and will fail with a clear error if a required namespace is missing. See [Namespace Lifecycle](#requirement-namespace-lifecycle)
+- **Namespace lifecycle (gateway mode)** — in gateway mode (`OPENSHELL_USE_GATEWAY=true`), project namespaces are created and managed externally to ACP (e.g., by the OpenShell gateway Helm install or cluster provisioning tooling). ACP verifies existence and fails with a clear error if a required namespace is missing. In pod mode, ACP continues to create and delete namespaces directly. See [Namespace Lifecycle](#requirement-namespace-lifecycle)
 - **Namespace-level credential storage** — credentials remain stored in ACP, not as Kubernetes Secrets in the project namespace. A future iteration should store credentials as Kubernetes Secrets in each project namespace, with ACP reading them from the Secret and passing them to the gateway when configuring providers. This indirection is necessary because the gateway does not yet support loading credentials directly from Kubernetes Secrets ([OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882))
 - **Network policy ownership** — OpenShell policies (including network egress rules allowing runner-to-control-plane gRPC) will be user-configurable via the Agent spec. Whether ACP auto-injects the control plane egress rule on top of the user-configured policy or requires users to include it explicitly is TBD
 
@@ -488,23 +488,33 @@ The control plane SHALL load client TLS credentials dynamically from a Kubernete
 
 ### Requirement: Namespace Lifecycle
 
-Project namespaces are created and managed externally to ACP. The control plane SHALL NOT create or delete Kubernetes namespaces. When a project is created or a session is provisioned, the control plane SHALL verify the expected namespace exists and fail with a descriptive error if it does not. When a project is deleted or a session is cleaned up, the control plane SHALL clean up its own resources within the namespace (secrets, service accounts, services, sandboxes) but SHALL NOT delete the namespace itself.
+Namespace lifecycle is mode-dependent:
 
-This design reflects the operational reality that project namespaces contain infrastructure managed by other systems (OpenShell gateway, TLS secrets, gateway configuration) that must not be destroyed by ACP lifecycle events.
+- **Pod mode** (`OPENSHELL_USE_GATEWAY=false`): The control plane manages namespace lifecycle directly. `StandardNamespaceProvisioner.ProvisionNamespace` creates the namespace if absent or updates its labels if it already exists. `DeprovisionNamespace` deletes the namespace on cleanup.
+- **Gateway mode** (`OPENSHELL_USE_GATEWAY=true`): Project namespaces are created and managed externally to ACP (e.g., by the OpenShell gateway Helm install or cluster provisioning tooling). The control plane verifies existence via a direct `GetNamespace` call and fails with a descriptive error if a required namespace is missing. It never creates or deletes namespaces.
 
-#### Scenario: Namespace exists
+#### Scenario: Pod mode — namespace provisioning
 
-- GIVEN a project with name `my-project`
-- WHEN the control plane provisions resources for a session in that project
-- THEN it SHALL verify namespace `my-project` exists
-- AND it SHALL proceed with resource creation within the namespace
+- GIVEN `OPENSHELL_USE_GATEWAY` is `false`
+- WHEN the control plane provisions a session
+- THEN it SHALL call `StandardNamespaceProvisioner.ProvisionNamespace`
+- AND if the namespace does not exist, it SHALL create it
+- AND if the namespace already exists, it SHALL update its labels (update-or-create)
+- AND provisioning SHALL proceed with resource creation within the namespace
 
-#### Scenario: Namespace does not exist
+#### Scenario: Pod mode — namespace deprovisioning
 
-- GIVEN a project with name `my-project`
+- GIVEN `OPENSHELL_USE_GATEWAY` is `false`
+- WHEN the control plane cleans up a session
+- THEN it SHALL call `StandardNamespaceProvisioner.DeprovisionNamespace`
+- AND it SHALL delete the namespace
+
+#### Scenario: Gateway mode — namespace does not exist
+
+- GIVEN `OPENSHELL_USE_GATEWAY` is `true`
 - AND namespace `my-project` does not exist on the cluster
 - WHEN the control plane attempts to provision resources
-- THEN it SHALL fail with an error: `namespace my-project does not exist and must be created externally`
+- THEN it SHALL fail with an error: `namespace my-project does not exist; gateway-managed namespaces must be provisioned externally`
 - AND it SHALL NOT attempt to create the namespace
 
 #### Scenario: Gateway mode — direct namespace verification (no provisioner)
@@ -522,9 +532,18 @@ This design reflects the operational reality that project namespaces contain inf
 - THEN the control plane SHALL NOT delete the namespace
 - AND ACP-managed resources within the namespace (secrets, service accounts, RBAC bindings) MAY become orphaned and should be cleaned up by external tooling or a future garbage collection mechanism
 
-#### Scenario: Session cleanup
+#### Scenario: Session cleanup (pod mode)
 
-- GIVEN a session being stopped or deleted
+- GIVEN `OPENSHELL_USE_GATEWAY` is `false`
+- AND a session is being stopped or deleted
+- WHEN the control plane cleans up session resources
+- THEN it SHALL delete session-scoped resources (secrets, service accounts, services) within the namespace
+- AND it SHALL call `DeprovisionNamespace` to delete the namespace
+
+#### Scenario: Session cleanup (gateway mode)
+
+- GIVEN `OPENSHELL_USE_GATEWAY` is `true`
+- AND a session is being stopped or deleted
 - WHEN the control plane cleans up session resources
 - THEN it SHALL delete session-scoped resources (secrets, service accounts, services, sandboxes) within the namespace
 - AND it SHALL NOT delete the namespace
@@ -584,7 +603,7 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | [pod_sync.go] | Extended with sandbox sync branch for gateway mode |
 | `main.go` | Extended to create and wire `GatewayClient` when `OPENSHELL_USE_GATEWAY=true` |
 | [config.go] | Extended with `OpenShellUseGateway` field |
-| `StandardNamespaceProvisioner` | `ProvisionNamespace` verifies namespace existence instead of creating; `DeprovisionNamespace` is a no-op. Used only in pod mode |
+| `StandardNamespaceProvisioner` | Used only in pod mode (`OPENSHELL_USE_GATEWAY=false`). `ProvisionNamespace` creates the namespace if absent, updates labels if it exists (update-or-create). `DeprovisionNamespace` deletes the namespace |
 | `provisionSessionGateway()` | Bypasses the provisioner entirely — uses a direct `GetNamespace` check so no provisioner implementation can inadvertently create or modify the namespace |
 | `cleanupSessionGateway()` | Does not call `DeprovisionNamespace` — namespace lifecycle is fully external in gateway mode |
 | [openshell-sandbox.spec.md] | Unchanged — file-mode spec remains authoritative when `OPENSHELL_USE_GATEWAY=false` |
