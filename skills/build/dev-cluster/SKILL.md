@@ -35,6 +35,8 @@ make kind-port-forward                # Setup port forwarding
 
 **If `make kind-up` fails partway through**, fix the root cause and re-run (`make kind-down && make kind-up`). Never manually patch deployments to recover — the Makefile handles bucket creation, secrets, and port forwarding in order.
 
+Test user credentials are written to `.env.test` during `kind-up`. Use this token for manual API testing or the fast inner-loop frontend setup.
+
 ## Reloading Individual Components (Hot Deploy)
 
 Use `make kind-reload-*` to rebuild and deploy a single component to a running cluster. These targets build the image with a unique tag (`git-hash-epoch`), load it into kind via `ctr images import`, and use `kubectl set image` to trigger a rollout.
@@ -111,16 +113,54 @@ kubectl rollout status deployment/<name> -n ambient-code
 kubectl get events -n ambient-code --sort-by='.lastTimestamp'
 ```
 
-### Step 4: Validate Frontend
+### Step 4: Validate Frontend Accessibility
 
-Always verify before reporting success — port forwarding silently dies on restarts:
+After deployment, **always verify the frontend is reachable** before reporting success. Port forwarding silently dies on rollout restarts, context switches, and timeouts.
+
+**Key distinction:**
+- **Connection refused (curl exit code 7)** → port forwarding is broken. Fix it and retry.
+- **HTTP error (4xx/5xx)** → port forwarding works but the app is unhealthy. Check pod logs.
 
 ```bash
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$KIND_FWD_FRONTEND_PORT 2>/dev/null)
-CURL_EXIT=$?
+for attempt in 1 2 3; do
+  STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$KIND_FWD_FRONTEND_PORT 2>/dev/null)
+  CURL_EXIT=$?
+  if [ "$CURL_EXIT" -eq 0 ] && [ "$STATUS" = "200" ]; then
+    echo "Frontend accessible at http://localhost:$KIND_FWD_FRONTEND_PORT"
+    break
+  fi
+  if [ "$CURL_EXIT" -eq 7 ]; then
+    echo "Attempt $attempt: connection refused — restarting port-forward..."
+    pkill -f "port-forward.*ambient-code" 2>/dev/null
+    sleep 1
+    kubectl config use-context kind-$(make -s kind-cluster-name 2>/dev/null || echo "ambient-local") 2>/dev/null
+    make kind-port-forward &
+    sleep 3
+  else
+    echo "Attempt $attempt: frontend returned HTTP $STATUS — check pod logs"
+    kubectl logs -l app=ambient-ui -n ambient-code --tail=20
+    break
+  fi
+done
 ```
 
-If connection refused (`$CURL_EXIT` = 7): `pkill -f "port-forward.*ambient-code"` then `make kind-port-forward &`
+**CRITICAL:** Never report "the cluster is ready" or provide a URL without first confirming the frontend responds.
+
+### Step 5: Provide Access Info
+
+Only after frontend validation passes:
+
+```
+Frontend: http://localhost:$KIND_FWD_FRONTEND_PORT (verified ✓)
+Test credentials: check .env.test for the token
+
+To view logs:
+  kubectl logs -f -l app=backend -n ambient-code
+  kubectl logs -f -l app=ambient-ui -n ambient-code
+  kubectl logs -f -l app=operator -n ambient-code
+
+To teardown: make kind-down
+```
 
 ## Workflow: Setting Up from a PR
 
@@ -140,6 +180,15 @@ cd components/ambient-ui && npm install
 TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d)
 echo "OC_TOKEN=$TOKEN\nBACKEND_URL=http://localhost:$KIND_FWD_BACKEND_PORT/api" > .env.local
 npm run dev  # http://localhost:3000
+
+**When to use:**
+- Frontend-only changes (components, styles, pages, API routes)
+- Iterating on UI features rapidly
+- Debugging frontend issues
+
+**When NOT to use:**
+- Backend, operator, or runner changes (those still need image rebuild + load)
+- Testing container configuration or deployment manifests
 ```
 
 ## Google OAuth for Integrations
@@ -167,6 +216,44 @@ make benchmark COMPONENT=ambient-control-plane MODE=cold  # Single component
 
 - `cold` = first-contributor setup cost; `warm` = incremental rebuild cost
 - `FORMAT=tsv` preferred for agents; `budget_ok=false` means >60s contributor budget exceeded
+
+## Common Tasks
+
+### Bring up a fresh cluster
+```bash
+make kind-up
+```
+
+### Rebuild everything and test
+```bash
+make kind-rebuild
+```
+
+### Reload a single component
+```bash
+make kind-reload-ambient-api-server
+make kind-reload-ambient-control-plane
+make kind-reload-ambient-ui
+```
+
+### Show logs
+```bash
+kubectl logs -f -l app=backend -n ambient-code
+kubectl logs -f -l app=ambient-ui -n ambient-code
+kubectl logs -f -l app=operator -n ambient-code
+```
+
+### Check if cluster is healthy
+```bash
+kubectl get pods -n ambient-code
+kubectl get events -n ambient-code --sort-by='.lastTimestamp'
+kubectl get deployments -n ambient-code
+```
+
+### Tear down the cluster
+```bash
+make kind-down
+```
 
 ## Troubleshooting
 
@@ -209,7 +296,44 @@ elif command -v podman &>/dev/null && podman info &>/dev/null 2>&1; then
 fi
 ```
 
+**Always pass `CONTAINER_ENGINE=` explicitly to make commands when building:**
+```bash
+make kind-reload-ambient-api-server CONTAINER_ENGINE=docker
+make build-all CONTAINER_ENGINE=podman
+```
+
+## Detecting the Access URL
+
+After deployment, check the actual port mapping via `make kind-status` rather than assuming a fixed port:
+
+```bash
+make kind-status  # shows KIND_FWD_FRONTEND_PORT and other assigned ports
+
+# Quick connectivity test
+curl -s -o /dev/null -w "%{http_code}" http://localhost:$KIND_FWD_FRONTEND_PORT
+```
+
+Port mapping depends on the container engine:
+- **Docker**: often maps to port 80 → `http://localhost`
+- **Podman**: uses `KIND_HTTP_PORT` from `make kind-status`
+
 ## Quick Reference
+
+### Decision Tree: Which Approach?
+
+```
+Do you need to test local code changes?
+├─ No → Use kind (make kind-up)
+│        Fast, uses production images
+│
+└─ Yes → Is the change frontend-only?
+         ├─ Yes → Run locally with npm run dev
+         │        Instant hot-reload, no image builds
+         │
+         └─ No → Use kind with local images
+                  make kind-up LOCAL_IMAGES=true (first time)
+                  make kind-reload-* (subsequent changes)
+```
 
 | Task | Command |
 |------|---------|
