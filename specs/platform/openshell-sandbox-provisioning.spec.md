@@ -507,6 +507,14 @@ This design reflects the operational reality that project namespaces contain inf
 - THEN it SHALL fail with an error: `namespace my-project does not exist and must be created externally`
 - AND it SHALL NOT attempt to create the namespace
 
+#### Scenario: Gateway mode — direct namespace verification (no provisioner)
+
+- GIVEN `OPENSHELL_USE_GATEWAY` is `true`
+- WHEN the control plane provisions a session
+- THEN it SHALL verify the target namespace exists via a direct `GetNamespace` API call
+- AND it SHALL NOT call the provisioner's `ProvisionNamespace` method — the provisioner is bypassed entirely in gateway mode to prevent any provisioner implementation (Standard, MPP) from attempting to create or manage the namespace
+- AND if the namespace does not exist, the control plane SHALL fail with: `namespace <name> does not exist; gateway-managed namespaces must be provisioned externally`
+
 #### Scenario: Project deletion
 
 - GIVEN a project with name `my-project` and associated namespace `my-project`
@@ -520,6 +528,13 @@ This design reflects the operational reality that project namespaces contain inf
 - WHEN the control plane cleans up session resources
 - THEN it SHALL delete session-scoped resources (secrets, service accounts, services, sandboxes) within the namespace
 - AND it SHALL NOT delete the namespace
+
+#### Scenario: Gateway mode — no DeprovisionNamespace on cleanup
+
+- GIVEN `OPENSHELL_USE_GATEWAY` is `true`
+- WHEN the control plane cleans up a session
+- THEN it SHALL NOT call `DeprovisionNamespace` — the namespace is owned by external infrastructure (OpenShell gateway Helm install, cluster provisioning tooling) and must not be destroyed by ACP session lifecycle events
+- AND only session-scoped resources (sandbox, secrets, service accounts, services) SHALL be deleted
 
 ### Requirement: Configuration
 
@@ -569,7 +584,9 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | [pod_sync.go] | Extended with sandbox sync branch for gateway mode |
 | `main.go` | Extended to create and wire `GatewayClient` when `OPENSHELL_USE_GATEWAY=true` |
 | [config.go] | Extended with `OpenShellUseGateway` field |
-| `StandardNamespaceProvisioner` | `ProvisionNamespace` now verifies namespace existence instead of creating; `DeprovisionNamespace` is a no-op. Namespaces are managed externally |
+| `StandardNamespaceProvisioner` | `ProvisionNamespace` verifies namespace existence instead of creating; `DeprovisionNamespace` is a no-op. Used only in pod mode |
+| `provisionSessionGateway()` | Bypasses the provisioner entirely — uses a direct `GetNamespace` check so no provisioner implementation can inadvertently create or modify the namespace |
+| `cleanupSessionGateway()` | Does not call `DeprovisionNamespace` — namespace lifecycle is fully external in gateway mode |
 | [openshell-sandbox.spec.md] | Unchanged — file-mode spec remains authoritative when `OPENSHELL_USE_GATEWAY=false` |
 | Runner pod | Same image and env vars, but the runner process is started via `ExecSandbox` after the sandbox reaches Ready — the gateway overrides the container entrypoint to the supervisor binary with `sleep infinity`, so the image's CMD is never executed directly |
 

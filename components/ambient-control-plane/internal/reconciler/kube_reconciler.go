@@ -286,8 +286,11 @@ func (r *SimpleKubeReconciler) provisionSessionGateway(ctx context.Context, sess
 		Str("sandbox", sbxName).
 		Msg("provisioning session via gateway")
 
-	if err := r.ensureNamespaceExists(ctx, namespace, session); err != nil {
-		return err
+	if _, err := r.kube.GetNamespace(ctx, namespace); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return fmt.Errorf("namespace %s does not exist; gateway-managed namespaces must be provisioned externally", namespace)
+		}
+		return fmt.Errorf("checking namespace %s: %w", namespace, err)
 	}
 
 	existing, err := r.gateway.GetSandbox(ctx, namespace, sbxName)
@@ -708,12 +711,6 @@ func (r *SimpleKubeReconciler) cleanupSessionGateway(ctx context.Context, sessio
 	}
 	if err := r.nsKube().DeleteServicesByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
 		r.logger.Warn().Err(err).Msg("deleting services")
-	}
-
-	if err := r.provisioner.DeprovisionNamespace(ctx, namespace); err != nil {
-		r.logger.Warn().Err(err).Str("namespace", namespace).Msg("deprovisioning namespace")
-	} else {
-		r.logger.Info().Str("namespace", namespace).Msg("namespace deprovisioned")
 	}
 
 	return nil
