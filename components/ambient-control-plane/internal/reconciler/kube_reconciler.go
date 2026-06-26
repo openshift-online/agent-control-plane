@@ -195,7 +195,7 @@ func (r *SimpleKubeReconciler) Reconcile(ctx context.Context, event informer.Res
 
 func (r *SimpleKubeReconciler) provisionSession(ctx context.Context, session types.Session) error {
 	if r.cfg.OpenShellUseGateway {
-		return r.provisionSessionGateway(ctx, session)
+		return r.provisionSessionSandbox(ctx, session)
 	}
 	return r.provisionSessionPod(ctx, session)
 }
@@ -263,7 +263,7 @@ func (r *SimpleKubeReconciler) provisionSessionPod(ctx context.Context, session 
 	return nil
 }
 
-func (r *SimpleKubeReconciler) provisionSessionGateway(ctx context.Context, session types.Session) error {
+func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, session types.Session) error {
 	if session.ProjectID == "" {
 		return fmt.Errorf("session %s has no project_id; refusing to provision", session.ID)
 	}
@@ -312,7 +312,7 @@ func (r *SimpleKubeReconciler) provisionSessionGateway(ctx context.Context, sess
 		return fmt.Errorf("ensuring gateway providers: %w", err)
 	}
 
-	env := r.buildGatewayEnv(ctx, session, project.Name, sdk, providerNames)
+	env := r.buildSandboxEnv(ctx, session, project.Name, sdk, providerNames)
 
 	for k, v := range env {
 		if strings.ContainsAny(v, "\n\r") {
@@ -482,7 +482,7 @@ func (r *SimpleKubeReconciler) ensureGatewayProviders(ctx context.Context, names
 	return providerNames, nil
 }
 
-func (r *SimpleKubeReconciler) buildGatewayEnv(ctx context.Context, session types.Session, projectName string, sdk *sdkclient.Client, providerNames []string) map[string]string {
+func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session types.Session, projectName string, sdk *sdkclient.Client, providerNames []string) map[string]string {
 	env := map[string]string{
 		"SESSION_ID":                  session.ID,
 		"AGENTIC_SESSION_NAME":        session.Name,
@@ -580,7 +580,7 @@ func providerTypeMapping() map[string]bool {
 
 func (r *SimpleKubeReconciler) deprovisionSession(ctx context.Context, session types.Session, nextPhase string) error {
 	if r.cfg.OpenShellUseGateway {
-		return r.deprovisionSessionGateway(ctx, session, nextPhase)
+		return r.deprovisionSessionSandbox(ctx, session, nextPhase)
 	}
 	return r.deprovisionSessionPod(ctx, session, nextPhase)
 }
@@ -611,7 +611,7 @@ func (r *SimpleKubeReconciler) deprovisionSessionPod(ctx context.Context, sessio
 	return nil
 }
 
-func (r *SimpleKubeReconciler) deprovisionSessionGateway(ctx context.Context, session types.Session, nextPhase string) error {
+func (r *SimpleKubeReconciler) deprovisionSessionSandbox(ctx context.Context, session types.Session, nextPhase string) error {
 	namespace, err := r.resolveGatewayNamespace(ctx, session)
 	if err != nil {
 		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("could not resolve project name for namespace; falling back to session namespace")
@@ -637,7 +637,7 @@ func (r *SimpleKubeReconciler) deprovisionSessionGateway(ctx context.Context, se
 
 func (r *SimpleKubeReconciler) cleanupSession(ctx context.Context, session types.Session) error {
 	if r.cfg.OpenShellUseGateway {
-		return r.cleanupSessionGateway(ctx, session)
+		return r.cleanupSessionSandbox(ctx, session)
 	}
 	return r.cleanupSessionPod(ctx, session)
 }
@@ -682,7 +682,7 @@ func (r *SimpleKubeReconciler) cleanupSessionPod(ctx context.Context, session ty
 	return nil
 }
 
-func (r *SimpleKubeReconciler) cleanupSessionGateway(ctx context.Context, session types.Session) error {
+func (r *SimpleKubeReconciler) cleanupSessionSandbox(ctx context.Context, session types.Session) error {
 	namespace, err := r.resolveGatewayNamespace(ctx, session)
 	if err != nil {
 		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("could not resolve project name for namespace; falling back to session namespace")
