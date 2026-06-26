@@ -248,8 +248,8 @@ github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJw
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/openshift-online/ocm-api-model/clientapi v0.0.458 h1:p5rkiZV7TWlk06EOM8DtPiVWKO9gnYNN0pVeWnXovtE=
 github.com/openshift-online/ocm-api-model/clientapi v0.0.458/go.mod h1:fZwy5HY2URG9nrExvQeXrDU/08TGqZ16f8oymVEN5lo=
-github.com/openshift-online/ocm-api-model/model v0.0.458 h1:slgdBbvdcrI9g7eILVSJq069cBkLOWlMmSMFka6uoWM=
-github.com/openshift-online/ocm-api-model/model v0.0.458/go.mod h1:PQIoq6P8Vlb7goOdRMLK8nJY+B7HH0RTqYAa4kyidTE=
+github.com/openshift-online/ocm-api-model/model v0.0.459 h1:pGOc+kGrEfDxOPw6PXZOBGNACDI08/M8nZTA1LTDMdw=
+github.com/openshift-online/ocm-api-model/model v0.0.459/go.mod h1:PQIoq6P8Vlb7goOdRMLK8nJY+B7HH0RTqYAa4kyidTE=
 github.com/openshift-online/ocm-sdk-go v0.1.503 h1:QN0PUvucEGHLXwjiMEI7nuoa2H6N/SUiA4aRYh6sZ2M=
 github.com/openshift-online/ocm-sdk-go v0.1.503/go.mod h1:SM9x+/m+JAigXnGzb/dY+tMbbgx5f5Oq9Nj5Grg1LVk=
 github.com/openshift-online/rh-trex-ai v0.0.30 h1:fgd/5XozbOb7wtkXzMQcOrO7TL1bbluLzP1GrASZCWY=
