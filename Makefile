@@ -173,6 +173,12 @@ help: ## Display this help message
 	@echo '  make kind-rebuild'
 	@echo '  make build-all PLATFORM=linux/arm64'
 
+##@ Code Generation
+
+vendor-openshell-proto: ## Vendor OpenShell proto files and regenerate Go stubs. Usage: make vendor-openshell-proto REF=v0.0.71
+	@test -n "$(REF)" || (echo "Usage: make vendor-openshell-proto REF=<tag-or-sha>"; exit 1)
+	bash components/ambient-control-plane/scripts/vendor-proto.sh $(REF)
+
 ##@ Building
 
 build-all: build-runner build-api-server build-control-plane build-mcp build-ambient-ui build-credential-sidecars ## Build all container images
