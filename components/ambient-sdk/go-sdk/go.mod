@@ -6,7 +6,7 @@ toolchain go1.26.4
 
 require (
 	github.com/ambient-code/platform/components/ambient-api-server v0.0.0-20260304211549-047314a7664b
-	google.golang.org/grpc v1.79.3
+	google.golang.org/grpc v1.81.1
 )
 
 require (
