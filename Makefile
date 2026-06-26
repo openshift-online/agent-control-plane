@@ -109,6 +109,7 @@ KIND_HOST ?=
 # These inherit from environment if set, or can be overridden on command line
 LOCAL_IMAGES ?= false
 LOCAL_VERTEX ?= false
+OPENSHELL_USE_GATEWAY ?= false
 ANTHROPIC_VERTEX_PROJECT_ID ?= $(shell echo $$ANTHROPIC_VERTEX_PROJECT_ID)
 CLOUD_ML_REGION ?= $(shell echo $$CLOUD_ML_REGION)
 # Default to ADC location if not set (created by: gcloud auth application-default login)
@@ -169,7 +170,12 @@ help: ## Display this help message
 
 ##@ Building
 
-build-all: build-runner build-api-server build-control-plane build-mcp build-ambient-ui build-credential-sidecars ## Build all container images
+MCP_BUILD_TARGETS := build-mcp build-credential-sidecars
+ifeq ($(OPENSHELL_USE_GATEWAY),true)
+MCP_BUILD_TARGETS :=
+endif
+
+build-all: build-runner build-api-server build-control-plane build-ambient-ui $(MCP_BUILD_TARGETS) ## Build all container images
 
 build-ambient-ui: ## Build ambient-ui image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building ambient-ui with $(CONTAINER_ENGINE)..."
@@ -1270,9 +1276,15 @@ _kind-require-cluster: ## Internal: Fail fast if kind cluster is not running
 	@$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$' || \
 		(echo "$(COLOR_RED)✗$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' not found. Run 'make kind-up LOCAL_IMAGES=true' first, or set KIND_CLUSTER_NAME to an existing cluster." && exit 1)
 
+KIND_CORE_IMAGES := $(RUNNER_IMAGE) $(API_SERVER_IMAGE) $(CONTROL_PLANE_IMAGE) $(AMBIENT_UI_IMAGE)
+KIND_MCP_IMAGES := $(MCP_IMAGE) $(GITHUB_MCP_IMAGE) $(JIRA_MCP_IMAGE) $(K8S_MCP_IMAGE) $(GOOGLE_MCP_IMAGE)
+ifeq ($(OPENSHELL_USE_GATEWAY),true)
+KIND_MCP_IMAGES :=
+endif
+
 _kind-load-images: ## Internal: Load images into kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind ($(KIND_CLUSTER_NAME))..."
-	@for img in $(RUNNER_IMAGE) $(API_SERVER_IMAGE) $(CONTROL_PLANE_IMAGE) $(MCP_IMAGE) $(AMBIENT_UI_IMAGE) $(GITHUB_MCP_IMAGE) $(JIRA_MCP_IMAGE) $(K8S_MCP_IMAGE) $(GOOGLE_MCP_IMAGE); do \
+	@for img in $(KIND_CORE_IMAGES) $(KIND_MCP_IMAGES); do \
 		echo "  Loading $$img -> $(KIND_IMAGE_PREFIX)$$img..."; \
 		$(CONTAINER_ENGINE) tag $$img $(KIND_IMAGE_PREFIX)$$img 2>/dev/null || true; \
 		if [ -n "$(KIND_HOST)" ] || [ "$(CONTAINER_ENGINE)" = "podman" ]; then \
