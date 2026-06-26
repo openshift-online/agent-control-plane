@@ -27,6 +27,27 @@ make kind-port-forward   # ports shown in output
 
 See [CONTRIBUTING.md](CONTRIBUTING.md#local-development-setup) for full local development setup.
 
+### OpenShell Gateway Mode (Kind)
+
+When running with `OPENSHELL_USE_GATEWAY=true`, the control plane delegates sandbox creation to an OpenShell gateway instead of creating pods directly.
+
+```bash
+make kind-up OPENSHELL_USE_GATEWAY=true
+```
+
+This automatically installs all prerequisites: the tenant namespace, the [agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) CRD (v0.4.6), and the [OpenShell gateway Helm chart](https://github.com/NVIDIA/OpenShell/tree/main/deploy/helm/openshell). It also patches the control plane deployment with `OPENSHELL_USE_GATEWAY=true`.
+
+Override defaults with:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENSHELL_TENANT_NAMESPACE` | `tenant` | Namespace for the gateway and sandboxes |
+| `AGENT_SANDBOX_VERSION` | `v0.4.6` | Agent Sandbox CRD release (must match gateway API version) |
+
+After the sandbox reaches Ready, the control plane executes commands inside it via the `ExecSandbox` gRPC RPC — the runner starts through exec, not the container entrypoint.
+
+See [OpenShell Sandbox Provisioning Spec](specs/platform/openshell-sandbox-provisioning.spec.md) for full details on gateway mode, CRD version compatibility, and configuration.
+
 ## Architecture
 
 | Component | Technology | Description |

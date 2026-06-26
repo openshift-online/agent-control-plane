@@ -11,7 +11,47 @@
 
 When the platform operates in OpenShell mode, the control plane SHALL delegate agent pod creation to an OpenShell gateway running in each project namespace, instead of creating Kubernetes pods directly. This provides policy-enforced sandboxing (network, filesystem, process controls) for all agent sessions through OpenShell's security layer.
 
-The OpenShell gateway exposes a gRPC service (`openshell.v1.OpenShell`) that manages sandbox lifecycle. Each project namespace has an OpenShell gateway pre-installed via Helm chart. The control plane discovers it via Kubernetes Service DNS.
+The OpenShell gateway exposes a gRPC service (`openshell.v1.OpenShell`) that manages sandbox lifecycle. Each project namespace has an OpenShell gateway pre-installed via the [OpenShell Helm chart](https://github.com/NVIDIA/OpenShell/tree/main/deploy/helm/openshell). The control plane discovers it via Kubernetes Service DNS.
+
+#### Gateway Installation
+
+The OpenShell gateway is installed into each project namespace using the upstream Helm chart:
+
+```bash
+helm install openshell-gateway oci://ghcr.io/nvidia/openshell/helm-chart --namespace <project-namespace>
+```
+
+The Helm chart deploys a StatefulSet, Service, ConfigMap, and TLS secrets via a `certgen` pre-install hook (`openshell-gateway generate-certs`). The certgen hook generates a self-signed CA, server certificate (with SANs derived from the Helm release name and namespace), client certificate, and JWT signing keys. These are stored in `openshell-server-tls`, `openshell-client-tls`, and `openshell-gateway-jwt-keys` Secrets respectively.
+
+**Important:** The default server certificate SANs are derived from the Helm chart's `fullname` template (typically `openshell`) and the release namespace. If the Helm release name or Kubernetes Service name differs from the chart defaults, additional SANs must be provided via `pkiInitJob.serverDnsNames` to ensure sandbox-to-gateway TLS verification succeeds:
+
+```bash
+helm install openshell-gateway oci://ghcr.io/nvidia/openshell/helm-chart \
+  --namespace tenant \
+  --set "pkiInitJob.serverDnsNames={openshell-gateway.tenant.svc.cluster.local}"
+```
+
+Alternatively, cert-manager can manage TLS certificates by setting `certManager.enabled=true` in the Helm values.
+
+The ACP control plane reads the `openshell-client-tls` Secret from the project namespace to establish mTLS connections to the gateway (see [Gateway TLS and Authentication](#requirement-gateway-tls-and-authentication)).
+
+#### Sandbox CRD Installation
+
+The [Agent Sandbox CRD](https://github.com/kubernetes-sigs/agent-sandbox) (`sandboxes.agents.x-k8s.io`) and its controller must be installed cluster-wide before deploying the gateway. The CRD version must match the API version that the OpenShell gateway expects.
+
+**Version compatibility:** The OpenShell gateway 0.0.70 uses the `agents.x-k8s.io/v1alpha1` API. The agent-sandbox project graduated its API to `v1beta1` in release v0.5.0. Installing the `latest` release (v0.5.0+) will cause sandbox-to-gateway authentication failures because the gateway's K8s ServiceAccount authenticator checks for `v1alpha1` in pod ownerReferences, but the v0.5.0 controller stamps `v1beta1`.
+
+Install the CRD at the version compatible with your gateway:
+
+```bash
+# For OpenShell gateway ≤ 0.0.70 — use agent-sandbox v0.4.6 (v1alpha1)
+kubectl apply -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v0.4.6/manifest.yaml
+
+# For OpenShell gateway with v1beta1 support (future) — use agent-sandbox v0.5.0+
+kubectl apply -f https://github.com/kubernetes-sigs/agent-sandbox/releases/latest/download/manifest.yaml
+```
+
+This installs the `agent-sandbox-system` namespace, the CRD, and the sandbox controller. The controller watches for Sandbox CRs and creates pods with ownerReferences — the API version in those ownerReferences must match what the gateway authenticator expects.
 
 ### Iteration 1 Constraints
 
@@ -52,6 +92,7 @@ When `OPENSHELL_USE_GATEWAY` is true, the control plane SHALL create agent sandb
 - AND it SHALL call `CreateSandbox` on the gateway in that namespace
 - AND the sandbox SHALL be created with the runner image, session environment variables, and attached credential providers
 - AND the session phase SHALL transition to `Running`
+- AND the control plane SHALL asynchronously poll `GetSandbox` until the sandbox reaches `SANDBOX_PHASE_READY`, then execute the runner start command inside the sandbox via `ExecSandbox` (see [Sandbox Command Execution](#requirement-sandbox-command-execution-via-execsandbox))
 
 #### Scenario: Session provisioning without gateway mode
 
@@ -107,7 +148,7 @@ Sandbox naming follows the same `session-<safe_name>` pattern used by pods (`pod
 
 ### Requirement: Security Context Delegation
 
-In gateway mode, the control plane SHALL NOT set a SecurityContext on the runner container. The OpenShell gateway owns pod creation and applies its own security settings — including the SCC, capabilities, and privilege configuration recommended by the [OpenShell OpenShift deployment guide](https://docs.nvidia.com/openshell/kubernetes/openshift). The gateway's sandbox service account is bound to the required SCC as part of the pre-deployed Helm installation. The [Sandbox CRD](https://docs.nvidia.com/openshell/kubernetes/setup#install-agent-sandbox) and the [privileged SCC grant for sandbox pods](https://docs.nvidia.com/openshell/kubernetes/openshift#grant-the-privileged-scc-to-sandbox-pods) are assumed to be pre-installed on the cluster.
+In gateway mode, the control plane SHALL NOT set a SecurityContext on the runner container. The OpenShell gateway owns pod creation and applies its own security settings — including the SCC, capabilities, and privilege configuration recommended by the [OpenShell OpenShift deployment guide](https://docs.nvidia.com/openshell/kubernetes/openshift). The gateway's sandbox service account is bound to the required SCC as part of the pre-deployed Helm installation. The [Sandbox CRD](#sandbox-crd-installation) and the [privileged SCC grant for sandbox pods](https://docs.nvidia.com/openshell/kubernetes/openshift#grant-the-privileged-scc-to-sandbox-pods) are assumed to be pre-installed on the cluster.
 
 This is a significant change from file mode, where the control plane must grant elevated privileges (`root`, `SYS_ADMIN`, `NET_ADMIN`, `SYS_PTRACE`, `SETUID`, `SETGID`, `CHOWN`, `DAC_OVERRIDE`, seccomp `Unconfined`) to the runner container so the in-container Supervisor can create network namespaces and drop privileges. In gateway mode, the Supervisor is still present inside the sandbox, but the gateway configures it — the control plane's [`buildRunnerSecurityContext()`][kube_reconciler.go] and `buildVolumes()` (OpenShell policy mount) are not invoked.
 
@@ -120,6 +161,7 @@ This is a significant change from file mode, where the control plane must grant 
 - AND it SHALL NOT add the `/etc/openshell` volume mount
 - AND the `CreateSandboxRequest` SHALL contain only image, environment, and provider references
 - AND all pod-level security settings SHALL be the gateway's responsibility
+- AND the gateway SHALL override the container command to its supervisor binary (`/opt/openshell/bin/openshell-sandbox`) — the runner image's `CMD`/`ENTRYPOINT` is not executed (the runner is started via `ExecSandbox` after the sandbox reaches Ready)
 
 #### Scenario: File mode — elevated SecurityContext preserved
 
@@ -203,6 +245,45 @@ The control plane SHALL pass session configuration to the sandbox as environment
 - THEN the control plane SHALL exclude that variable from the `CreateSandboxRequest` environment
 - AND the provider-injected value SHALL take precedence
 - AND the control plane SHALL log a warning identifying the skipped variable
+
+### Requirement: Sandbox Command Execution via ExecSandbox
+
+The OpenShell gateway's Kubernetes driver overrides the container entrypoint to the supervisor binary (`/opt/openshell/bin/openshell-sandbox`) and hardcodes `OPENSHELL_SANDBOX_COMMAND=sleep infinity` in the container environment. This means the sandbox always boots with `sleep infinity` as its main process — the runner image's `CMD`/`ENTRYPOINT` is never executed. This is by design: the OpenShell sandbox model treats the sandbox as a persistent workspace where user commands run via exec after provisioning completes.
+
+Setting `OPENSHELL_SANDBOX_COMMAND` in the `CreateSandboxRequest` environment is ineffective because the K8s driver's `apply_required_env()` overwrites it after applying user environment variables.
+
+The control plane SHALL start the runner process inside the sandbox by calling the `ExecSandbox` gRPC RPC after the sandbox reaches `SANDBOX_PHASE_READY`. This mirrors how the OpenShell CLI implements `openshell sandbox create -- <command>`: it creates the sandbox, watches for Ready, then runs the command via exec — the command is never part of the `CreateSandboxRequest`.
+
+The `ExecSandbox` RPC is a server-streaming call that returns stdout, stderr, and exit code events. The `ExecSandboxRequest.SandboxId` field requires the gateway's internal sandbox UUID (from `Sandbox.Metadata.Id` in the `GetSandbox` response), not the Kubernetes sandbox name.
+
+#### Scenario: Runner startup via ExecSandbox
+
+- GIVEN a sandbox has been created via `CreateSandbox`
+- WHEN the sandbox reaches `SANDBOX_PHASE_READY`
+- THEN the control plane SHALL call `ExecSandbox` with the runner start command
+- AND the `SandboxId` SHALL be the gateway's internal UUID obtained from `GetSandbox` response metadata
+- AND the exec SHALL run asynchronously (fire-and-forget) — the control plane does not block on the exec stream
+
+#### Scenario: Polling for sandbox readiness
+
+- GIVEN a sandbox was just created
+- WHEN the control plane polls `GetSandbox` for readiness
+- THEN it SHALL poll every 2 seconds with a 120-second timeout
+- AND if the sandbox enters `SANDBOX_PHASE_ERROR`, the control plane SHALL log an error and stop polling
+- AND if the timeout expires before `SANDBOX_PHASE_READY`, the control plane SHALL log an error
+
+#### Scenario: Idempotent exec on re-reconcile
+
+- GIVEN a sandbox already exists for a session (detected via `GetSandbox` in the idempotency check)
+- WHEN the control plane reconciles the same session again
+- THEN it SHALL launch the exec-after-Ready goroutine again
+- AND this is safe because re-running the runner command in an already-running sandbox is idempotent for short-lived exec commands
+
+#### Scenario: OPENSHELL_SANDBOX_COMMAND is not used
+
+- GIVEN the control plane builds the gateway environment map
+- THEN it SHALL NOT include `OPENSHELL_SANDBOX_COMMAND` in the environment
+- AND the runner start command SHALL only be delivered via `ExecSandbox` after the sandbox is ready
 
 ### Requirement: Sandbox Deprovisioning
 
@@ -308,6 +389,7 @@ The control plane SHALL vendor OpenShell proto definitions and generate Go gRPC 
 - THEN they SHALL be placed at `components/ambient-control-plane/proto/openshell/v1/`
 - AND each file SHALL have a `go_package` option added
 - AND generated Go stubs SHALL be output to `internal/openshell/grpc/` (component-scoped, matching the control plane's convention of keeping packages under `internal/`; only the control plane consumes these stubs)
+- AND the vendored proto SHALL include the `ExecSandbox` RPC (server-streaming: `ExecSandboxRequest` → `stream ExecSandboxEvent`) in addition to sandbox lifecycle and provider management RPCs
 
 ### Requirement: gRPC Connection Management
 
@@ -346,9 +428,13 @@ The control plane SHALL maintain a cache of gRPC connections to OpenShell gatewa
 
 ### Requirement: Gateway TLS and Authentication
 
-The control plane SHALL use mTLS for transport-level security when connecting to the OpenShell gateway. The gateway SHALL be deployed with `allow_unauthenticated_users = true`, relying on mTLS alone to authenticate the control plane — no application-layer JWT or OIDC tokens are required.
+The control plane SHALL use mTLS for transport-level security when connecting to the OpenShell gateway. The gateway SHALL be deployed with `allow_unauthenticated_users = false` — all clients must authenticate via one of the gateway's application-layer authenticators in addition to presenting a valid mTLS client certificate.
 
-**Rationale:** The gateway's auth chain (`SandboxJwtAuthenticator` → `K8sServiceAccountAuthenticator` → `OidcAuthenticator`) is designed for sandbox-to-gateway and user-to-gateway authentication. ACP-to-gateway communication is a trusted cluster-internal control-plane path where mTLS provides sufficient identity verification. Adding application-layer JWT minting (reading the gateway's Ed25519 signing key, constructing SPIFFE-shaped claims) introduces complexity disproportionate to the security benefit for an already-authenticated mTLS channel. The gateway is not exposed outside the cluster (no Route), so the only clients are ACP (via mTLS) and sandboxes (via gateway-minted bootstrap JWTs managed by the gateway itself).
+**Authentication paths:**
+- **ACP → gateway:** The control plane presents its Kubernetes ServiceAccount token as a Bearer token in gRPC requests. The gateway validates it via the `K8sServiceAccountAuthenticator` (TokenReview API). This is the same auth path used by sandbox pods for `IssueSandboxToken` bootstrap, ensuring a consistent authentication model.
+- **Sandbox → gateway:** Sandbox pods authenticate via `IssueSandboxToken` (K8s SA token exchange for a gateway-minted JWT), then use the sandbox JWT for subsequent requests (policy fetch, log push, token refresh). This is managed entirely by the gateway and its supervisor — the control plane is not involved.
+
+The gateway is not exposed outside the cluster (no Route), so the only clients are ACP (via mTLS + K8s SA token) and sandboxes (via mTLS + gateway-minted JWTs).
 
 The control plane SHALL load client TLS credentials dynamically from a Kubernetes Secret in each project namespace, enabling per-namespace certificate isolation. The `openshell-client-tls` Secret (configurable via `OPENSHELL_GATEWAY_CLIENT_TLS_SECRET`) contains the client certificate, private key, and CA certificate for verifying the gateway's server certificate.
 
@@ -360,15 +446,16 @@ The control plane SHALL load client TLS credentials dynamically from a Kubernete
 - AND it SHALL use `tls.crt` and `tls.key` as the client certificate
 - AND it SHALL use `ca.crt` as the root CA for server verification
 - AND TLS credentials SHALL be cached per namespace and evicted on connection errors
-- AND no application-layer authentication tokens SHALL be attached to gRPC requests
+- AND the control plane SHALL attach its Kubernetes ServiceAccount token as a Bearer token in gRPC call metadata for application-layer authentication
 
 #### Scenario: Gateway authentication configuration
 
 - GIVEN an OpenShell gateway deployed in a project namespace
 - WHEN the gateway is configured for ACP integration
-- THEN `allow_unauthenticated_users` SHALL be set to `true` in the gateway configuration
-- AND the gateway SHALL accept gRPC requests from mTLS-authenticated clients without requiring an `Authorization` header
-- AND sandbox-to-gateway authentication (bootstrap JWTs) remains the gateway's responsibility and is unaffected
+- THEN `allow_unauthenticated_users` SHALL be set to `false` in the gateway configuration
+- AND the gateway SHALL require all clients to authenticate via one of its application-layer authenticators (`SandboxJwtAuthenticator`, `K8sServiceAccountAuthenticator`, or `OidcAuthenticator`)
+- AND the control plane SHALL present its Kubernetes ServiceAccount token as a Bearer token in gRPC requests to pass the `K8sServiceAccountAuthenticator`
+- AND sandbox-to-gateway authentication (bootstrap JWTs via `IssueSandboxToken`) remains the gateway's responsibility and is unaffected
 
 #### Scenario: TLS ServerName override
 
@@ -484,7 +571,7 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | [config.go] | Extended with `OpenShellUseGateway` field |
 | `StandardNamespaceProvisioner` | `ProvisionNamespace` now verifies namespace existence instead of creating; `DeprovisionNamespace` is a no-op. Namespaces are managed externally |
 | [openshell-sandbox.spec.md] | Unchanged — file-mode spec remains authoritative when `OPENSHELL_USE_GATEWAY=false` |
-| Runner pod | No changes — same image, same env vars, running inside OpenShell sandbox instead of bare pod |
+| Runner pod | Same image and env vars, but the runner process is started via `ExecSandbox` after the sandbox reaches Ready — the gateway overrides the container entrypoint to the supervisor binary with `sleep infinity`, so the image's CMD is never executed directly |
 
 ### Backward compatibility
 

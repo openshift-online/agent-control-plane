@@ -293,6 +293,7 @@ func (r *SimpleKubeReconciler) provisionSessionGateway(ctx context.Context, sess
 	existing, err := r.gateway.GetSandbox(ctx, namespace, sbxName)
 	if err == nil && existing != nil && existing.Sandbox != nil {
 		r.logger.Debug().Str("sandbox", sbxName).Msg("sandbox already exists")
+		go r.execAfterReady(namespace, sbxName, session.ID)
 		r.updateSessionPhaseWithNamespace(ctx, session, PhaseRunning, namespace)
 		return nil
 	}
@@ -344,8 +345,79 @@ func (r *SimpleKubeReconciler) provisionSessionGateway(ctx context.Context, sess
 		Int("providers", len(providerNames)).
 		Msg("sandbox created via gateway")
 
+	go r.execAfterReady(namespace, sbxName, session.ID)
+
 	r.updateSessionPhaseWithNamespace(ctx, session, PhaseRunning, namespace)
 	return nil
+}
+
+func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			r.logger.Error().
+				Str("sandbox", sbxName).
+				Str("session_id", sessionID).
+				Msg("timed out waiting for sandbox to become ready")
+			return
+		case <-ticker.C:
+			resp, err := r.gateway.GetSandbox(ctx, namespace, sbxName)
+			if err != nil {
+				r.logger.Debug().Err(err).Str("sandbox", sbxName).Msg("polling sandbox status")
+				continue
+			}
+			if resp.Sandbox == nil || resp.Sandbox.Status == nil {
+				continue
+			}
+			phase := resp.Sandbox.Status.Phase
+			if phase == openshellpb.SandboxPhase_SANDBOX_PHASE_ERROR {
+				r.logger.Error().
+					Str("sandbox", sbxName).
+					Str("session_id", sessionID).
+					Msg("sandbox entered error phase")
+				return
+			}
+			if phase != openshellpb.SandboxPhase_SANDBOX_PHASE_READY {
+				r.logger.Debug().
+					Str("sandbox", sbxName).
+					Str("phase", phase.String()).
+					Msg("sandbox not ready yet")
+				continue
+			}
+
+			sandboxID := sbxName
+			if resp.Sandbox.Metadata != nil && resp.Sandbox.Metadata.Id != "" {
+				sandboxID = resp.Sandbox.Metadata.Id
+			}
+
+			r.logger.Info().
+				Str("sandbox", sbxName).
+				Str("sandbox_id", sandboxID).
+				Msg("sandbox is ready, executing command")
+
+			result, err := r.gateway.ExecSandbox(ctx, namespace, &openshellpb.ExecSandboxRequest{
+				SandboxId: sandboxID,
+				Command:   []string{"echo", "hello world from ACP"},
+			})
+			if err != nil {
+				r.logger.Error().Err(err).Str("sandbox", sbxName).Msg("exec failed")
+				return
+			}
+			r.logger.Info().
+				Str("sandbox", sbxName).
+				Str("stdout", string(result.Stdout)).
+				Str("stderr", string(result.Stderr)).
+				Int32("exit_code", result.ExitCode).
+				Msg("exec completed")
+			return
+		}
+	}
 }
 
 func (r *SimpleKubeReconciler) ensureGatewayProviders(ctx context.Context, namespace, projectName string, sdk *sdkclient.Client, credentialIDs map[string]string) ([]string, error) {

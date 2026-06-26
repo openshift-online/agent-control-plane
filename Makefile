@@ -114,6 +114,10 @@ CLOUD_ML_REGION ?= $(shell echo $$CLOUD_ML_REGION)
 # Default to ADC location if not set (created by: gcloud auth application-default login)
 GOOGLE_APPLICATION_CREDENTIALS ?= $(or $(shell echo $$GOOGLE_APPLICATION_CREDENTIALS),$(HOME)/.config/gcloud/application_default_credentials.json)
 
+# OpenShell Gateway Configuration (for OPENSHELL_USE_GATEWAY=true)
+OPENSHELL_USE_GATEWAY ?= false
+OPENSHELL_TENANT_NAMESPACE ?= tenant
+AGENT_SANDBOX_VERSION ?= v0.4.6
 
 # Colors for output (using tput for better compatibility, with fallback to printf-compatible codes)
 # Use shell assignment to evaluate tput at runtime if available
@@ -874,6 +878,14 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Extracting test token..."
 	@cd e2e && KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_HTTP_PORT=$(KIND_HTTP_PORT) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/extract-token.sh
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' ready!"
+	@# OpenShell gateway setup if requested
+	@if [ "$(OPENSHELL_USE_GATEWAY)" = "true" ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Installing OpenShell gateway prerequisites..."; \
+		NAMESPACE=$(NAMESPACE) \
+		OPENSHELL_TENANT_NAMESPACE="$(OPENSHELL_TENANT_NAMESPACE)" \
+		AGENT_SANDBOX_VERSION="$(AGENT_SANDBOX_VERSION)" \
+		./scripts/setup-kind-openshell.sh; \
+	fi
 	@# Vertex AI setup if requested
 	@if [ "$(LOCAL_VERTEX)" = "true" ]; then \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring Vertex AI..."; \

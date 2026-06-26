@@ -3,6 +3,7 @@ package openshell
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 
 	pb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
@@ -165,6 +166,46 @@ func (g *GatewayClient) GetProvider(ctx context.Context, namespace string, name 
 		g.evictConn(namespace)
 	}
 	return resp, err
+}
+
+type ExecResult struct {
+	Stdout   []byte
+	Stderr   []byte
+	ExitCode int32
+}
+
+func (g *GatewayClient) ExecSandbox(ctx context.Context, namespace string, req *pb.ExecSandboxRequest) (*ExecResult, error) {
+	client, err := g.clientForNamespace(ctx, namespace)
+	if err != nil {
+		return nil, err
+	}
+	stream, err := client.ExecSandbox(ctx, req)
+	if err != nil {
+		if g.shouldEvict(err) {
+			g.evictConn(namespace)
+		}
+		return nil, err
+	}
+
+	result := &ExecResult{}
+	for {
+		event, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return result, fmt.Errorf("exec stream: %w", err)
+		}
+		switch p := event.Payload.(type) {
+		case *pb.ExecSandboxEvent_Stdout:
+			result.Stdout = append(result.Stdout, p.Stdout.Data...)
+		case *pb.ExecSandboxEvent_Stderr:
+			result.Stderr = append(result.Stderr, p.Stderr.Data...)
+		case *pb.ExecSandboxEvent_Exit:
+			result.ExitCode = p.Exit.ExitCode
+		}
+	}
+	return result, nil
 }
 
 func (g *GatewayClient) Close() error {

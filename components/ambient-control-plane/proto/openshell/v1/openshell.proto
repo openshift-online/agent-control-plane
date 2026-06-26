@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Vendored from github.com/NVIDIA/OpenShell/proto/openshell.proto
-// Subset: only sandbox lifecycle and provider management RPCs needed by the control plane.
+// Subset: sandbox lifecycle, exec, and provider management RPCs needed by the control plane.
 
 syntax = "proto3";
 
@@ -17,6 +17,7 @@ service OpenShell {
   rpc CreateSandbox(CreateSandboxRequest) returns (SandboxResponse);
   rpc GetSandbox(GetSandboxRequest) returns (SandboxResponse);
   rpc DeleteSandbox(DeleteSandboxRequest) returns (DeleteSandboxResponse);
+  rpc ExecSandbox(ExecSandboxRequest) returns (stream ExecSandboxEvent);
   rpc CreateProvider(CreateProviderRequest) returns (ProviderResponse);
   rpc UpdateProvider(UpdateProviderRequest) returns (ProviderResponse);
   rpc GetProvider(GetProviderRequest) returns (ProviderResponse);
@@ -132,4 +133,36 @@ message DeleteProviderRequest {
 
 message DeleteProviderResponse {
   bool deleted = 1;
+}
+
+message ExecSandboxRequest {
+  string sandbox_id = 1;
+  repeated string command = 2;
+  string workdir = 3;
+  map<string, string> environment = 4;
+  uint32 timeout_seconds = 5;
+  bytes stdin = 6;
+  bool tty = 7;
+  uint32 cols = 8;
+  uint32 rows = 9;
+}
+
+message ExecSandboxEvent {
+  oneof payload {
+    ExecSandboxStdout stdout = 1;
+    ExecSandboxStderr stderr = 2;
+    ExecSandboxExit exit = 3;
+  }
+}
+
+message ExecSandboxStdout {
+  bytes data = 1;
+}
+
+message ExecSandboxStderr {
+  bytes data = 1;
+}
+
+message ExecSandboxExit {
+  int32 exit_code = 1;
 }
