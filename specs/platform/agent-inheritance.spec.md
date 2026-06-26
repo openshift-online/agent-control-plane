@@ -91,6 +91,8 @@ agents/
       providers.yaml          # Additional project providers
 ```
 
+**Option A: `configMapGenerator` with `behavior: merge`** (preferred — overlay only declares the delta)
+
 ```yaml
 # agents/overlays/project-alpha/kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -98,7 +100,47 @@ kind: Kustomization
 namespace: project-alpha
 resources:
   - ../../base
-  - security-reviewer.yaml
+  - providers.yaml
+configMapGenerator:
+  - name: agent-defaults
+    behavior: merge
+    labels:
+      ambient.ai/kind: agent
+    files:
+      - security-reviewer.yaml=agents/security-reviewer.yaml
+```
+
+```yaml
+# agents/overlays/project-alpha/agents/security-reviewer.yaml
+name: security-reviewer
+description: Reviews PRs for OWASP top 10 vulnerabilities
+prompt: |
+  You are a security review agent specializing in OWASP top 10.
+providers:
+  - google-vertex-ai
+  - anthropic
+  - github
+sandbox_policy: restricted
+sandbox_template:
+  resources:
+    memory: 8Gi
+environment:
+  CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: "1"
+labels:
+  team: platform-security
+```
+
+With `behavior: merge`, Kustomize merges the overlay's data keys into the base ConfigMap. The overlay agent file only declares what differs — `entrypoint`, `sandbox_template.image`, `sandbox_template.resources.cpu`, and `LOG_LEVEL` are inherited from the base.
+
+**Option B: JSON patch `op: replace`** (valid but requires repeating the full agent YAML)
+
+```yaml
+# agents/overlays/project-alpha/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: project-alpha
+resources:
+  - ../../base
   - providers.yaml
 patches:
   - target:
@@ -110,8 +152,6 @@ patches:
         value: |
           name: security-reviewer
           description: Reviews PRs for OWASP top 10 vulnerabilities
-          prompt: |
-            You are a security review agent specializing in OWASP top 10.
           entrypoint: claude
           providers:
             - google-vertex-ai
@@ -129,6 +169,8 @@ patches:
           labels:
             team: platform-security
 ```
+
+> **Tradeoff.** JSON patch `op: replace` on a ConfigMap data key replaces the entire string value — the overlay must repeat every field, not just the delta. This works but defeats the purpose of "only declare what differs." `configMapGenerator` with `behavior: merge` or strategic merge patches are cleaner when the goal is true overlay semantics. JSON patch is appropriate when the overlay intentionally replaces the entire agent definition rather than extending a base.
 
 ### What `kustomize build` produces
 
