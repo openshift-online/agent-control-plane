@@ -64,7 +64,7 @@ metadata:
   labels:
     ambient.ai/kind: agent
 data:
-  defaults.yaml: |
+  defaults: |
     name: defaults
     entrypoint: claude
     providers:
@@ -107,7 +107,7 @@ configMapGenerator:
     labels:
       ambient.ai/kind: agent
     files:
-      - security-reviewer.yaml=agents/security-reviewer.yaml
+      - security-reviewer=agents/security-reviewer.yaml
 ```
 
 ```yaml
@@ -148,7 +148,7 @@ patches:
       name: agent-defaults
     patch: |
       - op: replace
-        path: /data/defaults.yaml
+        path: /data/defaults
         value: |
           name: security-reviewer
           description: Reviews PRs for OWASP top 10 vulnerabilities
@@ -189,7 +189,7 @@ metadata:
   name: agent-defaults
   namespace: alpha
 data:
-  security-reviewer.yaml: |
+  security-reviewer: |
     name: security-reviewer
     description: Reviews PRs for OWASP top 10 vulnerabilities
     prompt: |

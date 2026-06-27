@@ -225,7 +225,7 @@ The control plane SHALL discover policy declarations by watching ConfigMaps with
 
 ### Structure
 
-Each policy is stored as a `data` entry. The data key is an arbitrary ConfigMap key (e.g., `restricted.yaml`) — it is not a filename and has no special meaning beyond serving as a unique key within the ConfigMap. The YAML content includes a `name` field (for consistency with provider declarations) followed by the upstream OpenShell `SandboxPolicy` fields. The data key and the `name` field SHOULD match by convention (e.g., `restricted.yaml` contains `name: restricted`), but agents reference the policy by the `name` field value, not the data key.
+Each policy is stored as a `data` entry. The data key is an arbitrary ConfigMap key (e.g., `restricted`) used as a unique identifier within the ConfigMap. The YAML content includes a `name` field (for consistency with provider declarations) followed by the upstream OpenShell `SandboxPolicy` fields. The data key and the `name` field SHOULD match by convention (e.g., key `restricted` contains `name: restricted`), but agents reference the policy by the `name` field value, not the data key.
 
 ```yaml
 apiVersion: v1
@@ -236,7 +236,7 @@ metadata:
   labels:
     ambient.ai/kind: policy
 data:
-  restricted.yaml: |
+  restricted: |
     name: restricted
     network_policies:
       github_api:
@@ -272,7 +272,7 @@ data:
       run_as_group: sandbox
     landlock:
       compatibility: best_effort
-  permissive.yaml: |
+  permissive: |
     name: permissive
     filesystem:
       read_write:
@@ -299,7 +299,7 @@ Platform minimum enforcement (ensuring tenant policies cannot weaken platform-le
 
 ### Conventions
 
-- Each `data` key is an arbitrary ConfigMap key (e.g., `restricted.yaml`) — the `.yaml` suffix is a convention, not a requirement
+- Each `data` key is an arbitrary ConfigMap key (e.g., `restricted`)
 - The policy name is derived from the `name` field within the YAML content, not from the data key
 - Policy names MUST be unique within a namespace (across all Policy ConfigMaps)
 - One ConfigMap MAY contain multiple policy entries
@@ -325,7 +325,7 @@ Agent definitions SHALL be expressed as YAML documents within ConfigMaps in tena
 #### Scenario: Single agent in a ConfigMap
 
 - GIVEN a ConfigMap with label `ambient.ai/kind: agent` exists in tenant namespace `alpha`
-- AND the ConfigMap's `data` contains a key `security-reviewer.yaml` with a valid agent YAML document
+- AND the ConfigMap's `data` contains a key `security-reviewer` with a valid agent YAML document
 - WHEN the control plane reconciles the namespace
 - THEN an agent named `security-reviewer` SHALL be created in project `alpha`
 - AND the agent's sandbox configuration SHALL reflect the YAML document
@@ -333,14 +333,14 @@ Agent definitions SHALL be expressed as YAML documents within ConfigMaps in tena
 #### Scenario: Multiple agents in a single ConfigMap
 
 - GIVEN a ConfigMap with label `ambient.ai/kind: agent` exists in tenant namespace `alpha`
-- AND the ConfigMap's `data` contains keys `reviewer.yaml` and `builder.yaml`
+- AND the ConfigMap's `data` contains keys `reviewer` and `builder`
 - WHEN the control plane reconciles the namespace
 - THEN agents `reviewer` and `builder` SHALL both be created in project `alpha`
 
 #### Scenario: ConfigMap update triggers reconciliation
 
 - GIVEN an agent `reviewer` was created from a ConfigMap
-- WHEN the ConfigMap's `reviewer.yaml` data key is updated with a new `entrypoint` value
+- WHEN the ConfigMap's `reviewer` data key is updated with a new `entrypoint` value
 - THEN the control plane SHALL update the agent's configuration to match
 - AND no running session SHALL be affected (changes apply to the next session start)
 
@@ -708,7 +708,7 @@ metadata:
   labels:
     ambient.ai/kind: agent
 data:
-  security-reviewer.yaml: |
+  security-reviewer: |
     name: security-reviewer
     description: Reviews PRs for security vulnerabilities
     prompt: You are a security review agent.
@@ -717,14 +717,14 @@ data:
       - github
       - anthropic
     # ... (full agent YAML)
-  builder.yaml: |
+  builder: |
     name: builder
     # ... (another agent YAML)
 ```
 
 ### Conventions
 
-- Each data key is an arbitrary ConfigMap key (e.g., `reviewer.yaml`) — the `.yaml` suffix is a convention, not a requirement
+- Each data key is an arbitrary ConfigMap key (e.g., `reviewer`)
 - Each data value is a complete agent YAML document
 - One ConfigMap MAY contain multiple agent declarations
 - A tenant namespace MAY contain multiple agent ConfigMaps
@@ -948,10 +948,12 @@ data:
   github: |
     name: github
     type: github
+    # credential source kubernetes secret
     secret: github-pat
   anthropic: |
     name: anthropic
     type: anthropic
+    # credential source kubernetes secret
     secret: anthropic-key
 ---
 # Policy declaration — namespace: alpha
@@ -963,7 +965,7 @@ metadata:
   labels:
     ambient.ai/kind: policy
 data:
-  restricted.yaml: |
+  restricted: |
     name: restricted
     network_policies:
       github_api:
@@ -989,7 +991,7 @@ metadata:
   labels:
     ambient.ai/kind: agent
 data:
-  reviewer.yaml: |
+  reviewer: |
     name: reviewer
     description: Reviews PRs for security issues
     prompt: Review this PR for security vulnerabilities.
