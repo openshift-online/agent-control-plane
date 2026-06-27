@@ -18,7 +18,7 @@ This spec extends the Agent concept from `data-model.spec.md` with sandbox-aware
 
 - **Agent Declaration** — a YAML document within a ConfigMap that defines an agent's identity, behavior, and sandbox configuration. The primary mechanism for creating and updating agents.
 - **Provider** — an OpenShell Gateway-registered credential provider (e.g., `github`, `anthropic`, `jira`). The gateway's egress proxy resolves credential placeholders at the network boundary — credentials never enter the sandbox. Not to be confused with the `provider` field on the platform's `Credential` entity, which classifies the stored token type.
-- **Payload** — content (file reference or inline text) uploaded into the sandbox filesystem at a declared path. Used for CLAUDE.md, settings, MCP configs, task files.
+- **Payload** — content delivered into the sandbox filesystem at a declared path. Sources include inline text (`content`), a local file reference (`local_path`), or a git repository (`repo_url`). Used for prompts (CLAUDE.md), settings, MCP configs, task files, and source code.
 - **Entrypoint** — the CLI binary launched inside the sandbox (e.g., `claude`, `opencode`, `bash`).
 - **Sandbox Policy** — an OpenShell `SandboxPolicy` governing network endpoints, filesystem paths, process identity, and Landlock constraints within the sandbox. Declared as a namespace-scoped resource in a Policy ConfigMap using the exact upstream OpenShell YAML format, and referenced by agents by name.
 - **Policy Declaration** — a `data` entry within a ConfigMap (labeled `ambient.ai/kind: policy`) containing a raw upstream OpenShell `SandboxPolicy` YAML definition. The policy name is derived from the `name` field within the YAML content. Policy declarations are namespace-scoped and available for any agent in the tenant namespace to reference by name — they are not automatically bound to all agents.
@@ -40,9 +40,10 @@ This spec extends the Agent concept from `data-model.spec.md` with sandbox-aware
 | `name` | string | yes | Human-readable identifier; unique within the project. Stable address: `{project_name}/{agent_name}`. |
 | `display_name` | string | no | Human-friendly display label. |
 | `description` | string | no | Purpose description for the agent. |
-| `prompt` | string | no | Standing instructions defining who this agent is. Injected into every session start context. |
 | `labels` | map[string]string | no | Queryable key-value metadata. |
 | `annotations` | map[string]string | no | Freeform key-value metadata. |
+
+> **Prompts.** Agent prompts (standing instructions, CLAUDE.md content) are delivered via payloads rather than a dedicated field. This keeps the schema simple — a prompt is just content at a path — and avoids ConfigMap size pressure from large inline strings. See [Payloads](#payloads).
 
 ### Entrypoint
 
@@ -68,10 +69,13 @@ Providers are namespace-scoped resources declared separately from agents (see [P
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `sandbox_path` | string | yes | Absolute path inside the sandbox where the content is mounted. |
-| `content` | string | yes | Inline string content to place at the sandbox path. |
+| `sandbox_path` | string | yes | Absolute path inside the sandbox where the content is delivered. |
+| `content` | string | one of | Inline string content to place at the sandbox path. |
+| `local_path` | string | one of | Path to a file (relative to the git repo root) whose content is placed at the sandbox path. |
+| `repo_url` | string | one of | Git repository URL to clone into the sandbox path. Supports the same URL formats as the current ACP agent `repo_url` field (HTTPS, SSH). |
+| `ref` | string | no | Git ref to check out (branch, tag, or commit SHA). Only valid with `repo_url`. Defaults to the repository's default branch. |
 
-Since agent declarations live in ConfigMaps (reconciled by ArgoCD from git), payloads use inline `content` only. For binary content, use the ConfigMap's `binaryData` field.
+Exactly one of `content`, `local_path`, or `repo_url` MUST be specified per payload entry. Specifying more than one is a validation error.
 
 > **Path constraints.** `sandbox_path` MUST be an absolute path within the sandbox root (`/sandbox/`). The control plane SHALL reject paths containing `..` traversal segments or paths outside `/sandbox/`.
 
@@ -435,9 +439,9 @@ The agent YAML SHALL declare which providers the agent requires as an array of p
 
 ### Requirement: Payload Injection
 
-The agent YAML SHALL declare payloads (file references or inline content) to upload into the sandbox before the entrypoint launches.
+The agent YAML SHALL declare payloads to deliver into the sandbox before the entrypoint launches. Each payload specifies a `sandbox_path` and exactly one source: `content` (inline), `local_path` (file reference), or `repo_url` (git clone).
 
-#### Scenario: Inline content payload
+#### Scenario: Inline content payload (prompt)
 
 - GIVEN an agent declares:
   ```yaml
@@ -450,11 +454,37 @@ The agent YAML SHALL declare payloads (file references or inline content) to upl
 - THEN the file `/sandbox/.claude/CLAUDE.md` SHALL exist in the sandbox with the declared content
 - AND the file SHALL be available before the entrypoint process starts
 
+#### Scenario: Repository payload
+
+- GIVEN an agent declares:
+  ```yaml
+  payloads:
+    - sandbox_path: /sandbox/workspace
+      repo_url: https://github.com/example/my-repo.git
+      ref: main
+  ```
+- WHEN a session starts
+- THEN the repository SHALL be cloned into `/sandbox/workspace`
+- AND the `main` branch SHALL be checked out
+- AND the clone SHALL complete before the entrypoint process starts
+
+#### Scenario: Repository payload with default ref
+
+- GIVEN an agent declares a payload with `repo_url` but no `ref`
+- WHEN the repository is cloned
+- THEN the repository's default branch SHALL be checked out
+
 #### Scenario: Missing sandbox_path (validation error)
 
 - GIVEN an agent declares a payload without `sandbox_path`
 - WHEN the control plane validates the agent YAML
 - THEN the declaration SHALL be rejected
+
+#### Scenario: Multiple sources (validation error)
+
+- GIVEN an agent declares a payload with both `content` and `repo_url`
+- WHEN the control plane validates the agent YAML
+- THEN the declaration SHALL be rejected (exactly one source required)
 
 ---
 
@@ -684,11 +714,12 @@ data:
     name: security-reviewer
     description: Reviews PRs for security vulnerabilities
     entrypoint: claude
-    prompt: |
-      You are a security review agent.
     providers:
       - github
       - anthropic
+    payloads:
+      - sandbox_path: /sandbox/.claude/CLAUDE.md
+        content: You are a security review agent.
     # ... (full agent YAML)
   builder.yaml: |
     name: builder
@@ -849,10 +880,6 @@ This spec describes the complete desired state. Implementation is expected to pr
 name: security-reviewer
 display_name: Security Reviewer
 description: Reviews PRs for OWASP top 10 vulnerabilities
-prompt: |
-  You are a security review agent specializing in OWASP top 10
-  vulnerabilities. Review every PR for injection, XSS, CSRF,
-  and authentication bypass risks.
 entrypoint: claude
 
 providers:
@@ -863,6 +890,9 @@ environment:
   CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: "1"
 
 payloads:
+  - sandbox_path: /sandbox/workspace
+    repo_url: https://github.com/example/my-service.git
+    ref: main
   - sandbox_path: /sandbox/.claude/CLAUDE.md
     content: |
       You are a security review agent. Focus on:
@@ -962,11 +992,16 @@ data:
   reviewer.yaml: |
     name: reviewer
     description: Reviews PRs for security issues
-    prompt: Review this PR for security vulnerabilities.
     entrypoint: claude
     providers:
       - github
       - anthropic
+    payloads:
+      - sandbox_path: /sandbox/workspace
+        repo_url: https://github.com/example/my-service.git
+      - sandbox_path: /sandbox/.claude/CLAUDE.md
+        content: |
+          Review this PR for security vulnerabilities.
     sandbox_policy: restricted
     sandbox_template:
       image: ghcr.io/nvidia/openshell:sandbox-v0.2.0

@@ -114,12 +114,14 @@ configMapGenerator:
 # agents/overlays/project-alpha/agents/security-reviewer.yaml
 name: security-reviewer
 description: Reviews PRs for OWASP top 10 vulnerabilities
-prompt: |
-  You are a security review agent specializing in OWASP top 10.
 providers:
   - google-vertex-ai
   - anthropic
   - github
+payloads:
+  - sandbox_path: /sandbox/.claude/CLAUDE.md
+    content: |
+      You are a security review agent specializing in OWASP top 10.
 sandbox_policy: restricted
 sandbox_template:
   resources:
@@ -190,13 +192,15 @@ data:
   security-reviewer.yaml: |
     name: security-reviewer
     description: Reviews PRs for OWASP top 10 vulnerabilities
-    prompt: |
-      You are a security review agent specializing in OWASP top 10.
     entrypoint: claude
     providers:
       - google-vertex-ai
       - anthropic
       - github
+    payloads:
+      - sandbox_path: /sandbox/.claude/CLAUDE.md
+        content: |
+          You are a security review agent specializing in OWASP top 10.
     sandbox_policy: restricted
     sandbox_template:
       image: ghcr.io/nvidia/openshell:sandbox-v0.2.0
