@@ -219,11 +219,11 @@ metadata:
   name: shared-providers
   namespace: alpha
 data:
-  google-vertex-ai.yaml: |
+  google-vertex-ai: |
     name: google-vertex-ai
     type: google-vertex-ai
     secret: google-vertex-ai-key
-  anthropic.yaml: |
+  anthropic: |
     name: anthropic
     type: anthropic
     secret: anthropic-key
@@ -236,7 +236,7 @@ metadata:
   name: project-providers
   namespace: alpha
 data:
-  github.yaml: |
+  github: |
     name: github
     type: github
     secret: github-pat
@@ -259,11 +259,11 @@ metadata:
   labels:
     ambient.ai/kind: provider
 data:
-  google-vertex-ai.yaml: |
+  google-vertex-ai: |
     name: google-vertex-ai
     type: google-vertex-ai
     secret: google-vertex-ai-key
-  anthropic.yaml: |
+  anthropic: |
     name: anthropic
     type: anthropic
     secret: anthropic-key
@@ -278,7 +278,7 @@ metadata:
   labels:
     ambient.ai/kind: provider
 data:
-  github.yaml: |
+  github: |
     name: github
     type: github
     secret: github-pat
@@ -306,7 +306,7 @@ patches:
       name: shared-providers
     patch: |
       - op: replace
-        path: /data/anthropic.yaml
+        path: /data/anthropic
         value: |
           name: anthropic
           type: anthropic

@@ -150,11 +150,11 @@ metadata:
   labels:
     ambient.ai/kind: provider
 data:
-  github.yaml: |
+  github: |
     name: github
     type: github
     secret: github-pat
-  anthropic.yaml: |
+  anthropic: |
     name: anthropic
     type: anthropic
     secret: anthropic-key
@@ -945,11 +945,11 @@ metadata:
   labels:
     ambient.ai/kind: provider
 data:
-  github.yaml: |
+  github: |
     name: github
     type: github
     secret: github-pat
-  anthropic.yaml: |
+  anthropic: |
     name: anthropic
     type: anthropic
     secret: anthropic-key
