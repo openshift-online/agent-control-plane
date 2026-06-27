@@ -18,7 +18,7 @@ This spec extends the Agent concept from `data-model.spec.md` with sandbox-aware
 
 - **Agent Declaration** — a YAML document within a ConfigMap that defines an agent's identity, behavior, and sandbox configuration. The primary mechanism for creating and updating agents.
 - **Provider** — an OpenShell Gateway-registered credential provider (e.g., `github`, `anthropic`, `jira`). The gateway's egress proxy resolves credential placeholders at the network boundary — credentials never enter the sandbox. Not to be confused with the `provider` field on the platform's `Credential` entity, which classifies the stored token type.
-- **Payload** — content delivered into the sandbox filesystem at a declared path. Sources include inline text (`content`), a local file reference (`local_path`), or a git repository (`repo_url`). Used for prompts (CLAUDE.md), settings, MCP configs, task files, and source code.
+- **Payload** — content delivered into the sandbox filesystem at a declared path. Sources include inline text (`content`) or a git repository (`repo_url`). Used for prompts (CLAUDE.md), settings, MCP configs, task files, and source code.
 - **Entrypoint** — the CLI binary launched inside the sandbox (e.g., `claude`, `opencode`, `bash`).
 - **Sandbox Policy** — an OpenShell `SandboxPolicy` governing network endpoints, filesystem paths, process identity, and Landlock constraints within the sandbox. Declared as a namespace-scoped resource in a Policy ConfigMap using the exact upstream OpenShell YAML format, and referenced by agents by name.
 - **Policy Declaration** — a `data` entry within a ConfigMap (labeled `ambient.ai/kind: policy`) containing a raw upstream OpenShell `SandboxPolicy` YAML definition. The policy name is derived from the `name` field within the YAML content. Policy declarations are namespace-scoped and available for any agent in the tenant namespace to reference by name — they are not automatically bound to all agents.
@@ -71,11 +71,10 @@ Providers are namespace-scoped resources declared separately from agents (see [P
 |-------|------|----------|-------------|
 | `sandbox_path` | string | yes | Absolute path inside the sandbox where the content is delivered. |
 | `content` | string | one of | Inline string content to place at the sandbox path. |
-| `local_path` | string | one of | Path to a file (relative to the git repo root) whose content is placed at the sandbox path. |
 | `repo_url` | string | one of | Git repository URL to clone into the sandbox path. Supports the same URL formats as the current ACP agent `repo_url` field (HTTPS, SSH). |
 | `ref` | string | no | Git ref to check out (branch, tag, or commit SHA). Only valid with `repo_url`. Defaults to the repository's default branch. |
 
-Exactly one of `content`, `local_path`, or `repo_url` MUST be specified per payload entry. Specifying more than one is a validation error.
+Exactly one of `content` or `repo_url` MUST be specified per payload entry. Specifying both is a validation error.
 
 > **Path constraints.** `sandbox_path` MUST be an absolute path within the sandbox root (`/sandbox/`). The control plane SHALL reject paths containing `..` traversal segments or paths outside `/sandbox/`.
 
@@ -439,7 +438,7 @@ The agent YAML SHALL declare which providers the agent requires as an array of p
 
 ### Requirement: Payload Injection
 
-The agent YAML SHALL declare payloads to deliver into the sandbox before the entrypoint launches. Each payload specifies a `sandbox_path` and exactly one source: `content` (inline), `local_path` (file reference), or `repo_url` (git clone).
+The agent YAML SHALL declare payloads to deliver into the sandbox before the entrypoint launches. Each payload specifies a `sandbox_path` and exactly one source: `content` (inline) or `repo_url` (git clone).
 
 #### Scenario: Inline content payload (prompt)
 
