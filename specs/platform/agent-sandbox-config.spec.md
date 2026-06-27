@@ -40,10 +40,9 @@ This spec extends the Agent concept from `data-model.spec.md` with sandbox-aware
 | `name` | string | yes | Human-readable identifier; unique within the project. Stable address: `{project_name}/{agent_name}`. |
 | `display_name` | string | no | Human-friendly display label. |
 | `description` | string | no | Purpose description for the agent. |
+| `prompt` | string | no | Standing instructions defining who this agent is. Injected into every session start context. |
 | `labels` | map[string]string | no | Queryable key-value metadata. |
 | `annotations` | map[string]string | no | Freeform key-value metadata. |
-
-> **Prompts.** Agent prompts (standing instructions, CLAUDE.md content) are delivered via payloads rather than a dedicated field. This keeps the schema simple — a prompt is just content at a path — and avoids ConfigMap size pressure from large inline strings. See [Payloads](#payloads).
 
 ### Entrypoint
 
@@ -712,13 +711,11 @@ data:
   security-reviewer.yaml: |
     name: security-reviewer
     description: Reviews PRs for security vulnerabilities
+    prompt: You are a security review agent.
     entrypoint: claude
     providers:
       - github
       - anthropic
-    payloads:
-      - sandbox_path: /sandbox/.claude/CLAUDE.md
-        content: You are a security review agent.
     # ... (full agent YAML)
   builder.yaml: |
     name: builder
@@ -879,6 +876,10 @@ This spec describes the complete desired state. Implementation is expected to pr
 name: security-reviewer
 display_name: Security Reviewer
 description: Reviews PRs for OWASP top 10 vulnerabilities
+prompt: |
+  You are a security review agent specializing in OWASP top 10
+  vulnerabilities. Review every PR for injection, XSS, CSRF,
+  and authentication bypass risks.
 entrypoint: claude
 
 providers:
@@ -991,6 +992,7 @@ data:
   reviewer.yaml: |
     name: reviewer
     description: Reviews PRs for security issues
+    prompt: Review this PR for security vulnerabilities.
     entrypoint: claude
     providers:
       - github
