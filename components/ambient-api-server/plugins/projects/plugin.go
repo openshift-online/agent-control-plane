@@ -86,7 +86,6 @@ func init() {
 			authzMiddleware = dbAuthz
 		}
 		projectHandler := NewProjectHandler(Service(envServices), generic.Service(envServices), registeredSessionFactory)
-		homeHandler := NewHomeHandler(agents.Service(envServices))
 
 		projectsRouter := apiV1Router.PathPrefix("/projects").Subrouter()
 		projectsRouter.HandleFunc("", projectHandler.List).Methods(http.MethodGet)
@@ -95,7 +94,6 @@ func init() {
 		projectsRouter.HandleFunc("/{id}", projectHandler.Patch).Methods(http.MethodPatch)
 		projectsRouter.HandleFunc("/{id}", projectHandler.Delete).Methods(http.MethodDelete)
 		projectsRouter.HandleFunc("/{id}/transfer-ownership", projectHandler.TransferOwnership).Methods(http.MethodPost)
-		projectsRouter.HandleFunc("/{id}/agents", homeHandler.ListAgents).Methods(http.MethodGet)
 		projectsRouter.Use(authMiddleware.AuthenticateAccountJWT)
 		projectsRouter.Use(authzMiddleware.AuthorizeApi)
 	})
