@@ -62,12 +62,17 @@ RUN npm install -g \
         @openai/codex@0.117.0 \
         @github/copilot@1.0.16
 
-# GitHub CLI (pinned binary download, matching Dockerfile pattern)
+# GitHub CLI (pinned binary download with SHA256 verification)
 ARG GH_VERSION=2.74.0
 RUN ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
-    curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${ARCH}.tar.gz" \
-    | tar -xz -C /usr/local/bin --strip-components=2 "gh_${GH_VERSION}_linux_${ARCH}/bin/gh" && \
-    chmod +x /usr/local/bin/gh
+    TARBALL="gh_${GH_VERSION}_linux_${ARCH}.tar.gz" && \
+    curl -fsSL -o "/tmp/${TARBALL}" "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${TARBALL}" && \
+    EXPECTED=$(curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_checksums.txt" \
+      | grep "${TARBALL}" | awk '{print $1}') && \
+    echo "${EXPECTED}  /tmp/${TARBALL}" | sha256sum -c - && \
+    tar -xzf "/tmp/${TARBALL}" -C /usr/local/bin --strip-components=2 "${TARBALL%.tar.gz}/bin/gh" && \
+    chmod +x /usr/local/bin/gh && \
+    rm -f "/tmp/${TARBALL}"
 
 # uv (Python package/project manager)
 COPY --from=ghcr.io/astral-sh/uv:0.10.8 /uv /usr/local/bin/uv
