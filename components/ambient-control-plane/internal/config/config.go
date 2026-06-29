@@ -49,6 +49,7 @@ type ControlPlaneConfig struct {
 	ImagePullSecret                 string
 	OpenShellEnabled                bool
 	OpenShellUseGateway             bool
+	OpenShellRunnerImage            string
 	OpenShellPolicyName             string
 	OpenShellGatewayServiceName     string
 	OpenShellGatewayGRPCPort        int
@@ -101,6 +102,7 @@ func Load() (*ControlPlaneConfig, error) {
 		ImagePullSecret:                 os.Getenv("IMAGE_PULL_SECRET"),
 		OpenShellEnabled:                os.Getenv("OPENSHELL_ENABLED") == "true",
 		OpenShellUseGateway:             os.Getenv("OPENSHELL_USE_GATEWAY") == "true",
+		OpenShellRunnerImage:            envOrDefault("OPENSHELL_RUNNER_IMAGE", "quay.io/ambient_code/acp_runner_openshell:latest"),
 		OpenShellPolicyName:             envOrDefault("OPENSHELL_POLICY_CONFIGMAP", "openshell-policy"),
 		OpenShellGatewayServiceName:     envOrDefault("OPENSHELL_GATEWAY_SERVICE_NAME", "openshell-gateway"),
 		OpenShellGatewayGRPCPort:        envOrDefaultInt("OPENSHELL_GATEWAY_GRPC_PORT", 8080),

@@ -95,6 +95,7 @@ type KubeReconcilerConfig struct {
 	MPPConfigNamespace    string
 	OpenShellEnabled      bool
 	OpenShellUseGateway   bool
+	OpenShellRunnerImage  string
 	OpenShellPolicyName   string
 	ServiceIdentity       string
 }
@@ -331,7 +332,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		},
 		Spec: &openshellpb.SandboxSpec{
 			Template: &openshellpb.SandboxTemplate{
-				Image: r.cfg.RunnerImage,
+				Image: r.cfg.OpenShellRunnerImage,
 			},
 			Environment: env,
 			Providers:   providerNames,

@@ -269,7 +269,7 @@ The `ExecSandbox` RPC is a server-streaming call that returns stdout, stderr, an
 #### Scenario: Gateway image runner path
 
 - GIVEN `OPENSHELL_USE_GATEWAY` is `true`
-- AND the sandbox uses the gateway-mode runner image (built from `Dockerfile.gw`)
+- AND the sandbox uses the gateway-mode runner image (built from `Dockerfile.openshell`)
 - THEN the runner SHALL be located at `/sandbox/runner/ambient-runner` inside the container
 - AND the `ExecSandbox` command SHALL use this path to start the uvicorn server
 - AND this path differs from the standard runner image (`/app/ambient-runner`) because the gateway image uses `/sandbox` as its working directory root to align with OpenShell sandbox conventions
