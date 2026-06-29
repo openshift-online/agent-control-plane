@@ -260,9 +260,20 @@ The `ExecSandbox` RPC is a server-streaming call that returns stdout, stderr, an
 
 - GIVEN a sandbox has been created via `CreateSandbox`
 - WHEN the sandbox reaches `SANDBOX_PHASE_READY`
-- THEN the control plane SHALL call `ExecSandbox` with the runner start command
+- THEN the control plane SHALL call `ExecSandbox` with the command `["/bin/bash", "-c", "cd /sandbox/runner/ambient-runner && uvicorn main:app --host 0.0.0.0 --port 8001"]`
 - AND the `SandboxId` SHALL be the gateway's internal UUID obtained from `GetSandbox` response metadata
-- AND the exec SHALL run asynchronously (fire-and-forget) — the control plane does not block on the exec stream
+- AND the exec SHALL run asynchronously (fire-and-forget) — the control plane launches a goroutine that consumes the exec stream but does not block reconciliation
+- AND the exec goroutine SHALL use a separate context from the readiness-polling context — the polling context has a 120-second timeout suitable for provisioning, but the exec context must remain open for the lifetime of the uvicorn process (which runs until session completion)
+- AND the exec goroutine SHALL NOT accumulate stdout/stderr in memory — it SHALL discard or stream output to the logger to avoid unbounded memory growth for long-running processes
+
+#### Scenario: Gateway image runner path
+
+- GIVEN `OPENSHELL_USE_GATEWAY` is `true`
+- AND the sandbox uses the gateway-mode runner image (built from `Dockerfile.gw`)
+- THEN the runner SHALL be located at `/sandbox/runner/ambient-runner` inside the container
+- AND the `ExecSandbox` command SHALL use this path to start the uvicorn server
+- AND this path differs from the standard runner image (`/app/ambient-runner`) because the gateway image uses `/sandbox` as its working directory root to align with OpenShell sandbox conventions
+- AND the gateway image's `CMD` directive is irrelevant — the gateway overrides the container entrypoint to the supervisor binary, so the runner is always started via `ExecSandbox`
 
 #### Scenario: Polling for sandbox readiness
 
@@ -277,7 +288,8 @@ The `ExecSandbox` RPC is a server-streaming call that returns stdout, stderr, an
 - GIVEN a sandbox already exists for a session (detected via `GetSandbox` in the idempotency check)
 - WHEN the control plane reconciles the same session again
 - THEN it SHALL launch the exec-after-Ready goroutine again
-- AND this is safe because re-running the runner command in an already-running sandbox is idempotent for short-lived exec commands
+- AND if the runner process is already listening on port 8001, the new uvicorn invocation SHALL fail to bind and exit — the original runner continues unaffected
+- AND the control plane SHALL treat a non-zero exit code from a re-exec as non-fatal (log at warn level, do not transition the session to Failed)
 
 #### Scenario: OPENSHELL_SANDBOX_COMMAND is not used
 
@@ -607,7 +619,8 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | `provisionSessionGateway()` | Bypasses the provisioner entirely — uses a direct `GetNamespace` check so no provisioner implementation can inadvertently create or modify the namespace |
 | `cleanupSessionGateway()` | Does not call `DeprovisionNamespace` — namespace lifecycle is fully external in gateway mode |
 | [openshell-sandbox.spec.md] | Unchanged — file-mode spec remains authoritative when `OPENSHELL_USE_GATEWAY=false` |
-| Runner pod | Same image and env vars, but the runner process is started via `ExecSandbox` after the sandbox reaches Ready — the gateway overrides the container entrypoint to the supervisor binary with `sleep infinity`, so the image's CMD is never executed directly |
+| Runner pod | Same image and env vars, but the runner process is started via `ExecSandbox` with `["/bin/bash", "-c", "cd /sandbox/runner/ambient-runner && uvicorn main:app --host 0.0.0.0 --port 8001"]` after the sandbox reaches Ready — the gateway overrides the container entrypoint to the supervisor binary with `sleep infinity`, so the image's CMD is never executed directly. The exec goroutine must use a long-lived context (not the 120s polling context) and must not accumulate stdout/stderr in memory |
+| `GatewayClient.ExecSandbox()` | Current implementation blocks on the full stream and accumulates output — must be updated to support fire-and-forget semantics for long-running processes (discard/stream output, use caller-provided context) |
 
 ### Backward compatibility
 

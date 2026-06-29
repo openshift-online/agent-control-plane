@@ -355,22 +355,22 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 }
 
 func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
+	pollCtx, pollCancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer pollCancel()
 
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-pollCtx.Done():
 			r.logger.Error().
 				Str("sandbox", sbxName).
 				Str("session_id", sessionID).
 				Msg("timed out waiting for sandbox to become ready")
 			return
 		case <-ticker.C:
-			resp, err := r.gateway.GetSandbox(ctx, namespace, sbxName)
+			resp, err := r.gateway.GetSandbox(pollCtx, namespace, sbxName)
 			if err != nil {
 				r.logger.Debug().Err(err).Str("sandbox", sbxName).Msg("polling sandbox status")
 				continue
@@ -402,22 +402,22 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			r.logger.Info().
 				Str("sandbox", sbxName).
 				Str("sandbox_id", sandboxID).
-				Msg("sandbox is ready, executing command")
+				Str("session_id", sessionID).
+				Msg("sandbox is ready, starting runner via exec")
 
-			result, err := r.gateway.ExecSandbox(ctx, namespace, &openshellpb.ExecSandboxRequest{
+			execCtx := context.Background()
+			err = r.gateway.ExecSandboxStreaming(execCtx, namespace, &openshellpb.ExecSandboxRequest{
 				SandboxId: sandboxID,
-				Command:   []string{"echo", "hello world from ACP"},
+				Command:   []string{"/bin/bash", "-c", "cd /sandbox/runner/ambient-runner && uvicorn main:app --host 0.0.0.0 --port 8001"},
 			})
 			if err != nil {
-				r.logger.Error().Err(err).Str("sandbox", sbxName).Msg("exec failed")
+				r.logger.Error().Err(err).Str("sandbox", sbxName).Str("session_id", sessionID).Msg("failed to start runner exec")
 				return
 			}
 			r.logger.Info().
 				Str("sandbox", sbxName).
-				Str("stdout", string(result.Stdout)).
-				Str("stderr", string(result.Stderr)).
-				Int32("exit_code", result.ExitCode).
-				Msg("exec completed")
+				Str("session_id", sessionID).
+				Msg("runner exec stream started")
 			return
 		}
 	}

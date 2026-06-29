@@ -43,7 +43,7 @@ FROM system AS devtools
 
 # Node.js 22 + build toolchain
 RUN curl -fsSL https://rpm.nodesource.com/setup_22.x | bash - && \
-    dnf install -y --nodocs \
+    dnf upgrade -y && dnf install -y --nodocs \
         nodejs \
         gcc \
         gcc-c++ \
@@ -120,7 +120,7 @@ COPY policy.yaml /etc/openshell/policy.yaml
 # ------------------------------------------------------------
 # Ambient runner (Layer 3)
 # ------------------------------------------------------------
-RUN dnf install -y --nodocs jq unzip && dnf clean all
+RUN dnf upgrade -y && install -y --nodocs jq unzip && dnf clean all
 
 WORKDIR /sandbox/runner
 

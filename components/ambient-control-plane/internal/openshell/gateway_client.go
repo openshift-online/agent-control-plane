@@ -208,6 +208,55 @@ func (g *GatewayClient) ExecSandbox(ctx context.Context, namespace string, req *
 	return result, nil
 }
 
+const maxLogChunkSize = 512
+
+func (g *GatewayClient) ExecSandboxStreaming(ctx context.Context, namespace string, req *pb.ExecSandboxRequest) error {
+	client, err := g.clientForNamespace(ctx, namespace)
+	if err != nil {
+		return err
+	}
+	stream, err := client.ExecSandbox(ctx, req)
+	if err != nil {
+		if g.shouldEvict(err) {
+			g.evictConn(namespace)
+		}
+		return err
+	}
+
+	go func() {
+		for {
+			event, err := stream.Recv()
+			if err == io.EOF {
+				g.logger.Debug().Str("sandbox_id", req.SandboxId).Msg("exec stream ended")
+				return
+			}
+			if err != nil {
+				g.logger.Warn().Err(err).Str("sandbox_id", req.SandboxId).Msg("exec stream error")
+				return
+			}
+			switch p := event.Payload.(type) {
+			case *pb.ExecSandboxEvent_Stdout:
+				chunk := p.Stdout.Data
+				if len(chunk) > maxLogChunkSize {
+					chunk = chunk[:maxLogChunkSize]
+				}
+				g.logger.Debug().Str("sandbox_id", req.SandboxId).Str("stdout", string(chunk)).Msg("exec stdout")
+			case *pb.ExecSandboxEvent_Stderr:
+				chunk := p.Stderr.Data
+				if len(chunk) > maxLogChunkSize {
+					chunk = chunk[:maxLogChunkSize]
+				}
+				g.logger.Debug().Str("sandbox_id", req.SandboxId).Str("stderr", string(chunk)).Msg("exec stderr")
+			case *pb.ExecSandboxEvent_Exit:
+				g.logger.Info().Str("sandbox_id", req.SandboxId).Int32("exit_code", p.Exit.ExitCode).Msg("exec process exited")
+				return
+			}
+		}
+	}()
+
+	return nil
+}
+
 func (g *GatewayClient) Close() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
