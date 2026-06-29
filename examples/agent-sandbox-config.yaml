@@ -5,26 +5,10 @@
 #
 # Prerequisites:
 #   - OPENSHELL_USE_GATEWAY=true on the control plane
-#   - Secrets referenced by providers must exist in the namespace
+#   - Secrets referenced by providers must exist in the namespace before applying:
+#       kubectl create secret generic github-pat --from-literal=token=<your-pat> -n alpha
+#       kubectl create secret generic anthropic-key --from-literal=token=<your-key> -n alpha
 #   - The namespace must correspond to an ACP project
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: github-pat
-  namespace: alpha
-type: Opaque
-stringData:
-  token: "<replace-with-github-pat>"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: anthropic-key
-  namespace: alpha
-type: Opaque
-stringData:
-  token: "<replace-with-anthropic-api-key>"
 ---
 apiVersion: v1
 kind: ConfigMap
