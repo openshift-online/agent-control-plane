@@ -6,7 +6,7 @@
 # Layer 2: openshell-sandboxes-engprod/sandboxes/claude-code  (Claude Code CLI)
 # Layer 3: ambient-runner  (uvicorn + FastAPI AG-UI server)
 
-ARG BASE_IMAGE=registry.access.redhat.com/ubi10/ubi:latest
+ARG BASE_IMAGE=registry.access.redhat.com/ubi10/ubi@sha256:516ef28e78e388d12e31618326da68e21dcfc40f767f0c37c3b57059c642a4f0
 
 # ============================================================
 # Stage 1 — System base (openshell base)
@@ -19,7 +19,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /sandbox
 
 # Core system dependencies
-RUN dnf upgrade -y && dnf install -y --nodocs --allowerasing \
+RUN dnf install -y --nodocs --allowerasing \
         ca-certificates \
         curl \
         bind-utils \
@@ -41,20 +41,20 @@ RUN groupadd -r supervisor && useradd -r -g supervisor -s /usr/sbin/nologin supe
 # ============================================================
 FROM system AS devtools
 
-# Node.js 22 + build toolchain
-RUN curl -fsSL https://rpm.nodesource.com/setup_22.x | bash - && \
-    dnf upgrade -y && dnf install -y --nodocs \
+# Node.js 22 (UBI AppStream) + build toolchain
+RUN dnf install -y --nodocs \
         nodejs \
+        npm \
         gcc \
         gcc-c++ \
         make \
         git \
         vim-minimal \
         nano \
-    && dnf clean all \
-    && npm install -g npm@11.11.0
+    && dnf clean all
 
-# Global npm packages
+# Global npm packages (multi-agent sandbox toolset: alternative coding agents
+# available alongside Claude Code for user selection via Agent spec)
 RUN npm install -g \
         tar@7.5.11 \
         @hono/node-server@1.19.11 \
@@ -62,10 +62,12 @@ RUN npm install -g \
         @openai/codex@0.117.0 \
         @github/copilot@1.0.16
 
-# GitHub CLI
-RUN dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && \
-    dnf install -y gh --repo gh-cli \
-    && dnf clean all
+# GitHub CLI (pinned binary download, matching Dockerfile pattern)
+ARG GH_VERSION=2.74.0
+RUN ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
+    curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${ARCH}.tar.gz" \
+    | tar -xz -C /usr/local/bin --strip-components=2 "gh_${GH_VERSION}_linux_${ARCH}/bin/gh" && \
+    chmod +x /usr/local/bin/gh
 
 # uv (Python package/project manager)
 COPY --from=ghcr.io/astral-sh/uv:0.10.8 /uv /usr/local/bin/uv
@@ -103,12 +105,12 @@ RUN mkdir -p /sandbox/.claude/skills /sandbox/.agents/skills && \
     chown -R sandbox:sandbox /sandbox/.claude /sandbox/.agents /sandbox
 
 # ------------------------------------------------------------
-# Claude Code CLI (openshell claude-code sandbox)
+# Claude Code CLI (pinned npm package instead of curl|bash)
 # ------------------------------------------------------------
-RUN curl -fsSL https://claude.ai/install.sh | bash \
+ARG CLAUDE_CODE_VERSION=2.1.195
+RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     && mkdir -p /opt/claude/bin \
-    && cp -L /root/.local/bin/claude /opt/claude/bin/claude \
-    && chmod 755 /opt/claude/bin/claude \
+    && ln -sf "$(which claude)" /opt/claude/bin/claude \
     && mkdir -p /sandbox/.local/bin \
     && ln -sf /opt/claude/bin/claude /sandbox/.local/bin/claude \
     && chown -R sandbox:sandbox /sandbox/.local
@@ -120,7 +122,7 @@ COPY policy.yaml /etc/openshell/policy.yaml
 # ------------------------------------------------------------
 # Ambient runner (Layer 3)
 # ------------------------------------------------------------
-RUN dnf upgrade -y && install -y --nodocs jq unzip && dnf clean all
+RUN dnf install -y --nodocs jq unzip && dnf clean all
 
 WORKDIR /sandbox/runner
 

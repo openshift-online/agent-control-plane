@@ -1,6 +1,8 @@
 #!/bin/bash
 export HOME=/sandbox
 export ANTHROPIC_BASE_URL=https://inference.local
+# Sentinel value: the gateway proxy intercepts requests before reaching Anthropic.
+# The actual API key is managed by the gateway's credential provider, not the runner.
 export ANTHROPIC_API_KEY=gateway
 export CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1
 

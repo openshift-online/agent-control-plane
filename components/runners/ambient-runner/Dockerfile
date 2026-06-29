@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi10/ubi:latest
+FROM registry.access.redhat.com/ubi10/ubi@sha256:516ef28e78e388d12e31618326da68e21dcfc40f767f0c37c3b57059c642a4f0
 
 ARG GIT_COMMIT=unknown
 
@@ -13,7 +13,7 @@ ARG GEMINI_CLI_VERSION=0.1.17
 
 # Install system packages: Python 3.12, git, jq, Node.js, Go, unzip (needed by CodeRabbit install script)
 # iproute provides ip-netns for OpenShell network namespace setup
-RUN dnf upgrade -y && dnf install -y python3 python3-pip python3-devel \
+RUN dnf install -y python3 python3-pip python3-devel \
     git jq nodejs npm go-toolset unzip iproute && \
     dnf clean all
 
