@@ -100,28 +100,36 @@ func (h agentHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				found.Entrypoint = patch.Entrypoint
 			}
 			if patch.Providers != nil {
-				if raw, merr := json.Marshal(patch.Providers); merr == nil {
-					s := string(raw)
-					found.Providers = &s
+				raw, merr := json.Marshal(patch.Providers)
+				if merr != nil {
+					return nil, errors.GeneralError("failed to marshal providers: %v", merr)
 				}
+				s := string(raw)
+				found.Providers = &s
 			}
 			if patch.Payloads != nil {
-				if raw, merr := json.Marshal(patch.Payloads); merr == nil {
-					s := string(raw)
-					found.Payloads = &s
+				raw, merr := json.Marshal(patch.Payloads)
+				if merr != nil {
+					return nil, errors.GeneralError("failed to marshal payloads: %v", merr)
 				}
+				s := string(raw)
+				found.Payloads = &s
 			}
 			if patch.Environment != nil {
-				if raw, merr := json.Marshal(patch.Environment); merr == nil {
-					s := string(raw)
-					found.Environment = &s
+				raw, merr := json.Marshal(patch.Environment)
+				if merr != nil {
+					return nil, errors.GeneralError("failed to marshal environment: %v", merr)
 				}
+				s := string(raw)
+				found.Environment = &s
 			}
 			if patch.SandboxTemplate != nil {
-				if raw, merr := json.Marshal(patch.SandboxTemplate); merr == nil {
-					s := string(raw)
-					found.SandboxTemplate = &s
+				raw, merr := json.Marshal(patch.SandboxTemplate)
+				if merr != nil {
+					return nil, errors.GeneralError("failed to marshal sandbox_template: %v", merr)
 				}
+				s := string(raw)
+				found.SandboxTemplate = &s
 			}
 			if patch.SandboxPolicy != nil {
 				found.SandboxPolicy = patch.SandboxPolicy

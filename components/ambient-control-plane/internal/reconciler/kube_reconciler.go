@@ -395,7 +395,9 @@ func (r *SimpleKubeReconciler) resolveSandboxImage(agent *types.Agent) string {
 		var tpl struct {
 			Image string `json:"image"`
 		}
-		if err := json.Unmarshal([]byte(agent.SandboxTemplate), &tpl); err == nil && tpl.Image != "" {
+		if err := json.Unmarshal([]byte(agent.SandboxTemplate), &tpl); err != nil {
+			r.logger.Warn().Err(err).Str("agent", agent.Name).Msg("failed to parse sandbox_template JSON, using default image")
+		} else if tpl.Image != "" {
 			return tpl.Image
 		}
 	}

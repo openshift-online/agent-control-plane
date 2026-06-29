@@ -259,27 +259,15 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		podSyncErrCh <- podSyncer.Run(ctx)
 	}()
 
+	var cmSyncErrCh <-chan error
 	if cfg.OpenShellUseGateway {
 		cmSyncer := reconciler.NewConfigMapSyncer(factory, provisionerKube, provisioner, cfg.PlatformMode, cfg.MPPConfigNamespace, log.Logger)
-		cmSyncErrCh := make(chan error, 1)
+		ch := make(chan error, 1)
 		go func() {
-			cmSyncErrCh <- cmSyncer.Run(ctx)
+			ch <- cmSyncer.Run(ctx)
 		}()
+		cmSyncErrCh = ch
 		log.Info().Msg("ConfigMap agent declaration syncer enabled")
-
-		select {
-		case tsErr := <-tsErrCh:
-			if tsErr != nil {
-				return fmt.Errorf("token server: %w", tsErr)
-			}
-			return <-infErrCh
-		case infErr := <-infErrCh:
-			return infErr
-		case podSyncErr := <-podSyncErrCh:
-			return fmt.Errorf("pod status syncer: %w", podSyncErr)
-		case cmSyncErr := <-cmSyncErrCh:
-			return fmt.Errorf("configmap syncer: %w", cmSyncErr)
-		}
 	}
 
 	select {
@@ -292,11 +280,12 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		return infErr
 	case podSyncErr := <-podSyncErrCh:
 		return fmt.Errorf("pod status syncer: %w", podSyncErr)
+	case cmSyncErr := <-cmSyncErrCh:
+		return fmt.Errorf("configmap syncer: %w", cmSyncErr)
 	case gwErr := <-gatewayErrCh:
 		if gwErr != nil {
 			return fmt.Errorf("gateway provisioning: %w", gwErr)
 		}
-		// Gateway provisioning exited cleanly (shouldn't happen), continue with other channels
 		return <-infErrCh
 	}
 }

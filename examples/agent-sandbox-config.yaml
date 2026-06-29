@@ -1,20 +1,20 @@
 # Agent Sandbox Configuration Example
 #
 # Complete example of ConfigMap-based agent, provider, and policy declarations.
-# Apply to a tenant namespace (e.g. "alpha") with: kubectl apply -f agent-sandbox-config.yaml
+# Apply to a tenant namespace (e.g. "tenant-a") with: kubectl apply -f agent-sandbox-config.yaml
 #
 # Prerequisites:
 #   - OPENSHELL_USE_GATEWAY=true on the control plane
 #   - Secrets referenced by providers must exist in the namespace before applying:
-#       kubectl create secret generic github-pat --from-literal=token=<your-pat> -n alpha
-#       kubectl create secret generic anthropic-key --from-literal=token=<your-key> -n alpha
+#       kubectl create secret generic github-pat --from-literal=token=<your-pat> -n tenant-a
+#       kubectl create secret generic anthropic-key --from-literal=token=<your-key> -n tenant-a
 #   - The namespace must correspond to an ACP project
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: provider-declarations
-  namespace: alpha
+  namespace: tenant-a
   labels:
     ambient.ai/kind: provider
 data:
@@ -31,7 +31,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: policy-declarations
-  namespace: alpha
+  namespace: tenant-a
   labels:
     ambient.ai/kind: policy
 data:
@@ -88,7 +88,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: agent-declarations
-  namespace: alpha
+  namespace: tenant-a
   labels:
     ambient.ai/kind: agent
 data:

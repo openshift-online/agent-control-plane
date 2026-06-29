@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
@@ -17,6 +18,9 @@ import (
 const (
 	configMapSyncInterval = 30 * time.Second
 	agentDeclarationLabel = "ambient.ai/kind=agent"
+	annotationSource      = "ambient.ai/source"
+	annotationSourceCM    = "configmap"
+	annotationSourceNS    = "ambient.ai/source-namespace"
 )
 
 type AgentDeclaration struct {
@@ -169,7 +173,7 @@ func (s *ConfigMapSyncer) syncNamespaceAgents(ctx context.Context, namespace, pr
 			}
 
 			declaredAgents[decl.Name] = true
-			if err := s.upsertAgent(ctx, sdk, projectID, decl); err != nil {
+			if err := s.upsertAgent(ctx, sdk, projectID, namespace, decl); err != nil {
 				s.logger.Warn().Err(err).
 					Str("namespace", namespace).
 					Str("agent", decl.Name).
@@ -178,7 +182,7 @@ func (s *ConfigMapSyncer) syncNamespaceAgents(ctx context.Context, namespace, pr
 		}
 	}
 
-	s.pruneRemovedAgents(ctx, sdk, projectID, declaredAgents)
+	s.pruneRemovedAgents(ctx, sdk, projectID, namespace, declaredAgents)
 }
 
 func parseAgentDeclaration(yamlStr string) (*AgentDeclaration, error) {
@@ -199,10 +203,31 @@ func parseAgentDeclaration(yamlStr string) (*AgentDeclaration, error) {
 	return &decl, nil
 }
 
-func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client, projectID string, decl *AgentDeclaration) error {
+func (s *ConfigMapSyncer) buildOriginAnnotations(namespace string, userAnnotations map[string]string) (string, error) {
+	merged := make(map[string]string, len(userAnnotations)+2)
+	for k, v := range userAnnotations {
+		merged[k] = v
+	}
+	merged[annotationSource] = annotationSourceCM
+	merged[annotationSourceNS] = namespace
+	raw, err := json.Marshal(merged)
+	if err != nil {
+		return "", fmt.Errorf("marshalling annotations: %w", err)
+	}
+	return string(raw), nil
+}
+
+func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, decl *AgentDeclaration) error {
 	existing := s.findAgentByName(ctx, sdk, projectID, decl.Name)
 
-	patch := map[string]interface{}{}
+	annJSON, err := s.buildOriginAnnotations(namespace, decl.Annotations)
+	if err != nil {
+		return err
+	}
+
+	patch := map[string]interface{}{
+		"annotations": annJSON,
+	}
 	if decl.DisplayName != "" {
 		patch["display_name"] = decl.DisplayName
 	}
@@ -237,12 +262,11 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 		patch["sandbox_template"] = decl.SandboxTemplate
 	}
 	if len(decl.Labels) > 0 {
-		labelsJSON, _ := json.Marshal(decl.Labels)
+		labelsJSON, err := json.Marshal(decl.Labels)
+		if err != nil {
+			return fmt.Errorf("marshalling agent labels: %w", err)
+		}
 		patch["labels"] = string(labelsJSON)
-	}
-	if len(decl.Annotations) > 0 {
-		annJSON, _ := json.Marshal(decl.Annotations)
-		patch["annotations"] = string(annJSON)
 	}
 
 	if existing != nil {
@@ -261,6 +285,7 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 		return fmt.Errorf("building agent %s: %w", decl.Name, err)
 	}
 
+	agent.Annotations = annJSON
 	if decl.DisplayName != "" {
 		agent.DisplayName = decl.DisplayName
 	}
@@ -283,24 +308,32 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 		agent.SandboxPolicy = decl.SandboxPolicy
 	}
 	if len(decl.Providers) > 0 {
-		if raw, err := json.Marshal(decl.Providers); err == nil {
-			agent.Providers = string(raw)
+		raw, err := json.Marshal(decl.Providers)
+		if err != nil {
+			return fmt.Errorf("marshalling providers: %w", err)
 		}
+		agent.Providers = string(raw)
 	}
 	if len(decl.Payloads) > 0 {
-		if raw, err := json.Marshal(decl.Payloads); err == nil {
-			agent.Payloads = string(raw)
+		raw, err := json.Marshal(decl.Payloads)
+		if err != nil {
+			return fmt.Errorf("marshalling payloads: %w", err)
 		}
+		agent.Payloads = string(raw)
 	}
 	if len(decl.Environment) > 0 {
-		if raw, err := json.Marshal(decl.Environment); err == nil {
-			agent.Environment = string(raw)
+		raw, err := json.Marshal(decl.Environment)
+		if err != nil {
+			return fmt.Errorf("marshalling environment: %w", err)
 		}
+		agent.Environment = string(raw)
 	}
 	if decl.SandboxTemplate != nil {
-		if raw, err := json.Marshal(decl.SandboxTemplate); err == nil {
-			agent.SandboxTemplate = string(raw)
+		raw, err := json.Marshal(decl.SandboxTemplate)
+		if err != nil {
+			return fmt.Errorf("marshalling sandbox_template: %w", err)
 		}
+		agent.SandboxTemplate = string(raw)
 	}
 
 	created, err := sdk.Agents().Create(ctx, agent)
@@ -312,7 +345,8 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 }
 
 func (s *ConfigMapSyncer) findAgentByName(ctx context.Context, sdk *sdkclient.Client, projectID, name string) *types.Agent {
-	agents, err := sdk.Agents().List(ctx, &types.ListOptions{Size: 100, Search: fmt.Sprintf("name = '%s'", name)})
+	escaped := strings.ReplaceAll(name, "'", "''")
+	agents, err := sdk.Agents().List(ctx, &types.ListOptions{Size: 100, Search: fmt.Sprintf("name = '%s'", escaped)})
 	if err != nil {
 		return nil
 	}
@@ -324,7 +358,18 @@ func (s *ConfigMapSyncer) findAgentByName(ctx context.Context, sdk *sdkclient.Cl
 	return nil
 }
 
-func (s *ConfigMapSyncer) pruneRemovedAgents(ctx context.Context, sdk *sdkclient.Client, projectID string, declaredAgents map[string]bool) {
+func (s *ConfigMapSyncer) isConfigMapManaged(agent *types.Agent, namespace string) bool {
+	if agent.Annotations == "" {
+		return false
+	}
+	var ann map[string]string
+	if err := json.Unmarshal([]byte(agent.Annotations), &ann); err != nil {
+		return false
+	}
+	return ann[annotationSource] == annotationSourceCM && ann[annotationSourceNS] == namespace
+}
+
+func (s *ConfigMapSyncer) pruneRemovedAgents(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, declaredAgents map[string]bool) {
 	agents, err := sdk.Agents().List(ctx, &types.ListOptions{Size: 500})
 	if err != nil {
 		s.logger.Warn().Err(err).Str("project_id", projectID).Msg("failed to list agents for pruning")
@@ -332,7 +377,7 @@ func (s *ConfigMapSyncer) pruneRemovedAgents(ctx context.Context, sdk *sdkclient
 	}
 
 	for _, a := range agents.Items {
-		if a.Entrypoint != "" && !declaredAgents[a.Name] {
+		if s.isConfigMapManaged(&a, namespace) && !declaredAgents[a.Name] {
 			if err := sdk.Agents().Delete(ctx, a.ID); err != nil {
 				s.logger.Warn().Err(err).Str("agent", a.Name).Msg("failed to delete stale agent")
 			} else {
