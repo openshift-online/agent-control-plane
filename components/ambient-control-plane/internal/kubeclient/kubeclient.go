@@ -337,6 +337,10 @@ func (kc *KubeClient) ListTenantNamespaces(ctx context.Context, namespace, label
 	return kc.dynamic.Resource(gvr).Namespace(namespace).List(ctx, opts)
 }
 
+func (kc *KubeClient) DynamicClient() dynamic.Interface {
+	return kc.dynamic
+}
+
 func (kc *KubeClient) GetConfigMap(ctx context.Context, namespace, name string) (*unstructured.Unstructured, error) {
 	return kc.dynamic.Resource(ConfigMapGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 }

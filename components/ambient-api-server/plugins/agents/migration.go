@@ -1,6 +1,8 @@
 package agents
 
 import (
+	"fmt"
+
 	"gorm.io/gorm"
 
 	"github.com/go-gormigrate/gormigrate/v2"
@@ -72,7 +74,7 @@ func agentSchemaExpansionMigration() *gormigrate.Migration {
 				"bot_account_name", "resource_overrides", "environment_variables",
 			}
 			for _, col := range cols {
-				if err := tx.Exec("ALTER TABLE agents DROP COLUMN IF EXISTS " + col).Error; err != nil {
+				if err := tx.Exec(fmt.Sprintf("ALTER TABLE agents DROP COLUMN IF EXISTS %s", col)).Error; err != nil {
 					return err
 				}
 			}
@@ -127,7 +129,7 @@ func sandboxConfigMigration() *gormigrate.Migration {
 				"environment", "sandbox_template", "sandbox_policy",
 			}
 			for _, col := range cols {
-				if err := tx.Exec("ALTER TABLE agents DROP COLUMN IF EXISTS " + col).Error; err != nil {
+				if err := tx.Exec(fmt.Sprintf("ALTER TABLE agents DROP COLUMN IF EXISTS %s", col)).Error; err != nil {
 					return err
 				}
 			}

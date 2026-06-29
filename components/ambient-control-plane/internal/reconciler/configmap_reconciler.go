@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
@@ -12,14 +13,19 @@ import (
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/rs/zerolog"
 	"gopkg.in/yaml.v3"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic/dynamicinformer"
+	"k8s.io/client-go/tools/cache"
 )
 
 const (
-	configMapSyncInterval    = 30 * time.Second
+	configMapResyncInterval  = 5 * time.Minute
+	configMapDebounceDelay   = 2 * time.Second
 	agentDeclarationLabel    = "ambient.ai/kind=agent"
 	providerDeclarationLabel = "ambient.ai/kind=provider"
 	policyDeclarationLabel   = "ambient.ai/kind=policy"
+	declarationLabelKey      = "ambient.ai/kind"
 	annotationSource         = "ambient.ai/source"
 	annotationSourceCM       = "configmap"
 	annotationSourceNS       = "ambient.ai/source-namespace"
@@ -93,9 +99,64 @@ func NewConfigMapSyncer(factory *SDKClientFactory, kube *kubeclient.KubeClient, 
 }
 
 func (s *ConfigMapSyncer) Run(ctx context.Context) error {
-	s.logger.Info().Dur("interval", configMapSyncInterval).Msg("configmap syncer started")
-	ticker := time.NewTicker(configMapSyncInterval)
-	defer ticker.Stop()
+	s.logger.Info().Msg("configmap syncer starting with informer-based watch")
+
+	dynFactory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(
+		s.kube.DynamicClient(),
+		configMapResyncInterval,
+		metav1.NamespaceAll,
+		func(opts *metav1.ListOptions) {
+			opts.LabelSelector = declarationLabelKey
+		},
+	)
+
+	cmInformer := dynFactory.ForResource(kubeclient.ConfigMapGVR).Informer()
+
+	var pendingMu sync.Mutex
+	pendingNamespaces := map[string]bool{}
+	debounceCh := make(chan struct{}, 1)
+
+	enqueueNamespace := func(obj interface{}) {
+		u, ok := obj.(*unstructured.Unstructured)
+		if !ok {
+			tombstone, isTombstone := obj.(cache.DeletedFinalStateUnknown)
+			if !isTombstone {
+				return
+			}
+			u, ok = tombstone.Obj.(*unstructured.Unstructured)
+			if !ok {
+				return
+			}
+		}
+		ns := u.GetNamespace()
+		if ns == "" {
+			return
+		}
+		pendingMu.Lock()
+		pendingNamespaces[ns] = true
+		pendingMu.Unlock()
+		select {
+		case debounceCh <- struct{}{}:
+		default:
+		}
+	}
+
+	if _, err := cmInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    enqueueNamespace,
+		UpdateFunc: func(_, newObj interface{}) { enqueueNamespace(newObj) },
+		DeleteFunc: enqueueNamespace,
+	}); err != nil {
+		return fmt.Errorf("adding configmap event handler: %w", err)
+	}
+
+	dynFactory.Start(ctx.Done())
+	synced := dynFactory.WaitForCacheSync(ctx.Done())
+	for gvr, ok := range synced {
+		if !ok {
+			return fmt.Errorf("informer cache sync failed for %s", gvr.String())
+		}
+	}
+	s.logger.Info().Msg("configmap informer cache synced, running initial full sync")
 
 	s.syncOnce(ctx)
 
@@ -104,8 +165,21 @@ func (s *ConfigMapSyncer) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			s.logger.Info().Msg("configmap syncer stopped")
 			return ctx.Err()
-		case <-ticker.C:
-			s.syncOnce(ctx)
+		case <-debounceCh:
+			select {
+			case <-time.After(configMapDebounceDelay):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+			pendingMu.Lock()
+			toSync := pendingNamespaces
+			pendingNamespaces = map[string]bool{}
+			pendingMu.Unlock()
+
+			for ns := range toSync {
+				s.syncNamespace(ctx, ns)
+			}
 		}
 	}
 }
@@ -122,6 +196,26 @@ func (s *ConfigMapSyncer) syncOnce(ctx context.Context) {
 		s.syncNamespaceProviders(ctx, ns.name, ns.projectID)
 		s.syncNamespacePolicies(ctx, ns.name, ns.projectID)
 	}
+}
+
+func (s *ConfigMapSyncer) syncNamespace(ctx context.Context, namespace string) {
+	ns, err := s.kube.GetNamespace(ctx, namespace)
+	if err != nil {
+		s.logger.Warn().Err(err).Str("namespace", namespace).Msg("failed to get namespace for configmap event")
+		return
+	}
+	labels := ns.GetLabels()
+	if labels[LabelManaged] != "true" {
+		return
+	}
+	projectID := labels[LabelProjectID]
+	if projectID == "" {
+		return
+	}
+	s.logger.Debug().Str("namespace", namespace).Str("project_id", projectID).Msg("syncing namespace from configmap event")
+	s.syncNamespaceAgents(ctx, namespace, projectID)
+	s.syncNamespaceProviders(ctx, namespace, projectID)
+	s.syncNamespacePolicies(ctx, namespace, projectID)
 }
 
 type nsInfo struct {
@@ -318,7 +412,7 @@ func (s *ConfigMapSyncer) findAgentByName(ctx context.Context, sdk *sdkclient.Cl
 	// returns environment/providers/payloads/sandbox_template as JSON
 	// objects/arrays, but the SDK Agent struct types them as strings.
 	agents, err := sdk.Agents().List(ctx, &types.ListOptions{
-		Size:   100,
+		Size:   1,
 		Search: fmt.Sprintf("name = '%s' AND project_id = '%s'", escapedName, escapedProjectID),
 		Fields: "id,name,project_id,annotations",
 	})
@@ -476,7 +570,7 @@ func (s *ConfigMapSyncer) findProviderByName(ctx context.Context, sdk *sdkclient
 	escapedName := strings.ReplaceAll(name, "'", "''")
 	escapedProjectID := strings.ReplaceAll(projectID, "'", "''")
 	providers, err := sdk.Providers().List(ctx, &types.ListOptions{
-		Size:   100,
+		Size:   1,
 		Search: fmt.Sprintf("name = '%s' AND project_id = '%s'", escapedName, escapedProjectID),
 	})
 	if err != nil {
@@ -632,7 +726,7 @@ func (s *ConfigMapSyncer) findPolicyByName(ctx context.Context, sdk *sdkclient.C
 	escapedName := strings.ReplaceAll(name, "'", "''")
 	escapedProjectID := strings.ReplaceAll(projectID, "'", "''")
 	policies, err := sdk.Policys().List(ctx, &types.ListOptions{
-		Size:   100,
+		Size:   1,
 		Search: fmt.Sprintf("name = '%s' AND project_id = '%s'", escapedName, escapedProjectID),
 	})
 	if err != nil {
