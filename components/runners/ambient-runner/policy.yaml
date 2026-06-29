@@ -1,0 +1,178 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+version: 1
+
+# --- Sandbox setup configuration (queried once at startup) ---
+
+filesystem_policy:
+  include_workdir: true
+  read_only:
+    - /usr
+    - /lib
+    - /opt
+    - /proc
+    - /dev/urandom
+    - /app
+    - /etc
+    - /var/log
+  read_write:
+    - /sandbox
+    - /tmp
+    - /dev/null
+
+landlock:
+  compatibility: best_effort
+
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+
+# --- Network policies (queried per-CONNECT request) ---
+#
+# Each named policy maps a set of allowed (binary, endpoint) pairs.
+# Binary identity is resolved via /proc/net/tcp inode lookup + /proc/{pid}/exe.
+# Ancestors (/proc/{pid}/status PPid walk) and cmdline paths are also matched.
+# SHA256 integrity is enforced in Rust via trust-on-first-use, not here.
+
+network_policies:
+  # Claude Code with Vertex AI backend.
+  # When ANTHROPIC_VERTEX_PROJECT_ID and CLOUD_ML_REGION are set, Claude Code
+  # routes model calls through the regional Vertex AI endpoint instead of
+  # api.anthropic.com.  Auxiliary Anthropic endpoints (feature flags, telemetry,
+  # OAuth) are still used regardless of the backend.
+  claude_code_vertex:
+    name: claude-code-vertex
+    endpoints:
+      # Vertex AI — Claude models served via the regional AI Platform endpoint
+      - { host: "*-aiplatform.googleapis.com", port: 443, protocol: rest, enforcement: enforce, access: full, tls: terminate }
+      # Google auth — ADC token exchange and service-account impersonation
+      - { host: oauth2.googleapis.com, port: 443 }
+      - { host: iamcredentials.googleapis.com, port: 443 }
+      # Anthropic API — used by Claude Code on startup for version/capability
+      # checks even when inference is routed through Vertex or a provider
+      - { host: api.anthropic.com, port: 443, protocol: rest, enforcement: enforce, access: full, tls: terminate }
+      # Auxiliary Claude Code endpoints (feature flags, telemetry, OAuth)
+      - { host: statsig.anthropic.com, port: 443 }
+      - { host: sentry.io, port: 443 }
+      - { host: raw.githubusercontent.com, port: 443 }
+      - { host: platform.claude.com, port: 443 }
+    binaries:
+      - { path: /usr/local/bin/claude }
+      - { path: /usr/bin/node }
+
+  # Google Cloud CLI — used for `gcloud auth application-default login` and
+  # token refresh.  gcloud is a Python script; the binary seen by the kernel
+  # is the interpreter bundled with the SDK.
+  gcloud:
+    name: gcloud
+    endpoints:
+      - { host: oauth2.googleapis.com, port: 443 }
+      - { host: accounts.google.com, port: 443 }
+      - { host: iamcredentials.googleapis.com, port: 443 }
+    binaries:
+      # Symlink at /usr/local/bin/gcloud → /opt/google-cloud-sdk/bin/gcloud
+      - { path: /usr/local/bin/gcloud }
+      # Actual script in the tarball-extracted SDK
+      - { path: /opt/google-cloud-sdk/bin/gcloud }
+      # Bundled CPython used by the SDK
+      - { path: "/opt/google-cloud-sdk/platform/bundledpythonunix/bin/**" }
+
+  github_ssh_over_https:
+    name: github-ssh-over-https
+    endpoints:
+      - host: github.com
+        port: 443
+        protocol: rest
+        tls: terminate
+        enforcement: enforce
+        rules:
+          # Git Smart HTTP read-only: allow clone, fetch, pull
+          - allow:
+              method: GET
+              path: "/**/info/refs*"
+          - allow:
+              method: POST
+              path: "/**/git-upload-pack"
+    binaries:
+      - { path: /usr/bin/git }
+
+  nvidia_inference:
+    name: nvidia-inference
+    endpoints:
+      - { host: integrate.api.nvidia.com, port: 443 }
+    binaries:
+      - { path: /usr/bin/curl }
+      - { path: /bin/bash }
+      - { path: /usr/local/bin/opencode }
+
+  # --- GitHub REST API (read-only) ---
+  github_rest_api:
+    name: github-rest-api
+    endpoints:
+      - host: api.github.com
+        port: 443
+        protocol: rest
+        tls: terminate
+        enforcement: enforce
+        access: read-only
+    binaries:
+      - { path: /usr/local/bin/claude }
+      - { path: /usr/bin/gh }
+
+  pypi:
+    name: pypi
+    endpoints:
+      - { host: pypi.org, port: 443 }
+      - { host: files.pythonhosted.org, port: 443 }
+      - { host: github.com, port: 443 }
+      - { host: objects.githubusercontent.com, port: 443 }
+      - { host: api.github.com, port: 443 }
+      - { host: downloads.python.org, port: 443 }
+    binaries:
+      - { path: /sandbox/.venv/bin/python }
+      - { path: /sandbox/.venv/bin/python3 }
+      - { path: /sandbox/.venv/bin/pip }
+      - { path: /app/.venv/bin/python }
+      - { path: /app/.venv/bin/python3 }
+      - { path: /app/.venv/bin/pip }
+      - { path: /usr/local/bin/uv }
+      - { path: "/sandbox/.uv/python/**" }
+
+  vscode:
+    name: vscode
+    endpoints:
+      - { host: update.code.visualstudio.com, port: 443 }
+      - { host: az764295.vo.msecnd.net, port: 443 }
+      - { host: vscode.download.prss.microsoft.com, port: 443 }
+      - { host: marketplace.visualstudio.com, port: 443 }
+      - { host: gallerycdn.vsassets.io, port: 443 }
+    binaries:
+      - { path: /usr/bin/curl }
+      - { path: /usr/bin/wget }
+      - { path: "/sandbox/.vscode-server/**" }
+      - { path: "/sandbox/.vscode-remote-containers/**" }
+
+  cursor:
+    name: cursor
+    endpoints:
+      - { host: cursor.blob.core.windows.net, port: 443 }
+      - { host: api2.cursor.sh, port: 443 }
+      - { host: repo.cursor.sh, port: 443 }
+      - { host: download.cursor.sh, port: 443 }
+      - { host: cursor.download.prss.microsoft.com, port: 443 }
+    binaries:
+      - { path: /usr/bin/curl }
+      - { path: /usr/bin/wget }
+      - { path: "/sandbox/.cursor-server/**" }
+
+  opencode:
+    name: opencode
+    endpoints:
+      - { host: registry.npmjs.org, port: 443 }
+      - { host: opencode.ai, port: 443 }
+      - { host: integrate.api.nvidia.com, port: 443 }
+    binaries:
+      - { path: /usr/lib/node_modules/opencode-ai/bin/.opencode }
+      - { path: /usr/bin/node }
+      - { path: /usr/local/bin/opencode }

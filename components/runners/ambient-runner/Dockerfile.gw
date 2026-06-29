@@ -1,0 +1,142 @@
+# syntax=docker/dockerfile:1.4
+
+# ACP Runner image
+#
+# Layer 1: openshell-sandboxes-engprod/sandboxes/base  (UBI10 + dev toolchain)
+# Layer 2: openshell-sandboxes-engprod/sandboxes/claude-code  (Claude Code CLI)
+# Layer 3: ambient-runner  (uvicorn + FastAPI AG-UI server)
+
+ARG BASE_IMAGE=registry.access.redhat.com/ubi10/ubi:latest
+
+# ============================================================
+# Stage 1 — System base (openshell base)
+# ============================================================
+FROM ${BASE_IMAGE} AS system
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /sandbox
+
+# Core system dependencies
+RUN dnf install -y --nodocs --allowerasing \
+        ca-certificates \
+        curl \
+        bind-utils \
+        iproute \
+        nftables \
+        iputils \
+        net-tools \
+        nmap-ncat \
+        openssh-server \
+        procps-ng \
+    && dnf clean all
+
+# Create supervisor and sandbox users/groups
+RUN groupadd -r supervisor && useradd -r -g supervisor -s /usr/sbin/nologin supervisor && \
+    groupadd -r sandbox && useradd -r -g sandbox -d /sandbox -s /bin/bash sandbox
+
+# ============================================================
+# Stage 2 — Developer tools (openshell base)
+# ============================================================
+FROM system AS devtools
+
+# Node.js 22 + build toolchain
+RUN curl -fsSL https://rpm.nodesource.com/setup_22.x | bash - && \
+    dnf install -y --nodocs \
+        nodejs \
+        gcc \
+        gcc-c++ \
+        make \
+        git \
+        vim-minimal \
+        nano \
+    && dnf clean all \
+    && npm install -g npm@11.11.0
+
+# Global npm packages
+RUN npm install -g \
+        tar@7.5.11 \
+        @hono/node-server@1.19.11 \
+        opencode-ai@1.2.18 \
+        @openai/codex@0.117.0 \
+        @github/copilot@1.0.16
+
+# GitHub CLI
+RUN dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && \
+    dnf install -y gh --repo gh-cli \
+    && dnf clean all
+
+# uv (Python package/project manager)
+COPY --from=ghcr.io/astral-sh/uv:0.10.8 /uv /usr/local/bin/uv
+ENV UV_PYTHON_INSTALL_DIR="/sandbox/.uv/python"
+RUN uv python install 3.14.3 && \
+    ln -s $(uv python find 3.14.3) /usr/local/bin/python3 && \
+    ln -s $(uv python find 3.14.3) /usr/local/bin/python && \
+    uv cache clean
+
+# ============================================================
+# Stage 3 — Final image
+# ============================================================
+FROM devtools AS final
+
+# PATH and venv setup (openshell base)
+ENV PATH="/sandbox/.venv/bin:/usr/local/bin:/usr/bin:/bin" \
+    VIRTUAL_ENV="/sandbox/.venv"
+
+# Set up sandbox user home, venv, and shell init (openshell base)
+RUN mkdir -p /sandbox/.claude/skills /sandbox/.agents/skills && \
+    uv venv --python 3.14.3 --seed /sandbox/.venv && \
+    uv pip install --python /sandbox/.venv/bin/python cloudpickle && \
+    uv cache clean && \
+    chown -R sandbox:sandbox /sandbox/.venv && \
+    printf '%s\n' \
+        'export PATH="/sandbox/.venv/bin:/usr/local/bin:/usr/bin:/bin"' \
+        'export VIRTUAL_ENV="/sandbox/.venv"' \
+        'export UV_PYTHON_INSTALL_DIR="/sandbox/.uv/python"' \
+        'export PS1="\u@\h:\w\$ "' \
+        > /sandbox/.bashrc && \
+    printf '%s\n' \
+        '[ -f ~/.bashrc ] && . ~/.bashrc' \
+        > /sandbox/.profile && \
+    chown sandbox:sandbox /sandbox/.bashrc /sandbox/.profile && \
+    chown -R sandbox:sandbox /sandbox/.claude /sandbox/.agents /sandbox
+
+# ------------------------------------------------------------
+# Claude Code CLI (openshell claude-code sandbox)
+# ------------------------------------------------------------
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+    && mkdir -p /opt/claude/bin \
+    && cp -L /root/.local/bin/claude /opt/claude/bin/claude \
+    && chmod 755 /opt/claude/bin/claude \
+    && mkdir -p /sandbox/.local/bin \
+    && ln -sf /opt/claude/bin/claude /sandbox/.local/bin/claude \
+    && chown -R sandbox:sandbox /sandbox/.local
+
+COPY --chmod=755 claude-wrapper.sh /usr/local/bin/claude
+
+COPY policy.yaml /etc/openshell/policy.yaml
+
+# ------------------------------------------------------------
+# Ambient runner (Layer 3)
+# ------------------------------------------------------------
+RUN dnf install -y --nodocs jq unzip && dnf clean all
+
+WORKDIR /sandbox/runner
+
+COPY . /sandbox/runner/ambient-runner
+
+RUN uv pip install --python /sandbox/.venv/bin/python '/sandbox/runner/ambient-runner[all]'
+
+ENV RUNNER_TYPE=claude-agent-sdk \
+    HOME=/sandbox \
+    SHELL=/bin/bash \
+    TERM=xterm-256color \
+    AGUI_PORT=8001
+
+ARG GIT_COMMIT=unknown
+LABEL org.opencontainers.image.revision=$GIT_COMMIT
+
+EXPOSE 8001
+
+CMD ["/bin/bash", "-c", "cd /sandbox/runner/ambient-runner && uvicorn main:app --host 0.0.0.0 --port 8001"]
