@@ -9,6 +9,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+CONTAINER_ENGINE="${CONTAINER_ENGINE:-podman}"
+
 BOLD='\033[1m'
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -22,7 +24,7 @@ banner() { echo ""; echo -e "${BOLD}══════════════�
 teardown() {
   echo ""
   echo "▶ Tearing down kind cluster..."
-  make kind-down CONTAINER_ENGINE=docker 2>&1 || true
+  make kind-down CONTAINER_ENGINE="$CONTAINER_ENGINE" 2>&1 || true
 }
 
 get_token_and_port() {
@@ -56,13 +58,13 @@ patch_cp_pull_policy() {
 banner "Phase 1: Pod mode (OPENSHELL_USE_GATEWAY=false)"
 
 echo "▶ Starting kind cluster (Quay.io images)..."
-if make kind-up CONTAINER_ENGINE=docker 2>&1; then
+if make kind-up CONTAINER_ENGINE="$CONTAINER_ENGINE" 2>&1; then
   echo -e "${GREEN}✓ kind-up complete${NC}"
 
   patch_cp_pull_policy
 
   echo "▶ Rebuilding and reloading control plane from local source..."
-  if make kind-reload-ambient-control-plane CONTAINER_ENGINE=docker 2>&1; then
+  if make kind-reload-ambient-control-plane CONTAINER_ENGINE="$CONTAINER_ENGINE" 2>&1; then
     echo -e "${GREEN}✓ Control plane reloaded${NC}"
 
     get_token_and_port
@@ -99,13 +101,13 @@ teardown
 banner "Phase 2: Gateway mode (OPENSHELL_USE_GATEWAY=true)"
 
 echo "▶ Starting kind cluster (Quay.io images + gateway prerequisites)..."
-if make kind-up OPENSHELL_USE_GATEWAY=true CONTAINER_ENGINE=docker 2>&1; then
+if make kind-up OPENSHELL_USE_GATEWAY=true CONTAINER_ENGINE="$CONTAINER_ENGINE" 2>&1; then
   echo -e "${GREEN}✓ kind-up complete (gateway prereqs installed, CP patched)${NC}"
 
   patch_cp_pull_policy
 
   echo "▶ Rebuilding and reloading control plane from local source..."
-  if make kind-reload-ambient-control-plane CONTAINER_ENGINE=docker 2>&1; then
+  if make kind-reload-ambient-control-plane CONTAINER_ENGINE="$CONTAINER_ENGINE" 2>&1; then
     echo -e "${GREEN}✓ Control plane reloaded${NC}"
 
     # Restore OPENSHELL_USE_GATEWAY=true — kind-reload restarts the pod but
