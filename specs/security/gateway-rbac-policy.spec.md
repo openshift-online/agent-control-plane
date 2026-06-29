@@ -8,16 +8,16 @@
 
 ## Purpose
 
-When both `OPENSHELL_USE_GATEWAY=true` AND `OPENSHELL_ENABLED=true`, the platform SHALL enforce a simplified RBAC policy that restricts agent, policy, and provider lifecycle management to a GitOps workflow and constrains human users to three effective tiers: Admin, Editor, and Viewer. Agent definitions SHALL be managed exclusively through ConfigMaps applied to tenant namespaces (schema defined in `agent-sandbox-config.spec.md`), and the API SHALL reject agent create, update, and delete operations. Policy and provider declarations (ConfigMaps with labels `ambient.ai/kind: policy` and `ambient.ai/kind: provider`) are already GitOps-only by design — no API endpoints exist for them, and this spec does not introduce any. Existing project members without an explicit Admin or Editor role SHALL receive Viewer-level access. When either flag is false, the system SHALL behave identically to the base RBAC model defined in `rbac-enforcement.spec.md`.
+When both `OPENSHELL_USE_GATEWAY=true` AND `OPENSHELL_ENABLED=true`, the platform SHALL enforce a simplified RBAC policy that restricts agent, policy, and provider lifecycle management to a GitOps workflow and constrains human users to three effective tiers: Admin, Editor, and Viewer. Agent definitions SHALL be managed exclusively through ConfigMaps applied to tenant namespaces (schema defined in `agent-sandbox-config.spec.md`), and the API SHALL reject agent create, update, and delete operations. Policy and provider declarations (ConfigMaps with labels `ambient.ai/kind: policy` and `ambient.ai/kind: provider`) are already GitOps-only by design — no API endpoints exist for them, and this spec does not introduce any. A user's effective ACP tier SHALL be derived from their Kubernetes RoleBindings on the tenant namespace — if a user has `view` access on the namespace, they are a viewer in ACP for that project. When either flag is false, the system SHALL behave identically to the base RBAC model defined in `rbac-enforcement.spec.md`.
 
 ---
 
 ## Terminology
 
 - **Gateway mode** — the platform state when both `OPENSHELL_USE_GATEWAY=true` AND `OPENSHELL_ENABLED=true`. All requirements in this spec apply only when gateway mode is active unless stated otherwise.
-- **Admin tier** — users holding `platform:admin` or `project:owner` roles. Full management access including session creation, schedule management, and role binding grants.
-- **Editor tier** — users holding `project:editor` or `agent:operator` roles. Can start agent sessions and manage schedules, but cannot manage project membership or roles.
-- **Viewer tier** — users holding `project:viewer`, `agent:observer`, `platform:viewer`, or any project-scoped binding not in the Admin or Editor tier. Read-only access to agents, sessions, and schedules.
+- **Admin tier** — users with `admin` or `cluster-admin` access on the tenant namespace, or holding `platform:admin` or `project:owner` ACP internal roles. Full management access including session creation, schedule management, and role binding grants.
+- **Editor tier** — users with `edit` access on the tenant namespace, or holding `project:editor` or `agent:operator` ACP internal roles. Can start agent sessions and manage schedules, but cannot manage project membership or roles.
+- **Viewer tier** — users with `view` access on the tenant namespace, or holding `project:viewer`, `agent:observer`, `platform:viewer`, or any project-scoped binding not in the Admin or Editor tier. Read-only access to agents, sessions, and schedules.
 - **GitOps-managed agent** — an Agent record reconciled from a ConfigMap with label `ambient.ai/kind: agent` in a tenant namespace. Distinguished from API-created agents by the annotation `ambient.ai/managed-by: configmap`.
 - **Policy declaration** — a ConfigMap entry with label `ambient.ai/kind: policy` containing an OpenShell `SandboxPolicy` YAML definition. Namespace-scoped, referenced by agents by name. No API endpoints exist for policies; they are GitOps-only by design (see `agent-sandbox-config.spec.md`).
 - **Provider declaration** — a ConfigMap entry with label `ambient.ai/kind: provider` defining a named credential provider with its type and Secret reference. Namespace-scoped, referenced by agents by name. No API endpoints exist for providers; they are GitOps-only by design (see `agent-sandbox-config.spec.md`).
@@ -117,15 +117,15 @@ The 403 response body SHALL include a reason indicating that agent management is
 
 ### Requirement: Role-to-Tier Mapping
 
-When gateway mode is active, existing RBAC roles SHALL map to the simplified three-tier model as follows:
+When gateway mode is active, Kubernetes namespace access and ACP internal roles SHALL map to the simplified three-tier model as follows:
 
-| Tier | Roles | Capabilities |
-|------|-------|-------------|
-| Admin | `platform:admin`, `project:owner` | Start agent sessions, create/modify/delete schedules, manage role bindings, view all resources |
-| Editor | `project:editor`, `agent:operator` | Start agent sessions, create/modify/delete schedules, view all resources |
-| Viewer | `project:viewer`, `agent:observer`, `platform:viewer`, `credential:viewer` | View agents, sessions, scheduled sessions, and their runs. No mutation. |
+| Tier | Namespace Access | ACP Internal Roles (fallback) | Capabilities |
+|------|-----------------|-------------------------------|-------------|
+| Admin | `admin`, `cluster-admin` | `platform:admin`, `project:owner` | Start agent sessions, create/modify/delete schedules, manage role bindings, view all resources |
+| Editor | `edit` | `project:editor`, `agent:operator` | Start agent sessions, create/modify/delete schedules, view all resources |
+| Viewer | `view` | `project:viewer`, `agent:observer`, `platform:viewer`, `credential:viewer` | View agents, sessions, scheduled sessions, and their runs. No mutation. |
 
-The tier mapping SHALL NOT modify existing role definitions, permission sets, or the role hierarchy defined in `rbac-enforcement.spec.md`. The mapping is a conceptual overlay that determines behavior at the handler level.
+The namespace-backed resolution is the primary mechanism. ACP internal role bindings serve as a fallback (e.g., `platform:admin` with global scope still grants access regardless of namespace permissions). The tier mapping SHALL NOT modify existing role definitions, permission sets, or the role hierarchy defined in `rbac-enforcement.spec.md`.
 
 #### Scenario: Admin tier user starts a session
 
@@ -200,39 +200,89 @@ When gateway mode is active, only Admin and Editor tier users SHALL create, modi
 - WHEN user A calls `POST /projects/proj-1/scheduled-sessions/ss-1/suspend`
 - THEN the response is 403 Forbidden
 
-### Requirement: Default Viewer Access for Project Members
+### Requirement: Namespace-Backed Role Resolution
 
-When gateway mode is active and a project member holds a role binding that does not map to the Admin or Editor tier, that user SHALL have Viewer-level access. This means they can read and list agents, sessions, and scheduled sessions within the project, but cannot perform any mutations.
+When gateway mode is active, the user's effective ACP tier SHALL be derived from their Kubernetes RBAC permissions on the tenant namespace, not solely from ACP's internal `role_bindings` table. Each tenant namespace maps to an ACP project. The API server SHALL check the authenticated user's permissions on the corresponding Kubernetes namespace to determine their tier.
 
-This requirement does NOT auto-provision bindings for unauthenticated users or users without any project membership. Users MUST still be granted project access by an Admin (via `POST /role_bindings`) before they can view resources. The default-to-viewer behavior applies only to users who already have a project-scoped binding.
+The mapping from Kubernetes namespace access to ACP tier SHALL be:
 
-#### Scenario: User with only project:viewer binding views agents
+| Kubernetes Namespace Access | ACP Tier |
+|----------------------------|----------|
+| `admin` or `cluster-admin` verb access | Admin |
+| `edit` verb access | Editor |
+| `view` verb access | Viewer |
+| No namespace access | No ACP access (403/404 per existing opacity rules) |
+
+The API server SHALL use a Kubernetes `SubjectAccessReview` or equivalent mechanism to determine the user's effective access level on the tenant namespace. The user identity for the review SHALL come from the JWT claims (the same identity used for ACP authentication).
+
+Users who have no access to the Kubernetes namespace SHALL NOT have access to the corresponding ACP project. There is no auto-provisioning — namespace access is managed externally (e.g., via app-interface, ArgoCD, or direct OpenShift role grants).
+
+#### Scenario: Namespace viewer maps to ACP viewer
 
 - GIVEN gateway mode is active
-- AND user A has `project:viewer` on proj-1
+- AND user A has `view` access on the OpenShift namespace `proj-1`
+- WHEN user A calls `GET /projects/proj-1/agents`
+- THEN the response is 200 with a list of agents
+- AND user A is treated as Viewer tier in ACP
+
+#### Scenario: Namespace editor maps to ACP editor
+
+- GIVEN gateway mode is active
+- AND user A has `edit` access on the OpenShift namespace `proj-1`
+- WHEN user A calls `POST /projects/proj-1/agents/agent-1/start`
+- THEN the session is created
+- AND user A is treated as Editor tier in ACP
+
+#### Scenario: Namespace admin maps to ACP admin
+
+- GIVEN gateway mode is active
+- AND user A has `admin` access on the OpenShift namespace `proj-1`
+- WHEN user A calls `POST /role_bindings` to grant access within proj-1
+- THEN the binding is created
+- AND user A is treated as Admin tier in ACP
+
+#### Scenario: No namespace access means no ACP access
+
+- GIVEN gateway mode is active
+- AND user A has NO access to the OpenShift namespace `proj-1`
+- WHEN user A calls `GET /projects/proj-1/agents`
+- THEN the response is 404 (per existing RBAC opacity rules)
+
+#### Scenario: ACP internal bindings still apply as fallback
+
+- GIVEN gateway mode is active
+- AND user A has `platform:admin` in ACP's internal role_bindings (global scope)
+- AND user A has no explicit Kubernetes namespace access on proj-1
+- WHEN user A calls `GET /projects/proj-1/agents`
+- THEN the request is authorized via the ACP internal binding
+- AND platform:admin overrides namespace-level checks
+
+### Requirement: Default Viewer Access for Project Members
+
+When gateway mode is active, users with `view` access on the tenant namespace (or any ACP role binding that does not map to the Admin or Editor tier) SHALL have Viewer-level access. This means they can read and list agents, sessions, and scheduled sessions within the project, but cannot perform any mutations.
+
+In practice, most users in production environments will be viewers — admin and editor access is rare and typically reserved for platform operators.
+
+#### Scenario: Namespace viewer views agents
+
+- GIVEN gateway mode is active
+- AND user A has `view` access on namespace `proj-1`
 - AND agents exist in proj-1
 - WHEN user A calls `GET /projects/proj-1/agents`
 - THEN the response is 200 with a list of agents
 
-#### Scenario: User with no bindings cannot view any project
+#### Scenario: User with no namespace access cannot view any project
 
 - GIVEN gateway mode is active
-- AND user A has no role bindings
+- AND user A has no Kubernetes namespace access on `proj-1`
+- AND user A has no ACP internal bindings covering proj-1
 - WHEN user A calls `GET /projects/proj-1/agents`
 - THEN the response is 404 (per existing RBAC opacity rules)
 
-#### Scenario: Agent observer has viewer-level access
+#### Scenario: Namespace viewer cannot start a session
 
 - GIVEN gateway mode is active
-- AND user A has `agent:observer` on agent-1 in proj-1
-- WHEN user A calls `GET /projects/proj-1/agents/agent-1`
-- THEN the response is 200 with agent details
-- AND user A can view sessions for agent-1
-
-#### Scenario: Agent observer cannot start a session
-
-- GIVEN gateway mode is active
-- AND user A has `agent:observer` on agent-1 in proj-1
+- AND user A has `view` access on namespace `proj-1`
 - WHEN user A calls `POST /projects/proj-1/agents/agent-1/start`
 - THEN the response is 403 Forbidden
 
@@ -405,7 +455,9 @@ Toggling gateway mode off (by setting either flag to false) SHALL restore full A
 | Handler-level gating, not middleware-level | The RBAC middleware (`rbac-enforcement.spec.md`) is a general-purpose permission evaluator. Injecting gateway-mode business logic into it violates separation of concerns. Agent CRUD gating is a business rule ("in gateway mode, nobody creates agents via API"), not a permission check. |
 | ConfigMap agents stored in database | The session creation flow reads agents from the database. Storing ConfigMap-reconciled agents in the database means the existing session start handler, scheduled session trigger, and agent-to-session relationship work unchanged. |
 | Existing agents survive flag toggle | Toggling gateway mode on does not destroy data. API-created agents become read-only via the API but remain functional (sessions can be started against them). Toggling off restores full API access. |
-| Users must be granted project access by an admin | No auto-provisioning of viewer bindings for arbitrary authenticated users. This preserves the zero-trust bootstrap model from `rbac-enforcement.spec.md` where users start with zero permissions. Admins explicitly grant project membership. |
+| Namespace-backed role resolution in gateway mode | In gateway mode, the user's ACP tier is derived from their Kubernetes namespace RoleBindings (e.g., `view` in the namespace = viewer in ACP for that project). This aligns ACP access with the external identity management system (app-interface, OpenShift) that already controls namespace access. ACP internal bindings remain as a fallback (e.g., `platform:admin` still works). |
+| Manual session triggering permitted for Admin/Editor | Although agents are GitOps-only, allowing admin/editor users to manually kick off sessions from pre-defined agents is a valid use case. In practice, most prod users will be viewers and won't have this ability. |
+| Users must have namespace access to view projects | No auto-provisioning of viewer bindings for arbitrary authenticated users. Namespace access is managed externally (app-interface, ArgoCD, OpenShift admin). Users without namespace access get no ACP access. |
 | Platform-info endpoint over environment variable | The UI is a server-rendered application that proxies to the API server. Environment variables are baked at build time; the endpoint reflects runtime server configuration. A configuration change requires only an API server restart, not a UI rebuild. |
 | 403 (not 405) for gated agent CRUD | 405 Method Not Allowed implies the method is never valid on that URL, which is incorrect — the method is valid when gateway mode is off. 403 Forbidden with a descriptive reason correctly communicates "you are not permitted to do this in the current configuration." |
 | Auth-exempt platform-info | The UI needs gateway mode status before establishing project context. Requiring RBAC evaluation would create a chicken-and-egg: the UI cannot know whether to show agent creation controls without calling platform-info, but RBAC evaluation requires a project scope. |
