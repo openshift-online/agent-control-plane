@@ -24,6 +24,10 @@ Resolver algorithm that determines which global credentials are injected into a 
 
 AES-256-GCM encryption at rest for credential tokens stored in PostgreSQL. Covers keyring management, versioned key rotation, and CLI encrypt/decrypt commands.
 
+### [Gateway Mode RBAC Policy](gateway-rbac-policy.spec.md)
+
+Simplified RBAC policy active when both `OPENSHELL_USE_GATEWAY` and `OPENSHELL_ENABLED` are true. Restricts agent lifecycle to GitOps ConfigMaps, maps roles to Admin/Editor/Viewer tiers, and gates session interaction by tier.
+
 ### [OpenShell Sandbox](openshell-sandbox.spec.md)
 
 Network and filesystem isolation for runner pods using Linux namespaces. Covers sandbox supervisor, policy enforcement, OpenShift SCC requirements, and kernel compatibility.
@@ -31,4 +35,3 @@ Network and filesystem isolation for runner pods using Linux namespaces. Covers 
 ### [References](references.spec.md)
 
 Consolidated references from all security sub-specs — ADRs, external standards, and cross-spec links.
-
