@@ -19,7 +19,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /sandbox
 
 # Core system dependencies
-RUN dnf install -y --nodocs --allowerasing \
+RUN dnf install -y --allowerasing --nodocs \
         ca-certificates \
         curl \
         bind-utils \
@@ -42,7 +42,7 @@ RUN groupadd -r supervisor && useradd -r -g supervisor -s /usr/sbin/nologin supe
 FROM system AS devtools
 
 # Node.js 22 (UBI AppStream) + build toolchain
-RUN dnf install -y --nodocs \
+RUN dnf install -y --allowerasing --nodocs \
         nodejs \
         npm \
         gcc \
@@ -127,7 +127,7 @@ COPY policy.yaml /etc/openshell/policy.yaml
 # ------------------------------------------------------------
 # Ambient runner (Layer 3)
 # ------------------------------------------------------------
-RUN dnf install -y --nodocs jq unzip && dnf clean all
+RUN dnf install -y --allowerasing --nodocs jq unzip && dnf clean all
 
 WORKDIR /sandbox/runner
 
