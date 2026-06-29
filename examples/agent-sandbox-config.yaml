@@ -1,0 +1,139 @@
+# Agent Sandbox Configuration Example
+#
+# Complete example of ConfigMap-based agent, provider, and policy declarations.
+# Apply to a tenant namespace (e.g. "alpha") with: kubectl apply -f agent-sandbox-config.yaml
+#
+# Prerequisites:
+#   - OPENSHELL_USE_GATEWAY=true on the control plane
+#   - Secrets referenced by providers must exist in the namespace
+#   - The namespace must correspond to an ACP project
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-pat
+  namespace: alpha
+type: Opaque
+stringData:
+  token: "<replace-with-github-pat>"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: anthropic-key
+  namespace: alpha
+type: Opaque
+stringData:
+  token: "<replace-with-anthropic-api-key>"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: provider-declarations
+  namespace: alpha
+  labels:
+    ambient.ai/kind: provider
+data:
+  github: |
+    name: github
+    type: github
+    secret: github-pat
+  anthropic: |
+    name: anthropic
+    type: anthropic
+    secret: anthropic-key
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: policy-declarations
+  namespace: alpha
+  labels:
+    ambient.ai/kind: policy
+data:
+  restricted-github-only: |
+    name: restricted-github-only
+    network_policies:
+      github_api:
+        endpoints:
+          - host: api.github.com
+            port: 443
+            protocol: rest
+            rules:
+              - allow:
+                  method: "*"
+                  path: "/**"
+        binaries:
+          - path: /usr/bin/git
+      inference:
+        endpoints:
+          - host: inference.local
+            port: 443
+            protocol: rest
+            rules:
+              - allow:
+                  method: POST
+                  path: "/v1/**"
+    filesystem:
+      read_write:
+        - /sandbox
+        - /tmp
+      read_only:
+        - /usr
+        - /etc
+        - /lib
+    process:
+      run_as_user: sandbox
+      run_as_group: sandbox
+    landlock:
+      compatibility: best_effort
+  permissive-dev: |
+    name: permissive-dev
+    filesystem:
+      read_write:
+        - /sandbox
+        - /tmp
+      read_only:
+        - /usr
+        - /etc
+    process:
+      run_as_user: sandbox
+      run_as_group: sandbox
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-declarations
+  namespace: alpha
+  labels:
+    ambient.ai/kind: agent
+data:
+  security-reviewer: |
+    name: security-reviewer
+    display_name: Security Reviewer
+    description: Reviews PRs for security vulnerabilities and OWASP top-10 issues.
+    entrypoint: claude
+    prompt: |
+      You are a security reviewer. Analyze code for vulnerabilities including
+      injection attacks, authentication issues, and insecure data handling.
+      Report findings with severity, location, and remediation guidance.
+    providers:
+      - github
+      - anthropic
+    payloads:
+      - sandbox_path: /sandbox/CLAUDE.md
+        content: |
+          # Security Review Agent
+          Focus on OWASP top-10 vulnerabilities.
+          Always check for hardcoded secrets.
+      - sandbox_path: /sandbox/workspace
+        repo_url: https://github.com/example-org/target-repo
+        ref: main
+    environment:
+      LOG_LEVEL: info
+      REVIEW_MODE: strict
+    sandbox_template:
+      resources:
+        cpu: "2"
+        memory: 4Gi
+    sandbox_policy: restricted-github-only

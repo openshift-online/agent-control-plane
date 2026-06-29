@@ -482,6 +482,12 @@ function makeSdkAgent(overrides: Partial<Agent> = {}): Agent {
     repo_url: 'https://github.com/org/repo',
     resource_overrides: '',
     workflow_id: 'wf-1',
+    entrypoint: '',
+    providers: '',
+    payloads: '',
+    environment: '',
+    sandbox_template: '',
+    sandbox_policy: '',
     ...overrides,
   }
 }

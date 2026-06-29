@@ -23,6 +23,12 @@ Name | Type | Description | Notes
 **BotAccountName** | Pointer to **string** |  | [optional] 
 **ResourceOverrides** | Pointer to **string** |  | [optional] 
 **EnvironmentVariables** | Pointer to **string** |  | [optional] 
+**Entrypoint** | Pointer to **string** | CLI binary to launch inside the sandbox (e.g., claude, opencode, bash). Defaults to claude. | [optional] 
+**Providers** | Pointer to **[]string** | Names of providers this agent requires, referencing provider declarations in the tenant namespace. | [optional] 
+**Payloads** | Pointer to [**[]Payload**](Payload.md) | Content to upload into the sandbox filesystem before the entrypoint launches. | [optional] 
+**Environment** | Pointer to **map[string]string** | Environment variables injected into the sandbox at creation time. | [optional] 
+**SandboxTemplate** | Pointer to [**SandboxTemplate**](SandboxTemplate.md) |  | [optional] 
+**SandboxPolicy** | Pointer to **string** | Name of a policy declaration in the tenant namespace. When omitted, the platform default policy applies. | [optional] 
 **CurrentSessionId** | Pointer to **string** | Denormalized for fast reads — the active session, if any | [optional] [readonly] 
 **Labels** | Pointer to **string** |  | [optional] 
 **Annotations** | Pointer to **string** |  | [optional] 
@@ -510,6 +516,156 @@ SetEnvironmentVariables sets EnvironmentVariables field to given value.
 `func (o *Agent) HasEnvironmentVariables() bool`
 
 HasEnvironmentVariables returns a boolean if a field has been set.
+
+### GetEntrypoint
+
+`func (o *Agent) GetEntrypoint() string`
+
+GetEntrypoint returns the Entrypoint field if non-nil, zero value otherwise.
+
+### GetEntrypointOk
+
+`func (o *Agent) GetEntrypointOk() (*string, bool)`
+
+GetEntrypointOk returns a tuple with the Entrypoint field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetEntrypoint
+
+`func (o *Agent) SetEntrypoint(v string)`
+
+SetEntrypoint sets Entrypoint field to given value.
+
+### HasEntrypoint
+
+`func (o *Agent) HasEntrypoint() bool`
+
+HasEntrypoint returns a boolean if a field has been set.
+
+### GetProviders
+
+`func (o *Agent) GetProviders() []string`
+
+GetProviders returns the Providers field if non-nil, zero value otherwise.
+
+### GetProvidersOk
+
+`func (o *Agent) GetProvidersOk() (*[]string, bool)`
+
+GetProvidersOk returns a tuple with the Providers field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetProviders
+
+`func (o *Agent) SetProviders(v []string)`
+
+SetProviders sets Providers field to given value.
+
+### HasProviders
+
+`func (o *Agent) HasProviders() bool`
+
+HasProviders returns a boolean if a field has been set.
+
+### GetPayloads
+
+`func (o *Agent) GetPayloads() []Payload`
+
+GetPayloads returns the Payloads field if non-nil, zero value otherwise.
+
+### GetPayloadsOk
+
+`func (o *Agent) GetPayloadsOk() (*[]Payload, bool)`
+
+GetPayloadsOk returns a tuple with the Payloads field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetPayloads
+
+`func (o *Agent) SetPayloads(v []Payload)`
+
+SetPayloads sets Payloads field to given value.
+
+### HasPayloads
+
+`func (o *Agent) HasPayloads() bool`
+
+HasPayloads returns a boolean if a field has been set.
+
+### GetEnvironment
+
+`func (o *Agent) GetEnvironment() map[string]string`
+
+GetEnvironment returns the Environment field if non-nil, zero value otherwise.
+
+### GetEnvironmentOk
+
+`func (o *Agent) GetEnvironmentOk() (*map[string]string, bool)`
+
+GetEnvironmentOk returns a tuple with the Environment field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetEnvironment
+
+`func (o *Agent) SetEnvironment(v map[string]string)`
+
+SetEnvironment sets Environment field to given value.
+
+### HasEnvironment
+
+`func (o *Agent) HasEnvironment() bool`
+
+HasEnvironment returns a boolean if a field has been set.
+
+### GetSandboxTemplate
+
+`func (o *Agent) GetSandboxTemplate() SandboxTemplate`
+
+GetSandboxTemplate returns the SandboxTemplate field if non-nil, zero value otherwise.
+
+### GetSandboxTemplateOk
+
+`func (o *Agent) GetSandboxTemplateOk() (*SandboxTemplate, bool)`
+
+GetSandboxTemplateOk returns a tuple with the SandboxTemplate field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetSandboxTemplate
+
+`func (o *Agent) SetSandboxTemplate(v SandboxTemplate)`
+
+SetSandboxTemplate sets SandboxTemplate field to given value.
+
+### HasSandboxTemplate
+
+`func (o *Agent) HasSandboxTemplate() bool`
+
+HasSandboxTemplate returns a boolean if a field has been set.
+
+### GetSandboxPolicy
+
+`func (o *Agent) GetSandboxPolicy() string`
+
+GetSandboxPolicy returns the SandboxPolicy field if non-nil, zero value otherwise.
+
+### GetSandboxPolicyOk
+
+`func (o *Agent) GetSandboxPolicyOk() (*string, bool)`
+
+GetSandboxPolicyOk returns a tuple with the SandboxPolicy field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetSandboxPolicy
+
+`func (o *Agent) SetSandboxPolicy(v string)`
+
+SetSandboxPolicy sets SandboxPolicy field to given value.
+
+### HasSandboxPolicy
+
+`func (o *Agent) HasSandboxPolicy() bool`
+
+HasSandboxPolicy returns a boolean if a field has been set.
 
 ### GetCurrentSessionId
 

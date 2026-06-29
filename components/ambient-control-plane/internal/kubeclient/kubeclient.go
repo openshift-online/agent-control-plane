@@ -345,6 +345,11 @@ func (kc *KubeClient) CreateConfigMap(ctx context.Context, obj *unstructured.Uns
 	return kc.dynamic.Resource(ConfigMapGVR).Namespace(obj.GetNamespace()).Create(ctx, obj, metav1.CreateOptions{})
 }
 
+func (kc *KubeClient) ListConfigMapsByLabel(ctx context.Context, namespace, labelSelector string) (*unstructured.UnstructuredList, error) {
+	opts := metav1.ListOptions{LabelSelector: labelSelector}
+	return kc.dynamic.Resource(ConfigMapGVR).Namespace(namespace).List(ctx, opts)
+}
+
 func (kc *KubeClient) GetResource(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {
 	return kc.dynamic.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 }

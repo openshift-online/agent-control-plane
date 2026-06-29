@@ -101,3 +101,37 @@ func dropParentAgentIdMigration() *gormigrate.Migration {
 		},
 	}
 }
+
+func sandboxConfigMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202606291000",
+		Migrate: func(tx *gorm.DB) error {
+			stmts := []string{
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS entrypoint TEXT`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS providers JSONB`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS payloads JSONB`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS environment JSONB`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS sandbox_template JSONB`,
+				`ALTER TABLE agents ADD COLUMN IF NOT EXISTS sandbox_policy TEXT`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			cols := []string{
+				"entrypoint", "providers", "payloads",
+				"environment", "sandbox_template", "sandbox_policy",
+			}
+			for _, col := range cols {
+				if err := tx.Exec("ALTER TABLE agents DROP COLUMN IF EXISTS " + col).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+}

@@ -21,6 +21,12 @@ type Agent struct {
 	BotAccountName       *string `json:"bot_account_name"`
 	ResourceOverrides    *string `json:"resource_overrides"`
 	EnvironmentVariables *string `json:"environment_variables"`
+	Entrypoint           *string `json:"entrypoint"`
+	Providers            *string `json:"providers"              gorm:"type:jsonb"`
+	Payloads             *string `json:"payloads"               gorm:"type:jsonb"`
+	Environment          *string `json:"environment"            gorm:"type:jsonb"`
+	SandboxTemplate      *string `json:"sandbox_template"       gorm:"type:jsonb"`
+	SandboxPolicy        *string `json:"sandbox_policy"`
 	Labels               *string `json:"labels"`
 	Annotations          *string `json:"annotations"`
 	CurrentSessionId     *string `json:"current_session_id"`

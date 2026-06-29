@@ -2,7 +2,7 @@ import type { Session, Project, Agent, Credential, RoleBinding } from 'ambient-s
 import type {
   DomainSession, DomainProject, DomainSessionMessage, DomainAgent, SessionPhase, SessionEventType,
   DomainRepo, DomainReconciledRepo, DomainCondition, ReconciledRepoStatus, ConditionStatus,
-  DomainCredential, DomainRoleBinding,
+  DomainCredential, DomainRoleBinding, DomainPayload, DomainSandboxTemplate,
 } from '@/domain/types'
 
 const VALID_PHASES: ReadonlySet<string> = new Set<string>([
@@ -169,6 +169,48 @@ export function mapSdkProjectToDomain(sdk: Project): DomainProject {
   }
 }
 
+function parseProviders(raw: string): string[] {
+  if (!raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (Array.isArray(parsed)) {
+      return parsed.filter((v): v is string => typeof v === 'string')
+    }
+    return []
+  } catch {
+    return []
+  }
+}
+
+function parsePayloads(raw: string): DomainPayload[] {
+  if (!raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((v): v is Record<string, unknown> => typeof v === 'object' && v !== null)
+      .map((v) => ({
+        sandbox_path: String(v.sandbox_path ?? ''),
+        ...(v.content ? { content: String(v.content) } : {}),
+        ...(v.repo_url ? { repo_url: String(v.repo_url) } : {}),
+        ...(v.ref ? { ref: String(v.ref) } : {}),
+      }))
+  } catch {
+    return []
+  }
+}
+
+function parseSandboxTemplate(raw: string): DomainSandboxTemplate | null {
+  if (!raw) return null
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
+    return parsed as DomainSandboxTemplate
+  } catch {
+    return null
+  }
+}
+
 export function mapSdkAgentToDomain(sdk: Agent): DomainAgent {
   return {
     id: sdk.id,
@@ -182,6 +224,12 @@ export function mapSdkAgentToDomain(sdk: Agent): DomainAgent {
     prompt: emptyToNull(sdk.prompt),
     repoUrl: emptyToNull(sdk.repo_url),
     workflowId: emptyToNull(sdk.workflow_id),
+    entrypoint: emptyToNull(sdk.entrypoint),
+    providers: parseProviders(sdk.providers),
+    payloads: parsePayloads(sdk.payloads),
+    environment: parseJsonObject(sdk.environment),
+    sandboxTemplate: parseSandboxTemplate(sdk.sandbox_template),
+    sandboxPolicy: emptyToNull(sdk.sandbox_policy),
     annotations: parseAnnotations(sdk.annotations),
     labels: parseJsonObject(sdk.labels),
     createdAt: sdk.created_at ?? '',

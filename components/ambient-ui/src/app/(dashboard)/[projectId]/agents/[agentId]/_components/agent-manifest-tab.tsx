@@ -73,10 +73,52 @@ function agentToYaml(agent: DomainAgent): string {
   if (agent.model) lines.push(`  model: ${agent.model}`)
   if (agent.repoUrl) lines.push(`  repoUrl: ${agent.repoUrl}`)
   if (agent.workflowId) lines.push(`  workflowId: ${agent.workflowId}`)
+  if (agent.entrypoint) lines.push(`  entrypoint: ${agent.entrypoint}`)
+  if (agent.sandboxPolicy) lines.push(`  sandboxPolicy: ${agent.sandboxPolicy}`)
   if (agent.prompt) {
     lines.push('  prompt: |')
     for (const promptLine of agent.prompt.split('\n')) {
       lines.push(`    ${promptLine}`)
+    }
+  }
+  if (agent.providers.length > 0) {
+    lines.push('  providers:')
+    for (const p of agent.providers) {
+      lines.push(`    - ${p}`)
+    }
+  }
+  if (agent.payloads.length > 0) {
+    lines.push('  payloads:')
+    for (const payload of agent.payloads) {
+      lines.push(`    - sandbox_path: ${payload.sandbox_path}`)
+      if (payload.repo_url) lines.push(`      repo_url: ${payload.repo_url}`)
+      if (payload.ref) lines.push(`      ref: ${payload.ref}`)
+      if (payload.content) {
+        lines.push('      content: |')
+        for (const cl of payload.content.split('\n')) {
+          lines.push(`        ${cl}`)
+        }
+      }
+    }
+  }
+  const envEntries = Object.entries(agent.environment)
+  if (envEntries.length > 0) {
+    lines.push('  environment:')
+    for (const [key, value] of envEntries) {
+      lines.push(`    ${key}: "${value}"`)
+    }
+  }
+  if (agent.sandboxTemplate) {
+    lines.push('  sandboxTemplate:')
+    if (agent.sandboxTemplate.image) lines.push(`    image: ${agent.sandboxTemplate.image}`)
+    if (agent.sandboxTemplate.resources) {
+      lines.push('    resources:')
+      if (agent.sandboxTemplate.resources.cpu) lines.push(`      cpu: "${agent.sandboxTemplate.resources.cpu}"`)
+      if (agent.sandboxTemplate.resources.memory) lines.push(`      memory: ${agent.sandboxTemplate.resources.memory}`)
+    }
+    if (agent.sandboxTemplate.gpu) {
+      lines.push('    gpu:')
+      if (agent.sandboxTemplate.gpu.count !== undefined) lines.push(`      count: ${agent.sandboxTemplate.gpu.count}`)
     }
   }
 

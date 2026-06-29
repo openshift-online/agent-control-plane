@@ -4912,6 +4912,34 @@ components:
             type: string
           environment_variables:
             type: string
+          entrypoint:
+            description: "CLI binary to launch inside the sandbox (e.g., claude, opencode,\
+              \ bash). Defaults to claude."
+            type: string
+          providers:
+            description: "Names of providers this agent requires, referencing provider\
+              \ declarations in the tenant namespace."
+            items:
+              type: string
+            type: array
+          payloads:
+            description: Content to upload into the sandbox filesystem before the
+              entrypoint launches.
+            items:
+              $ref: "#/components/schemas/Payload"
+            type: array
+          environment:
+            additionalProperties:
+              type: string
+            description: Environment variables injected into the sandbox at creation
+              time.
+            type: object
+          sandbox_template:
+            $ref: "#/components/schemas/SandboxTemplate"
+          sandbox_policy:
+            description: "Name of a policy declaration in the tenant namespace. When\
+              \ omitted, the platform default policy applies."
+            type: string
           current_session_id:
             description: "Denormalized for fast reads — the active session, if any"
             readOnly: true
@@ -4931,28 +4959,59 @@ components:
         - project_id
         type: object
       example:
-        repo_url: repo_url
         workflow_id: workflow_id
-        llm_model: llm_model
-        resource_overrides: resource_overrides
-        owner_user_id: owner_user_id
+        payloads:
+        - repo_url: repo_url
+          ref: ref
+          sandbox_path: sandbox_path
+          content: content
+        - repo_url: repo_url
+          ref: ref
+          sandbox_path: sandbox_path
+          content: content
         current_session_id: current_session_id
-        kind: kind
-        llm_temperature: 5.962133916683182
         created_at: 2000-01-23T04:56:07.000+00:00
         description: description
         annotations: annotations
-        display_name: display_name
-        llm_max_tokens: 5
-        labels: labels
+        sandbox_policy: sandbox_policy
         environment_variables: environment_variables
         updated_at: 2000-01-23T04:56:07.000+00:00
         project_id: project_id
-        bot_account_name: bot_account_name
-        name: name
+        entrypoint: entrypoint
         id: id
         href: href
+        repo_url: repo_url
+        llm_model: llm_model
+        resource_overrides: resource_overrides
+        owner_user_id: owner_user_id
+        kind: kind
+        llm_temperature: 5.962133916683182
+        display_name: display_name
+        llm_max_tokens: 5
+        sandbox_template:
+          image: image
+          runtime_class_name: runtime_class_name
+          log_level: log_level
+          resources:
+            memory: memory
+            cpu: cpu
+          annotations:
+            key: annotations
+          gpu:
+            count: 2
+          driver_config:
+            key: ""
+          labels:
+            key: labels
+        labels: labels
+        environment:
+          key: environment
+        bot_account_name: bot_account_name
+        name: name
         prompt: prompt
+        providers:
+        - providers
+        - providers
     AgentList:
       allOf:
       - $ref: "#/components/schemas/List"
@@ -4968,62 +5027,155 @@ components:
         kind: kind
         page: 0
         items:
-        - repo_url: repo_url
-          workflow_id: workflow_id
-          llm_model: llm_model
-          resource_overrides: resource_overrides
-          owner_user_id: owner_user_id
+        - workflow_id: workflow_id
+          payloads:
+          - repo_url: repo_url
+            ref: ref
+            sandbox_path: sandbox_path
+            content: content
+          - repo_url: repo_url
+            ref: ref
+            sandbox_path: sandbox_path
+            content: content
           current_session_id: current_session_id
-          kind: kind
-          llm_temperature: 5.962133916683182
           created_at: 2000-01-23T04:56:07.000+00:00
           description: description
           annotations: annotations
-          display_name: display_name
-          llm_max_tokens: 5
-          labels: labels
+          sandbox_policy: sandbox_policy
           environment_variables: environment_variables
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
-          bot_account_name: bot_account_name
-          name: name
+          entrypoint: entrypoint
           id: id
           href: href
-          prompt: prompt
-        - repo_url: repo_url
-          workflow_id: workflow_id
+          repo_url: repo_url
           llm_model: llm_model
           resource_overrides: resource_overrides
           owner_user_id: owner_user_id
-          current_session_id: current_session_id
           kind: kind
           llm_temperature: 5.962133916683182
+          display_name: display_name
+          llm_max_tokens: 5
+          sandbox_template:
+            image: image
+            runtime_class_name: runtime_class_name
+            log_level: log_level
+            resources:
+              memory: memory
+              cpu: cpu
+            annotations:
+              key: annotations
+            gpu:
+              count: 2
+            driver_config:
+              key: ""
+            labels:
+              key: labels
+          labels: labels
+          environment:
+            key: environment
+          bot_account_name: bot_account_name
+          name: name
+          prompt: prompt
+          providers:
+          - providers
+          - providers
+        - workflow_id: workflow_id
+          payloads:
+          - repo_url: repo_url
+            ref: ref
+            sandbox_path: sandbox_path
+            content: content
+          - repo_url: repo_url
+            ref: ref
+            sandbox_path: sandbox_path
+            content: content
+          current_session_id: current_session_id
           created_at: 2000-01-23T04:56:07.000+00:00
           description: description
           annotations: annotations
-          display_name: display_name
-          llm_max_tokens: 5
-          labels: labels
+          sandbox_policy: sandbox_policy
           environment_variables: environment_variables
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
-          bot_account_name: bot_account_name
-          name: name
+          entrypoint: entrypoint
           id: id
           href: href
+          repo_url: repo_url
+          llm_model: llm_model
+          resource_overrides: resource_overrides
+          owner_user_id: owner_user_id
+          kind: kind
+          llm_temperature: 5.962133916683182
+          display_name: display_name
+          llm_max_tokens: 5
+          sandbox_template:
+            image: image
+            runtime_class_name: runtime_class_name
+            log_level: log_level
+            resources:
+              memory: memory
+              cpu: cpu
+            annotations:
+              key: annotations
+            gpu:
+              count: 2
+            driver_config:
+              key: ""
+            labels:
+              key: labels
+          labels: labels
+          environment:
+            key: environment
+          bot_account_name: bot_account_name
+          name: name
           prompt: prompt
+          providers:
+          - providers
+          - providers
     AgentPatchRequest:
       example:
         repo_url: repo_url
         llm_model: llm_model
+        payloads:
+        - repo_url: repo_url
+          ref: ref
+          sandbox_path: sandbox_path
+          content: content
+        - repo_url: repo_url
+          ref: ref
+          sandbox_path: sandbox_path
+          content: content
         llm_temperature: 0.8008281904610115
-        name: name
         description: description
         annotations: annotations
         display_name: display_name
-        prompt: prompt
+        sandbox_policy: sandbox_policy
         llm_max_tokens: 6
+        sandbox_template:
+          image: image
+          runtime_class_name: runtime_class_name
+          log_level: log_level
+          resources:
+            memory: memory
+            cpu: cpu
+          annotations:
+            key: annotations
+          gpu:
+            count: 2
+          driver_config:
+            key: ""
+          labels:
+            key: labels
         labels: labels
+        environment:
+          key: environment
+        entrypoint: entrypoint
+        name: name
+        prompt: prompt
+        providers:
+        - providers
+        - providers
       properties:
         name:
           type: string
@@ -5044,6 +5196,24 @@ components:
         llm_max_tokens:
           format: int32
           type: integer
+        entrypoint:
+          type: string
+        providers:
+          items:
+            type: string
+          type: array
+        payloads:
+          items:
+            $ref: "#/components/schemas/Payload"
+          type: array
+        environment:
+          additionalProperties:
+            type: string
+          type: object
+        sandbox_template:
+          $ref: "#/components/schemas/SandboxTemplate"
+        sandbox_policy:
+          type: string
         labels:
           type: string
         annotations:
@@ -5655,6 +5825,96 @@ components:
           type: boolean
         runner_type:
           type: string
+      type: object
+    Payload:
+      example:
+        repo_url: repo_url
+        ref: ref
+        sandbox_path: sandbox_path
+        content: content
+      properties:
+        sandbox_path:
+          description: Absolute path inside the sandbox where the content is delivered.
+          type: string
+        content:
+          description: Inline string content to place at the sandbox path.
+          type: string
+        repo_url:
+          description: Git repository URL to clone into the sandbox path.
+          type: string
+        ref:
+          description: "Git ref to check out (branch, tag, or commit SHA). Only valid\
+            \ with repo_url."
+          type: string
+      required:
+      - sandbox_path
+      type: object
+    SandboxTemplate:
+      example:
+        image: image
+        runtime_class_name: runtime_class_name
+        log_level: log_level
+        resources:
+          memory: memory
+          cpu: cpu
+        annotations:
+          key: annotations
+        gpu:
+          count: 2
+        driver_config:
+          key: ""
+        labels:
+          key: labels
+      properties:
+        image:
+          description: OCI container image reference for the sandbox.
+          type: string
+        resources:
+          $ref: "#/components/schemas/ResourceRequirements"
+        gpu:
+          $ref: "#/components/schemas/GpuRequirements"
+        runtime_class_name:
+          description: Kubernetes RuntimeClassName for the sandbox pod.
+          type: string
+        driver_config:
+          additionalProperties: true
+          description: OpenShell driver-specific opaque configuration (JSON).
+          type: object
+        labels:
+          additionalProperties:
+            type: string
+          description: Labels applied to the sandbox compute resources.
+          type: object
+        annotations:
+          additionalProperties:
+            type: string
+          description: Annotations applied to the sandbox compute resources.
+          type: object
+        log_level:
+          description: "Sandbox supervisor log verbosity (debug, info, warn, error)."
+          type: string
+      type: object
+    ResourceRequirements:
+      example:
+        memory: memory
+        cpu: cpu
+      properties:
+        cpu:
+          description: "CPU request/limit in Kubernetes quantity format (e.g., \"\
+            2\", \"500m\")."
+          type: string
+        memory:
+          description: "Memory request/limit in Kubernetes quantity format (e.g.,\
+            \ \"4Gi\", \"256Mi\")."
+          type: string
+      type: object
+    GpuRequirements:
+      example:
+        count: 2
+      properties:
+        count:
+          description: Number of GPUs to allocate. Default 0.
+          type: integer
       type: object
   securitySchemes:
     Bearer:

@@ -453,6 +453,29 @@ components:
               type: string
             environment_variables:
               type: string
+            entrypoint:
+              type: string
+              description: CLI binary to launch inside the sandbox (e.g., claude, opencode, bash). Defaults to claude.
+            providers:
+              type: array
+              items:
+                type: string
+              description: Names of providers this agent requires, referencing provider declarations in the tenant namespace.
+            payloads:
+              type: array
+              items:
+                $ref: '#/components/schemas/Payload'
+              description: Content to upload into the sandbox filesystem before the entrypoint launches.
+            environment:
+              type: object
+              additionalProperties:
+                type: string
+              description: Environment variables injected into the sandbox at creation time.
+            sandbox_template:
+              $ref: '#/components/schemas/SandboxTemplate'
+            sandbox_policy:
+              type: string
+              description: Name of a policy declaration in the tenant namespace. When omitted, the platform default policy applies.
             current_session_id:
               type: string
               readOnly: true
@@ -498,10 +521,90 @@ components:
         llm_max_tokens:
           type: integer
           format: int32
+        entrypoint:
+          type: string
+        providers:
+          type: array
+          items:
+            type: string
+        payloads:
+          type: array
+          items:
+            $ref: '#/components/schemas/Payload'
+        environment:
+          type: object
+          additionalProperties:
+            type: string
+        sandbox_template:
+          $ref: '#/components/schemas/SandboxTemplate'
+        sandbox_policy:
+          type: string
         labels:
           type: string
         annotations:
           type: string
+    Payload:
+      type: object
+      required:
+        - sandbox_path
+      properties:
+        sandbox_path:
+          type: string
+          description: Absolute path inside the sandbox where the content is delivered.
+        content:
+          type: string
+          description: Inline string content to place at the sandbox path.
+        repo_url:
+          type: string
+          description: Git repository URL to clone into the sandbox path.
+        ref:
+          type: string
+          description: Git ref to check out (branch, tag, or commit SHA). Only valid with repo_url.
+    SandboxTemplate:
+      type: object
+      properties:
+        image:
+          type: string
+          description: OCI container image reference for the sandbox.
+        resources:
+          $ref: '#/components/schemas/ResourceRequirements'
+        gpu:
+          $ref: '#/components/schemas/GpuRequirements'
+        runtime_class_name:
+          type: string
+          description: Kubernetes RuntimeClassName for the sandbox pod.
+        driver_config:
+          type: object
+          additionalProperties: true
+          description: OpenShell driver-specific opaque configuration (JSON).
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: Labels applied to the sandbox compute resources.
+        annotations:
+          type: object
+          additionalProperties:
+            type: string
+          description: Annotations applied to the sandbox compute resources.
+        log_level:
+          type: string
+          description: Sandbox supervisor log verbosity (debug, info, warn, error).
+    ResourceRequirements:
+      type: object
+      properties:
+        cpu:
+          type: string
+          description: CPU request/limit in Kubernetes quantity format (e.g., "2", "500m").
+        memory:
+          type: string
+          description: Memory request/limit in Kubernetes quantity format (e.g., "4Gi", "256Mi").
+    GpuRequirements:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Number of GPUs to allocate. Default 0.
     AgentSessionList:
       allOf:
         - $ref: 'openapi.yaml#/components/schemas/List'

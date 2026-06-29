@@ -259,6 +259,29 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		podSyncErrCh <- podSyncer.Run(ctx)
 	}()
 
+	if cfg.OpenShellUseGateway {
+		cmSyncer := reconciler.NewConfigMapSyncer(factory, provisionerKube, provisioner, cfg.PlatformMode, cfg.MPPConfigNamespace, log.Logger)
+		cmSyncErrCh := make(chan error, 1)
+		go func() {
+			cmSyncErrCh <- cmSyncer.Run(ctx)
+		}()
+		log.Info().Msg("ConfigMap agent declaration syncer enabled")
+
+		select {
+		case tsErr := <-tsErrCh:
+			if tsErr != nil {
+				return fmt.Errorf("token server: %w", tsErr)
+			}
+			return <-infErrCh
+		case infErr := <-infErrCh:
+			return infErr
+		case podSyncErr := <-podSyncErrCh:
+			return fmt.Errorf("pod status syncer: %w", podSyncErr)
+		case cmSyncErr := <-cmSyncErrCh:
+			return fmt.Errorf("configmap syncer: %w", cmSyncErr)
+		}
+	}
+
 	select {
 	case tsErr := <-tsErrCh:
 		if tsErr != nil {

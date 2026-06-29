@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"encoding/json"
 	"net/http"
 	"regexp"
 
@@ -94,6 +95,36 @@ func (h agentHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			}
 			if patch.LlmMaxTokens != nil {
 				found.LlmMaxTokens = *patch.LlmMaxTokens
+			}
+			if patch.Entrypoint != nil {
+				found.Entrypoint = patch.Entrypoint
+			}
+			if patch.Providers != nil {
+				if raw, merr := json.Marshal(patch.Providers); merr == nil {
+					s := string(raw)
+					found.Providers = &s
+				}
+			}
+			if patch.Payloads != nil {
+				if raw, merr := json.Marshal(patch.Payloads); merr == nil {
+					s := string(raw)
+					found.Payloads = &s
+				}
+			}
+			if patch.Environment != nil {
+				if raw, merr := json.Marshal(patch.Environment); merr == nil {
+					s := string(raw)
+					found.Environment = &s
+				}
+			}
+			if patch.SandboxTemplate != nil {
+				if raw, merr := json.Marshal(patch.SandboxTemplate); merr == nil {
+					s := string(raw)
+					found.SandboxTemplate = &s
+				}
+			}
+			if patch.SandboxPolicy != nil {
+				found.SandboxPolicy = patch.SandboxPolicy
 			}
 			if patch.Labels != nil {
 				found.Labels = patch.Labels
