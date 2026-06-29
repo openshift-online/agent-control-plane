@@ -67,6 +67,7 @@ for TENANT in "${TENANTS[@]}"; do
     helm install openshell-gateway "$OPENSHELL_GATEWAY_CHART" \
       --namespace "$TENANT" \
       --set "pkiInitJob.serverDnsNames={openshell-gateway.${TENANT}.svc.cluster.local}" \
+      --set "server.auth.allowUnauthenticatedUsers=true" \
       --wait --timeout 120s
     echo "    Installed OpenShell gateway in '$TENANT'"
   fi
