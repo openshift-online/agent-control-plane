@@ -13,7 +13,7 @@ ARG GEMINI_CLI_VERSION=0.1.17
 
 # Install system packages: Python 3.12, git, jq, Node.js, Go, unzip (needed by CodeRabbit install script)
 # iproute provides ip-netns for OpenShell network namespace setup
-RUN dnf install -y python3 python3-pip python3-devel \
+RUN dnf upgrade -y && dnf install -y python3 python3-pip python3-devel \
     git jq nodejs npm go-toolset unzip iproute && \
     dnf clean all
 

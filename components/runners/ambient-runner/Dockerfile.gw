@@ -19,7 +19,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /sandbox
 
 # Core system dependencies
-RUN dnf install -y --nodocs --allowerasing \
+RUN dnf upgrade -y && dnf install -y --nodocs --allowerasing \
         ca-certificates \
         curl \
         bind-utils \
