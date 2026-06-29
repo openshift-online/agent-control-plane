@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { Download, Trash2, MoreVertical } from 'lucide-react'
+import { Download, Trash2, MoreVertical, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -28,37 +28,7 @@ import { useDeleteAgent } from '@/queries/use-agents'
 import { formatRelativeTime } from '@/lib/format-timestamp'
 import { TestSessionPopover } from './test-session-popover'
 import { useChatSidebar } from '@/components/chat-sidebar-context'
-
-function agentToYaml(agent: DomainAgent): string {
-  const lines: string[] = [
-    'apiVersion: ambient-code.io/v1',
-    'kind: Agent',
-    'metadata:',
-    `  name: ${agent.name}`,
-  ]
-
-  const annotationEntries = Object.entries(agent.annotations)
-  if (annotationEntries.length > 0) {
-    lines.push('  annotations:')
-    for (const [key, value] of annotationEntries) {
-      lines.push(`    ${key}: "${value}"`)
-    }
-  }
-
-  lines.push('spec:')
-  if (agent.displayName) lines.push(`  displayName: "${agent.displayName}"`)
-  if (agent.description) lines.push(`  description: "${agent.description}"`)
-  if (agent.model) lines.push(`  model: ${agent.model}`)
-  if (agent.repoUrl) lines.push(`  repoUrl: ${agent.repoUrl}`)
-  if (agent.prompt) {
-    lines.push('  prompt: |')
-    for (const promptLine of agent.prompt.split('\n')) {
-      lines.push(`    ${promptLine}`)
-    }
-  }
-
-  return lines.join('\n') + '\n'
-}
+import { agentToYaml } from '@/lib/agent-yaml'
 
 export function AgentHeader({
   agent,
@@ -133,15 +103,27 @@ export function AgentHeader({
                     <Download className="size-4 mr-2" />
                     Export YAML
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => setDeleteDialogOpen(true)}
-                    disabled={deleteAgent.isPending}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <Trash2 className="size-4 mr-2" />
-                    Delete
-                  </DropdownMenuItem>
+                  {lifecycle === 'gitops' ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground flex items-start gap-1.5">
+                        <Info className="size-3 shrink-0 mt-0.5" />
+                        <span>Managed via GitOps. To remove, delete the ConfigMap declaration.</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => setDeleteDialogOpen(true)}
+                        disabled={deleteAgent.isPending}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="size-4 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -152,6 +134,9 @@ export function AgentHeader({
               <MetaItem label="ID" value={agent.name} />
             )}
             {agent.model && <MetaItem label="Model" value={agent.model} />}
+            {lifecycle === 'gitops' && agent.annotations['ambient.ai/source-namespace'] && (
+              <MetaItem label="Namespace" value={agent.annotations['ambient.ai/source-namespace']} />
+            )}
             {agent.ownerUserId && <MetaItem label="Owner" value={agent.ownerUserId} />}
             <MetaItem label="Updated" value={formatRelativeTime(agent.updatedAt)} />
           </div>

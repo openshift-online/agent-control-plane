@@ -35,6 +35,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ARG GIT_COMMIT=unknown
 ENV NEXT_PUBLIC_GIT_COMMIT=$GIT_COMMIT
 
+ARG OPENSHELL_USE_GATEWAY=false
+ENV NEXT_PUBLIC_OPENSHELL_USE_GATEWAY=$OPENSHELL_USE_GATEWAY
+
 RUN npm run build
 
 # Prepare standalone output with OpenShift-compatible permissions in the builder

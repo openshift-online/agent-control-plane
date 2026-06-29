@@ -195,6 +195,7 @@ build-ambient-ui: ## Build ambient-ui image
 	@cd components && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
 		-f ambient-ui/Dockerfile \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		--build-arg OPENSHELL_USE_GATEWAY=$(OPENSHELL_USE_GATEWAY) \
 		-t $(AMBIENT_UI_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Ambient UI built: $(AMBIENT_UI_IMAGE)"
 
@@ -1107,6 +1108,7 @@ kind-reload-ambient-ui: check-kind check-kubectl check-local-context ## Rebuild 
 	@cd components && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) \
 		-f ambient-ui/Dockerfile \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		--build-arg OPENSHELL_USE_GATEWAY=$(OPENSHELL_USE_GATEWAY) \
 		-t $(AMBIENT_UI_IMAGE) . $(QUIET_REDIRECT)
 	$(call kind-reload-component,$(AMBIENT_UI_IMAGE),ambient-ui,Ambient UI,ambient-ui)
 

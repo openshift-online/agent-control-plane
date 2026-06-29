@@ -112,6 +112,16 @@ Class | Method | HTTP request | Description
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdGet**](docs/DefaultAPI.md#apiambientv1projectsidget) | **Get** /api/ambient/v1/projects/{id} | Get a project by id
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdHomeGet**](docs/DefaultAPI.md#apiambientv1projectsidhomeget) | **Get** /api/ambient/v1/projects/{id}/home | Project home — latest status for every Agent in this project
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidpatch) | **Patch** /api/ambient/v1/projects/{id} | Update a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdPoliciesGet**](docs/DefaultAPI.md#apiambientv1projectsidpoliciesget) | **Get** /api/ambient/v1/projects/{id}/policies | Returns a list of policies in a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdPoliciesPolicyIdDelete**](docs/DefaultAPI.md#apiambientv1projectsidpoliciespolicyiddelete) | **Delete** /api/ambient/v1/projects/{id}/policies/{policy_id} | Delete a policy from a project (internal — used by control plane reconciler)
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdPoliciesPolicyIdGet**](docs/DefaultAPI.md#apiambientv1projectsidpoliciespolicyidget) | **Get** /api/ambient/v1/projects/{id}/policies/{policy_id} | Get a policy by id
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdPoliciesPolicyIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidpoliciespolicyidpatch) | **Patch** /api/ambient/v1/projects/{id}/policies/{policy_id} | Update a policy (internal — used by control plane reconciler)
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdPoliciesPost**](docs/DefaultAPI.md#apiambientv1projectsidpoliciespost) | **Post** /api/ambient/v1/projects/{id}/policies | Create a policy in a project (internal — used by control plane reconciler)
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdProvidersGet**](docs/DefaultAPI.md#apiambientv1projectsidprovidersget) | **Get** /api/ambient/v1/projects/{id}/providers | Returns a list of providers in a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdProvidersPost**](docs/DefaultAPI.md#apiambientv1projectsidproviderspost) | **Post** /api/ambient/v1/projects/{id}/providers | Create a provider in a project (internal — used by control plane reconciler)
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdProvidersProviderIdDelete**](docs/DefaultAPI.md#apiambientv1projectsidprovidersprovideriddelete) | **Delete** /api/ambient/v1/projects/{id}/providers/{provider_id} | Delete a provider from a project (internal — used by control plane reconciler)
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdProvidersProviderIdGet**](docs/DefaultAPI.md#apiambientv1projectsidprovidersprovideridget) | **Get** /api/ambient/v1/projects/{id}/providers/{provider_id} | Get a provider by id
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdProvidersProviderIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidprovidersprovideridpatch) | **Patch** /api/ambient/v1/projects/{id}/providers/{provider_id} | Update a provider (internal — used by control plane reconciler)
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdScheduledSessionsGet**](docs/DefaultAPI.md#apiambientv1projectsidscheduledsessionsget) | **Get** /api/ambient/v1/projects/{id}/scheduled-sessions | Returns a list of scheduled sessions in a project
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdScheduledSessionsPost**](docs/DefaultAPI.md#apiambientv1projectsidscheduledsessionspost) | **Post** /api/ambient/v1/projects/{id}/scheduled-sessions | Create a scheduled session in a project
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdScheduledSessionsSsIdDelete**](docs/DefaultAPI.md#apiambientv1projectsidscheduledsessionsssiddelete) | **Delete** /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id} | Delete a scheduled session
@@ -166,6 +176,9 @@ Class | Method | HTTP request | Description
  - [List](docs/List.md)
  - [ObjectReference](docs/ObjectReference.md)
  - [Payload](docs/Payload.md)
+ - [Policy](docs/Policy.md)
+ - [PolicyList](docs/PolicyList.md)
+ - [PolicyPatchRequest](docs/PolicyPatchRequest.md)
  - [Project](docs/Project.md)
  - [ProjectHome](docs/ProjectHome.md)
  - [ProjectHomeAgent](docs/ProjectHomeAgent.md)
@@ -174,6 +187,9 @@ Class | Method | HTTP request | Description
  - [ProjectSettings](docs/ProjectSettings.md)
  - [ProjectSettingsList](docs/ProjectSettingsList.md)
  - [ProjectSettingsPatchRequest](docs/ProjectSettingsPatchRequest.md)
+ - [Provider](docs/Provider.md)
+ - [ProviderList](docs/ProviderList.md)
+ - [ProviderPatchRequest](docs/ProviderPatchRequest.md)
  - [ResourceRequirements](docs/ResourceRequirements.md)
  - [Role](docs/Role.md)
  - [RoleBinding](docs/RoleBinding.md)

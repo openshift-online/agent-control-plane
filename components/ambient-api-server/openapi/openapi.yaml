@@ -88,6 +88,14 @@ paths:
     $ref: 'openapi.scheduledSessions.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1scheduled-sessions~1{ss_id}~1trigger'
   /api/ambient/v1/projects/{id}/scheduled-sessions/{ss_id}/runs:
     $ref: 'openapi.scheduledSessions.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1scheduled-sessions~1{ss_id}~1runs'
+  /api/ambient/v1/projects/{id}/providers:
+    $ref: 'openapi.providers.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1providers'
+  /api/ambient/v1/projects/{id}/providers/{provider_id}:
+    $ref: 'openapi.providers.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1providers~1{provider_id}'
+  /api/ambient/v1/projects/{id}/policies:
+    $ref: 'openapi.policies.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1policies'
+  /api/ambient/v1/projects/{id}/policies/{policy_id}:
+    $ref: 'openapi.policies.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1policies~1{policy_id}'
   # AUTO-ADD NEW PATHS
 components:
   securitySchemes:
@@ -247,6 +255,18 @@ components:
       $ref: 'openapi.scheduledSessions.yaml#/components/schemas/ScheduledSessionList'
     ScheduledSessionPatchRequest:
       $ref: 'openapi.scheduledSessions.yaml#/components/schemas/ScheduledSessionPatchRequest'
+    Provider:
+      $ref: 'openapi.providers.yaml#/components/schemas/Provider'
+    ProviderList:
+      $ref: 'openapi.providers.yaml#/components/schemas/ProviderList'
+    ProviderPatchRequest:
+      $ref: 'openapi.providers.yaml#/components/schemas/ProviderPatchRequest'
+    Policy:
+      $ref: 'openapi.policies.yaml#/components/schemas/Policy'
+    PolicyList:
+      $ref: 'openapi.policies.yaml#/components/schemas/PolicyList'
+    PolicyPatchRequest:
+      $ref: 'openapi.policies.yaml#/components/schemas/PolicyPatchRequest'
     # AUTO-ADD NEW SCHEMAS
   parameters:
     id:

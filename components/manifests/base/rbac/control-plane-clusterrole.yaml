@@ -11,6 +11,10 @@ rules:
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["roles", "rolebindings"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# ConfigMaps (read agent/provider/policy declarations from tenant namespaces)
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
 # Session runner resources (provision/deprovision per-session workloads in project namespaces)
 - apiGroups: [""]
   resources: ["secrets", "serviceaccounts", "services", "pods"]

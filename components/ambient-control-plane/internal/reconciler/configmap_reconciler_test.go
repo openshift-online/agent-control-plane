@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/rs/zerolog"
 )
 
@@ -135,64 +134,140 @@ func TestIsConfigMapManaged(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		agent     *types.Agent
-		namespace string
-		want      bool
+		name        string
+		annotations string
+		namespace   string
+		want        bool
 	}{
 		{
-			name:      "no annotations",
-			agent:     &types.Agent{},
-			namespace: "ns-1",
-			want:      false,
+			name:        "empty annotations",
+			annotations: "",
+			namespace:   "ns-1",
+			want:        false,
 		},
 		{
 			name: "configmap-managed matching namespace",
-			agent: &types.Agent{
-				Annotations: mustJSON(map[string]string{
-					annotationSource:   annotationSourceCM,
-					annotationSourceNS: "ns-1",
-				}),
-			},
+			annotations: mustJSON(map[string]string{
+				annotationSource:   annotationSourceCM,
+				annotationSourceNS: "ns-1",
+			}),
 			namespace: "ns-1",
 			want:      true,
 		},
 		{
 			name: "configmap-managed different namespace",
-			agent: &types.Agent{
-				Annotations: mustJSON(map[string]string{
-					annotationSource:   annotationSourceCM,
-					annotationSourceNS: "ns-2",
-				}),
-			},
+			annotations: mustJSON(map[string]string{
+				annotationSource:   annotationSourceCM,
+				annotationSourceNS: "ns-2",
+			}),
 			namespace: "ns-1",
 			want:      false,
 		},
 		{
 			name: "not configmap-managed",
-			agent: &types.Agent{
-				Annotations: mustJSON(map[string]string{
-					"some-other": "annotation",
-				}),
-			},
+			annotations: mustJSON(map[string]string{
+				"some-other": "annotation",
+			}),
 			namespace: "ns-1",
 			want:      false,
 		},
 		{
-			name: "invalid JSON annotations",
-			agent: &types.Agent{
-				Annotations: "not-json",
-			},
-			namespace: "ns-1",
-			want:      false,
+			name:        "invalid JSON annotations",
+			annotations: "not-json",
+			namespace:   "ns-1",
+			want:        false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := syncer.isConfigMapManaged(tt.agent, tt.namespace)
+			got := syncer.isConfigMapManaged(tt.annotations, tt.namespace)
 			if got != tt.want {
 				t.Errorf("isConfigMapManaged() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParsePolicyDeclaration(t *testing.T) {
+	tests := []struct {
+		name     string
+		yaml     string
+		wantName string
+		wantErr  bool
+		check    func(t *testing.T, spec map[string]interface{})
+	}{
+		{
+			name:     "minimal policy",
+			yaml:     "name: my-policy\n",
+			wantName: "my-policy",
+			check: func(t *testing.T, spec map[string]interface{}) {
+				if len(spec) != 0 {
+					t.Errorf("expected empty spec, got %v", spec)
+				}
+			},
+		},
+		{
+			name: "full policy with network_policies",
+			yaml: `
+name: restricted-github-only
+network_policies:
+  github_api:
+    endpoints:
+      - host: api.github.com
+        port: 443
+filesystem:
+  read_write:
+    - /sandbox
+    - /tmp
+process:
+  run_as_user: sandbox
+`,
+			wantName: "restricted-github-only",
+			check: func(t *testing.T, spec map[string]interface{}) {
+				if _, ok := spec["network_policies"]; !ok {
+					t.Error("expected network_policies in spec")
+				}
+				if _, ok := spec["filesystem"]; !ok {
+					t.Error("expected filesystem in spec")
+				}
+				if _, ok := spec["process"]; !ok {
+					t.Error("expected process in spec")
+				}
+				if _, ok := spec["name"]; ok {
+					t.Error("name should be stripped from spec")
+				}
+			},
+		},
+		{
+			name:     "missing name",
+			yaml:     "filesystem:\n  read_write:\n    - /tmp\n",
+			wantName: "",
+		},
+		{
+			name:    "invalid YAML",
+			yaml:    "{{{not yaml",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			name, spec, err := parsePolicyDeclaration(tt.yaml)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if name != tt.wantName {
+				t.Errorf("name = %q, want %q", name, tt.wantName)
+			}
+			if tt.check != nil {
+				tt.check(t, spec)
 			}
 		})
 	}

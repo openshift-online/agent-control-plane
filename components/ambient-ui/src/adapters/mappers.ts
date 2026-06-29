@@ -22,50 +22,60 @@ function parsePhase(raw: string): SessionPhase {
   return 'Pending'
 }
 
-function parseAnnotations(raw: string): Record<string, string> {
+function parseAnnotations(raw: string | Record<string, unknown> | unknown): Record<string, string> {
   if (!raw) {
     return {}
   }
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-      const result: Record<string, string> = {}
-      for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-        result[key] = String(value)
-      }
-      return result
+  let obj: unknown = raw
+  if (typeof raw === 'string') {
+    try {
+      obj = JSON.parse(raw)
+    } catch {
+      return {}
     }
-    return {}
-  } catch {
-    return {}
   }
+  if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
+    const result: Record<string, string> = {}
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+      result[key] = String(value)
+    }
+    return result
+  }
+  return {}
 }
 
-function parseJsonArray(raw: string): unknown[] {
+function parseJsonArray(raw: string | unknown[] | unknown): unknown[] {
   if (!raw) return []
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
+  if (Array.isArray(raw)) return raw
+  if (typeof raw === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(raw)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
   }
+  return []
 }
 
-function parseJsonObject(raw: string): Record<string, string> {
+function parseJsonObject(raw: string | Record<string, unknown> | unknown): Record<string, string> {
   if (!raw) return {}
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-      const result: Record<string, string> = {}
-      for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-        result[key] = String(value)
-      }
-      return result
+  let obj: unknown = raw
+  if (typeof raw === 'string') {
+    try {
+      obj = JSON.parse(raw)
+    } catch {
+      return {}
     }
-    return {}
-  } catch {
-    return {}
   }
+  if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
+    const result: Record<string, string> = {}
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+      result[key] = String(value)
+    }
+    return result
+  }
+  return {}
 }
 
 const VALID_REPO_STATUSES: ReadonlySet<string> = new Set(['Cloning', 'Ready', 'Failed'])
@@ -169,46 +179,62 @@ export function mapSdkProjectToDomain(sdk: Project): DomainProject {
   }
 }
 
-function parseProviders(raw: string): string[] {
+function parseProviders(raw: string | string[] | unknown): string[] {
   if (!raw) return []
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (Array.isArray(parsed)) {
-      return parsed.filter((v): v is string => typeof v === 'string')
+  if (Array.isArray(raw)) {
+    return raw.filter((v): v is string => typeof v === 'string')
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        return parsed.filter((v): v is string => typeof v === 'string')
+      }
+      return []
+    } catch {
+      return []
     }
-    return []
-  } catch {
-    return []
   }
+  return []
 }
 
-function parsePayloads(raw: string): DomainPayload[] {
+function parsePayloads(raw: string | unknown[] | unknown): DomainPayload[] {
   if (!raw) return []
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed
-      .filter((v): v is Record<string, unknown> => typeof v === 'object' && v !== null)
-      .map((v) => ({
-        sandbox_path: String(v.sandbox_path ?? ''),
-        ...(v.content ? { content: String(v.content) } : {}),
-        ...(v.repo_url ? { repo_url: String(v.repo_url) } : {}),
-        ...(v.ref ? { ref: String(v.ref) } : {}),
-      }))
-  } catch {
+  let arr: unknown
+  if (Array.isArray(raw)) {
+    arr = raw
+  } else if (typeof raw === 'string') {
+    try {
+      arr = JSON.parse(raw)
+    } catch {
+      return []
+    }
+  } else {
     return []
   }
+  if (!Array.isArray(arr)) return []
+  return arr
+    .filter((v): v is Record<string, unknown> => typeof v === 'object' && v !== null)
+    .map((v) => ({
+      sandbox_path: String(v.sandbox_path ?? ''),
+      ...(v.content ? { content: String(v.content) } : {}),
+      ...(v.repo_url ? { repo_url: String(v.repo_url) } : {}),
+      ...(v.ref ? { ref: String(v.ref) } : {}),
+    }))
 }
 
-function parseSandboxTemplate(raw: string): DomainSandboxTemplate | null {
+function parseSandboxTemplate(raw: string | Record<string, unknown> | unknown): DomainSandboxTemplate | null {
   if (!raw) return null
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
-    return parsed as DomainSandboxTemplate
-  } catch {
-    return null
+  let obj: unknown = raw
+  if (typeof raw === 'string') {
+    try {
+      obj = JSON.parse(raw)
+    } catch {
+      return null
+    }
   }
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return null
+  return obj as DomainSandboxTemplate
 }
 
 export function mapSdkAgentToDomain(sdk: Agent): DomainAgent {

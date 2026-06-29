@@ -124,5 +124,6 @@ fi
 kubectl set env deployment/ambient-control-plane -n "$NAMESPACE" \
   OPENSHELL_USE_GATEWAY=true >/dev/null
 echo "  Patched ambient-control-plane with OPENSHELL_USE_GATEWAY=true"
+echo "  Note: ambient-ui gateway mode is baked in at build time via --build-arg OPENSHELL_USE_GATEWAY=true"
 
 echo "OpenShell gateway setup complete (${TENANTS[*]})."

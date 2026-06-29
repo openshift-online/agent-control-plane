@@ -1,25 +1,38 @@
-'use client'
+"use client";
 
-import { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'next/navigation'
-import type { LucideIcon } from 'lucide-react'
+import { useState, useEffect, useCallback } from "react";
+import { useParams } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
 import {
-  Pin, Tag, Ticket, GitPullRequest, GitBranch, FolderGit2,
-  Layers, ExternalLink, MessageCircle, User, Play,
-  DollarSign, Siren, Bot, AlertTriangle, Info,
-} from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+  Pin,
+  Tag,
+  Ticket,
+  GitPullRequest,
+  GitBranch,
+  FolderGit2,
+  Layers,
+  ExternalLink,
+  MessageCircle,
+  User,
+  Play,
+  DollarSign,
+  Siren,
+  Bot,
+  AlertTriangle,
+  Info,
+} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -27,55 +40,65 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
-import { getRegisteredAnnotation } from '@/domain/annotations'
-import type { DomainAgent } from '@/domain/types'
-import type { AgentLifecycle } from '../../_components/lifecycle-badge'
-import { useUpdateAgent } from '@/queries/use-agents'
-import { MODEL_OPTIONS } from '@/domain/models'
+} from "@/components/ui/table";
+import { getRegisteredAnnotation } from "@/domain/annotations";
+import type { DomainAgent } from "@/domain/types";
+import type { AgentLifecycle } from "../../_components/lifecycle-badge";
+import { useUpdateAgent } from "@/queries/use-agents";
+import { MODEL_OPTIONS } from "@/domain/models";
 
 const ICON_MAP: Record<string, LucideIcon> = {
-  pin: Pin, tag: Tag, ticket: Ticket, layers: Layers, play: Play, bot: Bot,
-  siren: Siren, user: User, 'dollar-sign': DollarSign,
-  'git-pull-request': GitPullRequest, 'git-branch': GitBranch,
-  'folder-git-2': FolderGit2, 'external-link': ExternalLink,
-  'message-circle': MessageCircle, 'alert-triangle': AlertTriangle,
-}
+  pin: Pin,
+  tag: Tag,
+  ticket: Ticket,
+  layers: Layers,
+  play: Play,
+  bot: Bot,
+  siren: Siren,
+  user: User,
+  "dollar-sign": DollarSign,
+  "git-pull-request": GitPullRequest,
+  "git-branch": GitBranch,
+  "folder-git-2": FolderGit2,
+  "external-link": ExternalLink,
+  "message-circle": MessageCircle,
+  "alert-triangle": AlertTriangle,
+};
 
 function isClickableValue(value: string): boolean {
-  return /^https?:\/\//.test(value)
+  return /^https?:\/\//.test(value);
 }
 
 export function AgentOverviewTab({
   agent,
   lifecycle,
 }: {
-  agent: DomainAgent
-  lifecycle: AgentLifecycle
+  agent: DomainAgent;
+  lifecycle: AgentLifecycle;
 }) {
-  const { projectId } = useParams<{ projectId: string }>()
-  const isGitOps = lifecycle === 'gitops'
-  const updateAgent = useUpdateAgent()
+  const { projectId } = useParams<{ projectId: string }>();
+  const isManaged = lifecycle === "gitops";
+  const updateAgent = useUpdateAgent();
 
-  const [displayName, setDisplayName] = useState(agent.displayName ?? '')
-  const [model, setModel] = useState(agent.model ?? '')
-  const [prompt, setPrompt] = useState(agent.prompt ?? '')
-  const [repoUrl, setRepoUrl] = useState(agent.repoUrl ?? '')
-  const [description, setDescription] = useState(agent.description ?? '')
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [saveSuccess, setSaveSuccess] = useState(false)
+  const [displayName, setDisplayName] = useState(agent.displayName ?? "");
+  const [model, setModel] = useState(agent.model ?? "");
+  const [prompt, setPrompt] = useState(agent.prompt ?? "");
+  const [repoUrl, setRepoUrl] = useState(agent.repoUrl ?? "");
+  const [description, setDescription] = useState(agent.description ?? "");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
-    setDisplayName(agent.displayName ?? '')
-    setModel(agent.model ?? '')
-    setPrompt(agent.prompt ?? '')
-    setRepoUrl(agent.repoUrl ?? '')
-    setDescription(agent.description ?? '')
-  }, [agent])
+    setDisplayName(agent.displayName ?? "");
+    setModel(agent.model ?? "");
+    setPrompt(agent.prompt ?? "");
+    setRepoUrl(agent.repoUrl ?? "");
+    setDescription(agent.description ?? "");
+  }, [agent]);
 
   const handleSave = useCallback(async () => {
-    setSaveError(null)
-    setSaveSuccess(false)
+    setSaveError(null);
+    setSaveSuccess(false);
     try {
       await updateAgent.mutateAsync({
         projectId,
@@ -87,25 +110,41 @@ export function AgentOverviewTab({
           repoUrl: repoUrl || undefined,
           description: description || undefined,
         },
-      })
-      setSaveSuccess(true)
-      globalThis.setTimeout(() => setSaveSuccess(false), 3000)
+      });
+      setSaveSuccess(true);
+      globalThis.setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save changes.')
+      setSaveError(
+        err instanceof Error ? err.message : "Failed to save changes.",
+      );
     }
-  }, [updateAgent, projectId, agent.id, displayName, model, prompt, repoUrl, description])
+  }, [
+    updateAgent,
+    projectId,
+    agent.id,
+    displayName,
+    model,
+    prompt,
+    repoUrl,
+    description,
+  ]);
 
-  const annotationEntries = Object.entries(agent.annotations)
+  const annotationEntries = Object.entries(agent.annotations);
 
   return (
     <div className="space-y-6 pt-4">
-      {isGitOps && (
+      {isManaged && (
         <div className="flex items-start gap-3 rounded-md border border-muted bg-muted/50 p-4">
           <Info className="size-5 shrink-0 text-muted-foreground mt-0.5" />
           <div>
             <p className="text-sm font-medium">GitOps-managed agent</p>
             <p className="text-sm text-muted-foreground">
-              This agent is managed via GitOps. Edits here will not persist.
+              This agent is managed via GitOps
+              {agent.annotations["ambient.ai/source-namespace"]
+                ? ` in namespace ${agent.annotations["ambient.ai/source-namespace"]}`
+                : ""}
+              . This is viewable only. Edits to this resource should occur via
+              the ConfigMap declaration.
             </p>
           </div>
         </div>
@@ -125,7 +164,7 @@ export function AgentOverviewTab({
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Human-readable name"
-              disabled={isGitOps}
+              disabled={isManaged}
             />
           </div>
 
@@ -133,7 +172,7 @@ export function AgentOverviewTab({
             <label htmlFor="agent-model" className="text-sm font-medium">
               Model
             </label>
-            <Select value={model} onValueChange={setModel} disabled={isGitOps}>
+            <Select value={model} onValueChange={setModel} disabled={isManaged}>
               <SelectTrigger id="agent-model" className="w-full">
                 <SelectValue placeholder="Select a model" />
               </SelectTrigger>
@@ -156,7 +195,7 @@ export function AgentOverviewTab({
               value={repoUrl}
               onChange={(e) => setRepoUrl(e.target.value)}
               placeholder="https://github.com/org/repo"
-              disabled={isGitOps}
+              disabled={isManaged}
             />
           </div>
 
@@ -170,7 +209,7 @@ export function AgentOverviewTab({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="What does this agent do?"
               className="min-h-20"
-              disabled={isGitOps}
+              disabled={isManaged}
             />
           </div>
 
@@ -184,20 +223,19 @@ export function AgentOverviewTab({
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="System prompt for the agent..."
               className="min-h-40 font-mono text-sm"
-              disabled={isGitOps}
+              disabled={isManaged}
             />
           </div>
 
-          {!isGitOps && (
+          {!isManaged && (
             <div className="flex items-center gap-3 pt-2">
-              <Button
-                onClick={handleSave}
-                disabled={updateAgent.isPending}
-              >
-                {updateAgent.isPending ? 'Saving...' : 'Save Changes'}
+              <Button onClick={handleSave} disabled={updateAgent.isPending}>
+                {updateAgent.isPending ? "Saving..." : "Save Changes"}
               </Button>
               {saveSuccess && (
-                <span className="text-sm text-success-foreground">Changes saved.</span>
+                <span className="text-sm text-success-foreground">
+                  Changes saved.
+                </span>
               )}
               {saveError && (
                 <span className="text-sm text-destructive">{saveError}</span>
@@ -224,14 +262,18 @@ export function AgentOverviewTab({
               </TableHeader>
               <TableBody>
                 {annotationEntries.map(([key, value]) => {
-                  const registered = getRegisteredAnnotation(key)
-                  const Icon = registered?.icon ? ICON_MAP[registered.icon] : null
-                  const clickable = isClickableValue(value)
+                  const registered = getRegisteredAnnotation(key);
+                  const Icon = registered?.icon
+                    ? ICON_MAP[registered.icon]
+                    : null;
+                  const clickable = isClickableValue(value);
                   return (
                     <TableRow key={key}>
                       <TableCell className="font-mono text-xs">
                         <span className="inline-flex items-center gap-1.5">
-                          {Icon && <Icon className="size-3.5 shrink-0 text-muted-foreground" />}
+                          {Icon && (
+                            <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+                          )}
                           {registered ? registered.label : key}
                         </span>
                       </TableCell>
@@ -250,7 +292,7 @@ export function AgentOverviewTab({
                         )}
                       </TableCell>
                     </TableRow>
-                  )
+                  );
                 })}
               </TableBody>
             </Table>
@@ -277,5 +319,5 @@ export function AgentOverviewTab({
         </Card>
       )}
     </div>
-  )
+  );
 }

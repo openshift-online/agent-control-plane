@@ -23,6 +23,9 @@ docs/InboxMessagePatchRequest.md
 docs/List.md
 docs/ObjectReference.md
 docs/Payload.md
+docs/Policy.md
+docs/PolicyList.md
+docs/PolicyPatchRequest.md
 docs/Project.md
 docs/ProjectHome.md
 docs/ProjectHomeAgent.md
@@ -31,6 +34,9 @@ docs/ProjectPatchRequest.md
 docs/ProjectSettings.md
 docs/ProjectSettingsList.md
 docs/ProjectSettingsPatchRequest.md
+docs/Provider.md
+docs/ProviderList.md
+docs/ProviderPatchRequest.md
 docs/ResourceRequirements.md
 docs/Role.md
 docs/RoleBinding.md
@@ -72,6 +78,9 @@ model_inbox_message_patch_request.go
 model_list.go
 model_object_reference.go
 model_payload.go
+model_policy.go
+model_policy_list.go
+model_policy_patch_request.go
 model_project.go
 model_project_home.go
 model_project_home_agent.go
@@ -80,6 +89,9 @@ model_project_patch_request.go
 model_project_settings.go
 model_project_settings_list.go
 model_project_settings_patch_request.go
+model_provider.go
+model_provider_list.go
+model_provider_patch_request.go
 model_resource_requirements.go
 model_role.go
 model_role_binding.go

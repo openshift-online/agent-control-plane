@@ -10,12 +10,15 @@ import { EmptyState } from '@/components/empty-state'
 import { useAgents } from '@/queries/use-agents'
 import { AgentsTable } from './_components/agents-table'
 import { CreateAgentSheet } from './_components/create-agent-sheet'
+import { ConfigMapSummaryBar } from './_components/configmap-summary-bar'
+import { useGatewayMode } from '@/lib/use-gateway-mode'
 
 export default function AgentsPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const [search, setSearch] = useState('')
   const [createSheetOpen, setCreateSheetOpen] = useState(false)
   const { data, isLoading, error } = useAgents(projectId)
+  const gatewayMode = useGatewayMode()
 
   if (error) {
     return (
@@ -49,17 +52,19 @@ export default function AgentsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
           <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
             <Plus className="size-4" />
-            New Agent
+            {gatewayMode ? 'Generate Agent YAML' : 'New Agent'}
           </Button>
         </div>
         <EmptyState
           icon={Bot}
           title="No agents"
-          description="This project has no agents yet."
+          description={gatewayMode
+            ? 'No agents have been declared via GitOps yet.'
+            : 'This project has no agents yet.'}
           action={
             <Button onClick={() => setCreateSheetOpen(true)}>
               <Plus className="size-4 mr-1.5" />
-              Create Agent
+              {gatewayMode ? 'Generate Agent YAML' : 'Create Agent'}
             </Button>
           }
         />
@@ -73,18 +78,19 @@ export default function AgentsPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
         <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
+            <Plus className="size-4" />
+            {gatewayMode ? 'Generate Agent YAML' : 'New Agent'}
+          </Button>
           <Input
             placeholder="Filter by name, model, or owner..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="max-w-xs"
           />
-          <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
-            <Plus className="size-4" />
-            New Agent
-          </Button>
         </div>
       </div>
+      {gatewayMode && <ConfigMapSummaryBar projectId={projectId} />}
       <AgentsTable
         agents={agents}
         searchFilter={search}

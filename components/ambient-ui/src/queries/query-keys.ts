@@ -76,4 +76,22 @@ export const queryKeys = {
     runs: (projectId: string, id: string) =>
       [...queryKeys.scheduledSessions.all, 'runs', projectId, id] as const,
   },
+  providers: {
+    all: ['providers'] as const,
+    lists: () => [...queryKeys.providers.all, 'list'] as const,
+    list: (projectId: string) =>
+      [...queryKeys.providers.lists(), projectId] as const,
+    details: () => [...queryKeys.providers.all, 'detail'] as const,
+    detail: (projectId: string, id: string) =>
+      [...queryKeys.providers.details(), projectId, id] as const,
+  },
+  policies: {
+    all: ['policies'] as const,
+    lists: () => [...queryKeys.policies.all, 'list'] as const,
+    list: (projectId: string) =>
+      [...queryKeys.policies.lists(), projectId] as const,
+    details: () => [...queryKeys.policies.all, 'detail'] as const,
+    detail: (projectId: string, id: string) =>
+      [...queryKeys.policies.details(), projectId, id] as const,
+  },
 } as const

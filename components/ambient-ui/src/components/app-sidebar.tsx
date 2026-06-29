@@ -9,11 +9,13 @@ import {
   CalendarClock,
   Bot,
   KeyRound,
+  Shield,
   Settings,
   Moon,
   Sun,
 } from 'lucide-react'
 import { useSessions } from '@/queries/use-sessions'
+import { useGatewayMode } from '@/lib/use-gateway-mode'
 import { getAttentionItems } from '@/app/(dashboard)/[projectId]/_components/dashboard-helpers'
 import { ProjectSelector } from '@/components/project-selector'
 import { Button } from '@/components/ui/button'
@@ -122,12 +124,21 @@ export function AppSidebar({ projectId, effectiveProjectId }: AppSidebarProps) {
   const pathname = usePathname()
   const { theme, setTheme } = useTheme()
   const { data: sessionsData } = useSessions(effectiveProjectId ?? '', undefined)
+  const gatewayMode = useGatewayMode()
 
   const operateBadges = (() => {
     if (!sessionsData?.items) return undefined
     const count = getAttentionItems(sessionsData.items).length
     return count > 0 ? { Dashboard: count } : undefined
   })()
+
+  const effectiveBuildNavItems: readonly NavItem[] = gatewayMode
+    ? [
+        ...buildNavItems,
+        { label: 'Providers', icon: KeyRound, href: 'providers' },
+        { label: 'Policies', icon: Shield, href: 'policies' },
+      ]
+    : buildNavItems
 
   return (
     <Sidebar>
@@ -141,10 +152,14 @@ export function AppSidebar({ projectId, effectiveProjectId }: AppSidebarProps) {
 
       <SidebarContent>
         <NavGroup label="Operate" items={operateNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} badgeCounts={operateBadges} />
-        <NavGroup label="Build" items={buildNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
+        <NavGroup label={gatewayMode ? 'Config' : 'Build'} items={effectiveBuildNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
         <NavGroup label="Project" items={projectNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
-        <Separator className="mx-2 my-1" />
-        <NavGroup label="Admin" items={configureNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
+        {!gatewayMode && (
+          <>
+            <Separator className="mx-2 my-1" />
+            <NavGroup label="Admin" items={configureNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
+          </>
+        )}
       </SidebarContent>
 
       <SidebarFooter>

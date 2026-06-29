@@ -1,21 +1,25 @@
 'use client'
 
-import { GitBranch, CircleDashed } from 'lucide-react'
+import { FileStack, CircleDashed } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-
-const MANAGED_BY_KEY = 'ambient-code.io/managed-by'
 
 export type AgentLifecycle = 'unmanaged' | 'gitops'
 
 export function getAgentLifecycle(annotations: Record<string, string>): AgentLifecycle {
-  return annotations[MANAGED_BY_KEY] === 'gitops' ? 'gitops' : 'unmanaged'
+  if (
+    annotations['ambient.ai/source'] === 'configmap' ||
+    annotations['ambient-code.io/managed-by'] === 'gitops'
+  ) {
+    return 'gitops'
+  }
+  return 'unmanaged'
 }
 
 export function LifecycleBadge({ lifecycle }: { lifecycle: AgentLifecycle }) {
   if (lifecycle === 'gitops') {
     return (
-      <Badge variant="secondary" className="gap-1 text-muted-foreground">
-        <GitBranch className="size-3" />
+      <Badge variant="secondary" className="gap-1 text-blue-600 dark:text-blue-400">
+        <FileStack className="size-3" />
         GitOps
       </Badge>
     )

@@ -331,3 +331,28 @@ export type DomainScheduledSessionUpdateRequest = {
   stopOnRunFinished?: boolean
   runnerType?: string
 }
+
+export type DomainProvider = {
+  id: string
+  name: string
+  type: string
+  secret: string
+  namespace: string
+  projectId: string
+  annotations: Record<string, string>
+  labels: Record<string, string>
+  createdAt: string
+  updatedAt: string
+}
+
+export type DomainPolicy = {
+  id: string
+  name: string
+  namespace: string
+  projectId: string
+  spec: Record<string, unknown>
+  annotations: Record<string, string>
+  labels: Record<string, string>
+  createdAt: string
+  updatedAt: string
+}
