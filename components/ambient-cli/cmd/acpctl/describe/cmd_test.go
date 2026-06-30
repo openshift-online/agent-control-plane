@@ -160,3 +160,86 @@ func TestDescribeOutputIsJSON(t *testing.T) {
 		t.Errorf("expected JSON output (starts with '{'), got: %s", result.Stdout)
 	}
 }
+
+func TestDescribeProvider(t *testing.T) {
+	srv := testhelper.NewServer(t)
+	srv.Handle("/api/ambient/v1/projects/"+testhelper.TestProject+"/providers/prov1", func(w http.ResponseWriter, r *http.Request) {
+		srv.RespondJSON(t, w, http.StatusOK, &types.Provider{
+			ObjectReference: types.ObjectReference{ID: "prov1"},
+			Name:            "github-provider",
+			Type:            "github",
+			Secret:          "gh-secret",
+		})
+	})
+
+	testhelper.Configure(t, srv.URL)
+	result := testhelper.Run(t, Cmd, "provider", "prov1")
+	if result.Err != nil {
+		t.Fatalf("unexpected error: %v", result.Err)
+	}
+	if !strings.Contains(result.Stdout, `"github-provider"`) {
+		t.Errorf("expected 'github-provider' in JSON, got: %s", result.Stdout)
+	}
+	if !strings.Contains(result.Stdout, `"github"`) {
+		t.Errorf("expected type 'github' in JSON, got: %s", result.Stdout)
+	}
+}
+
+func TestDescribeProvider_Aliases(t *testing.T) {
+	srv := testhelper.NewServer(t)
+	srv.Handle("/api/ambient/v1/projects/"+testhelper.TestProject+"/providers/prov1", func(w http.ResponseWriter, r *http.Request) {
+		srv.RespondJSON(t, w, http.StatusOK, &types.Provider{
+			ObjectReference: types.ObjectReference{ID: "prov1"},
+			Name:            "p",
+		})
+	})
+
+	for _, alias := range []string{"provider", "providers"} {
+		testhelper.Configure(t, srv.URL)
+		result := testhelper.Run(t, Cmd, alias, "prov1")
+		if result.Err != nil {
+			t.Errorf("alias %q: unexpected error: %v", alias, result.Err)
+		}
+	}
+}
+
+func TestDescribePolicy(t *testing.T) {
+	srv := testhelper.NewServer(t)
+	srv.Handle("/api/ambient/v1/projects/"+testhelper.TestProject+"/policies/pol1", func(w http.ResponseWriter, r *http.Request) {
+		srv.RespondJSON(t, w, http.StatusOK, &types.Policy{
+			ObjectReference: types.ObjectReference{ID: "pol1"},
+			Name:            "default-policy",
+			Namespace:       "ambient-code",
+		})
+	})
+
+	testhelper.Configure(t, srv.URL)
+	result := testhelper.Run(t, Cmd, "policy", "pol1")
+	if result.Err != nil {
+		t.Fatalf("unexpected error: %v", result.Err)
+	}
+	if !strings.Contains(result.Stdout, `"default-policy"`) {
+		t.Errorf("expected 'default-policy' in JSON, got: %s", result.Stdout)
+	}
+	if !strings.Contains(result.Stdout, `"ambient-code"`) {
+		t.Errorf("expected namespace 'ambient-code' in JSON, got: %s", result.Stdout)
+	}
+}
+
+func TestDescribePolicy_Aliases(t *testing.T) {
+	srv := testhelper.NewServer(t)
+	srv.Handle("/api/ambient/v1/projects/"+testhelper.TestProject+"/policies/pol1", func(w http.ResponseWriter, r *http.Request) {
+		srv.RespondJSON(t, w, http.StatusOK, &types.Policy{
+			ObjectReference: types.ObjectReference{ID: "pol1"},
+			Name:            "p",
+		})
+	})
+
+	for _, alias := range []string{"policy", "policies"} {
+		testhelper.Configure(t, srv.URL)
+		result := testhelper.Run(t, Cmd, alias, "pol1")
+		if result.Err != nil {
+			t.Errorf("alias %q: unexpected error: %v", alias, result.Err)
+		}
+	}
+}

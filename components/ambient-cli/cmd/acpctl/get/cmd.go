@@ -37,13 +37,15 @@ Valid resource types:
   project-settings    (aliases: projectsettings, ps)
   users               (aliases: user, usr)
   agents              (aliases: agent)
+  providers           (aliases: provider)
+  policies            (aliases: policy)
   roles               (aliases: role)
   role-bindings       (aliases: role-binding, rb)
   credentials         (aliases: credential, cred)
 `,
 	Args:    cobra.RangeArgs(1, 2),
 	RunE:    run,
-	Example: "  acpctl get sessions\n  acpctl get session my-session-id\n  acpctl get projects -o json\n  acpctl get agents\n  acpctl get project-agents --project-id <id>\n  acpctl get sessions -w  # Watch for real-time session changes",
+	Example: "  acpctl get sessions\n  acpctl get session my-session-id\n  acpctl get projects -o json\n  acpctl get agents\n  acpctl get providers\n  acpctl get policies\n  acpctl get project-agents --project-id <id>\n  acpctl get sessions -w  # Watch for real-time session changes",
 }
 
 var projectAgentArgs struct {
@@ -132,6 +134,10 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 			return fmt.Errorf("no project set; use --project-id or run 'acpctl config set project <name>'")
 		}
 		return getAgentsByProject(ctx, client, printer, pid, name)
+	case "providers":
+		return getProviders(ctx, client, printer, name)
+	case "policies":
+		return getPolicies(ctx, client, printer, name)
 	case "roles":
 		return getRoles(ctx, client, printer, name)
 	case "role-bindings":
@@ -139,7 +145,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	case "credentials":
 		return getCredentials(ctx, client, printer, name)
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-agents, project-settings, users, agents, roles, role-bindings, credentials", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-agents, project-settings, users, agents, providers, policies, roles, role-bindings, credentials", cmdArgs[0])
 	}
 }
 
@@ -157,6 +163,10 @@ func normalizeResource(r string) string {
 		return "users"
 	case "agent", "agents":
 		return "agents"
+	case "provider", "providers":
+		return "providers"
+	case "policy", "policies":
+		return "policies"
 	case "role", "roles":
 		return "roles"
 	case "role-binding", "role-bindings", "rolebinding", "rolebindings", "rb":
@@ -508,6 +518,90 @@ func printCredentialTable(printer *output.Printer, credentials []sdktypes.Creden
 			age = output.FormatAge(time.Since(*c.CreatedAt))
 		}
 		table.WriteRow(c.ID, c.Name, c.Provider, c.Description, age)
+	}
+	return nil
+}
+
+func getProviders(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
+	if name != "" {
+		provider, err := client.Providers().Get(ctx, name)
+		if err != nil {
+			return fmt.Errorf("get provider %q: %w", name, err)
+		}
+		if printer.Format() == output.FormatJSON {
+			return printer.PrintJSON(provider)
+		}
+		return printProviderTable(printer, []sdktypes.Provider{*provider})
+	}
+	opts := sdktypes.NewListOptions().Size(args.limit).Build()
+	list, err := client.Providers().List(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("list providers: %w", err)
+	}
+	if printer.Format() == output.FormatJSON {
+		return printer.PrintJSON(list)
+	}
+	return printProviderTable(printer, list.Items)
+}
+
+func printProviderTable(printer *output.Printer, providers []sdktypes.Provider) error {
+	columns := []output.Column{
+		{Name: "ID", Width: 27},
+		{Name: "NAME", Width: 24},
+		{Name: "TYPE", Width: 12},
+		{Name: "SECRET", Width: 20},
+		{Name: "NAMESPACE", Width: 20},
+		{Name: "AGE", Width: 10},
+	}
+	table := output.NewTable(printer.Writer(), columns)
+	table.WriteHeaders()
+	for _, p := range providers {
+		age := ""
+		if p.CreatedAt != nil {
+			age = output.FormatAge(time.Since(*p.CreatedAt))
+		}
+		table.WriteRow(p.ID, p.Name, p.Type, p.Secret, p.Namespace, age)
+	}
+	return nil
+}
+
+func getPolicies(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
+	if name != "" {
+		policy, err := client.Policys().Get(ctx, name)
+		if err != nil {
+			return fmt.Errorf("get policy %q: %w", name, err)
+		}
+		if printer.Format() == output.FormatJSON {
+			return printer.PrintJSON(policy)
+		}
+		return printPolicyTable(printer, []sdktypes.Policy{*policy})
+	}
+	opts := sdktypes.NewListOptions().Size(args.limit).Build()
+	list, err := client.Policys().List(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("list policies: %w", err)
+	}
+	if printer.Format() == output.FormatJSON {
+		return printer.PrintJSON(list)
+	}
+	return printPolicyTable(printer, list.Items)
+}
+
+func printPolicyTable(printer *output.Printer, policies []sdktypes.Policy) error {
+	columns := []output.Column{
+		{Name: "ID", Width: 27},
+		{Name: "NAME", Width: 24},
+		{Name: "NAMESPACE", Width: 20},
+		{Name: "AGE", Width: 10},
+	}
+	table := output.NewTable(printer.Writer(), columns)
+	table.WriteHeaders()
+	for _, p := range policies {
+		age := ""
+		if p.CreatedAt != nil {
+			age = output.FormatAge(time.Since(*p.CreatedAt))
+		}
+		table.WriteRow(p.ID, p.Name, p.Namespace, age)
 	}
 	return nil
 }

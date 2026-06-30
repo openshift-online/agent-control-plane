@@ -278,3 +278,148 @@ func TestGetProjects_Aliases(t *testing.T) {
 		}
 	}
 }
+
+func TestGetProviders_List(t *testing.T) {
+	srv := testhelper.NewServer(t)
+	srv.Handle("/api/ambient/v1/projects/"+testhelper.TestProject+"/providers", func(w http.ResponseWriter, r *http.Request) {
+		srv.RespondJSON(t, w, http.StatusOK, &types.ProviderList{
+			ListMeta: types.ListMeta{Total: 2},
+			Items: []types.Provider{
+				{
+					ObjectReference: types.ObjectReference{ID: "prov1", CreatedAt: makeTime("2026-01-01T00:00:00Z")},
+					Name:            "github-provider",
+					Type:            "github",
+					Secret:          "gh-secret",
+					Namespace:       "default",
+					ProjectID:       testhelper.TestProject,
+				},
+				{
+					ObjectReference: types.ObjectReference{ID: "prov2", CreatedAt: makeTime("2026-01-02T00:00:00Z")},
+					Name:            "anthropic-provider",
+					Type:            "anthropic",
+					ProjectID:       testhelper.TestProject,
+				},
+			},
+		})
+	})
+
+	testhelper.Configure(t, srv.URL)
+	result := testhelper.Run(t, Cmd, "providers")
+	if result.Err != nil {
+		t.Fatalf("unexpected error: %v\nstdout: %s\nstderr: %s", result.Err, result.Stdout, result.Stderr)
+	}
+	if !strings.Contains(result.Stdout, "github-provider") {
+		t.Errorf("expected 'github-provider' in output, got: %s", result.Stdout)
+	}
+	if !strings.Contains(result.Stdout, "anthropic-provider") {
+		t.Errorf("expected 'anthropic-provider' in output, got: %s", result.Stdout)
+	}
+}
+
+func TestGetProviders_Single(t *testing.T) {
+	srv := testhelper.NewServer(t)
+	srv.Handle("/api/ambient/v1/projects/"+testhelper.TestProject+"/providers/prov1", func(w http.ResponseWriter, r *http.Request) {
+		srv.RespondJSON(t, w, http.StatusOK, &types.Provider{
+			ObjectReference: types.ObjectReference{ID: "prov1"},
+			Name:            "github-provider",
+			Type:            "github",
+			ProjectID:       testhelper.TestProject,
+		})
+	})
+
+	testhelper.Configure(t, srv.URL)
+	result := testhelper.Run(t, Cmd, "provider", "prov1")
+	if result.Err != nil {
+		t.Fatalf("unexpected error: %v", result.Err)
+	}
+	if !strings.Contains(result.Stdout, "github-provider") {
+		t.Errorf("expected 'github-provider' in output, got: %s", result.Stdout)
+	}
+}
+
+func TestGetProviders_JSON(t *testing.T) {
+	srv := testhelper.NewServer(t)
+	srv.Handle("/api/ambient/v1/projects/"+testhelper.TestProject+"/providers", func(w http.ResponseWriter, r *http.Request) {
+		srv.RespondJSON(t, w, http.StatusOK, &types.ProviderList{
+			Items: []types.Provider{
+				{ObjectReference: types.ObjectReference{ID: "prov1"}, Name: "github-provider", Type: "github"},
+			},
+		})
+	})
+
+	testhelper.Configure(t, srv.URL)
+	result := testhelper.Run(t, Cmd, "providers", "-o", "json")
+	if result.Err != nil {
+		t.Fatalf("unexpected error: %v", result.Err)
+	}
+	if !strings.Contains(result.Stdout, `"github-provider"`) {
+		t.Errorf("expected JSON with 'github-provider', got: %s", result.Stdout)
+	}
+}
+
+func TestGetPolicies_List(t *testing.T) {
+	srv := testhelper.NewServer(t)
+	srv.Handle("/api/ambient/v1/projects/"+testhelper.TestProject+"/policies", func(w http.ResponseWriter, r *http.Request) {
+		srv.RespondJSON(t, w, http.StatusOK, &types.PolicyList{
+			ListMeta: types.ListMeta{Total: 1},
+			Items: []types.Policy{
+				{
+					ObjectReference: types.ObjectReference{ID: "pol1", CreatedAt: makeTime("2026-01-01T00:00:00Z")},
+					Name:            "default-policy",
+					Namespace:       "ambient-code",
+					ProjectID:       testhelper.TestProject,
+				},
+			},
+		})
+	})
+
+	testhelper.Configure(t, srv.URL)
+	result := testhelper.Run(t, Cmd, "policies")
+	if result.Err != nil {
+		t.Fatalf("unexpected error: %v\nstdout: %s\nstderr: %s", result.Err, result.Stdout, result.Stderr)
+	}
+	if !strings.Contains(result.Stdout, "default-policy") {
+		t.Errorf("expected 'default-policy' in output, got: %s", result.Stdout)
+	}
+}
+
+func TestGetPolicies_Single(t *testing.T) {
+	srv := testhelper.NewServer(t)
+	srv.Handle("/api/ambient/v1/projects/"+testhelper.TestProject+"/policies/pol1", func(w http.ResponseWriter, r *http.Request) {
+		srv.RespondJSON(t, w, http.StatusOK, &types.Policy{
+			ObjectReference: types.ObjectReference{ID: "pol1"},
+			Name:            "default-policy",
+			Namespace:       "ambient-code",
+			ProjectID:       testhelper.TestProject,
+		})
+	})
+
+	testhelper.Configure(t, srv.URL)
+	result := testhelper.Run(t, Cmd, "policy", "pol1")
+	if result.Err != nil {
+		t.Fatalf("unexpected error: %v", result.Err)
+	}
+	if !strings.Contains(result.Stdout, "default-policy") {
+		t.Errorf("expected 'default-policy' in output, got: %s", result.Stdout)
+	}
+}
+
+func TestGetPolicies_JSON(t *testing.T) {
+	srv := testhelper.NewServer(t)
+	srv.Handle("/api/ambient/v1/projects/"+testhelper.TestProject+"/policies", func(w http.ResponseWriter, r *http.Request) {
+		srv.RespondJSON(t, w, http.StatusOK, &types.PolicyList{
+			Items: []types.Policy{
+				{ObjectReference: types.ObjectReference{ID: "pol1"}, Name: "sandbox-policy"},
+			},
+		})
+	})
+
+	testhelper.Configure(t, srv.URL)
+	result := testhelper.Run(t, Cmd, "policies", "-o", "json")
+	if result.Err != nil {
+		t.Fatalf("unexpected error: %v", result.Err)
+	}
+	if !strings.Contains(result.Stdout, `"sandbox-policy"`) {
+		t.Errorf("expected JSON with 'sandbox-policy', got: %s", result.Stdout)
+	}
+}

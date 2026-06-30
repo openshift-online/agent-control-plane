@@ -23,6 +23,8 @@ Valid resource types:
   project-settings  (aliases: ps)
   user              (aliases: usr)
   agent             (aliases: agents)
+  provider          (aliases: providers)
+  policy            (aliases: policies)
   role
   role-binding      (aliases: rb)
   credential        (aliases: cred)`,
@@ -106,7 +108,21 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		}
 		return printer.PrintJSON(cred)
 
+	case "provider", "providers":
+		provider, err := client.Providers().Get(ctx, name)
+		if err != nil {
+			return fmt.Errorf("describe provider %q: %w", name, err)
+		}
+		return printer.PrintJSON(provider)
+
+	case "policy", "policies":
+		policy, err := client.Policys().Get(ctx, name)
+		if err != nil {
+			return fmt.Errorf("describe policy %q: %w", name, err)
+		}
+		return printer.PrintJSON(policy)
+
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-settings, user, agent, role, role-binding, credential", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-settings, user, agent, provider, policy, role, role-binding, credential", cmdArgs[0])
 	}
 }
