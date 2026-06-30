@@ -18,6 +18,32 @@ IFS=' ' read -ra TENANTS <<< "${OPENSHELL_TENANTS:-tenant-a tenant-b}"
 
 echo "Setting up OpenShell gateway prerequisites (tenants: ${TENANTS[*]})..."
 
+# 0. Suppress IPv6 (AAAA) DNS for all external domains in CoreDNS.
+#    Kind on Podman has no IPv6 connectivity. The OpenShell supervisor's DNS
+#    resolver tries IPv6 first and fails without falling back to IPv4, causing
+#    503 on inference calls (Vertex AI) and DENIED on api.anthropic.com, github.com, etc.
+echo "  Patching CoreDNS to suppress AAAA records (IPv4-only)..."
+kubectl get configmap coredns -n kube-system -o json \
+  | python3 -c '
+import json, sys, re
+cm = json.load(sys.stdin)
+corefile = cm["data"]["Corefile"]
+if "template IN AAAA" not in corefile:
+    corefile = re.sub(
+        r"([ \t]+forward \. /etc/resolv\.conf)",
+        "        template IN AAAA {\n"
+        "            rcode NOERROR\n"
+        "        }\n"
+        r"\1",
+        corefile,
+    )
+    cm["data"]["Corefile"] = corefile
+json.dump(cm, sys.stdout)
+' | kubectl apply -f - >/dev/null 2>&1
+kubectl rollout restart deployment coredns -n kube-system >/dev/null 2>&1
+kubectl rollout status deployment coredns -n kube-system --timeout=60s >/dev/null 2>&1
+echo "  CoreDNS patched (IPv4-only for all external domains)"
+
 # 1. Install Agent Sandbox CRD + controller (once, cluster-scoped)
 echo "  Installing agent-sandbox CRD ${AGENT_SANDBOX_VERSION}..."
 kubectl apply -f "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/${AGENT_SANDBOX_VERSION}/manifest.yaml"

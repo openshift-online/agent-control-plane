@@ -421,9 +421,16 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				Msg("sandbox is ready, starting runner via exec")
 
 			execCtx := context.Background()
+			// Patch ndots before starting the runner. The OpenShell supervisor is
+			// statically linked with musl libc, whose getaddrinfo sends A+AAAA
+			// queries simultaneously. With Kubernetes' default ndots:5, external
+			// FQDNs get expanded through all search domains first, causing musl's
+			// DNS resolver to mishandle the many concurrent responses and return
+			// zero usable addresses (manifests as 503 "inference service unavailable").
+			// Setting ndots:1 makes musl resolve FQDNs directly.
 			err = r.gateway.ExecSandboxStreaming(execCtx, namespace, &openshellpb.ExecSandboxRequest{
 				SandboxId: sandboxID,
-				Command:   []string{"/bin/bash", "-c", "cd /sandbox/runner/ambient-runner && PATH=/sandbox/.venv/bin:$PATH uvicorn main:app --host 0.0.0.0 --port 8001"},
+				Command:   []string{"/bin/bash", "-c", "sed -i 's/ndots:[0-9]*/ndots:1/' /etc/resolv.conf 2>/dev/null; cd /sandbox/runner/ambient-runner && PATH=/sandbox/.venv/bin:$PATH uvicorn main:app --host 0.0.0.0 --port 8001"},
 			})
 			if err != nil {
 				r.logger.Error().Err(err).Str("sandbox", sbxName).Str("session_id", sessionID).Msg("failed to start runner exec")
@@ -603,6 +610,7 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 		"USE_AGUI":                    "true",
 		"DEBUG":                       "true",
 		"LOG_LEVEL":                   r.cfg.RunnerLogLevel,
+		"RUST_LOG":                    "info",
 		"AMBIENT_CP_TOKEN_URL":        r.cfg.CPTokenURL,
 		"AMBIENT_CP_TOKEN_PUBLIC_KEY": base64.StdEncoding.EncodeToString([]byte(r.cfg.CPTokenPublicKey)),
 		"AMBIENT_GRPC_URL":            r.cfg.RunnerGRPCURL,
