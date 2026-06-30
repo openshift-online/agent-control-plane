@@ -483,10 +483,10 @@ function makeSdkAgent(overrides: Partial<Agent> = {}): Agent {
     resource_overrides: '',
     workflow_id: 'wf-1',
     entrypoint: '',
-    providers: '',
-    payloads: '',
+    providers: [],
+    payloads: [],
     environment: '',
-    sandbox_template: '',
+    sandbox_template: {},
     sandbox_policy: '',
     ...overrides,
   }
