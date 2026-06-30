@@ -1,11 +1,19 @@
 #!/bin/bash
+# Claude-specific wrapper for OpenShell sandboxes.
+#
+# ANTHROPIC_BASE_URL, ANTHROPIC_API_KEY, HTTPS_PROXY, NODE_EXTRA_CA_CERTS,
+# and other proxy/TLS vars are set at the sandbox level by the control plane
+# reconciler and the OpenShell supervisor — they apply to all tools, not just
+# Claude. This wrapper only handles Claude Code-specific setup.
 # Guard against infinite recursion: this script is installed as /usr/local/bin/claude,
 # so when Claude Code spawns subagents that invoke `claude` by name, PATH resolves
-# back here. Skip the wrapper setup on re-entry and exec the real binary directly.
-if [ -n "$_CLAUDE_WRAPPER_ACTIVE" ]; then
+# back here. A file-based guard is used instead of an env var because the sandbox
+# supervisor spawns each command in a clean environment that does not inherit exports.
+GUARD="/tmp/.claude-wrapper-initialized"
+if [ -f "$GUARD" ]; then
     exec /opt/claude/bin/claude "$@"
 fi
-export _CLAUDE_WRAPPER_ACTIVE=1
+touch "$GUARD"
 
 export HOME=/sandbox
 export ANTHROPIC_BASE_URL=https://inference.local
