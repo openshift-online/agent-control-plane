@@ -16,7 +16,7 @@
 .DEFAULT_GOAL := help
 
 # Configuration
-CONTAINER_ENGINE ?= podman
+CONTAINER_ENGINE ?= $(shell command -v podman >/dev/null 2>&1 && echo podman || echo docker)
 
 # Auto-detect host architecture for native builds
 # Override with PLATFORM=linux/amd64 or PLATFORM=linux/arm64 if needed
