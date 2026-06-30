@@ -154,10 +154,13 @@ export function SandboxConfigFields({
             </label>
             <Input
               id="sandbox-image"
-              placeholder="quay.io/custom:v1"
+              placeholder="quay.io/ambient_code/ambient_runner_openshell:latest"
               value={state.image}
               onChange={(e) => update({ image: e.target.value })}
             />
+            <p className="text-xs text-muted-foreground">
+              Images must be from an allowed registry: <code className="text-[11px] bg-muted px-1 py-0.5 rounded">quay.io/ambient_code/</code> or <code className="text-[11px] bg-muted px-1 py-0.5 rounded">ghcr.io/nvidia/</code>. Images from other registries will be rejected.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

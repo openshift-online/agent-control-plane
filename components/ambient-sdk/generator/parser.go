@@ -352,6 +352,39 @@ func extractFields(schemaMap map[string]interface{}) ([]Field, []string, error) 
 				}
 			}
 
+			goType := toGoType(propType, propFormat, nullable)
+			pyType := toPythonType(propType, propFormat, nullable)
+			tsType := toTSType(propType, propFormat)
+			if ref, ok := propMap["$ref"].(string); ok && propType == "" {
+				refName := refToTypeName(ref)
+				goType = "*" + refName
+				pyType = "dict"
+				tsType = "Record<string, unknown>"
+			}
+			if propType == "object" {
+				if addProps, ok := propMap["additionalProperties"]; ok {
+					if addPropsMap, ok := addProps.(map[string]interface{}); ok {
+						if valueType, ok := addPropsMap["type"].(string); ok {
+							goType = "map[string]" + toGoType(valueType, "", false)
+						}
+					}
+				}
+			}
+			if propType == "array" {
+				if items, ok := propMap["items"].(map[string]interface{}); ok {
+					if ref, ok := items["$ref"].(string); ok {
+						refName := refToTypeName(ref)
+						goType = "[]" + refName
+						pyType = "list[dict]"
+						tsType = "Array<Record<string, unknown>>"
+					} else if itemType, ok := items["type"].(string); ok {
+						goType = "[]" + toGoType(itemType, "", false)
+						pyType = "list[" + toPythonType(itemType, "", false) + "]"
+						tsType = toTSType(itemType, "") + "[]"
+					}
+				}
+			}
+
 			f := Field{
 				Name:       propName,
 				GoName:     toGoName(propName),
@@ -359,9 +392,9 @@ func extractFields(schemaMap map[string]interface{}) ([]Field, []string, error) 
 				TSName:     toCamelCase(propName),
 				Type:       propType,
 				Format:     propFormat,
-				GoType:     toGoType(propType, propFormat, nullable),
-				PythonType: toPythonType(propType, propFormat, nullable),
-				TSType:     toTSType(propType, propFormat),
+				GoType:     goType,
+				PythonType: pyType,
+				TSType:     tsType,
 				Required:   isRequired,
 				Nullable:   nullable,
 				ReadOnly:   readOnly,
@@ -401,6 +434,30 @@ func extractPatchFields(schemaMap map[string]interface{}) ([]Field, []string, er
 		propFormat, _ := propMap["format"].(string)
 		propNullable, _ := propMap["nullable"].(bool)
 
+		goType := toGoType(propType, propFormat, propNullable)
+		pyType := toPythonType(propType, propFormat, propNullable)
+		tsType := toTSType(propType, propFormat)
+		if ref, ok := propMap["$ref"].(string); ok && propType == "" {
+			refName := refToTypeName(ref)
+			goType = "*" + refName
+			pyType = "dict"
+			tsType = "Record<string, unknown>"
+		}
+		if propType == "array" {
+			if items, ok := propMap["items"].(map[string]interface{}); ok {
+				if ref, ok := items["$ref"].(string); ok {
+					refName := refToTypeName(ref)
+					goType = "[]" + refName
+					pyType = "list[dict]"
+					tsType = "Array<Record<string, unknown>>"
+				} else if itemType, ok := items["type"].(string); ok {
+					goType = "[]" + toGoType(itemType, "", false)
+					pyType = "list[" + toPythonType(itemType, "", false) + "]"
+					tsType = toTSType(itemType, "") + "[]"
+				}
+			}
+		}
+
 		f := Field{
 			Name:       propName,
 			GoName:     toGoName(propName),
@@ -408,9 +465,9 @@ func extractPatchFields(schemaMap map[string]interface{}) ([]Field, []string, er
 			TSName:     toCamelCase(propName),
 			Type:       propType,
 			Format:     propFormat,
-			GoType:     toGoType(propType, propFormat, propNullable),
-			PythonType: toPythonType(propType, propFormat, propNullable),
-			TSType:     toTSType(propType, propFormat),
+			GoType:     goType,
+			PythonType: pyType,
+			TSType:     tsType,
 			Required:   false,
 			Nullable:   propNullable,
 			JSONTag:    jsonTag(propName, false),

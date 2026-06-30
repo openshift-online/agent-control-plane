@@ -58,6 +58,7 @@ type ControlPlaneConfig struct {
 	OpenShellGatewayTLSServerName   string
 	ServiceIdentity                 string
 	CACertFile                      string
+	AllowedSandboxRegistries        []string
 }
 
 func Load() (*ControlPlaneConfig, error) {
@@ -76,7 +77,7 @@ func Load() (*ControlPlaneConfig, error) {
 		OIDCClientID:                    os.Getenv("OIDC_CLIENT_ID"),
 		OIDCClientSecret:                os.Getenv("OIDC_CLIENT_SECRET"),
 		Reconcilers:                     parseReconcilers(envOrDefault("RECONCILERS", "tally,kube")),
-		RunnerImage:                     envOrDefault("RUNNER_IMAGE", "quay.io/ambient_code/acp_claude_runner:latest"),
+		RunnerImage:                     envOrDefault("RUNNER_IMAGE", "quay.io/ambient_code/ambient_runner_openshell:latest"),
 		RunnerGRPCUseTLS:                os.Getenv("AMBIENT_GRPC_USE_TLS") == "true",
 		Namespace:                       envOrDefault("NAMESPACE", "ambient-code"),
 		AnthropicAPIKey:                 os.Getenv("ANTHROPIC_API_KEY"),
@@ -112,6 +113,7 @@ func Load() (*ControlPlaneConfig, error) {
 		OpenShellGatewayTLSServerName:   os.Getenv("OPENSHELL_GATEWAY_TLS_SERVER_NAME"),
 		ServiceIdentity:                 strings.TrimSpace(os.Getenv("GRPC_SERVICE_ACCOUNT")),
 		CACertFile:                      envOrDefault("CA_CERT_FILE", "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"),
+		AllowedSandboxRegistries:        parseAllowedRegistries(os.Getenv("ALLOWED_SANDBOX_REGISTRIES")),
 	}
 
 	if cfg.MCPAPIServerURL == "" {
@@ -154,6 +156,29 @@ func envOrDefaultInt(key string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+var defaultAllowedSandboxRegistries = []string{
+	"quay.io/ambient_code/",
+	"ghcr.io/nvidia/",
+}
+
+func parseAllowedRegistries(val string) []string {
+	if val == "" {
+		return defaultAllowedSandboxRegistries
+	}
+	parts := strings.Split(val, ",")
+	var result []string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	if len(result) == 0 {
+		return defaultAllowedSandboxRegistries
+	}
+	return result
 }
 
 func parseReconcilers(reconcilersStr string) []string {

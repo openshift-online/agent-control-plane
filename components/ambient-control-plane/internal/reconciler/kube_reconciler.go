@@ -68,39 +68,40 @@ var credentialSidecarRegistry = map[string]credentialSidecarSpec{
 }
 
 type KubeReconcilerConfig struct {
-	RunnerImage           string
-	RunnerGRPCURL         string
-	RunnerGRPCUseTLS      bool
-	AnthropicAPIKey       string
-	VertexEnabled         bool
-	VertexProjectID       string
-	VertexRegion          string
-	VertexCredentialsPath string
-	VertexSecretName      string
-	VertexSecretNamespace string
-	RunnerImageNamespace  string
-	MCPImage              string
-	MCPAPIServerURL       string
-	GitHubMCPImage        string
-	JiraMCPImage          string
-	K8sMCPImage           string
-	GoogleMCPImage        string
-	RunnerLogLevel        string
-	CPRuntimeNamespace    string
-	CPTokenURL            string
-	CPTokenPublicKey      string
-	HTTPProxy             string
-	HTTPSProxy            string
-	NoProxy               string
-	ImagePullSecret       string
-	PlatformMode          string
-	MPPConfigNamespace    string
-	OpenShellEnabled      bool
-	OpenShellUseGateway   bool
-	OpenShellRunnerImage  string
-	OpenShellPolicyName   string
-	ServiceIdentity       string
-	CACertFile            string
+	RunnerImage              string
+	RunnerGRPCURL            string
+	RunnerGRPCUseTLS         bool
+	AnthropicAPIKey          string
+	VertexEnabled            bool
+	VertexProjectID          string
+	VertexRegion             string
+	VertexCredentialsPath    string
+	VertexSecretName         string
+	VertexSecretNamespace    string
+	RunnerImageNamespace     string
+	MCPImage                 string
+	MCPAPIServerURL          string
+	GitHubMCPImage           string
+	JiraMCPImage             string
+	K8sMCPImage              string
+	GoogleMCPImage           string
+	RunnerLogLevel           string
+	CPRuntimeNamespace       string
+	CPTokenURL               string
+	CPTokenPublicKey         string
+	HTTPProxy                string
+	HTTPSProxy               string
+	NoProxy                  string
+	ImagePullSecret          string
+	PlatformMode             string
+	MPPConfigNamespace       string
+	OpenShellEnabled         bool
+	OpenShellUseGateway      bool
+	OpenShellRunnerImage     string
+	OpenShellPolicyName      string
+	ServiceIdentity          string
+	CACertFile               string
+	AllowedSandboxRegistries []string
 }
 
 type SimpleKubeReconciler struct {
@@ -391,29 +392,30 @@ func (r *SimpleKubeReconciler) resolveEntrypoint(agent *types.Agent) []string {
 }
 
 func (r *SimpleKubeReconciler) resolveSandboxImage(agent *types.Agent) string {
-	if agent != nil && agent.SandboxTemplate != "" {
-		var tpl struct {
-			Image string `json:"image"`
+	if agent != nil && agent.SandboxTemplate != nil && agent.SandboxTemplate.Image != "" {
+		if !r.isAllowedRegistry(agent.SandboxTemplate.Image) {
+			r.logger.Warn().Str("agent", agent.Name).Str("image", agent.SandboxTemplate.Image).Strs("allowed", r.cfg.AllowedSandboxRegistries).Msg("sandbox image not in allowed registries, using default image")
+			return r.cfg.RunnerImage
 		}
-		if err := json.Unmarshal([]byte(agent.SandboxTemplate), &tpl); err != nil {
-			r.logger.Warn().Err(err).Str("agent", agent.Name).Msg("failed to parse sandbox_template JSON, using default image")
-		} else if tpl.Image != "" {
-			return tpl.Image
-		}
+		return agent.SandboxTemplate.Image
 	}
 	return r.cfg.OpenShellRunnerImage
 }
 
+func (r *SimpleKubeReconciler) isAllowedRegistry(image string) bool {
+	for _, prefix := range r.cfg.AllowedSandboxRegistries {
+		if strings.HasPrefix(image, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *SimpleKubeReconciler) mergeAgentEnvironment(env map[string]string, agent *types.Agent) {
-	if agent == nil || agent.Environment == "" {
+	if agent == nil || len(agent.Environment) == 0 {
 		return
 	}
-	var agentEnv map[string]string
-	if err := json.Unmarshal([]byte(agent.Environment), &agentEnv); err != nil {
-		r.logger.Warn().Err(err).Msg("failed to parse agent environment")
-		return
-	}
-	for k, v := range agentEnv {
+	for k, v := range agent.Environment {
 		if _, exists := env[k]; !exists {
 			env[k] = v
 		}
@@ -1639,7 +1641,10 @@ func (r *SimpleKubeReconciler) resolveCredentialIDs(ctx context.Context, sdk *sd
 	// If no bindings found, return empty result (no credentials injected)
 	totalBindings := len(agentBindings) + len(projectBindings) + len(globalBindings)
 	if totalBindings == 0 {
-		r.logger.Info().Str("project_id", projectID).Msg("no credential bindings found for project; no credentials will be injected")
+		// Only log when NOT using gateway - gateway resolves credentials from agent provider declarations
+		if !r.cfg.OpenShellUseGateway {
+			r.logger.Info().Str("project_id", projectID).Msg("no credential bindings found for project; no credentials will be injected")
+		}
 		return map[string]string{}, nil
 	}
 

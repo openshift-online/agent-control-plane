@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -287,6 +288,79 @@ func TestCredentialSidecarsGating_GatewayMode(t *testing.T) {
 				t.Errorf("shouldCallBuildCredentialSidecars = %v, want %v", shouldCall, tt.shouldBuildSidecars)
 			}
 		})
+	}
+}
+
+func TestResolveSandboxImage_AllowedRegistry(t *testing.T) {
+	r := &SimpleKubeReconciler{
+		cfg: KubeReconcilerConfig{
+			RunnerImage:              "quay.io/ambient_code/ambient_runner_openshell:latest",
+			AllowedSandboxRegistries: []string{"quay.io/ambient_code/", "ghcr.io/nvidia/"},
+		},
+	}
+	r.logger = r.logger.With().Logger()
+
+	tests := []struct {
+		name     string
+		template *types.SandboxTemplate
+		expected string
+	}{
+		{
+			name:     "allowed quay.io/ambient_code image",
+			template: &types.SandboxTemplate{Image: "quay.io/ambient_code/custom-runner:v2"},
+			expected: "quay.io/ambient_code/custom-runner:v2",
+		},
+		{
+			name:     "allowed ghcr.io/nvidia image",
+			template: &types.SandboxTemplate{Image: "ghcr.io/nvidia/cuda-runner:12.0"},
+			expected: "ghcr.io/nvidia/cuda-runner:12.0",
+		},
+		{
+			name:     "blocked docker.io image falls back to default",
+			template: &types.SandboxTemplate{Image: "docker.io/attacker/malware:latest"},
+			expected: "quay.io/ambient_code/ambient_runner_openshell:latest",
+		},
+		{
+			name:     "blocked unqualified image falls back to default",
+			template: &types.SandboxTemplate{Image: "malicious:latest"},
+			expected: "quay.io/ambient_code/ambient_runner_openshell:latest",
+		},
+		{
+			name:     "nil template uses default",
+			template: nil,
+			expected: "quay.io/ambient_code/ambient_runner_openshell:latest",
+		},
+		{
+			name:     "empty image uses default",
+			template: &types.SandboxTemplate{},
+			expected: "quay.io/ambient_code/ambient_runner_openshell:latest",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent := &types.Agent{Name: "test-agent", SandboxTemplate: tt.template}
+			result := r.resolveSandboxImage(agent)
+			if result != tt.expected {
+				t.Errorf("resolveSandboxImage() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestResolveSandboxImage_EmptyAllowlist(t *testing.T) {
+	r := &SimpleKubeReconciler{
+		cfg: KubeReconcilerConfig{
+			RunnerImage:              "quay.io/ambient_code/ambient_runner_openshell:latest",
+			AllowedSandboxRegistries: []string{},
+		},
+	}
+	r.logger = r.logger.With().Logger()
+
+	agent := &types.Agent{Name: "test-agent", SandboxTemplate: &types.SandboxTemplate{Image: "quay.io/ambient_code/runner:v1"}}
+	result := r.resolveSandboxImage(agent)
+	if result != "quay.io/ambient_code/ambient_runner_openshell:latest" {
+		t.Errorf("empty allowlist should block all images, got %q", result)
 	}
 }
 

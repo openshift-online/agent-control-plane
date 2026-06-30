@@ -64,6 +64,7 @@ func (g *GatewayClient) getOrCreateConn(ctx context.Context, namespace string) (
 	if err != nil {
 		return nil, fmt.Errorf("resolving TLS credentials for namespace %s: %w", namespace, err)
 	}
+
 	conn, err = grpc.NewClient(target, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		return nil, fmt.Errorf("dialing gateway at %s: %w", target, err)

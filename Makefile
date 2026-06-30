@@ -1117,14 +1117,16 @@ kind-reload-ambient-control-plane: check-kind check-kubectl check-local-context 
 	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
 		-f components/ambient-control-plane/Dockerfile \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
-		-t $(CONTROL_PLANE_IMAGE) components $(QUIET_REDIRECT)
+		-t $(CONTROL_PLANE_IMAGE) components $(QUIET_REDIRECT) || \
+		{ echo "$(COLOR_RED)✗$(COLOR_RESET) Build failed. Run without QUIET=1 for full output."; exit 1; }
 	$(call kind-reload-component,$(CONTROL_PLANE_IMAGE),ambient-control-plane,Ambient control plane,ambient-control-plane)
 
 kind-reload-ambient-api-server: check-kind check-kubectl check-local-context ## Rebuild and reload ambient-api-server only (kind)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding ambient-api-server..."
 	@cd components/ambient-api-server && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
-		-t $(API_SERVER_IMAGE) . $(QUIET_REDIRECT)
+		-t $(API_SERVER_IMAGE) . $(QUIET_REDIRECT) || \
+		{ echo "$(COLOR_RED)✗$(COLOR_RESET) Build failed. Run without QUIET=1 for full output."; exit 1; }
 	$(call kind-reload-component,$(API_SERVER_IMAGE),ambient-api-server,Ambient API server,api-server)
 	@_IMG=$$(kubectl get deployment ambient-api-server -n $(NAMESPACE) -o jsonpath='{.spec.template.spec.containers[0].image}') && \
 		kubectl set image deployment/ambient-api-server -n $(NAMESPACE) migration=$$_IMG $(QUIET_REDIRECT) && \
