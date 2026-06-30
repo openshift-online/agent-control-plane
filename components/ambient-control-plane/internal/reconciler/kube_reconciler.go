@@ -628,26 +628,20 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 		env["IS_RESUME"] = "true"
 	}
 
-	useVertex := "0"
-	if r.cfg.VertexEnabled {
-		useVertex = "1"
-		if r.cfg.OpenShellUseGateway {
-			// In gateway mode the supervisor proxy handles all inference via
-			// inference.local — Claude Code must NOT set USE_VERTEX or
-			// CLAUDE_CODE_USE_VERTEX, because those flags make it bypass the
-			// proxy and attempt direct Vertex AI connections with GCP credential
-			// discovery, which will fail inside the sandbox. The gateway's
-			// configured provider handles the Vertex routing transparently.
-			env["ACP_OPENSHELL_INFERENCE"] = "true"
-		} else {
-			env["ANTHROPIC_VERTEX_PROJECT_ID"] = r.cfg.VertexProjectID
-			env["CLOUD_ML_REGION"] = r.cfg.VertexRegion
-			env["USE_VERTEX"] = useVertex
-			env["CLAUDE_CODE_USE_VERTEX"] = useVertex
-			env["GOOGLE_APPLICATION_CREDENTIALS"] = r.cfg.VertexCredentialsPath
-			env["GCE_METADATA_HOST"] = "metadata.invalid"
-			env["GCE_METADATA_TIMEOUT"] = "1"
-		}
+	if r.cfg.OpenShellUseGateway {
+		// In gateway mode the supervisor proxy handles all inference via
+		// inference.local — regardless of provider (Vertex, Anthropic, etc.).
+		// The runner must activate inference routing mode so requests go
+		// through the proxy instead of directly to the provider API.
+		env["ACP_OPENSHELL_INFERENCE"] = "true"
+	} else if r.cfg.VertexEnabled {
+		env["USE_VERTEX"] = "1"
+		env["CLAUDE_CODE_USE_VERTEX"] = "1"
+		env["ANTHROPIC_VERTEX_PROJECT_ID"] = r.cfg.VertexProjectID
+		env["CLOUD_ML_REGION"] = r.cfg.VertexRegion
+		env["GOOGLE_APPLICATION_CREDENTIALS"] = r.cfg.VertexCredentialsPath
+		env["GCE_METADATA_HOST"] = "metadata.invalid"
+		env["GCE_METADATA_TIMEOUT"] = "1"
 	}
 
 	if prompt := r.assembleInitialPrompt(ctx, session, sdk); prompt != "" {

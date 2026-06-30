@@ -749,7 +749,7 @@ class ClaudeBridge(PlatformBridge):
         }
 
         if os.getenv("OPENSHELL_ENABLED") == "true":
-            options["cli_path"] = "/app/openshell-claude-wrapper.sh"
+            options["cli_path"] = "/app/standard-claude-wrapper.sh"
 
         if self._add_dirs:
             options["add_dirs"] = self._add_dirs

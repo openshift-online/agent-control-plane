@@ -252,7 +252,7 @@ operation.
   - `/var/run/netns` directory with mode 777 (for network namespace mount points)
   - `/workspace` directory owned by `sandbox:sandbox`
   - `/usr/local/bin/claude` symlink to the bundled Claude CLI binary
-  - `/app/openshell-claude-wrapper.sh` wrapper script
+  - `/app/standard-claude-wrapper.sh` wrapper script
 
 ---
 

@@ -62,20 +62,21 @@ RUN npm install -g \
         @openai/codex@0.117.0 \
         @github/copilot@1.0.16
 
-# GitHub CLI (pinned binary download with SHA256 verification)
+# GitHub CLI (pinned binary download with pre-committed SHA256 checksums)
 ARG GH_VERSION=2.74.0
-RUN ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
-    TARBALL="gh_${GH_VERSION}_linux_${ARCH}.tar.gz" && \
+ARG GH_CHECKSUM_AMD64=e55c9d49dc49c0b0fef0a9acd3510482fd9e27ff52ae80f8a6e838cd25b4cd89
+ARG GH_CHECKSUM_ARM64=221222bd00281ab993f7e2c19b9f3f2482d66fa759baedcd8668785c940c8df7
+ARG TARGETARCH
+RUN TARBALL="gh_${GH_VERSION}_linux_${TARGETARCH}.tar.gz" && \
+    CHECKSUM=$(eval echo \$GH_CHECKSUM_$(echo ${TARGETARCH} | tr '[:lower:]' '[:upper:]')) && \
     curl -fsSL -o "/tmp/${TARBALL}" "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${TARBALL}" && \
-    EXPECTED=$(curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_checksums.txt" \
-      | grep "${TARBALL}" | awk '{print $1}') && \
-    echo "${EXPECTED}  /tmp/${TARBALL}" | sha256sum -c - && \
+    echo "${CHECKSUM}  /tmp/${TARBALL}" | sha256sum -c - && \
     tar -xzf "/tmp/${TARBALL}" -C /usr/local/bin --strip-components=2 "${TARBALL%.tar.gz}/bin/gh" && \
     chmod +x /usr/local/bin/gh && \
     rm -f "/tmp/${TARBALL}"
 
 # uv (Python package/project manager)
-COPY --from=ghcr.io/astral-sh/uv:0.10.8 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv@sha256:88234bc9e09c2b2f6d176a3daf411419eb0370d450a08129257410de9cfafd2a /uv /usr/local/bin/uv
 ENV UV_PYTHON_INSTALL_DIR="/sandbox/.uv/python"
 RUN uv python install 3.14.3 && \
     ln -s $(uv python find 3.14.3) /usr/local/bin/python3 && \
@@ -120,7 +121,7 @@ RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     && ln -sf /opt/claude/bin/claude /sandbox/.local/bin/claude \
     && chown -R sandbox:sandbox /sandbox/.local
 
-COPY --chmod=755 claude-wrapper.sh /usr/local/bin/claude
+COPY --chmod=755 openshell-claude-wrapper.sh /usr/local/bin/claude
 
 COPY policy.yaml /etc/openshell/policy.yaml
 

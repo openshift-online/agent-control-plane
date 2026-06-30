@@ -50,8 +50,8 @@ WORKDIR /app
 COPY . /app/ambient-runner
 
 # OpenShell wrapper script (dispatches to supervisor or direct claude based on OPENSHELL_ENABLED)
-COPY openshell-claude-wrapper.sh /app/openshell-claude-wrapper.sh
-RUN chmod +x /app/openshell-claude-wrapper.sh
+COPY standard-claude-wrapper.sh /app/standard-claude-wrapper.sh
+RUN chmod +x /app/standard-claude-wrapper.sh
 
 # Install runner as a package, then remove build-only deps in same layer
 RUN pip3 install --break-system-packages --no-cache-dir '/app/ambient-runner[all]' && \

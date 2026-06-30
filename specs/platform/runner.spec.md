@@ -538,11 +538,11 @@ Rego + YAML files mounted from a ConfigMap. No OpenShell Gateway is required.
 ```
 Runner Pod (FastAPI + uvicorn) — runs UNSANDBOXED
   │
-  └── bridge.py sets cli_path = /app/openshell-claude-wrapper.sh
+  └── bridge.py sets cli_path = /app/standard-claude-wrapper.sh
         │
         └── Claude Agent SDK spawns wrapper as subprocess
               │
-              └── openshell-claude-wrapper.sh
+              └── standard-claude-wrapper.sh
                     │
                     └── exec /openshell-sandbox \
                           --policy-rules /etc/openshell/policy.rego \
@@ -667,7 +667,7 @@ In gateway mode, the control plane configures the gateway's [inference routing](
 
 Before configuring providers or inference, the control plane enables `providers_v2_enabled=true` on the gateway via `UpdateConfig`. This is required for gateway versions 0.0.72+ to proxy inference traffic correctly. The control plane then iterates all bound credentials and configures inference routing for every inference-capable provider type (e.g., `google-vertex-ai`, `claude`, `anthropic`, `nvidia`, `openai`, `aws-bedrock`). For each qualifying provider, it calls `SetClusterInference` with `provider_name`, `model_id` (derived from `session.LlmModel`, defaulting to `claude-sonnet-4-6`), and `no_verify=true`.
 
-The gateway's privacy router uses these settings to route inference requests through the configured provider, injecting credentials transparently. In gateway mode, the control plane does NOT set `USE_VERTEX`, `CLAUDE_CODE_USE_VERTEX`, or `ANTHROPIC_VERTEX_PROJECT_ID` in the sandbox environment — per the [OpenShell Vertex AI docs](https://docs.nvidia.com/openshell/providers/google-vertex-ai), setting these flags inside sandboxes causes Claude Code to bypass the gateway proxy and attempt direct Vertex AI connections with GCP credential discovery, which fails because sandboxes don't expose GCP credentials. The gateway handles Vertex routing transparently via the configured provider.
+The gateway's privacy router uses these settings to route inference requests through the configured provider, injecting credentials transparently. In gateway mode, the control plane sets `ACP_OPENSHELL_INFERENCE=true` for **all** provider types — not only Vertex. This ensures the runner activates inference routing mode regardless of which credential backend is configured (Vertex, Anthropic, NVIDIA, OpenAI, AWS Bedrock, etc.). The control plane does NOT set `USE_VERTEX`, `CLAUDE_CODE_USE_VERTEX`, or `ANTHROPIC_VERTEX_PROJECT_ID` in the sandbox environment — per the [OpenShell Vertex AI docs](https://docs.nvidia.com/openshell/providers/google-vertex-ai), setting these flags inside sandboxes causes Claude Code to bypass the gateway proxy and attempt direct connections with credential discovery, which fails because sandboxes don't expose provider credentials. The gateway handles routing transparently via the configured provider.
 
 See `openshell-sandbox-provisioning.spec.md` § Inference Configuration via SetClusterInference and § Providers V2 Enablement for the full requirements.
 
@@ -734,8 +734,8 @@ Both short (`svc`) and fully-qualified (`svc.cluster.local`) hostnames must be l
 | File | Component | Change |
 |------|-----------|--------|
 | `Dockerfile` | Runner | Added `openshell-sandbox` v0.0.56 binary, `sandbox` user, `/workspace` dir, `/usr/local/bin/claude` symlink, `iproute` package |
-| `openshell-claude-wrapper.sh` | Runner | Wrapper script: dispatches to supervisor or direct claude based on `OPENSHELL_ENABLED` |
-| `bridges/claude/bridge.py` | Runner | `cli_path = "/app/openshell-claude-wrapper.sh"` when OpenShell enabled |
+| `standard-claude-wrapper.sh` | Runner | Wrapper script: dispatches to supervisor or direct claude based on `OPENSHELL_ENABLED` |
+| `bridges/claude/bridge.py` | Runner | `cli_path = "/app/standard-claude-wrapper.sh"` when OpenShell enabled |
 | `.openshell-ref/policy.rego` | Runner | Official OPA Rego policy from OpenShell repository |
 | `.openshell-ref/policy.yaml` | Runner | Network + filesystem + process policy data |
 | `internal/reconciler/kube_reconciler.go` | Control Plane | `buildRunnerSecurityContext`, `buildVolumes`, `buildVolumeMounts`, `buildEnv`, `ensureOpenShellPolicy` |
