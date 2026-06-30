@@ -91,17 +91,15 @@ For Vertex AI / Google service account JSON:
 
 ```bash
 components/ambient-cli/acpctl credential create \
-  --name vertex-sa --provider google-vertex-ai \
-  --token "$(cat vertex.json.b64)"
+  --name vertex-sa --provider vertex \
+  --token "$(cat vertex.json)"
 ```
 
-If you only have the raw JSON file:
-
-```bash
-components/ambient-cli/acpctl credential create \
-  --name vertex-sa --provider google-vertex-ai \
-  --token "$(base64 -w0 vertex.json)"
-```
+> **Important:** The token must be the **raw JSON** contents of the service
+> account key file, not base64-encoded. The control plane parses it as JSON
+> to extract `client_email` and `private_key` for credential refresh. A
+> base64-encoded token causes `invalid character 'e' looking for beginning
+> of value` errors.
 
 #### Bind to a tenant (workaround for CLI bug)
 
@@ -137,6 +135,21 @@ curl -s -X POST \
     \"project_id\": \"tenant-a\"
   }"
 ```
+
+### Step 3b — Set Vertex AI Config on Control Plane
+
+The gateway requires `VERTEX_AI_PROJECT_ID` and `CLOUD_ML_REGION` for inference
+routing. Set these on the control plane deployment:
+
+```bash
+kubectl set env deployment/ambient-control-plane -n ambient-code \
+  ANTHROPIC_VERTEX_PROJECT_ID=<your-gcp-project-id> \
+  CLOUD_ML_REGION=us-east5
+kubectl rollout status deployment/ambient-control-plane -n ambient-code --timeout=60s
+```
+
+The `project_id` value comes from your service account JSON file. The region
+must match where your Vertex AI API is enabled.
 
 ### Step 4 — Create a Session
 
