@@ -323,7 +323,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		return fmt.Errorf("ensuring gateway providers: %w", err)
 	}
 
-	if err := r.configureInference(ctx, namespace, project.Name, credentialIDs); err != nil {
+	if err := r.configureInference(ctx, namespace, project.Name, session.LlmModel, credentialIDs); err != nil {
 		return fmt.Errorf("configuring inference: %w", err)
 	}
 
@@ -562,9 +562,11 @@ func (r *SimpleKubeReconciler) ensureVertexCredentialRefresh(ctx context.Context
 	return nil
 }
 
-func (r *SimpleKubeReconciler) configureInference(ctx context.Context, namespace, projectName string, credentialIDs map[string]string) error {
-	// TODO: allow model to be configured per-session via session.LlmModel
-	const inferenceModel = "claude-sonnet-4-6"
+func (r *SimpleKubeReconciler) configureInference(ctx context.Context, namespace, projectName, sessionModel string, credentialIDs map[string]string) error {
+	inferenceModel := sessionModel
+	if inferenceModel == "" {
+		inferenceModel = "claude-sonnet-4-6"
+	}
 
 	for ambientProvider := range credentialIDs {
 		if !openshell.IsInferenceCapable(ambientProvider) {
