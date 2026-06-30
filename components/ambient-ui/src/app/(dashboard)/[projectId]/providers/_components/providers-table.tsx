@@ -49,10 +49,9 @@ const providerColumns = [
       <span className="font-mono text-xs">{info.getValue()}</span>
     ),
   }),
-  col.display({
+  col.accessor('updatedAt', {
     id: 'lastUpdated',
     header: 'Last Updated',
-    enableSorting: true,
     sortingFn: (rowA, rowB) =>
       new Date(rowA.original.updatedAt).getTime() -
       new Date(rowB.original.updatedAt).getTime(),

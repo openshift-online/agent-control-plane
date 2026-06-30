@@ -78,8 +78,16 @@ export default function FleetPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Sessions</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">Sessions</h1>
+          <Input
+            placeholder="Filter by name, agent, or model..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-80"
+          />
+        </div>
         <div className="flex items-center gap-2">
           {testSessionCount > 0 && (
             <Button
@@ -94,12 +102,6 @@ export default function FleetPage() {
                 : `Show test runs (${testSessionCount})`}
             </Button>
           )}
-          <Input
-            placeholder="Filter by name, agent, or model..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="max-w-xs"
-          />
           <Button onClick={() => setCreateOpen(true)} size="sm">
             <Plus className="mr-1.5 size-4" />
             New Session

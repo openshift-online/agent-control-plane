@@ -337,4 +337,4 @@ export function getStaleMinutes(session: DomainSession): number | null {
   return Math.floor((Date.now() - new Date(session.updatedAt).getTime()) / 60000)
 }
 
-export const ROW_GRID_TEMPLATE = 'grid-cols-[4px_minmax(160px,240px)_1fr_72px_110px_80px_88px]'
+export const ROW_GRID_TEMPLATE = 'grid-cols-[4px_minmax(160px,200px)_1fr_72px_110px_110px_88px]'

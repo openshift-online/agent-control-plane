@@ -54,7 +54,7 @@ export default function PoliciesPage() {
         <EmptyState
           icon={Shield}
           title="No policies"
-          description="No sandbox policies have been declared yet. Create a ConfigMap with label ambient.ai/kind: policy and apply it with kubectl."
+          description="No policies have been declared via GitOps yet."
           action={
             <Button onClick={() => setCreateSheetOpen(true)}>
               <Plus className="size-4 mr-1.5" />
@@ -73,19 +73,19 @@ export default function PoliciesPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Policies</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
-            <Plus className="size-4" />
-            Generate Policy YAML
-          </Button>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">Policies</h1>
           <Input
-            placeholder="Filter by name or namespace..."
+            placeholder="Filter by name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="max-w-xs"
+            className="w-80"
           />
         </div>
+        <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
+          <Plus className="size-4" />
+          Generate Policy YAML
+        </Button>
       </div>
       <PoliciesTable policies={policies} searchFilter={search} />
       <CreatePolicySheet

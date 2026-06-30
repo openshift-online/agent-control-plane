@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { KeyRound, Shield } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useProviders } from '@/queries/use-providers'
@@ -17,16 +18,20 @@ export function ConfigMapSummaryBar({ projectId }: { projectId: string }) {
   return (
     <div className="flex items-center gap-3 text-sm text-muted-foreground">
       {providerCount > 0 && (
-        <Badge variant="secondary" className="gap-1">
-          <KeyRound className="size-3" />
-          {providerCount} {providerCount === 1 ? 'Provider' : 'Providers'}
-        </Badge>
+        <Link href={`/${projectId}/providers`}>
+          <Badge variant="secondary" className="gap-1 cursor-pointer hover:bg-secondary/80">
+            <KeyRound className="size-3" />
+            {providerCount} {providerCount === 1 ? 'Provider' : 'Providers'}
+          </Badge>
+        </Link>
       )}
       {policyCount > 0 && (
-        <Badge variant="secondary" className="gap-1">
-          <Shield className="size-3" />
-          {policyCount} {policyCount === 1 ? 'Policy' : 'Policies'}
-        </Badge>
+        <Link href={`/${projectId}/policies`}>
+          <Badge variant="secondary" className="gap-1 cursor-pointer hover:bg-secondary/80">
+            <Shield className="size-3" />
+            {policyCount} {policyCount === 1 ? 'Policy' : 'Policies'}
+          </Badge>
+        </Link>
       )}
     </div>
   )

@@ -76,19 +76,19 @@ export default function AgentsPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
-            <Plus className="size-4" />
-            {gatewayMode ? 'Generate Agent YAML' : 'New Agent'}
-          </Button>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
           <Input
             placeholder="Filter by name, model, or owner..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="max-w-xs"
+            className="w-80"
           />
         </div>
+        <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
+          <Plus className="size-4" />
+          {gatewayMode ? 'Generate Agent YAML' : 'New Agent'}
+        </Button>
       </div>
       {gatewayMode && <ConfigMapSummaryBar projectId={projectId} />}
       <AgentsTable

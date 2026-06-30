@@ -79,10 +79,9 @@ const agentColumns = [
       )
     },
   }),
-  col.display({
+  col.accessor('updatedAt', {
     id: 'lastUpdated',
     header: 'Last Updated',
-    enableSorting: true,
     sortingFn: (rowA, rowB) => {
       return new Date(rowA.original.updatedAt).getTime() - new Date(rowB.original.updatedAt).getTime()
     },

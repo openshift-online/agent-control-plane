@@ -171,6 +171,9 @@ export function CreateSessionSheet({
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              Overrides the agent&apos;s configured default model
+            </p>
           </div>
 
           <button
