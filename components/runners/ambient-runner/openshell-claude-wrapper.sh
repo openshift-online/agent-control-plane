@@ -28,4 +28,4 @@ if [ ! -f /sandbox/.claude/settings.json ]; then
     printf '{"theme":"dark"}\n' > /sandbox/.claude/settings.json
 fi
 
-exec /opt/claude/bin/claude --bare "$@"
+exec /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe --bare "$@"

@@ -13,6 +13,12 @@ patches:
     version: v1
     kind: Deployment
     name: ambient-api-server
+- path: control-plane-local-images-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-control-plane
 
 # Override imagePullPolicy to IfNotPresent for all deployments
 - path: image-pull-policy-patch.yaml
