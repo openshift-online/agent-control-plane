@@ -475,34 +475,13 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				Msg("sandbox is ready, executing entrypoint")
 
 			execCtx := context.Background()
-
 			// Patch ndots before starting the runner. The OpenShell supervisor is
 			// statically linked with musl libc, whose getaddrinfo sends A+AAAA
 			// queries simultaneously. With Kubernetes' default ndots:5, external
 			// FQDNs get expanded through all search domains first, causing musl's
 			// DNS resolver to mishandle the many concurrent responses and return
-			// zero usable addresses (manifests as NET:FAIL on inference.local).
+			// zero usable addresses (manifests as 503 "inference service unavailable").
 			// Setting ndots:1 makes musl resolve FQDNs directly.
-			//
-			// This must run before the runner entrypoint so the supervisor
-			// picks up the patched resolv.conf on its first DNS lookup for
-			// the upstream inference endpoint.
-			patchResult, patchErr := r.gateway.ExecSandbox(execCtx, namespace, &openshellpb.ExecSandboxRequest{
-				SandboxId: sandboxID,
-				Command:   []string{"sh", "-c", "sed 's/ndots:[0-9]*/ndots:1/' /etc/resolv.conf > /tmp/resolv.conf && cat /tmp/resolv.conf > /etc/resolv.conf && rm /tmp/resolv.conf"},
-			})
-			if patchErr != nil {
-				r.logger.Warn().Err(patchErr).Str("sandbox", sbxName).Msg("failed to patch ndots in resolv.conf, continuing anyway")
-			} else if patchResult.ExitCode != 0 {
-				r.logger.Warn().
-					Str("sandbox", sbxName).
-					Int32("exit_code", patchResult.ExitCode).
-					Str("stderr", string(patchResult.Stderr)).
-					Msg("ndots patch returned non-zero exit, continuing anyway")
-			} else {
-				r.logger.Info().Str("sandbox", sbxName).Msg("patched resolv.conf ndots:1")
-			}
-
 			err = r.gateway.ExecSandboxStreaming(execCtx, namespace, &openshellpb.ExecSandboxRequest{
 				SandboxId: sandboxID,
 				Command:   entrypoint,
@@ -709,10 +688,6 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 		// The runner must activate inference routing mode so requests go
 		// through the proxy instead of directly to the provider API.
 		env["ACP_OPENSHELL_INFERENCE"] = "true"
-		// Set at sandbox level so every tool (claude, opencode, etc.) gets
-		// them — not just processes launched through a specific wrapper.
-		env["ANTHROPIC_BASE_URL"] = "https://inference.local"
-		env["ANTHROPIC_API_KEY"] = "unused-for-inference-routing"
 	} else if r.cfg.VertexEnabled {
 		env["USE_VERTEX"] = "1"
 		env["CLAUDE_CODE_USE_VERTEX"] = "1"
