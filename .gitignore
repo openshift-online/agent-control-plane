@@ -156,3 +156,6 @@ components/credential-sidecars/entrypoint/entrypoint
 apm_modules/
 apm.lock.yaml
 .local/
+
+# Local creds
+vertex.json

@@ -1,183 +1,309 @@
 ---
 name: openshell-gateway
 description: >
-  Sets up and tests OpenShell gateway mode in a local kind cluster for the Ambient
-  Code Platform. Use when working on gateway-provisioned session sandboxes, testing
-  dual-tenant provisioning, or developing the OpenShell gRPC integration. Triggers
-  on: "openshell gateway", "gateway mode", "OPENSHELL_USE_GATEWAY", "sandbox
-  provisioning", "dual-tenant", "tenant-a", "tenant-b", "agent-sandbox",
-  "test-openshell-dual-tenant".
+  Deploy a kind cluster with OpenShell gateway mode, set up Vertex/Google
+  credentials in tenant namespaces, spin up sandbox sessions, and configure
+  local openshell CLI connectivity to gateways. Use this skill whenever the
+  user wants to test gateway-provisioned sandboxes, create credentials in
+  tenants, debug sandbox provisioning, connect the openshell CLI to a gateway,
+  or run dual-tenant tests. You SHOULD reach for this skill on: "openshell
+  gateway", "gateway mode", "OPENSHELL_USE_GATEWAY", "sandbox provisioning",
+  "dual-tenant", "tenant-a", "tenant-b", "vertex credential", "spin up a
+  sandbox", "credential in tenant", "openshell sandbox list", "gateway
+  connectivity", "connect to the gateway", "mtls", "port-forward gateway".
 ---
 
-# OpenShell Gateway Testing Skill
+# OpenShell Gateway Skill
 
-> **Multi-cluster support:** Each worktree/branch gets its own Kind cluster via `CLUSTER_SLUG`. Run `make kind-status` to see port assignments. Never hardcode cluster names or ports.
+Gateway mode (`OPENSHELL_USE_GATEWAY=true`) delegates sandbox lifecycle to an
+OpenShell gateway via gRPC. The gateway runs per-tenant and manages `Sandbox`
+CRs. Gateway resources (StatefulSet, certgen Job, TLS secrets) are deployed by
+the **control plane reconciler** from the `platform-config` ConfigMap — no Helm
+chart is involved.
 
-The control plane supports two sandbox provisioning backends:
+## Full Workflow: Cluster → Credential → Sandbox
 
-- **Pod mode** (`OPENSHELL_USE_GATEWAY=false`, default): ACP creates a K8s namespace and spawns the runner as a Pod/Job directly.
-- **Gateway mode** (`OPENSHELL_USE_GATEWAY=true`): ACP delegates sandbox lifecycle to an OpenShell gateway via gRPC. The gateway runs in a per-tenant namespace and manages `AgentSandbox` CRs.
-
-## Prerequisites
-
-- `helm` installed (for the OpenShell gateway Helm chart)
-- Access to `oci://ghcr.io/nvidia/openshell/helm-chart`
-- A working kind environment (see the `dev-cluster` skill for base setup)
+### Step 1 — Deploy the Kind Cluster
 
 ```bash
-helm version --short
-```
-
-## Bringing Up Kind with Gateway Mode
-
-```bash
-# Full cluster setup with dual-tenant OpenShell gateway (default: tenant-a, tenant-b)
 make kind-up OPENSHELL_USE_GATEWAY=true
-
-# Custom tenants
-make kind-up OPENSHELL_USE_GATEWAY=true OPENSHELL_TENANTS="ns1 ns2 ns3"
-
-# With local control plane image (for in-progress CP changes)
-make kind-up LOCAL_IMAGES=true OPENSHELL_USE_GATEWAY=true
 ```
 
-`make kind-up` calls `scripts/setup-kind-openshell.sh` when `OPENSHELL_USE_GATEWAY=true`, which:
-1. Installs the `agent-sandbox` CRD and controller (cluster-scoped, once)
-2. Creates each tenant namespace
-3. Installs the OpenShell gateway Helm chart per tenant
-4. Creates ACP projects for each tenant via the API (uses `test-user-token`)
-5. Patches `ambient-control-plane` with `OPENSHELL_USE_GATEWAY=true`
-
-**If setup fails partway through**, fix the root cause and re-run with `make kind-down && make kind-up OPENSHELL_USE_GATEWAY=true`. Do not replay individual steps manually.
-
-## Verifying the Gateway Setup
+Then in a **separate terminal**:
 
 ```bash
-# Gateway StatefulSets and pods in each tenant namespace
-kubectl get statefulset,pods -n tenant-a
-kubectl get statefulset,pods -n tenant-b
+make kind-port-forward
+```
 
-# agent-sandbox controller
-kubectl get deployment agent-sandbox-controller -n agent-sandbox-system
+Check ports with `make kind-status`.
 
-# AgentSandbox CRD registered
-kubectl get crd sandboxes.agents.x-k8s.io
+#### Handle the Gateway Race Condition
 
-# Confirm control plane has the gateway flag
-kubectl get deployment ambient-control-plane -n ambient-code \
-  -o jsonpath='{.spec.template.spec.containers[0].env}' \
-  | jq '.[] | select(.name=="OPENSHELL_USE_GATEWAY")'
+There is a known race: the control plane gateway reconciler runs at startup
+before `setup-kind-openshell.sh` creates tenant namespaces. The reconciler logs
+"namespace not found, skipping" and does not retry autonomously.
 
-# Control plane logs — look for gateway client init
-kubectl logs -l app=ambient-control-plane -n ambient-code --tail=50 \
-  | grep -i "gateway\|openshell\|tenant"
+After `kind-up` completes, check whether the gateway deployed:
+
+```bash
+kubectl get statefulset -n tenant-a
+```
+
+If empty, force re-reconciliation:
+
+```bash
+kubectl annotate configmap platform-config -n ambient-code \
+  reconcile-trigger="$(date +%s)" --overwrite
+```
+
+Wait for gateway + certgen:
+
+```bash
+sleep 10
+kubectl get pods -n tenant-a
+# Expect: openshell-gateway-0 Running, openshell-gateway-certgen Completed
+kubectl get secrets -n tenant-a | grep openshell
+# Expect: openshell-client-tls, openshell-server-tls, openshell-gateway-jwt-keys
+```
+
+This is the most common failure when `kind-up` appears to succeed but sessions
+fail with `openshell-client-tls not found`. Always check and fix before
+proceeding.
+
+### Step 2 — Login with acpctl
+
+The `acpctl` binary lives at `components/ambient-cli/acpctl` (prebuilt).
+
+```bash
+TOKEN=$(kubectl get secret test-user-token -n ambient-code \
+  -o jsonpath='{.data.token}' | base64 -d)
+components/ambient-cli/acpctl login --url http://localhost:$API_PORT --token "$TOKEN"
+```
+
+Get `$API_PORT` from `make kind-status` (the "backend" port, typically 12856 on
+the main branch).
+
+### Step 3 — Create and Bind a Credential
+
+#### Create
+
+For Vertex AI / Google service account JSON:
+
+```bash
+components/ambient-cli/acpctl credential create \
+  --name vertex-sa --provider vertex \
+  --token "$(cat vertex.json)"
+```
+
+> **Important:** The token must be the **raw JSON** contents of the service
+> account key file, not base64-encoded. The control plane parses it as JSON
+> to extract `client_email` and `private_key` for credential refresh. A
+> base64-encoded token causes `invalid character 'e' looking for beginning
+> of value` errors.
+
+#### Bind to a tenant (workaround for CLI bug)
+
+`acpctl credential bind` has a bug: it passes the role **name**
+(`credential:viewer`) where the API expects a KSUID, causing
+`403: target role not found`. Use the direct API call instead:
+
+```bash
+API_PORT=12856  # from make kind-status
+
+ROLE_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
+  http://localhost:$API_PORT/api/ambient/v1/roles \
+  | python3 -c "
+import json, sys
+[print(r['id']) for r in json.load(sys.stdin)['items']
+ if r['name'] == 'credential:viewer']")
+
+CRED_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
+  http://localhost:$API_PORT/api/ambient/v1/credentials \
+  | python3 -c "
+import json, sys
+[print(r['id']) for r in json.load(sys.stdin)['items']
+ if r['name'] == 'vertex-sa']")
+
+curl -s -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  http://localhost:$API_PORT/api/ambient/v1/role_bindings \
+  -d "{
+    \"role_id\": \"$ROLE_ID\",
+    \"scope\": \"credential\",
+    \"credential_id\": \"$CRED_ID\",
+    \"project_id\": \"tenant-a\"
+  }"
+```
+
+### Step 3b — Set Vertex AI Config on Control Plane
+
+The gateway requires `VERTEX_AI_PROJECT_ID` and `CLOUD_ML_REGION` for inference
+routing. Set these on the control plane deployment:
+
+```bash
+kubectl set env deployment/ambient-control-plane -n ambient-code \
+  ANTHROPIC_VERTEX_PROJECT_ID=<your-gcp-project-id> \
+  CLOUD_ML_REGION=us-east5
+kubectl rollout status deployment/ambient-control-plane -n ambient-code --timeout=60s
+```
+
+The `project_id` value comes from your service account JSON file. The region
+must match where your Vertex AI API is enabled.
+
+### Step 4 — Create a Session
+
+```bash
+components/ambient-cli/acpctl create session \
+  --project-id tenant-a \
+  --name "gateway-test" \
+  --prompt "Say hello and list your current working directory"
+```
+
+### Step 5 — Verify Sandbox Reaches Ready
+
+```bash
+kubectl get sandboxes -n tenant-a
+SANDBOX=$(kubectl get sandboxes -n tenant-a -o jsonpath='{.items[-1].metadata.name}')
+
+# Wait for ready (image pull is ~1.7 GB on first run, allow 2-3 min)
+kubectl wait --for=jsonpath='{.status.conditions[0].status}'=True \
+  sandbox/$SANDBOX -n tenant-a --timeout=300s
+
+kubectl get sandbox $SANDBOX -n tenant-a \
+  -o jsonpath='{.status.conditions}' | python3 -m json.tool
+# Expect: reason=DependenciesReady, status=True, message="Pod is Ready"
+```
+
+## Local Gateway Connectivity (openshell CLI)
+
+This section configures the `openshell` CLI to connect to a tenant's gateway
+via mTLS so you can run commands like `openshell sandbox list` from your
+workstation.
+
+### mTLS Certs — Use `openshell-server-tls` for ALL Three Files
+
+The gateway's `tls-client-ca` volume mounts `openshell-server-tls`, so only
+certs signed by that CA are trusted. A separate `openshell-client-tls` secret
+exists but uses a **different CA** (same CN, different key pair). Using
+`openshell-client-tls` for `ca.crt` causes `BadSignature`; using it for
+`tls.crt`/`tls.key` causes `DecryptError`.
+
+```bash
+GATEWAY_NAME=tenant-a-gw
+mkdir -p ~/.config/openshell/gateways/${GATEWAY_NAME}/mtls
+
+# ALL three from openshell-server-tls
+kubectl get secret openshell-server-tls -n tenant-a \
+  -o jsonpath='{.data.ca\.crt}' | base64 -d \
+  > ~/.config/openshell/gateways/${GATEWAY_NAME}/mtls/ca.crt
+
+kubectl get secret openshell-server-tls -n tenant-a \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d \
+  > ~/.config/openshell/gateways/${GATEWAY_NAME}/mtls/tls.crt
+
+kubectl get secret openshell-server-tls -n tenant-a \
+  -o jsonpath='{.data.tls\.key}' | base64 -d \
+  > ~/.config/openshell/gateways/${GATEWAY_NAME}/mtls/tls.key
+```
+
+### Register the Gateway
+
+If the gateway name doesn't exist yet in `openshell gateway list`:
+
+```bash
+openshell gateway add --name ${GATEWAY_NAME} --local https://localhost:8080
+```
+
+If it already exists and needs updating, remove and re-add:
+
+```bash
+openshell gateway remove ${GATEWAY_NAME}
+openshell gateway add --name ${GATEWAY_NAME} --local https://localhost:8080
+```
+
+### Port-Forward and Test
+
+The gateway listens on gRPC port 8080. Port forwards drop after idle — restart
+as needed.
+
+```bash
+kubectl port-forward -n tenant-a statefulset/openshell-gateway 8080:8080 &
+```
+
+Verify connectivity:
+
+```bash
+openshell sandbox list --gateway ${GATEWAY_NAME}
+```
+
+If the gateway is already set as active (`*` in `openshell gateway list`),
+the `--gateway` flag can be omitted:
+
+```bash
+openshell sandbox list
+```
+
+### Connecting to a Different Tenant
+
+Repeat the same steps with the other tenant's namespace and a different
+gateway name/port:
+
+```bash
+GATEWAY_NAME=tenant-b-gw
+# Extract certs from tenant-b's openshell-server-tls (same process)
+# Register with a different local port to avoid collisions:
+openshell gateway add --name ${GATEWAY_NAME} --local https://localhost:8081
+kubectl port-forward -n tenant-b statefulset/openshell-gateway 8081:8080 &
+openshell sandbox list --gateway ${GATEWAY_NAME}
+```
+
+## Troubleshooting
+
+**Gateway not deployed after kind-up** — Race condition. See Step 1 above.
+Annotate `platform-config` to trigger re-reconciliation.
+
+**`openshell-client-tls` not found** — Gateway certgen hasn't run. Ensure the
+gateway StatefulSet and certgen Job completed in the tenant namespace first.
+
+**`credential bind` returns 403** — CLI bug, use the direct API workaround in
+Step 3 above.
+
+**Sandbox pod stuck in `Init:0/1`** — The init container pulls
+`quay.io/ambient_code/acp_runner_openshell:latest` (~1.7 GB). Check events:
+`kubectl describe pod <pod> -n tenant-a | tail -20`
+
+**Session marked Failed** — Likely the first session hit max retries while the
+gateway was still deploying. Create a new session after confirming the gateway
+and TLS secrets are in place.
+
+**`BadSignature` or `DecryptError` from openshell CLI** — You used
+`openshell-client-tls` instead of `openshell-server-tls` for the mTLS certs.
+Re-extract all three files from `openshell-server-tls` (see the mTLS section).
+
+**`openshell sandbox list` hangs or connection refused** — Port forward
+dropped. Restart it: `kubectl port-forward -n tenant-a statefulset/openshell-gateway 8080:8080 &`
+
+**Switching between gateway and pod mode:**
+
+```bash
+kubectl set env deployment/ambient-control-plane -n ambient-code \
+  OPENSHELL_USE_GATEWAY=true   # or false
+kubectl rollout restart deployment/ambient-control-plane -n ambient-code
 ```
 
 ## Running the Dual-Tenant E2E Test
 
 ```bash
-# Requires: kind-up with OPENSHELL_USE_GATEWAY=true
 make test-openshell-dual-tenant
-
-# Or run directly
-API_URL="http://localhost:$KIND_FWD_API_SERVER_PORT" ./tests/openshell-dual-tenant.sh
 ```
 
-The test covers five sections:
-1. **Gateway deployments** — `openshell-gateway` StatefulSet ready in each tenant namespace
-2. **Sandbox CRD/controller** — `agent-sandbox` controller healthy, CRD exists
-3. **ACP projects** — `tenant-a` and `tenant-b` projects exist in the API
-4. **Concurrent session creation** — sessions created in both tenant projects simultaneously
-5. **Concurrent sandbox provisioning** — `AgentSandbox` CRs appear after session start
-
-## Reloading After Control Plane Changes
-
-```bash
-# Hot-deploy the control plane (env vars persist — OPENSHELL_USE_GATEWAY survives)
-make kind-reload-ambient-control-plane
-
-# Verify flag is still set
-kubectl rollout status deployment/ambient-control-plane -n ambient-code
-kubectl get deployment ambient-control-plane -n ambient-code \
-  -o jsonpath='{.spec.template.spec.containers[0].env}' | jq '.[] | select(.name=="OPENSHELL_USE_GATEWAY")'
-```
-
-`kind-reload-*` generates a unique image tag (`git-short-epoch`) and uses `kubectl set image` — it does **not** reset env vars set by the setup script.
-
-## Troubleshooting
-
-### Gateway pod not starting
-
-```bash
-kubectl describe statefulset openshell-gateway -n tenant-a
-kubectl logs -l app.kubernetes.io/name=openshell-gateway -n tenant-a --tail=50
-# Check PKI init job (TLS cert generation runs before gateway starts)
-kubectl get jobs -n tenant-a
-```
-
-### AgentSandbox CRs not appearing after session start
-
-```bash
-# Check control plane → gateway connectivity
-kubectl logs -l app=ambient-control-plane -n ambient-code --tail=50 \
-  | grep -i "sandbox\|gateway\|grpc\|error"
-
-# Verify the gateway flag is set
-kubectl get deployment ambient-control-plane -n ambient-code \
-  -o jsonpath='{.spec.template.spec.containers[0].env}' | jq '.'
-```
-
-### Helm ClusterRole adoption conflict
-
-Multiple gateway installs share cluster-scoped RBAC. Re-run the setup script — it handles adoption automatically:
-
-```bash
-OPENSHELL_TENANTS="tenant-a tenant-b" ./scripts/setup-kind-openshell.sh
-```
-
-### agent-sandbox controller not ready
-
-```bash
-kubectl get pods -n agent-sandbox-system
-kubectl logs -l app=agent-sandbox-controller -n agent-sandbox-system --tail=50
-grep AGENT_SANDBOX_VERSION scripts/setup-kind-openshell.sh  # check pinned version
-```
-
-### Adding a tenant to an existing cluster
-
-```bash
-# Idempotent for existing tenants
-OPENSHELL_TENANTS="tenant-a tenant-b tenant-c" ./scripts/setup-kind-openshell.sh
-```
-
-### Switching between gateway mode and pod mode
-
-```bash
-# Enable gateway mode
-kubectl set env deployment/ambient-control-plane -n ambient-code OPENSHELL_USE_GATEWAY=true
-kubectl rollout restart deployment/ambient-control-plane -n ambient-code
-
-# Revert to pod mode
-kubectl set env deployment/ambient-control-plane -n ambient-code OPENSHELL_USE_GATEWAY=false
-kubectl rollout restart deployment/ambient-control-plane -n ambient-code
-```
-
-## Reference
-
-| Make Target | Description |
-|-------------|-------------|
-| `make kind-up OPENSHELL_USE_GATEWAY=true` | Full cluster with gateway setup |
-| `make kind-up LOCAL_IMAGES=true OPENSHELL_USE_GATEWAY=true` | Local images + gateway |
-| `make test-openshell-dual-tenant` | Run dual-tenant E2E test |
-| `make kind-reload-ambient-control-plane` | Hot-deploy control plane after changes |
-| `make vendor-openshell-proto REF=v0.0.71` | Update vendored OpenShell proto stubs |
-
-Key files:
+## Key Files
 
 | File | Purpose |
 |------|---------|
-| `scripts/setup-kind-openshell.sh` | Gateway setup automation |
-| `tests/openshell-dual-tenant.sh` | Dual-tenant E2E test |
-| `components/ambient-control-plane/internal/reconciler/kube_reconciler.go` | `provisionSessionSandbox`, `cleanupSessionSandbox` |
-| `components/ambient-control-plane/internal/openshell/` | Gateway gRPC client and generated stubs |
-| `components/ambient-control-plane/proto/VENDOR.md` | Vendored proto update instructions |
+| `scripts/setup-kind-openshell.sh` | Gateway prerequisites (CRD, namespaces, projects) |
+| `components/ambient-control-plane/internal/gateway/reconciler.go` | Gateway manifest deployment from platform-config |
+| `components/ambient-control-plane/internal/reconciler/kube_reconciler.go` | Session → sandbox provisioning |
+| `components/ambient-control-plane/internal/openshell/tls_resolver.go` | mTLS credential resolution |
+| `components/manifests/base/platform-config.yaml` | Namespace/gateway configuration |
