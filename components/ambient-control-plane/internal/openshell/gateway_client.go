@@ -302,6 +302,18 @@ func (g *GatewayClient) ExecSandboxStreaming(ctx context.Context, namespace stri
 	return nil
 }
 
+func (g *GatewayClient) UpdateConfig(ctx context.Context, namespace string, req *pb.UpdateConfigRequest) (*pb.UpdateConfigResponse, error) {
+	client, err := g.clientForNamespace(ctx, namespace)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.UpdateConfig(ctx, req)
+	if err != nil && g.shouldEvict(err) {
+		g.evictConn(namespace)
+	}
+	return resp, err
+}
+
 func (g *GatewayClient) Close() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()

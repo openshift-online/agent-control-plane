@@ -15,6 +15,7 @@ import (
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell"
 	datapb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/datamodel/v1"
 	inferencepb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/inference/v1"
+	sandboxpb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/sandbox/v1"
 	openshellpb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
@@ -310,6 +311,13 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		credentialIDs = map[string]string{}
 	}
 
+	// Enable providers_v2 on the gateway before configuring providers or
+	// inference routing — required for v0.0.72+ gateways to correctly proxy
+	// inference traffic instead of attempting local execution.
+	if err := r.enableProvidersV2(ctx, namespace); err != nil {
+		return fmt.Errorf("enabling providers_v2: %w", err)
+	}
+
 	providerNames, err := r.ensureGatewayProviders(ctx, namespace, project.Name, sdk, credentialIDs)
 	if err != nil {
 		return fmt.Errorf("ensuring gateway providers: %w", err)
@@ -428,6 +436,21 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			return
 		}
 	}
+}
+
+func (r *SimpleKubeReconciler) enableProvidersV2(ctx context.Context, namespace string) error {
+	_, err := r.gateway.UpdateConfig(ctx, namespace, &openshellpb.UpdateConfigRequest{
+		SettingKey: "providers_v2_enabled",
+		SettingValue: &sandboxpb.SettingValue{
+			Value: &sandboxpb.SettingValue_BoolValue{BoolValue: true},
+		},
+		Global: true,
+	})
+	if err != nil {
+		return fmt.Errorf("setting providers_v2_enabled: %w", err)
+	}
+	r.logger.Info().Str("namespace", namespace).Msg("providers_v2_enabled set on gateway")
+	return nil
 }
 
 func (r *SimpleKubeReconciler) ensureGatewayProviders(ctx context.Context, namespace, projectName string, sdk *sdkclient.Client, credentialIDs map[string]string) ([]string, error) {
@@ -598,15 +621,24 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 	useVertex := "0"
 	if r.cfg.VertexEnabled {
 		useVertex = "1"
-		env["ANTHROPIC_VERTEX_PROJECT_ID"] = r.cfg.VertexProjectID
-		env["CLOUD_ML_REGION"] = r.cfg.VertexRegion
-		env["GOOGLE_APPLICATION_CREDENTIALS"] = r.cfg.VertexCredentialsPath
-		env["GCE_METADATA_HOST"] = "metadata.invalid"
-		env["GCE_METADATA_TIMEOUT"] = "1"
+		if r.cfg.OpenShellUseGateway {
+			// In gateway mode the supervisor proxy handles all inference via
+			// inference.local — Claude Code must NOT set USE_VERTEX or
+			// CLAUDE_CODE_USE_VERTEX, because those flags make it bypass the
+			// proxy and attempt direct Vertex AI connections with GCP credential
+			// discovery, which will fail inside the sandbox. The gateway's
+			// configured provider handles the Vertex routing transparently.
+			env["ACP_OPENSHELL_INFERENCE"] = "true"
+		} else {
+			env["ANTHROPIC_VERTEX_PROJECT_ID"] = r.cfg.VertexProjectID
+			env["CLOUD_ML_REGION"] = r.cfg.VertexRegion
+			env["USE_VERTEX"] = useVertex
+			env["CLAUDE_CODE_USE_VERTEX"] = useVertex
+			env["GOOGLE_APPLICATION_CREDENTIALS"] = r.cfg.VertexCredentialsPath
+			env["GCE_METADATA_HOST"] = "metadata.invalid"
+			env["GCE_METADATA_TIMEOUT"] = "1"
+		}
 	}
-	env["USE_VERTEX"] = useVertex
-	env["CLAUDE_CODE_USE_VERTEX"] = useVertex
-	env["ACP_OPENSHELL_INFERENCE"] = "true"
 
 	if prompt := r.assembleInitialPrompt(ctx, session, sdk); prompt != "" {
 		env["INITIAL_PROMPT"] = prompt

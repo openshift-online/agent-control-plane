@@ -59,6 +59,8 @@ network_policies:
       - { host: platform.claude.com, port: 443 }
     binaries:
       - { path: /usr/local/bin/claude }
+      - { path: /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe }
+      - { path: "/sandbox/.venv/lib/python*/site-packages/claude_agent_sdk/_bundled/claude" }
       - { path: /usr/bin/node }
 
   # Google Cloud CLI — used for `gcloud auth application-default login` and
@@ -118,6 +120,8 @@ network_policies:
         access: read-only
     binaries:
       - { path: /usr/local/bin/claude }
+      - { path: /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe }
+      - { path: "/sandbox/.venv/lib/python*/site-packages/claude_agent_sdk/_bundled/claude" }
       - { path: /usr/bin/gh }
 
   pypi:
@@ -193,3 +197,4 @@ network_policies:
       - { path: /sandbox/.venv/bin/python }
       - { path: /sandbox/.venv/bin/python3 }
       - { path: /sandbox/.venv/bin/uvicorn }
+      - { path: "/sandbox/.uv/python/cpython-*/bin/python*" }

@@ -89,8 +89,9 @@ When `OPENSHELL_USE_GATEWAY` is true, the control plane SHALL create agent sandb
 - AND an OpenShell gateway is running in the project namespace
 - WHEN a session transitions to `Pending` phase
 - THEN the control plane SHALL look up the project by `session.ProjectID` and resolve the gateway namespace from the project's **Name** field (lowercased via `NamespaceName()`), not from `session.ProjectID` directly
+- AND it SHALL enable provider endpoint injection by setting `providers_v2_enabled=true` globally on the gateway via `UpdateConfig` (see [Providers V2 Enablement](#requirement-providers-v2-enablement))
 - AND it SHALL ensure credential providers exist via `CreateProvider` (see [Credential Mapping](#requirement-credential-mapping-to-openshell-providers))
-- AND it SHALL configure inference routing via `UpdateConfig` if an inference-capable credential is present (see [Inference Configuration](#requirement-inference-configuration-via-updateconfig))
+- AND it SHALL configure inference routing via `SetClusterInference` if an inference-capable credential is present (see [Inference Configuration](#requirement-inference-configuration-via-updateconfig))
 - AND it SHALL call `CreateSandbox` on the gateway in that namespace
 - AND the sandbox SHALL be created with the runner image, session environment variables, and attached credential providers
 - AND the session phase SHALL transition to `Running`
@@ -213,6 +214,23 @@ In iteration 1, all providers in the namespace are attached to every sandbox. A 
 - AND the gateway's egress proxy SHALL resolve subsequent requests to the updated credentials at request time
 - AND no sandboxes SHALL be restarted
 
+#### Scenario: Vertex AI provider credential refresh
+
+The `google-vertex-ai` provider type requires gateway-managed token refresh so the gateway can mint short-lived access tokens from a GCP service account key. This is equivalent to the CLI command `openshell provider refresh configure <name> --credential-key GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_TOKEN --strategy google-service-account-jwt --material client_email=... --material private_key=... --secret-material-key private_key`. See [OpenShell Vertex AI provider docs](https://docs.nvidia.com/openshell/providers/google-vertex-ai) for the full setup flow.
+
+- GIVEN a project has a `vertex` credential (OpenShell type `google-vertex-ai`)
+- AND the credential token is a GCP service account JSON key file
+- WHEN the control plane creates or updates the provider via `CreateProvider`/`UpdateProvider`
+- THEN it SHALL configure credential refresh by calling `ConfigureProviderRefresh` with:
+  - `Provider` = the provider name (e.g., `<project>-vertex`)
+  - `CredentialKey` = `GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_TOKEN`
+  - `Strategy` = `PROVIDER_CREDENTIAL_REFRESH_STRATEGY_GOOGLE_SERVICE_ACCOUNT_JWT`
+  - `Material` = `{"client_email": "<from SA key>", "private_key": "<from SA key>"}`
+  - `SecretMaterialKeys` = `["private_key"]`
+- AND it SHALL call `RotateProviderCredential` to trigger an immediate token mint
+- AND the provider credential mapping SHALL use `GOOGLE_SERVICE_ACCOUNT_KEY` as the credential key name (the raw SA JSON key file content)
+- AND the provider config SHALL include `VERTEX_AI_PROJECT_ID` and `VERTEX_AI_REGION` from the control plane's environment
+
 #### Scenario: Provider type mapping
 
 - GIVEN the following ambient credential provider names
@@ -229,11 +247,31 @@ In iteration 1, all providers in the namespace are attached to every sandbox. A 
 | `kubeconfig` | `generic` |
 | (unknown) | `generic` |
 
-### Requirement: Inference Configuration via UpdateConfig
+### Requirement: Providers V2 Enablement
 
-After ensuring credential providers exist, the control plane SHALL configure the gateway's inference routing so that sandboxes can reach an LLM via the `inference.local` endpoint. This is equivalent to the CLI command `openshell inference set --provider <name> --model <model>` and is performed via the `UpdateConfig` gRPC RPC with global-scope settings. See [OpenShell inference routing docs](https://docs.nvidia.com/openshell/sandboxes/inference-routing) for details on how `inference.local` routes requests through the gateway's privacy router.
+Before configuring providers or inference routing, the control plane SHALL enable provider endpoint injection on the gateway by setting the `providers_v2_enabled` global setting to `true`. This is equivalent to the CLI command `openshell settings set --global --key providers_v2_enabled --value true` and is required for gateway versions 0.0.72+ to correctly proxy inference traffic through the configured provider instead of attempting local execution (which results in 503 "inference service unavailable" errors).
 
-The control plane iterates all bound credentials and configures inference routing for every provider whose OpenShell type is inference-capable. Inference-capable types are those that support the `inference.local` routing endpoint: `google-vertex-ai`, `claude`, `anthropic`, `nvidia`, `openai`, and `aws-bedrock`. For each qualifying provider, the control plane sets two global gateway settings via `UpdateConfig`: `inference.provider` (the provider name as created by `ensureGatewayProviders`) and `inference.model`. These settings are applied per namespace after provider creation.
+See [OpenShell Vertex AI provider docs](https://docs.nvidia.com/openshell/providers/google-vertex-ai) for context on why this setting must be enabled before configuring providers.
+
+#### Scenario: Providers V2 enabled before provider creation
+
+- GIVEN `OPENSHELL_USE_GATEWAY` is `true`
+- AND an OpenShell gateway is running in the project namespace
+- WHEN the control plane provisions a sandbox
+- THEN it SHALL call `UpdateConfig` with `global=true`, `setting_key="providers_v2_enabled"`, `setting_value=true` (bool) BEFORE calling `CreateProvider` or `SetClusterInference`
+- AND failure to set this setting SHALL prevent sandbox creation (the session remains in `Pending` phase)
+
+#### Scenario: Idempotent enablement
+
+- GIVEN `providers_v2_enabled` is already set to `true` on the gateway
+- WHEN the control plane provisions another sandbox in the same namespace
+- THEN the `UpdateConfig` call SHALL succeed idempotently (setting the same value again is a no-op)
+
+### Requirement: Inference Configuration via SetClusterInference
+
+After ensuring credential providers exist, the control plane SHALL configure the gateway's inference routing so that sandboxes can reach an LLM via the `inference.local` endpoint. This is equivalent to the CLI command `openshell inference set --provider <name> --model <model>` and is performed via the `SetClusterInference` gRPC RPC on the `openshell.inference.v1.Inference` service. See [OpenShell inference routing docs](https://docs.nvidia.com/openshell/sandboxes/inference-routing) for details on how `inference.local` routes requests through the gateway's privacy router.
+
+The control plane iterates all bound credentials and configures inference routing for every provider whose OpenShell type is inference-capable. Inference-capable types are those that support the `inference.local` routing endpoint: `google-vertex-ai`, `claude`, `anthropic`, `nvidia`, `openai`, and `aws-bedrock`. For each qualifying provider, the control plane calls `SetClusterInference` with `provider_name` (the provider name as created by `ensureGatewayProviders`), `model_id`, and `no_verify=true`. These settings are applied per namespace after provider creation.
 
 > **TODO:** The inference model is currently hardcoded to `claude-sonnet-4-6`. A future iteration should allow the model to be configured per-session via `session.LlmModel`, falling back to a sensible default when unset.
 
@@ -241,11 +279,11 @@ The control plane iterates all bound credentials and configures inference routin
 
 - GIVEN a project has a credential whose OpenShell provider type is inference-capable (e.g., `vertex` → `google-vertex-ai`, `anthropic` → `claude`)
 - AND the control plane has created the corresponding provider via `CreateProvider`
+- AND `providers_v2_enabled` has been set to `true` on the gateway (see [Providers V2 Enablement](#requirement-providers-v2-enablement))
 - WHEN the control plane provisions a sandbox in that project's namespace
-- THEN it SHALL call `UpdateConfig` with `global=true`, `setting_key="inference.provider"`, `setting_value=<provider-name>` (string, the name returned by `ProviderName(projectName, ambientProvider)`)
-- AND it SHALL call `UpdateConfig` with `global=true`, `setting_key="inference.model"`, `setting_value="claude-sonnet-4-6"` (string)
-- AND both calls SHALL complete before sandbox creation proceeds
-- AND failure in either call SHALL prevent sandbox creation (the session remains in `Pending` phase)
+- THEN it SHALL call `SetClusterInference` with `provider_name=<provider-name>` (the name returned by `ProviderName(projectName, ambientProvider)`), `model_id="claude-sonnet-4-6"`, and `no_verify=true`
+- AND the call SHALL complete before sandbox creation proceeds
+- AND failure SHALL prevent sandbox creation (the session remains in `Pending` phase)
 
 #### Scenario: No inference-capable credential — inference configuration skipped
 
@@ -737,8 +775,10 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | [openshell-sandbox.spec.md] | Unchanged — file-mode spec remains authoritative when `OPENSHELL_USE_GATEWAY=false` |
 | Runner pod | Same image and env vars, but the runner process is started via `ExecSandbox` with `["/bin/bash", "-c", "cd /sandbox/runner/ambient-runner && PATH=/sandbox/.venv/bin:$PATH uvicorn main:app --host 0.0.0.0 --port 8001"]` after the sandbox reaches Ready — the gateway overrides the container entrypoint to the supervisor binary with `sleep infinity`, so the image's CMD is never executed directly. The exec goroutine must use a long-lived context (not the 120s polling context) and must not accumulate stdout/stderr in memory |
 | `GatewayClient.ExecSandbox()` | Current implementation blocks on the full stream and accumulates output — must be updated to support fire-and-forget semantics for long-running processes (discard/stream output, use caller-provided context) |
-| `GatewayClient.UpdateConfig()` | New method — calls the `UpdateConfig` gRPC RPC; used by `configureInference` to set `inference.provider` and `inference.model` gateway settings |
-| [kube_reconciler.go] `configureInference()` | New method — called after `ensureGatewayProviders`; sets gateway inference routing when an inference-capable credential is present |
+| `GatewayClient.UpdateConfig()` | New method — calls the `UpdateConfig` gRPC RPC; used by `enableProvidersV2` to set `providers_v2_enabled=true` globally on the gateway |
+| `GatewayClient.SetClusterInference()` | New method — calls the `SetClusterInference` gRPC RPC on the `openshell.inference.v1.Inference` service; used by `configureInference` to set provider and model for inference routing |
+| [kube_reconciler.go] `enableProvidersV2()` | New method — called before `ensureGatewayProviders`; sets `providers_v2_enabled=true` on the gateway, required for v0.0.72+ gateways |
+| [kube_reconciler.go] `configureInference()` | New method — called after `ensureGatewayProviders`; sets gateway inference routing via `SetClusterInference` when an inference-capable credential is present |
 | `provider_mapping.go` | Updated `vertex` mapping from `vertex-prod` to `google-vertex-ai` to match the OpenShell CLI's provider type |
 | Vendored proto (`openshell.proto`, `sandbox.proto`) | Extended with `UpdateConfig` RPC, `UpdateConfigRequest`/`UpdateConfigResponse` messages, and `SettingValue` message |
 

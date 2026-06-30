@@ -115,7 +115,7 @@ RUN mkdir -p /sandbox/.claude/skills /sandbox/.agents/skills && \
 ARG CLAUDE_CODE_VERSION=2.1.195
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     && mkdir -p /opt/claude/bin \
-    && ln -sf "$(which claude)" /opt/claude/bin/claude \
+    && ln -sf /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe /opt/claude/bin/claude \
     && mkdir -p /sandbox/.local/bin \
     && ln -sf /opt/claude/bin/claude /sandbox/.local/bin/claude \
     && chown -R sandbox:sandbox /sandbox/.local

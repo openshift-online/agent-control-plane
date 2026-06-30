@@ -659,21 +659,19 @@ Key differences from file mode:
 | Process start | Container `CMD` | `ExecSandbox` gRPC after sandbox reaches Ready |
 | Credentials | Sidecar containers | Gateway providers (egress proxy injection) |
 | Sandbox isolation | In-container Supervisor (file mode) | Gateway-managed Supervisor |
-| Inference routing | Runner env vars (`USE_VERTEX`, `ANTHROPIC_VERTEX_PROJECT_ID`) | Gateway `UpdateConfig` settings (`inference.provider`, `inference.model`) |
+| Inference routing | Runner env vars (`USE_VERTEX`, `CLAUDE_CODE_USE_VERTEX`, `ANTHROPIC_VERTEX_PROJECT_ID`) | Gateway `SetClusterInference` + `providers_v2_enabled` setting; `USE_VERTEX` and `CLAUDE_CODE_USE_VERTEX` are NOT set |
 
 #### Inference Configuration
 
 In gateway mode, the control plane configures the gateway's [inference routing](https://docs.nvidia.com/openshell/sandboxes/inference-routing) after creating credential providers. The gateway exposes an `inference.local` HTTPS endpoint inside each sandbox that strips sandbox credentials, injects backend credentials, and forwards requests to the configured LLM provider.
 
-The control plane iterates all bound credentials and configures inference routing for every inference-capable provider type (e.g., `google-vertex-ai`, `claude`, `anthropic`, `nvidia`, `openai`, `aws-bedrock`). For each qualifying provider, it calls `UpdateConfig` with two global settings:
-- `inference.provider` = `<provider-name>` — the provider name created by `ensureGatewayProviders`
-- `inference.model` = `"claude-sonnet-4-6"` — the model to use for generation requests
+Before configuring providers or inference, the control plane enables `providers_v2_enabled=true` on the gateway via `UpdateConfig`. This is required for gateway versions 0.0.72+ to proxy inference traffic correctly. The control plane then iterates all bound credentials and configures inference routing for every inference-capable provider type (e.g., `google-vertex-ai`, `claude`, `anthropic`, `nvidia`, `openai`, `aws-bedrock`). For each qualifying provider, it calls `SetClusterInference` with `provider_name`, `model_id`, and `no_verify=true`.
 
 > **TODO:** The inference model is currently hardcoded. A future iteration should derive it from `session.LlmModel`.
 
-The gateway's privacy router uses these settings to route inference requests through the configured provider, injecting credentials transparently. For Vertex AI, the runner still receives `USE_VERTEX=1` and related env vars for its own setup, but the actual credential injection is handled by the gateway proxy.
+The gateway's privacy router uses these settings to route inference requests through the configured provider, injecting credentials transparently. In gateway mode, the control plane does NOT set `USE_VERTEX`, `CLAUDE_CODE_USE_VERTEX`, or `ANTHROPIC_VERTEX_PROJECT_ID` in the sandbox environment — per the [OpenShell Vertex AI docs](https://docs.nvidia.com/openshell/providers/google-vertex-ai), setting these flags inside sandboxes causes Claude Code to bypass the gateway proxy and attempt direct Vertex AI connections with GCP credential discovery, which fails because sandboxes don't expose GCP credentials. The gateway handles Vertex routing transparently via the configured provider.
 
-See `openshell-sandbox-provisioning.spec.md` § Inference Configuration via UpdateConfig for the full requirement.
+See `openshell-sandbox-provisioning.spec.md` § Inference Configuration via SetClusterInference and § Providers V2 Enablement for the full requirements.
 
 #### Runner-Side Inference Routing (`ACP_OPENSHELL_INFERENCE`)
 
