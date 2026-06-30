@@ -688,6 +688,10 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 		// The runner must activate inference routing mode so requests go
 		// through the proxy instead of directly to the provider API.
 		env["ACP_OPENSHELL_INFERENCE"] = "true"
+		// Set at sandbox level so every tool (claude, opencode, etc.) gets
+		// them — not just processes launched through a specific wrapper.
+		env["ANTHROPIC_BASE_URL"] = "https://inference.local"
+		env["ANTHROPIC_API_KEY"] = "unused-for-inference-routing"
 	} else if r.cfg.VertexEnabled {
 		env["USE_VERTEX"] = "1"
 		env["CLAUDE_CODE_USE_VERTEX"] = "1"
