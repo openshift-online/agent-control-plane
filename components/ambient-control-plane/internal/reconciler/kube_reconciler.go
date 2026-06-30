@@ -1129,6 +1129,9 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 	saName := serviceAccountName(session.ID)
 
 	runnerImage := r.cfg.RunnerImage
+	if r.cfg.OpenShellUseGateway && r.cfg.OpenShellRunnerImage != "" {
+		runnerImage = r.cfg.OpenShellRunnerImage
+	}
 	imagePullPolicy := "Always"
 	if strings.HasPrefix(runnerImage, "localhost/") {
 		imagePullPolicy = "IfNotPresent"
