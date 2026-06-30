@@ -47,4 +47,3 @@ data:
     supervisor_sideload_method   = "image-volume"
     sa_token_ttl_secs            = 3600
     app_armor_profile            = "Unconfined"
-    image_pull_policy            = "IfNotPresent"

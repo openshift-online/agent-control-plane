@@ -26,3 +26,5 @@ spec:
               value: "false"
             - name: OPENSHELL_USE_GATEWAY
               value: "true"
+            - name: LOCAL_IMAGES
+              value: "true"

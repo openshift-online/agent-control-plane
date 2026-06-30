@@ -1,6 +1,6 @@
 # Override runner image references in control plane env vars for kind-local
 # Sets imagePullPolicy to IfNotPresent via localhost/ prefix (see kube_reconciler.go:1190)
-# Gateway also configured with image_pull_policy = "IfNotPresent" in configmap.yaml
+# Gateway image_pull_policy is set by LOCAL_IMAGES env var (see gateway/manifests.go)
 apiVersion: apps/v1
 kind: Deployment
 metadata:

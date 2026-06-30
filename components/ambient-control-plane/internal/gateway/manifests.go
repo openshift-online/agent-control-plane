@@ -173,6 +173,35 @@ func ApplyConfigOverrides(obj *unstructured.Unstructured, config GatewayConfig) 
 		}
 	}
 
+	// Add image_pull_policy for LOCAL_IMAGES=true (kind-local development)
+	if kind == "ConfigMap" && obj.GetName() == "openshell-gateway-config" && os.Getenv("LOCAL_IMAGES") == "true" && config.Config == "" {
+		data, found, err := unstructured.NestedMap(obj.Object, "data")
+		if err != nil || !found {
+			return fmt.Errorf("configmap data not found")
+		}
+
+		toml, ok := data["gateway.toml"].(string)
+		if !ok {
+			return fmt.Errorf("gateway.toml not found in configmap")
+		}
+
+		// Append image_pull_policy to [openshell.drivers.kubernetes] section
+		lines := strings.Split(toml, "\n")
+		for i, line := range lines {
+			// Find the last line of the kubernetes drivers section
+			if strings.Contains(line, `app_armor_profile`) {
+				// Insert image_pull_policy right after
+				lines = append(lines[:i+1], append([]string{`    image_pull_policy            = "IfNotPresent"`}, lines[i+1:]...)...)
+				break
+			}
+		}
+		data["gateway.toml"] = strings.Join(lines, "\n")
+
+		if err := unstructured.SetNestedMap(obj.Object, data, "data"); err != nil {
+			return fmt.Errorf("set configmap data: %w", err)
+		}
+	}
+
 	// Update certgen Job serverDnsNames if provided
 	if kind == "Job" && strings.Contains(obj.GetName(), "certgen") && len(config.ServerDnsNames) > 0 {
 		containers, found, err := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "containers")
