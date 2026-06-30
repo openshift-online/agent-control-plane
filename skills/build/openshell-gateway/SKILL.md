@@ -91,7 +91,7 @@ For Vertex AI / Google service account JSON:
 
 ```bash
 components/ambient-cli/acpctl credential create \
-  --name vertex-sa --provider google \
+  --name vertex-sa --provider google-vertex-ai \
   --token "$(cat vertex.json.b64)"
 ```
 
@@ -99,7 +99,7 @@ If you only have the raw JSON file:
 
 ```bash
 components/ambient-cli/acpctl credential create \
-  --name vertex-sa --provider google \
+  --name vertex-sa --provider google-vertex-ai \
   --token "$(base64 -w0 vertex.json)"
 ```
 
