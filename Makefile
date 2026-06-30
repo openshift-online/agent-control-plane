@@ -3,7 +3,7 @@
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-api-server local-logs-ui local-logs-control-plane local-shell-api-server local-shell-ui
 .PHONY: local-test local-test-dev local-test-quick test-all local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-reload-ambient-control-plane kind-reload-ambient-api-server kind-status kind-login kind-sso-toggle kind-setup-vertex
+.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-reload-ambient-control-plane kind-reload-ambient-api-server kind-reload-runner-openshell kind-status kind-login kind-sso-toggle kind-setup-vertex
 .PHONY: preflight-cluster preflight dev-env dev
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: unleash-port-forward unleash-status
@@ -1094,13 +1094,10 @@ screenshots-clean: ## Remove generated screenshots
 	@rm -rf e2e/cypress/screenshots/output/
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Screenshot output cleaned"
 
-kind-rebuild: check-kind check-kubectl check-local-context _kind-require-cluster build-all ## Rebuild, reload, and restart all components in kind
-	@$(MAKE) --no-print-directory _kind-load-images
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Applying kind-local manifests..."
-	@kubectl apply --validate=false -k components/manifests/overlays/kind-local/ $(QUIET_REDIRECT)
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting deployments..."
-	@kubectl rollout restart deployment -n $(NAMESPACE) $(QUIET_REDIRECT)
-	@kubectl rollout status deployment -n $(NAMESPACE) --timeout=120s $(QUIET_REDIRECT)
+kind-rebuild: check-kind check-kubectl check-local-context _kind-require-cluster ## Rebuild, reload, and restart all components in kind
+	@$(MAKE) --no-print-directory kind-reload-ambient-ui
+	@$(MAKE) --no-print-directory kind-reload-ambient-control-plane
+	@$(MAKE) --no-print-directory kind-reload-ambient-api-server
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All components rebuilt and restarted"
 
 kind-reload-ambient-ui: check-kind check-kubectl check-local-context ## Rebuild and reload ambient-ui only (kind)
@@ -1131,6 +1128,24 @@ kind-reload-ambient-api-server: check-kind check-kubectl check-local-context ## 
 	@_IMG=$$(kubectl get deployment ambient-api-server -n $(NAMESPACE) -o jsonpath='{.spec.template.spec.containers[0].image}') && \
 		kubectl set image deployment/ambient-api-server -n $(NAMESPACE) migration=$$_IMG $(QUIET_REDIRECT) && \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Migration init container updated to $$_IMG"
+
+kind-reload-runner-openshell: check-kind check-kubectl check-local-context ## Rebuild and reload OpenShell runner only (kind)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding OpenShell runner..."
+	@cd components/runners/ambient-runner && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-f Dockerfile.openshell \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		-t $(RUNNER_OPENSHELL_IMAGE) . $(QUIET_REDIRECT) || \
+		{ echo "$(COLOR_RED)✗$(COLOR_RESET) Build failed. Run without QUIET=1 for full output."; exit 1; }
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading OpenShell runner into kind cluster..."
+	@_IMG=$$(echo "$(RUNNER_OPENSHELL_IMAGE)" | cut -d: -f1) && \
+		$(CONTAINER_ENGINE) tag $(RUNNER_OPENSHELL_IMAGE) localhost/$$_IMG:latest && \
+		kind load docker-image localhost/$$_IMG:latest --name $(KIND_CLUSTER_NAME) && \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell runner image loaded as localhost/$$_IMG:latest"
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Updating control plane env vars to use localhost/acp_runner_openshell:latest..."
+	@kubectl set env deployment/ambient-control-plane -n $(NAMESPACE) \
+		OPENSHELL_RUNNER_IMAGE=localhost/acp_runner_openshell:latest $(QUIET_REDIRECT)
+	@kubectl rollout status deployment/ambient-control-plane -n $(NAMESPACE) --timeout=60s
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell runner reloaded — new sessions will use the updated image"
 
 kind-sso-toggle: check-kubectl ## Toggle SSO auth on/off in Kind (affects both frontend and backend)
 	@UNLEASH_ADMIN_TOKEN=$$(kubectl get secret unleash-credentials -n $(NAMESPACE) -o jsonpath='{.data.admin-api-token}' | base64 -d); \
