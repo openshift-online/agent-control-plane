@@ -122,8 +122,7 @@ fi
 
 # 4. Patch control plane with the gateway flag
 kubectl set env deployment/ambient-control-plane -n "$NAMESPACE" \
-  OPENSHELL_USE_GATEWAY=true \
-  OPENSHELL_RUNNER_IMAGE=localhost/acp_runner_openshell:latest >/dev/null
-echo "  Patched ambient-control-plane with OPENSHELL_USE_GATEWAY=true OPENSHELL_RUNNER_IMAGE=localhost/acp_runner_openshell:latest"
+  OPENSHELL_USE_GATEWAY=true >/dev/null
+echo "  Patched ambient-control-plane with OPENSHELL_USE_GATEWAY=true"
 
 echo "OpenShell gateway setup complete (${TENANTS[*]})."
