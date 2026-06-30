@@ -1,15 +1,21 @@
 'use client'
 
 // Feature-gated by NEXT_PUBLIC_OPENSHELL_USE_GATEWAY env var (sidebar nav only visible when enabled)
+import { useState } from 'react'
 import { useParams } from 'next/navigation'
-import { KeyRound } from 'lucide-react'
+import { KeyRound, Plus } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/empty-state'
 import { useProviders } from '@/queries/use-providers'
 import { ProvidersTable } from './_components/providers-table'
+import { CreateProviderSheet } from './_components/create-provider-sheet'
 
 export default function ProvidersPage() {
   const { projectId } = useParams<{ projectId: string }>()
+  const [search, setSearch] = useState('')
+  const [createSheetOpen, setCreateSheetOpen] = useState(false)
   const { data: providers, isLoading, error } = useProviders(projectId)
 
   if (error) {
@@ -28,7 +34,8 @@ export default function ProvidersPage() {
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold tracking-tight">Providers</h1>
         <div className="space-y-3">
-          <Skeleton className="h-[300px] w-full" />
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-[400px] w-full" />
         </div>
       </div>
     )
@@ -37,11 +44,27 @@ export default function ProvidersPage() {
   if (!providers || providers.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Providers</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold tracking-tight">Providers</h1>
+          <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
+            <Plus className="size-4" />
+            Generate Provider YAML
+          </Button>
+        </div>
         <EmptyState
           icon={KeyRound}
           title="No providers"
           description="No providers have been declared yet. Create a ConfigMap with label ambient.ai/kind: provider and apply it with kubectl."
+          action={
+            <Button onClick={() => setCreateSheetOpen(true)}>
+              <Plus className="size-4 mr-1.5" />
+              Generate Provider YAML
+            </Button>
+          }
+        />
+        <CreateProviderSheet
+          open={createSheetOpen}
+          onOpenChange={setCreateSheetOpen}
         />
       </div>
     )
@@ -49,15 +72,26 @@ export default function ProvidersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Providers ({providers.length})
-        </h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Providers</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
+            <Plus className="size-4" />
+            Generate Provider YAML
+          </Button>
+          <Input
+            placeholder="Filter by name, type, or secret..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="max-w-xs"
+          />
+        </div>
       </div>
-      <p className="text-sm text-muted-foreground">
-        Providers are managed via GitOps. Use <code className="bg-muted px-1 py-0.5 rounded text-xs">kubectl apply</code> to create or update.
-      </p>
-      <ProvidersTable providers={providers} />
+      <ProvidersTable providers={providers} searchFilter={search} />
+      <CreateProviderSheet
+        open={createSheetOpen}
+        onOpenChange={setCreateSheetOpen}
+      />
     </div>
   )
 }

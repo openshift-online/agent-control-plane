@@ -74,6 +74,10 @@ func (f *SDKClientFactory) Token(ctx context.Context) (string, error) {
 	return f.provider.Token(ctx)
 }
 
+func (f *SDKClientFactory) BaseURL() string {
+	return f.baseURL
+}
+
 func (f *SDKClientFactory) ForProject(ctx context.Context, project string) (*sdkclient.Client, error) {
 	token, err := f.provider.Token(ctx)
 	if err != nil {

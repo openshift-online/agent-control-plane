@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -322,7 +325,7 @@ func (s *ConfigMapSyncer) buildOriginAnnotations(namespace string, userAnnotatio
 }
 
 func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, decl *AgentDeclaration) error {
-	existing := s.findAgentByName(ctx, sdk, projectID, decl.Name)
+	existing := s.findAgentByName(ctx, projectID, decl.Name)
 
 	annJSON, err := s.buildOriginAnnotations(namespace, decl.Annotations)
 	if err != nil {
@@ -374,18 +377,13 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 	}
 
 	if existing != nil {
-		if _, err := sdk.Agents().Update(ctx, existing.ID, patch); err != nil {
+		if err := s.patchAPI(ctx, projectID, "agents", existing.ID, patch); err != nil {
 			return fmt.Errorf("updating agent %s: %w", decl.Name, err)
 		}
 		s.logger.Debug().Str("agent", decl.Name).Str("id", existing.ID).Msg("agent updated from configmap")
 		return nil
 	}
 
-	// Create with minimal fields only. Complex fields (providers, payloads,
-	// environment, sandbox_template) are object/array types in the OpenAPI spec
-	// but the SDK Agent struct stores them as strings, causing double-encoding
-	// when json.Marshal serializes the struct. The patch map built above uses
-	// map[string]any with native Go types, which serializes correctly.
 	agent, err := types.NewAgentBuilder().
 		Name(decl.Name).
 		ProjectID(projectID).
@@ -398,31 +396,23 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 	if err != nil {
 		return fmt.Errorf("creating agent %s: %w", decl.Name, err)
 	}
-	if _, err := sdk.Agents().Update(ctx, created.ID, patch); err != nil {
+	if err := s.patchAPI(ctx, projectID, "agents", created.ID, patch); err != nil {
 		return fmt.Errorf("updating newly created agent %s: %w", decl.Name, err)
 	}
 	s.logger.Info().Str("agent", decl.Name).Str("id", created.ID).Msg("agent created from configmap")
 	return nil
 }
 
-func (s *ConfigMapSyncer) findAgentByName(ctx context.Context, sdk *sdkclient.Client, projectID, name string) *types.Agent {
+func (s *ConfigMapSyncer) findAgentByName(ctx context.Context, projectID, name string) *resourceRef {
 	escapedName := strings.ReplaceAll(name, "'", "''")
-	escapedProjectID := strings.ReplaceAll(projectID, "'", "''")
-	// Request only scalar fields to avoid deserialization failures: the API
-	// returns environment/providers/payloads/sandbox_template as JSON
-	// objects/arrays, but the SDK Agent struct types them as strings.
-	agents, err := sdk.Agents().List(ctx, &types.ListOptions{
-		Size:   1,
-		Search: fmt.Sprintf("name = '%s' AND project_id = '%s'", escapedName, escapedProjectID),
-		Fields: "id,name,project_id,annotations",
-	})
+	items, err := s.queryAPI(ctx, projectID, "agents", fmt.Sprintf("name = '%s'", escapedName), 1)
 	if err != nil {
 		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("failed to search for existing agent")
 		return nil
 	}
-	for _, a := range agents.Items {
-		if a.Name == name && a.ProjectID == projectID {
-			return &a
+	for _, item := range items {
+		if item.Name == name && item.ProjectID == projectID {
+			return &item
 		}
 	}
 	return nil
@@ -440,18 +430,13 @@ func (s *ConfigMapSyncer) isConfigMapManaged(annotations string, namespace strin
 }
 
 func (s *ConfigMapSyncer) pruneRemovedAgents(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, declaredAgents map[string]bool) {
-	escapedProjectID := strings.ReplaceAll(projectID, "'", "''")
-	agents, err := sdk.Agents().List(ctx, &types.ListOptions{
-		Size:   500,
-		Search: fmt.Sprintf("project_id = '%s'", escapedProjectID),
-		Fields: "id,name,project_id,annotations",
-	})
+	items, err := s.queryAPI(ctx, projectID, "agents", "", 500)
 	if err != nil {
 		s.logger.Warn().Err(err).Str("project_id", projectID).Msg("failed to list agents for pruning")
 		return
 	}
 
-	for _, a := range agents.Items {
+	for _, a := range items {
 		if s.isConfigMapManaged(a.Annotations, namespace) && !declaredAgents[a.Name] {
 			if err := sdk.Agents().Delete(ctx, a.ID); err != nil {
 				s.logger.Warn().Err(err).Str("agent", a.Name).Msg("failed to delete stale agent")
@@ -568,10 +553,9 @@ func (s *ConfigMapSyncer) upsertProvider(ctx context.Context, sdk *sdkclient.Cli
 
 func (s *ConfigMapSyncer) findProviderByName(ctx context.Context, sdk *sdkclient.Client, projectID, name string) *types.Provider {
 	escapedName := strings.ReplaceAll(name, "'", "''")
-	escapedProjectID := strings.ReplaceAll(projectID, "'", "''")
 	providers, err := sdk.Providers().List(ctx, &types.ListOptions{
 		Size:   1,
-		Search: fmt.Sprintf("name = '%s' AND project_id = '%s'", escapedName, escapedProjectID),
+		Search: fmt.Sprintf("name = '%s'", escapedName),
 	})
 	if err != nil {
 		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("failed to search for existing provider")
@@ -586,10 +570,8 @@ func (s *ConfigMapSyncer) findProviderByName(ctx context.Context, sdk *sdkclient
 }
 
 func (s *ConfigMapSyncer) pruneRemovedProviders(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, declared map[string]bool) {
-	escapedProjectID := strings.ReplaceAll(projectID, "'", "''")
 	providers, err := sdk.Providers().List(ctx, &types.ListOptions{
-		Size:   500,
-		Search: fmt.Sprintf("project_id = '%s'", escapedProjectID),
+		Size: 500,
 	})
 	if err != nil {
 		s.logger.Warn().Err(err).Str("project_id", projectID).Msg("failed to list providers for pruning")
@@ -682,7 +664,7 @@ func parsePolicyDeclaration(yamlStr string) (name string, spec map[string]interf
 }
 
 func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Client, projectID, namespace, name string, spec map[string]interface{}) error {
-	existing := s.findPolicyByName(ctx, sdk, projectID, name)
+	existing := s.findPolicyByName(ctx, projectID, name)
 
 	annJSON, err := s.buildOriginAnnotations(namespace, nil)
 	if err != nil {
@@ -695,8 +677,8 @@ func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Clien
 	}
 
 	if existing != nil {
-		if _, updateErr := sdk.Policys().Update(ctx, existing.ID, patch); updateErr != nil {
-			return fmt.Errorf("updating policy %s: %w", name, updateErr)
+		if err := s.patchAPI(ctx, projectID, "policies", existing.ID, patch); err != nil {
+			return fmt.Errorf("updating policy %s: %w", name, err)
 		}
 		s.logger.Debug().Str("policy", name).Str("id", existing.ID).Msg("policy updated from configmap")
 		return nil
@@ -715,44 +697,36 @@ func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Clien
 	if createErr != nil {
 		return fmt.Errorf("creating policy %s: %w", name, createErr)
 	}
-	if _, updateErr := sdk.Policys().Update(ctx, created.ID, patch); updateErr != nil {
-		return fmt.Errorf("updating newly created policy %s: %w", name, updateErr)
+	if err := s.patchAPI(ctx, projectID, "policies", created.ID, patch); err != nil {
+		return fmt.Errorf("updating newly created policy %s: %w", name, err)
 	}
 	s.logger.Info().Str("policy", name).Str("id", created.ID).Msg("policy created from configmap")
 	return nil
 }
 
-func (s *ConfigMapSyncer) findPolicyByName(ctx context.Context, sdk *sdkclient.Client, projectID, name string) *types.Policy {
+func (s *ConfigMapSyncer) findPolicyByName(ctx context.Context, projectID, name string) *resourceRef {
 	escapedName := strings.ReplaceAll(name, "'", "''")
-	escapedProjectID := strings.ReplaceAll(projectID, "'", "''")
-	policies, err := sdk.Policys().List(ctx, &types.ListOptions{
-		Size:   1,
-		Search: fmt.Sprintf("name = '%s' AND project_id = '%s'", escapedName, escapedProjectID),
-	})
+	items, err := s.queryAPI(ctx, projectID, "policies", fmt.Sprintf("name = '%s'", escapedName), 1)
 	if err != nil {
 		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("failed to search for existing policy")
 		return nil
 	}
-	for _, p := range policies.Items {
-		if p.Name == name && p.ProjectID == projectID {
-			return &p
+	for _, item := range items {
+		if item.Name == name && item.ProjectID == projectID {
+			return &item
 		}
 	}
 	return nil
 }
 
 func (s *ConfigMapSyncer) pruneRemovedPolicies(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, declared map[string]bool) {
-	escapedProjectID := strings.ReplaceAll(projectID, "'", "''")
-	policies, err := sdk.Policys().List(ctx, &types.ListOptions{
-		Size:   500,
-		Search: fmt.Sprintf("project_id = '%s'", escapedProjectID),
-	})
+	items, err := s.queryAPI(ctx, projectID, "policies", "", 500)
 	if err != nil {
 		s.logger.Warn().Err(err).Str("project_id", projectID).Msg("failed to list policies for pruning")
 		return
 	}
 
-	for _, p := range policies.Items {
+	for _, p := range items {
 		if s.isConfigMapManaged(p.Annotations, namespace) && !declared[p.Name] {
 			if deleteErr := sdk.Policys().Delete(ctx, p.ID); deleteErr != nil {
 				s.logger.Warn().Err(deleteErr).Str("policy", p.Name).Msg("failed to delete stale policy")
@@ -761,4 +735,117 @@ func (s *ConfigMapSyncer) pruneRemovedPolicies(ctx context.Context, sdk *sdkclie
 			}
 		}
 	}
+}
+
+// resourceRef holds the minimal fields needed for find/prune operations.
+// Uses only string fields so json.Unmarshal ignores complex JSON types
+// (objects, arrays) that the API returns for fields like environment,
+// providers, payloads, sandbox_template, and spec.
+type resourceRef struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	ProjectID   string `json:"project_id"`
+	Annotations string `json:"annotations"`
+}
+
+type resourceRefList struct {
+	Items []resourceRef `json:"items"`
+}
+
+// queryAPI makes a raw HTTP request to the API server, bypassing the SDK's
+// typed deserialization. The SDK's generated types use string for fields that
+// the API returns as JSON objects/arrays (environment, providers, spec, etc.),
+// causing json.Unmarshal to fail. This helper uses resourceRef which only has
+// string fields, so complex JSON fields are silently ignored.
+func (s *ConfigMapSyncer) queryAPI(ctx context.Context, projectID, resource, search string, size int) ([]resourceRef, error) {
+	token, err := s.factory.Token(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("getting token: %w", err)
+	}
+
+	params := url.Values{}
+	if search != "" {
+		params.Set("search", search)
+	}
+	if size > 0 {
+		params.Set("size", fmt.Sprintf("%d", size))
+	}
+
+	reqURL := fmt.Sprintf("%s/api/ambient/v1/projects/%s/%s", s.factory.BaseURL(), projectID, resource)
+	if len(params) > 0 {
+		reqURL += "?" + params.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Ambient-Project", projectID)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result resourceRefList
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("parsing response: %w", err)
+	}
+
+	return result.Items, nil
+}
+
+// patchAPI sends a PATCH request to update a resource, ignoring the response
+// body. The SDK's Update methods unmarshal the response into typed structs
+// that fail on complex JSON fields, so this helper discards the response.
+func (s *ConfigMapSyncer) patchAPI(ctx context.Context, projectID, resource, id string, patch map[string]interface{}) error {
+	token, err := s.factory.Token(ctx)
+	if err != nil {
+		return fmt.Errorf("getting token: %w", err)
+	}
+
+	body, err := json.Marshal(patch)
+	if err != nil {
+		return fmt.Errorf("marshalling patch: %w", err)
+	}
+
+	reqURL := fmt.Sprintf("%s/api/ambient/v1/projects/%s/%s/%s", s.factory.BaseURL(), projectID, resource, id)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, reqURL, strings.NewReader(string(body)))
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Ambient-Project", projectID)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("reading response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API returned %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
 }

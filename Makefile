@@ -1126,6 +1126,9 @@ kind-reload-ambient-api-server: check-kind check-kubectl check-local-context ## 
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(API_SERVER_IMAGE) . $(QUIET_REDIRECT)
 	$(call kind-reload-component,$(API_SERVER_IMAGE),ambient-api-server,Ambient API server,api-server)
+	@_IMG=$$(kubectl get deployment ambient-api-server -n $(NAMESPACE) -o jsonpath='{.spec.template.spec.containers[0].image}') && \
+		kubectl set image deployment/ambient-api-server -n $(NAMESPACE) migration=$$_IMG $(QUIET_REDIRECT) && \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Migration init container updated to $$_IMG"
 
 kind-sso-toggle: check-kubectl ## Toggle SSO auth on/off in Kind (affects both frontend and backend)
 	@UNLEASH_ADMIN_TOKEN=$$(kubectl get secret unleash-credentials -n $(NAMESPACE) -o jsonpath='{.data.admin-api-token}' | base64 -d); \
