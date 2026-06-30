@@ -34,9 +34,16 @@ data:
     [openshell.gateway.auth]
     allow_unauthenticated_users = true
 
+    [openshell.gateway.gateway_jwt]
+    signing_key_path = "/etc/openshell-jwt/signing.pem"
+    public_key_path  = "/etc/openshell-jwt/public.pem"
+    kid_path         = "/etc/openshell-jwt/kid"
+    gateway_id       = "openshell-gateway"
+    ttl_secs         = 3600
+
     [openshell.drivers.kubernetes]
     grpc_endpoint                = "https://openshell-gateway.NAMESPACE_PLACEHOLDER.svc.cluster.local:8080"
     service_account_name         = "openshell-gateway-sandbox"
-    supervisor_sideload_method   = "init-container"
+    supervisor_sideload_method   = "image-volume"
     sa_token_ttl_secs            = 3600
     app_armor_profile            = "Unconfined"
