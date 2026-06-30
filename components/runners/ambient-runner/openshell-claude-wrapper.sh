@@ -1,4 +1,12 @@
 #!/bin/bash
+# Guard against infinite recursion: this script is installed as /usr/local/bin/claude,
+# so when Claude Code spawns subagents that invoke `claude` by name, PATH resolves
+# back here. Skip the wrapper setup on re-entry and exec the real binary directly.
+if [ -n "$_CLAUDE_WRAPPER_ACTIVE" ]; then
+    exec /opt/claude/bin/claude "$@"
+fi
+export _CLAUDE_WRAPPER_ACTIVE=1
+
 export HOME=/sandbox
 export ANTHROPIC_BASE_URL=https://inference.local
 # Sentinel value: the gateway proxy intercepts requests before reaching Anthropic.
