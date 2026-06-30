@@ -4,15 +4,17 @@
 #
 # Provisions for each tenant in OPENSHELL_TENANTS (default: tenant-a tenant-b):
 #   1. Agent Sandbox CRD + controller (once, cluster-scoped)
-#   2. Tenant namespace + OpenShell gateway Helm chart
+#   2. Tenant namespaces
 #   3. ACP project via the API
 #   4. Patches the control plane deployment with OPENSHELL_USE_GATEWAY=true
+#
+# The control plane reconciler handles gateway resource deployment via
+# the platform-config ConfigMap — no Helm chart needed.
 
 set -euo pipefail
 
 NAMESPACE="${NAMESPACE:-ambient-code}"
 AGENT_SANDBOX_VERSION="${AGENT_SANDBOX_VERSION:-v0.4.6}"
-OPENSHELL_GATEWAY_CHART="${OPENSHELL_GATEWAY_CHART:-oci://ghcr.io/nvidia/openshell/helm-chart}"
 # Space-separated list of tenant namespaces to provision
 IFS=' ' read -ra TENANTS <<< "${OPENSHELL_TENANTS:-tenant-a tenant-b}"
 
@@ -51,13 +53,7 @@ echo "  Waiting for agent-sandbox controller..."
 kubectl wait --for=condition=Available deployment/agent-sandbox-controller \
   -n agent-sandbox-system --timeout=120s >/dev/null 2>&1
 
-# 2. Verify helm is available
-if ! command -v helm >/dev/null 2>&1; then
-  echo "Error: helm is required but not found in PATH"
-  exit 1
-fi
-
-# 3. Provision namespace + gateway for each tenant
+# 2. Create tenant namespaces (gateway resources deployed by control plane reconciler)
 for TENANT in "${TENANTS[@]}"; do
   echo "  Provisioning tenant '$TENANT'..."
 
@@ -67,39 +63,9 @@ for TENANT in "${TENANTS[@]}"; do
     kubectl create namespace "$TENANT"
     echo "    Created namespace '$TENANT'"
   fi
-
-  if helm status openshell-gateway -n "$TENANT" >/dev/null 2>&1; then
-    echo "    OpenShell gateway already installed in '$TENANT'"
-  else
-    # Re-annotate any cluster-scoped RBAC resources owned by a prior release in a
-    # different namespace so Helm can take ownership for this tenant's install.
-    # ClusterRoles/ClusterRoleBindings are cluster-scoped and conflict across installs
-    # when multiple gateways share the same Helm release name.
-    for RTYPE in clusterrole clusterrolebinding; do
-      for RNAME in $(kubectl get "$RTYPE" \
-          -l "app.kubernetes.io/instance=openshell-gateway" \
-          -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
-        OWNER_NS=$(kubectl get "$RTYPE" "$RNAME" \
-          -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}' \
-          2>/dev/null || echo "")
-        if [ -n "$OWNER_NS" ] && [ "$OWNER_NS" != "$TENANT" ]; then
-          echo "    Adopting $RTYPE/$RNAME (was owned by $OWNER_NS)..."
-          kubectl annotate "$RTYPE" "$RNAME" \
-            "meta.helm.sh/release-namespace=${TENANT}" --overwrite >/dev/null 2>&1 || true
-        fi
-      done
-    done
-
-    helm install openshell-gateway "$OPENSHELL_GATEWAY_CHART" \
-      --namespace "$TENANT" \
-      --set "pkiInitJob.serverDnsNames={openshell-gateway.${TENANT}.svc.cluster.local}" \
-      --set "server.auth.allowUnauthenticatedUsers=true" \
-      --wait --timeout 120s
-    echo "    Installed OpenShell gateway in '$TENANT'"
-  fi
 done
 
-# 4. Create ACP projects for each tenant via the API
+# 3. Create ACP projects for each tenant via the API
 echo "  Creating ACP projects..."
 TOKEN=$(kubectl get secret test-user-token -n "$NAMESPACE" \
   -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
@@ -154,7 +120,7 @@ else
   kill "${PF_PID}" 2>/dev/null || true
 fi
 
-# 5. Patch control plane with the gateway flag
+# 4. Patch control plane with the gateway flag
 kubectl set env deployment/ambient-control-plane -n "$NAMESPACE" \
   OPENSHELL_USE_GATEWAY=true \
   OPENSHELL_RUNNER_IMAGE=localhost/acp_runner_openshell:latest >/dev/null
