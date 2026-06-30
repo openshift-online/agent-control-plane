@@ -90,13 +90,13 @@ metadata:
 
 func TestApplyManifestToNamespace(t *testing.T) {
 	tests := []struct {
-		name          string
-		manifestJSON  string
-		namespace     string
-		config        GatewayConfig
-		defaultImage  string
-		checkField    []string
-		wantValue     string
+		name         string
+		manifestJSON string
+		namespace    string
+		config       GatewayConfig
+		defaultImage string
+		checkField   []string
+		wantValue    string
 	}{
 		{
 			name: "namespace placeholder substitution",

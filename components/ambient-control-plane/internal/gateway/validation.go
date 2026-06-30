@@ -43,8 +43,8 @@ func ValidateImageReference(ref string) error {
 
 	// Reject obvious injection attempts
 	if strings.Contains(ref, ";") || strings.Contains(ref, "&") ||
-	   strings.Contains(ref, "|") || strings.Contains(ref, "`") ||
-	   strings.Contains(ref, "$") || strings.Contains(ref, "\n") {
+		strings.Contains(ref, "|") || strings.Contains(ref, "`") ||
+		strings.Contains(ref, "$") || strings.Contains(ref, "\n") {
 		return fmt.Errorf("image reference contains invalid characters: %q", ref)
 	}
 
