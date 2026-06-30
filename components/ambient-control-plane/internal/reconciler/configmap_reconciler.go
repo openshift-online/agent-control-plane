@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -33,6 +34,15 @@ const (
 	annotationSourceCM       = "configmap"
 	annotationSourceNS       = "ambient.ai/source-namespace"
 )
+
+var dnsLabelRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9\-]*[a-z0-9])?$`)
+
+func validateResourceName(name string) error {
+	if !dnsLabelRE.MatchString(name) {
+		return fmt.Errorf("invalid resource name %q: must be a DNS label (lowercase alphanumeric or hyphens, cannot start/end with hyphen)", name)
+	}
+	return nil
+}
 
 type ProviderDeclaration struct {
 	Name   string `yaml:"name"`
@@ -404,8 +414,11 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 }
 
 func (s *ConfigMapSyncer) findAgentByName(ctx context.Context, projectID, name string) *resourceRef {
-	escapedName := strings.ReplaceAll(name, "'", "''")
-	items, err := s.queryAPI(ctx, projectID, "agents", fmt.Sprintf("name = '%s'", escapedName), 1)
+	if err := validateResourceName(name); err != nil {
+		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("invalid agent name")
+		return nil
+	}
+	items, err := s.queryAPI(ctx, projectID, "agents", fmt.Sprintf("name = '%s'", name), 1)
 	if err != nil {
 		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("failed to search for existing agent")
 		return nil
@@ -552,10 +565,13 @@ func (s *ConfigMapSyncer) upsertProvider(ctx context.Context, sdk *sdkclient.Cli
 }
 
 func (s *ConfigMapSyncer) findProviderByName(ctx context.Context, sdk *sdkclient.Client, projectID, name string) *types.Provider {
-	escapedName := strings.ReplaceAll(name, "'", "''")
+	if err := validateResourceName(name); err != nil {
+		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("invalid provider name")
+		return nil
+	}
 	providers, err := sdk.Providers().List(ctx, &types.ListOptions{
 		Size:   1,
-		Search: fmt.Sprintf("name = '%s'", escapedName),
+		Search: fmt.Sprintf("name = '%s'", name),
 	})
 	if err != nil {
 		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("failed to search for existing provider")
@@ -705,8 +721,11 @@ func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Clien
 }
 
 func (s *ConfigMapSyncer) findPolicyByName(ctx context.Context, projectID, name string) *resourceRef {
-	escapedName := strings.ReplaceAll(name, "'", "''")
-	items, err := s.queryAPI(ctx, projectID, "policies", fmt.Sprintf("name = '%s'", escapedName), 1)
+	if err := validateResourceName(name); err != nil {
+		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("invalid policy name")
+		return nil
+	}
+	items, err := s.queryAPI(ctx, projectID, "policies", fmt.Sprintf("name = '%s'", name), 1)
 	if err != nil {
 		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("failed to search for existing policy")
 		return nil

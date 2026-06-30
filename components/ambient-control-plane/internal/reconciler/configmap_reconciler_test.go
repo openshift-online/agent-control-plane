@@ -280,3 +280,76 @@ func mustJSON(v interface{}) string {
 	}
 	return string(raw)
 }
+
+func TestValidateResourceName(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{
+			name:    "valid lowercase",
+			input:   "my-agent",
+			wantErr: false,
+		},
+		{
+			name:    "valid single char",
+			input:   "a",
+			wantErr: false,
+		},
+		{
+			name:    "valid with numbers",
+			input:   "agent-123",
+			wantErr: false,
+		},
+		{
+			name:    "valid all numbers",
+			input:   "123",
+			wantErr: false,
+		},
+		{
+			name:    "invalid uppercase",
+			input:   "My-Agent",
+			wantErr: true,
+		},
+		{
+			name:    "invalid starts with hyphen",
+			input:   "-agent",
+			wantErr: true,
+		},
+		{
+			name:    "invalid ends with hyphen",
+			input:   "agent-",
+			wantErr: true,
+		},
+		{
+			name:    "invalid special chars",
+			input:   "agent_name",
+			wantErr: true,
+		},
+		{
+			name:    "invalid single quote (SQL injection attempt)",
+			input:   "agent' OR '1'='1",
+			wantErr: true,
+		},
+		{
+			name:    "invalid spaces",
+			input:   "my agent",
+			wantErr: true,
+		},
+		{
+			name:    "empty string",
+			input:   "",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateResourceName(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateResourceName(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+		})
+	}
+}
