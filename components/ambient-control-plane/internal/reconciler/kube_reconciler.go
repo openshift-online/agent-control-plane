@@ -14,6 +14,7 @@ import (
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell"
 	datapb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/datamodel/v1"
+	inferencepb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/inference/v1"
 	openshellpb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
@@ -98,6 +99,7 @@ type KubeReconcilerConfig struct {
 	OpenShellRunnerImage  string
 	OpenShellPolicyName   string
 	ServiceIdentity       string
+	CACertFile            string
 }
 
 type SimpleKubeReconciler struct {
@@ -313,6 +315,10 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		return fmt.Errorf("ensuring gateway providers: %w", err)
 	}
 
+	if err := r.configureInference(ctx, namespace, project.Name, credentialIDs); err != nil {
+		return fmt.Errorf("configuring inference: %w", err)
+	}
+
 	env := r.buildSandboxEnv(ctx, session, project.Name, sdk, providerNames)
 
 	for k, v := range env {
@@ -409,7 +415,7 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			execCtx := context.Background()
 			err = r.gateway.ExecSandboxStreaming(execCtx, namespace, &openshellpb.ExecSandboxRequest{
 				SandboxId: sandboxID,
-				Command:   []string{"/bin/bash", "-c", "cd /sandbox/runner/ambient-runner && uvicorn main:app --host 0.0.0.0 --port 8001"},
+				Command:   []string{"/bin/bash", "-c", "cd /sandbox/runner/ambient-runner && PATH=/sandbox/.venv/bin:$PATH uvicorn main:app --host 0.0.0.0 --port 8001"},
 			})
 			if err != nil {
 				r.logger.Error().Err(err).Str("sandbox", sbxName).Str("session_id", sessionID).Msg("failed to start runner exec")
@@ -431,25 +437,12 @@ func (r *SimpleKubeReconciler) ensureGatewayProviders(ctx context.Context, names
 		osType := openshell.OpenShellProviderType(ambientProvider)
 		provName := openshell.ProviderName(projectName, ambientProvider)
 
-		_, err := r.gateway.GetProvider(ctx, namespace, provName)
-		if err == nil {
-			providerNames = append(providerNames, provName)
-			continue
-		}
-		if st, ok := status.FromError(err); !ok || st.Code() != codes.NotFound {
-			return nil, fmt.Errorf("checking provider %s: %w", provName, err)
-		}
-
-		cred, err := sdk.Credentials().Get(ctx, credID)
+		tokenResp, err := sdk.Credentials().GetToken(ctx, credID)
 		if err != nil {
-			return nil, fmt.Errorf("fetching credential %s for provider %s: %w", credID, ambientProvider, err)
+			return nil, fmt.Errorf("fetching credential token %s for provider %s: %w", credID, ambientProvider, err)
 		}
 
-		credMap := map[string]string{}
-		if cred.Token != "" {
-			credMap["token"] = cred.Token
-		}
-		if len(credMap) == 0 {
+		if tokenResp.Token == "" {
 			r.logger.Warn().
 				Str("provider", provName).
 				Str("credential_id", credID).
@@ -457,30 +450,117 @@ func (r *SimpleKubeReconciler) ensureGatewayProviders(ctx context.Context, names
 			continue
 		}
 
-		req := &openshellpb.CreateProviderRequest{
-			Provider: &datapb.Provider{
-				Metadata: &datapb.ObjectMeta{
-					Name: provName,
-				},
-				Type:        osType,
-				Credentials: credMap,
+		providerData := &datapb.Provider{
+			Metadata: &datapb.ObjectMeta{
+				Name: provName,
 			},
+			Type:        osType,
+			Credentials: openshell.ProviderCredentials(ambientProvider, tokenResp.Token),
+			Config:      openshell.ProviderConfig(ambientProvider),
 		}
 
-		if _, err := r.gateway.CreateProvider(ctx, namespace, req); err != nil {
-			return nil, fmt.Errorf("creating provider %s: %w", provName, err)
+		_, err = r.gateway.GetProvider(ctx, namespace, provName)
+		if err == nil {
+			if _, err := r.gateway.UpdateProvider(ctx, namespace, &openshellpb.UpdateProviderRequest{Provider: providerData}); err != nil {
+				return nil, fmt.Errorf("updating provider %s: %w", provName, err)
+			}
+			r.logger.Info().
+				Str("provider", provName).
+				Str("type", osType).
+				Str("namespace", namespace).
+				Msg("gateway provider updated")
+		} else if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+			if _, err := r.gateway.CreateProvider(ctx, namespace, &openshellpb.CreateProviderRequest{Provider: providerData}); err != nil {
+				return nil, fmt.Errorf("creating provider %s: %w", provName, err)
+			}
+			r.logger.Info().
+				Str("provider", provName).
+				Str("type", osType).
+				Str("namespace", namespace).
+				Msg("gateway provider created")
+		} else {
+			return nil, fmt.Errorf("checking provider %s: %w", provName, err)
 		}
 
-		r.logger.Info().
-			Str("provider", provName).
-			Str("type", osType).
-			Str("namespace", namespace).
-			Msg("gateway provider created")
+		if ambientProvider == "vertex" {
+			if err := r.ensureVertexCredentialRefresh(ctx, namespace, provName, tokenResp.Token); err != nil {
+				return nil, fmt.Errorf("configuring credential refresh for provider %s: %w", provName, err)
+			}
+		}
 
 		providerNames = append(providerNames, provName)
 	}
 
 	return providerNames, nil
+}
+
+func (r *SimpleKubeReconciler) ensureVertexCredentialRefresh(ctx context.Context, namespace, provName, saKeyJSON string) error {
+	material, err := openshell.ExtractServiceAccountJWTMaterial(saKeyJSON)
+	if err != nil {
+		return fmt.Errorf("parsing service account key: %w", err)
+	}
+
+	credKey := openshell.VertexAIRefreshCredentialKey
+
+	if _, err := r.gateway.ConfigureProviderRefresh(ctx, namespace, &openshellpb.ConfigureProviderRefreshRequest{
+		Provider:      provName,
+		CredentialKey: credKey,
+		Strategy:      openshellpb.ProviderCredentialRefreshStrategy_PROVIDER_CREDENTIAL_REFRESH_STRATEGY_GOOGLE_SERVICE_ACCOUNT_JWT,
+		Material: map[string]string{
+			"client_email": material.ClientEmail,
+			"private_key":  material.PrivateKey,
+		},
+		SecretMaterialKeys: []string{"private_key"},
+	}); err != nil {
+		return fmt.Errorf("configuring refresh: %w", err)
+	}
+
+	rotateResp, err := r.gateway.RotateProviderCredential(ctx, namespace, &openshellpb.RotateProviderCredentialRequest{
+		Provider:      provName,
+		CredentialKey: credKey,
+	})
+	if err != nil {
+		return fmt.Errorf("rotating credential: %w", err)
+	}
+
+	r.logger.Info().
+		Str("provider", provName).
+		Str("credential_key", credKey).
+		Str("status", rotateResp.Status.GetStatus()).
+		Msg("vertex credential refresh configured and rotated")
+
+	return nil
+}
+
+func (r *SimpleKubeReconciler) configureInference(ctx context.Context, namespace, projectName string, credentialIDs map[string]string) error {
+	// TODO: allow model to be configured per-session via session.LlmModel
+	const inferenceModel = "claude-sonnet-4-6"
+
+	for ambientProvider := range credentialIDs {
+		if !openshell.IsInferenceCapable(ambientProvider) {
+			continue
+		}
+
+		provName := openshell.ProviderName(projectName, ambientProvider)
+
+		resp, err := r.gateway.SetClusterInference(ctx, namespace, &inferencepb.SetClusterInferenceRequest{
+			ProviderName: provName,
+			ModelId:      inferenceModel,
+			NoVerify:     true,
+		})
+		if err != nil {
+			return fmt.Errorf("setting inference for provider %s: %w", provName, err)
+		}
+
+		r.logger.Info().
+			Str("namespace", namespace).
+			Str("provider", provName).
+			Str("model", inferenceModel).
+			Uint64("version", resp.Version).
+			Msg("inference routing configured")
+	}
+
+	return nil
 }
 
 func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session types.Session, projectName string, sdk *sdkclient.Client, providerNames []string) map[string]string {
@@ -501,9 +581,9 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 		"AMBIENT_GRPC_ENABLED":        boolToStr(r.cfg.RunnerGRPCURL != ""),
 		"AMBIENT_GRPC_USE_TLS":        boolToStr(r.cfg.RunnerGRPCUseTLS),
 		"AGENT_ID":                    session.AgentID,
-		"AMBIENT_GRPC_CA_CERT_FILE":   "/etc/pki/ca-trust/extracted/pem/service-ca.crt",
-		"SSL_CERT_FILE":               "/etc/pki/ca-trust/extracted/pem/service-ca.crt",
-		"REQUESTS_CA_BUNDLE":          "/etc/pki/ca-trust/extracted/pem/service-ca.crt",
+		"AMBIENT_GRPC_CA_CERT_FILE":   r.cfg.CACertFile,
+		"SSL_CERT_FILE":               r.cfg.CACertFile,
+		"REQUESTS_CA_BUNDLE":          r.cfg.CACertFile,
 	}
 
 	if session.StartTime != nil {
@@ -521,6 +601,7 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 	}
 	env["USE_VERTEX"] = useVertex
 	env["CLAUDE_CODE_USE_VERTEX"] = useVertex
+	env["ACP_OPENSHELL_INFERENCE"] = "true"
 
 	if prompt := r.assembleInitialPrompt(ctx, session, sdk); prompt != "" {
 		env["INITIAL_PROMPT"] = prompt
@@ -546,8 +627,15 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 	if r.cfg.HTTPSProxy != "" {
 		env["HTTPS_PROXY"] = r.cfg.HTTPSProxy
 	}
-	if r.cfg.NoProxy != "" {
-		env["NO_PROXY"] = r.cfg.NoProxy
+	noProxy := r.cfg.NoProxy
+	if r.cfg.OpenShellUseGateway && noProxy == "" {
+		// In gateway mode the sandbox network namespace has no direct route
+		// to cluster IPs or DNS — all traffic must traverse the supervisor
+		// proxy. Only loopback is excluded.
+		noProxy = "127.0.0.1,localhost"
+	}
+	if noProxy != "" {
+		env["NO_PROXY"] = noProxy
 	}
 
 	injected := map[string]bool{}

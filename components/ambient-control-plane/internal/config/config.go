@@ -57,6 +57,7 @@ type ControlPlaneConfig struct {
 	OpenShellGatewayClientTLSSecret string
 	OpenShellGatewayTLSServerName   string
 	ServiceIdentity                 string
+	CACertFile                      string
 }
 
 func Load() (*ControlPlaneConfig, error) {
@@ -110,6 +111,7 @@ func Load() (*ControlPlaneConfig, error) {
 		OpenShellGatewayClientTLSSecret: envOrDefault("OPENSHELL_GATEWAY_CLIENT_TLS_SECRET", "openshell-client-tls"),
 		OpenShellGatewayTLSServerName:   os.Getenv("OPENSHELL_GATEWAY_TLS_SERVER_NAME"),
 		ServiceIdentity:                 strings.TrimSpace(os.Getenv("GRPC_SERVICE_ACCOUNT")),
+		CACertFile:                      envOrDefault("CA_CERT_FILE", "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"),
 	}
 
 	if cfg.MCPAPIServerURL == "" {

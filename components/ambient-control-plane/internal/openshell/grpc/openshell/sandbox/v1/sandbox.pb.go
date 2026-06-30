@@ -892,6 +892,120 @@ func (x *NetworkBinary) GetHarness() bool {
 	return false
 }
 
+type SettingValue struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Value:
+	//
+	//	*SettingValue_StringValue
+	//	*SettingValue_BoolValue
+	//	*SettingValue_IntValue
+	//	*SettingValue_BytesValue
+	Value         isSettingValue_Value `protobuf_oneof:"value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SettingValue) Reset() {
+	*x = SettingValue{}
+	mi := &file_openshell_sandbox_v1_sandbox_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SettingValue) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SettingValue) ProtoMessage() {}
+
+func (x *SettingValue) ProtoReflect() protoreflect.Message {
+	mi := &file_openshell_sandbox_v1_sandbox_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SettingValue.ProtoReflect.Descriptor instead.
+func (*SettingValue) Descriptor() ([]byte, []int) {
+	return file_openshell_sandbox_v1_sandbox_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *SettingValue) GetValue() isSettingValue_Value {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+func (x *SettingValue) GetStringValue() string {
+	if x != nil {
+		if x, ok := x.Value.(*SettingValue_StringValue); ok {
+			return x.StringValue
+		}
+	}
+	return ""
+}
+
+func (x *SettingValue) GetBoolValue() bool {
+	if x != nil {
+		if x, ok := x.Value.(*SettingValue_BoolValue); ok {
+			return x.BoolValue
+		}
+	}
+	return false
+}
+
+func (x *SettingValue) GetIntValue() int64 {
+	if x != nil {
+		if x, ok := x.Value.(*SettingValue_IntValue); ok {
+			return x.IntValue
+		}
+	}
+	return 0
+}
+
+func (x *SettingValue) GetBytesValue() []byte {
+	if x != nil {
+		if x, ok := x.Value.(*SettingValue_BytesValue); ok {
+			return x.BytesValue
+		}
+	}
+	return nil
+}
+
+type isSettingValue_Value interface {
+	isSettingValue_Value()
+}
+
+type SettingValue_StringValue struct {
+	StringValue string `protobuf:"bytes,1,opt,name=string_value,json=stringValue,proto3,oneof"`
+}
+
+type SettingValue_BoolValue struct {
+	BoolValue bool `protobuf:"varint,2,opt,name=bool_value,json=boolValue,proto3,oneof"`
+}
+
+type SettingValue_IntValue struct {
+	IntValue int64 `protobuf:"varint,3,opt,name=int_value,json=intValue,proto3,oneof"`
+}
+
+type SettingValue_BytesValue struct {
+	BytesValue []byte `protobuf:"bytes,4,opt,name=bytes_value,json=bytesValue,proto3,oneof"`
+}
+
+func (*SettingValue_StringValue) isSettingValue_Value() {}
+
+func (*SettingValue_BoolValue) isSettingValue_Value() {}
+
+func (*SettingValue_IntValue) isSettingValue_Value() {}
+
+func (*SettingValue_BytesValue) isSettingValue_Value() {}
+
 type GetSandboxConfigRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SandboxId     string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
@@ -901,7 +1015,7 @@ type GetSandboxConfigRequest struct {
 
 func (x *GetSandboxConfigRequest) Reset() {
 	*x = GetSandboxConfigRequest{}
-	mi := &file_openshell_sandbox_v1_sandbox_proto_msgTypes[12]
+	mi := &file_openshell_sandbox_v1_sandbox_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -913,7 +1027,7 @@ func (x *GetSandboxConfigRequest) String() string {
 func (*GetSandboxConfigRequest) ProtoMessage() {}
 
 func (x *GetSandboxConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_sandbox_v1_sandbox_proto_msgTypes[12]
+	mi := &file_openshell_sandbox_v1_sandbox_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -926,7 +1040,7 @@ func (x *GetSandboxConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSandboxConfigRequest.ProtoReflect.Descriptor instead.
 func (*GetSandboxConfigRequest) Descriptor() ([]byte, []int) {
-	return file_openshell_sandbox_v1_sandbox_proto_rawDescGZIP(), []int{12}
+	return file_openshell_sandbox_v1_sandbox_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetSandboxConfigRequest) GetSandboxId() string {
@@ -944,7 +1058,7 @@ type GetGatewayConfigRequest struct {
 
 func (x *GetGatewayConfigRequest) Reset() {
 	*x = GetGatewayConfigRequest{}
-	mi := &file_openshell_sandbox_v1_sandbox_proto_msgTypes[13]
+	mi := &file_openshell_sandbox_v1_sandbox_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -956,7 +1070,7 @@ func (x *GetGatewayConfigRequest) String() string {
 func (*GetGatewayConfigRequest) ProtoMessage() {}
 
 func (x *GetGatewayConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_sandbox_v1_sandbox_proto_msgTypes[13]
+	mi := &file_openshell_sandbox_v1_sandbox_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -969,7 +1083,7 @@ func (x *GetGatewayConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGatewayConfigRequest.ProtoReflect.Descriptor instead.
 func (*GetGatewayConfigRequest) Descriptor() ([]byte, []int) {
-	return file_openshell_sandbox_v1_sandbox_proto_rawDescGZIP(), []int{13}
+	return file_openshell_sandbox_v1_sandbox_proto_rawDescGZIP(), []int{14}
 }
 
 var File_openshell_sandbox_v1_sandbox_proto protoreflect.FileDescriptor
@@ -1064,7 +1178,15 @@ const file_openshell_sandbox_v1_sandbox_proto_rawDesc = "" +
 	"\x03any\x18\x02 \x03(\tR\x03any\"A\n" +
 	"\rNetworkBinary\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1c\n" +
-	"\aharness\x18\x02 \x01(\bB\x02\x18\x01R\aharness\"8\n" +
+	"\aharness\x18\x02 \x01(\bB\x02\x18\x01R\aharness\"\x9f\x01\n" +
+	"\fSettingValue\x12#\n" +
+	"\fstring_value\x18\x01 \x01(\tH\x00R\vstringValue\x12\x1f\n" +
+	"\n" +
+	"bool_value\x18\x02 \x01(\bH\x00R\tboolValue\x12\x1d\n" +
+	"\tint_value\x18\x03 \x01(\x03H\x00R\bintValue\x12!\n" +
+	"\vbytes_value\x18\x04 \x01(\fH\x00R\n" +
+	"bytesValueB\a\n" +
+	"\x05value\"8\n" +
 	"\x17GetSandboxConfigRequest\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\"\x19\n" +
@@ -1082,7 +1204,7 @@ func file_openshell_sandbox_v1_sandbox_proto_rawDescGZIP() []byte {
 	return file_openshell_sandbox_v1_sandbox_proto_rawDescData
 }
 
-var file_openshell_sandbox_v1_sandbox_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_openshell_sandbox_v1_sandbox_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_openshell_sandbox_v1_sandbox_proto_goTypes = []any{
 	(*SandboxPolicy)(nil),           // 0: openshell.sandbox.v1.SandboxPolicy
 	(*FilesystemPolicy)(nil),        // 1: openshell.sandbox.v1.FilesystemPolicy
@@ -1096,26 +1218,27 @@ var file_openshell_sandbox_v1_sandbox_proto_goTypes = []any{
 	(*L7Allow)(nil),                 // 9: openshell.sandbox.v1.L7Allow
 	(*L7QueryMatcher)(nil),          // 10: openshell.sandbox.v1.L7QueryMatcher
 	(*NetworkBinary)(nil),           // 11: openshell.sandbox.v1.NetworkBinary
-	(*GetSandboxConfigRequest)(nil), // 12: openshell.sandbox.v1.GetSandboxConfigRequest
-	(*GetGatewayConfigRequest)(nil), // 13: openshell.sandbox.v1.GetGatewayConfigRequest
-	nil,                             // 14: openshell.sandbox.v1.SandboxPolicy.NetworkPoliciesEntry
-	nil,                             // 15: openshell.sandbox.v1.NetworkEndpoint.GraphqlPersistedQueriesEntry
-	nil,                             // 16: openshell.sandbox.v1.L7DenyRule.QueryEntry
-	nil,                             // 17: openshell.sandbox.v1.L7Allow.QueryEntry
+	(*SettingValue)(nil),            // 12: openshell.sandbox.v1.SettingValue
+	(*GetSandboxConfigRequest)(nil), // 13: openshell.sandbox.v1.GetSandboxConfigRequest
+	(*GetGatewayConfigRequest)(nil), // 14: openshell.sandbox.v1.GetGatewayConfigRequest
+	nil,                             // 15: openshell.sandbox.v1.SandboxPolicy.NetworkPoliciesEntry
+	nil,                             // 16: openshell.sandbox.v1.NetworkEndpoint.GraphqlPersistedQueriesEntry
+	nil,                             // 17: openshell.sandbox.v1.L7DenyRule.QueryEntry
+	nil,                             // 18: openshell.sandbox.v1.L7Allow.QueryEntry
 }
 var file_openshell_sandbox_v1_sandbox_proto_depIdxs = []int32{
 	1,  // 0: openshell.sandbox.v1.SandboxPolicy.filesystem:type_name -> openshell.sandbox.v1.FilesystemPolicy
 	2,  // 1: openshell.sandbox.v1.SandboxPolicy.landlock:type_name -> openshell.sandbox.v1.LandlockPolicy
 	3,  // 2: openshell.sandbox.v1.SandboxPolicy.process:type_name -> openshell.sandbox.v1.ProcessPolicy
-	14, // 3: openshell.sandbox.v1.SandboxPolicy.network_policies:type_name -> openshell.sandbox.v1.SandboxPolicy.NetworkPoliciesEntry
+	15, // 3: openshell.sandbox.v1.SandboxPolicy.network_policies:type_name -> openshell.sandbox.v1.SandboxPolicy.NetworkPoliciesEntry
 	5,  // 4: openshell.sandbox.v1.NetworkPolicyRule.endpoints:type_name -> openshell.sandbox.v1.NetworkEndpoint
 	11, // 5: openshell.sandbox.v1.NetworkPolicyRule.binaries:type_name -> openshell.sandbox.v1.NetworkBinary
 	8,  // 6: openshell.sandbox.v1.NetworkEndpoint.rules:type_name -> openshell.sandbox.v1.L7Rule
 	7,  // 7: openshell.sandbox.v1.NetworkEndpoint.deny_rules:type_name -> openshell.sandbox.v1.L7DenyRule
-	15, // 8: openshell.sandbox.v1.NetworkEndpoint.graphql_persisted_queries:type_name -> openshell.sandbox.v1.NetworkEndpoint.GraphqlPersistedQueriesEntry
-	16, // 9: openshell.sandbox.v1.L7DenyRule.query:type_name -> openshell.sandbox.v1.L7DenyRule.QueryEntry
+	16, // 8: openshell.sandbox.v1.NetworkEndpoint.graphql_persisted_queries:type_name -> openshell.sandbox.v1.NetworkEndpoint.GraphqlPersistedQueriesEntry
+	17, // 9: openshell.sandbox.v1.L7DenyRule.query:type_name -> openshell.sandbox.v1.L7DenyRule.QueryEntry
 	9,  // 10: openshell.sandbox.v1.L7Rule.allow:type_name -> openshell.sandbox.v1.L7Allow
-	17, // 11: openshell.sandbox.v1.L7Allow.query:type_name -> openshell.sandbox.v1.L7Allow.QueryEntry
+	18, // 11: openshell.sandbox.v1.L7Allow.query:type_name -> openshell.sandbox.v1.L7Allow.QueryEntry
 	4,  // 12: openshell.sandbox.v1.SandboxPolicy.NetworkPoliciesEntry.value:type_name -> openshell.sandbox.v1.NetworkPolicyRule
 	6,  // 13: openshell.sandbox.v1.NetworkEndpoint.GraphqlPersistedQueriesEntry.value:type_name -> openshell.sandbox.v1.GraphqlOperation
 	10, // 14: openshell.sandbox.v1.L7DenyRule.QueryEntry.value:type_name -> openshell.sandbox.v1.L7QueryMatcher
@@ -1132,13 +1255,19 @@ func file_openshell_sandbox_v1_sandbox_proto_init() {
 	if File_openshell_sandbox_v1_sandbox_proto != nil {
 		return
 	}
+	file_openshell_sandbox_v1_sandbox_proto_msgTypes[12].OneofWrappers = []any{
+		(*SettingValue_StringValue)(nil),
+		(*SettingValue_BoolValue)(nil),
+		(*SettingValue_IntValue)(nil),
+		(*SettingValue_BytesValue)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_openshell_sandbox_v1_sandbox_proto_rawDesc), len(file_openshell_sandbox_v1_sandbox_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   18,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

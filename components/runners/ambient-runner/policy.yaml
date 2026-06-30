@@ -176,3 +176,20 @@ network_policies:
       - { path: /usr/lib/node_modules/opencode-ai/bin/.opencode }
       - { path: /usr/bin/node }
       - { path: /usr/local/bin/opencode }
+
+  # ACP internal traffic — runner connects to the control plane token
+  # endpoint and the API server gRPC stream from inside the sandbox
+  # network namespace, where all traffic routes through the proxy.
+  acp_internal:
+    name: acp-internal
+    endpoints:
+      - { host: "ambient-control-plane.ambient-code.svc", port: 8080 }
+      - { host: "ambient-control-plane.ambient-code.svc.cluster.local", port: 8080 }
+      - { host: "ambient-api-server.ambient-code.svc", port: 8000 }
+      - { host: "ambient-api-server.ambient-code.svc.cluster.local", port: 8000 }
+      - { host: "ambient-api-server.ambient-code.svc", port: 9000 }
+      - { host: "ambient-api-server.ambient-code.svc.cluster.local", port: 9000 }
+    binaries:
+      - { path: /sandbox/.venv/bin/python }
+      - { path: /sandbox/.venv/bin/python3 }
+      - { path: /sandbox/.venv/bin/uvicorn }

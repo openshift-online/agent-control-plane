@@ -25,14 +25,17 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	OpenShell_CreateSandbox_FullMethodName  = "/openshell.v1.OpenShell/CreateSandbox"
-	OpenShell_GetSandbox_FullMethodName     = "/openshell.v1.OpenShell/GetSandbox"
-	OpenShell_DeleteSandbox_FullMethodName  = "/openshell.v1.OpenShell/DeleteSandbox"
-	OpenShell_ExecSandbox_FullMethodName    = "/openshell.v1.OpenShell/ExecSandbox"
-	OpenShell_CreateProvider_FullMethodName = "/openshell.v1.OpenShell/CreateProvider"
-	OpenShell_UpdateProvider_FullMethodName = "/openshell.v1.OpenShell/UpdateProvider"
-	OpenShell_GetProvider_FullMethodName    = "/openshell.v1.OpenShell/GetProvider"
-	OpenShell_ListProviders_FullMethodName  = "/openshell.v1.OpenShell/ListProviders"
+	OpenShell_CreateSandbox_FullMethodName            = "/openshell.v1.OpenShell/CreateSandbox"
+	OpenShell_GetSandbox_FullMethodName               = "/openshell.v1.OpenShell/GetSandbox"
+	OpenShell_DeleteSandbox_FullMethodName            = "/openshell.v1.OpenShell/DeleteSandbox"
+	OpenShell_ExecSandbox_FullMethodName              = "/openshell.v1.OpenShell/ExecSandbox"
+	OpenShell_CreateProvider_FullMethodName           = "/openshell.v1.OpenShell/CreateProvider"
+	OpenShell_UpdateProvider_FullMethodName           = "/openshell.v1.OpenShell/UpdateProvider"
+	OpenShell_GetProvider_FullMethodName              = "/openshell.v1.OpenShell/GetProvider"
+	OpenShell_ListProviders_FullMethodName            = "/openshell.v1.OpenShell/ListProviders"
+	OpenShell_UpdateConfig_FullMethodName             = "/openshell.v1.OpenShell/UpdateConfig"
+	OpenShell_ConfigureProviderRefresh_FullMethodName = "/openshell.v1.OpenShell/ConfigureProviderRefresh"
+	OpenShell_RotateProviderCredential_FullMethodName = "/openshell.v1.OpenShell/RotateProviderCredential"
 )
 
 // OpenShellClient is the client API for OpenShell service.
@@ -47,6 +50,9 @@ type OpenShellClient interface {
 	UpdateProvider(ctx context.Context, in *UpdateProviderRequest, opts ...grpc.CallOption) (*ProviderResponse, error)
 	GetProvider(ctx context.Context, in *GetProviderRequest, opts ...grpc.CallOption) (*ProviderResponse, error)
 	ListProviders(ctx context.Context, in *ListProvidersRequest, opts ...grpc.CallOption) (*ListProvidersResponse, error)
+	UpdateConfig(ctx context.Context, in *UpdateConfigRequest, opts ...grpc.CallOption) (*UpdateConfigResponse, error)
+	ConfigureProviderRefresh(ctx context.Context, in *ConfigureProviderRefreshRequest, opts ...grpc.CallOption) (*ConfigureProviderRefreshResponse, error)
+	RotateProviderCredential(ctx context.Context, in *RotateProviderCredentialRequest, opts ...grpc.CallOption) (*RotateProviderCredentialResponse, error)
 }
 
 type openShellClient struct {
@@ -146,6 +152,36 @@ func (c *openShellClient) ListProviders(ctx context.Context, in *ListProvidersRe
 	return out, nil
 }
 
+func (c *openShellClient) UpdateConfig(ctx context.Context, in *UpdateConfigRequest, opts ...grpc.CallOption) (*UpdateConfigResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateConfigResponse)
+	err := c.cc.Invoke(ctx, OpenShell_UpdateConfig_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *openShellClient) ConfigureProviderRefresh(ctx context.Context, in *ConfigureProviderRefreshRequest, opts ...grpc.CallOption) (*ConfigureProviderRefreshResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfigureProviderRefreshResponse)
+	err := c.cc.Invoke(ctx, OpenShell_ConfigureProviderRefresh_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *openShellClient) RotateProviderCredential(ctx context.Context, in *RotateProviderCredentialRequest, opts ...grpc.CallOption) (*RotateProviderCredentialResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RotateProviderCredentialResponse)
+	err := c.cc.Invoke(ctx, OpenShell_RotateProviderCredential_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // OpenShellServer is the server API for OpenShell service.
 // All implementations must embed UnimplementedOpenShellServer
 // for forward compatibility.
@@ -158,6 +194,9 @@ type OpenShellServer interface {
 	UpdateProvider(context.Context, *UpdateProviderRequest) (*ProviderResponse, error)
 	GetProvider(context.Context, *GetProviderRequest) (*ProviderResponse, error)
 	ListProviders(context.Context, *ListProvidersRequest) (*ListProvidersResponse, error)
+	UpdateConfig(context.Context, *UpdateConfigRequest) (*UpdateConfigResponse, error)
+	ConfigureProviderRefresh(context.Context, *ConfigureProviderRefreshRequest) (*ConfigureProviderRefreshResponse, error)
+	RotateProviderCredential(context.Context, *RotateProviderCredentialRequest) (*RotateProviderCredentialResponse, error)
 	mustEmbedUnimplementedOpenShellServer()
 }
 
@@ -191,6 +230,15 @@ func (UnimplementedOpenShellServer) GetProvider(context.Context, *GetProviderReq
 }
 func (UnimplementedOpenShellServer) ListProviders(context.Context, *ListProvidersRequest) (*ListProvidersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListProviders not implemented")
+}
+func (UnimplementedOpenShellServer) UpdateConfig(context.Context, *UpdateConfigRequest) (*UpdateConfigResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateConfig not implemented")
+}
+func (UnimplementedOpenShellServer) ConfigureProviderRefresh(context.Context, *ConfigureProviderRefreshRequest) (*ConfigureProviderRefreshResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfigureProviderRefresh not implemented")
+}
+func (UnimplementedOpenShellServer) RotateProviderCredential(context.Context, *RotateProviderCredentialRequest) (*RotateProviderCredentialResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RotateProviderCredential not implemented")
 }
 func (UnimplementedOpenShellServer) mustEmbedUnimplementedOpenShellServer() {}
 func (UnimplementedOpenShellServer) testEmbeddedByValue()                   {}
@@ -350,6 +398,60 @@ func _OpenShell_ListProviders_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _OpenShell_UpdateConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OpenShellServer).UpdateConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OpenShell_UpdateConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OpenShellServer).UpdateConfig(ctx, req.(*UpdateConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _OpenShell_ConfigureProviderRefresh_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfigureProviderRefreshRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OpenShellServer).ConfigureProviderRefresh(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OpenShell_ConfigureProviderRefresh_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OpenShellServer).ConfigureProviderRefresh(ctx, req.(*ConfigureProviderRefreshRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _OpenShell_RotateProviderCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RotateProviderCredentialRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OpenShellServer).RotateProviderCredential(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OpenShell_RotateProviderCredential_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OpenShellServer).RotateProviderCredential(ctx, req.(*RotateProviderCredentialRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // OpenShell_ServiceDesc is the grpc.ServiceDesc for OpenShell service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -384,6 +486,18 @@ var OpenShell_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListProviders",
 			Handler:    _OpenShell_ListProviders_Handler,
+		},
+		{
+			MethodName: "UpdateConfig",
+			Handler:    _OpenShell_UpdateConfig_Handler,
+		},
+		{
+			MethodName: "ConfigureProviderRefresh",
+			Handler:    _OpenShell_ConfigureProviderRefresh_Handler,
+		},
+		{
+			MethodName: "RotateProviderCredential",
+			Handler:    _OpenShell_RotateProviderCredential_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

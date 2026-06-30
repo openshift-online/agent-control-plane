@@ -99,6 +99,15 @@ message NetworkBinary {
   bool harness = 2 [deprecated = true];
 }
 
+message SettingValue {
+  oneof value {
+    string string_value = 1;
+    bool bool_value = 2;
+    int64 int_value = 3;
+    bytes bytes_value = 4;
+  }
+}
+
 message GetSandboxConfigRequest {
   string sandbox_id = 1;
 }

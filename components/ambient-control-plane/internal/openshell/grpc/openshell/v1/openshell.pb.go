@@ -87,6 +87,64 @@ func (SandboxPhase) EnumDescriptor() ([]byte, []int) {
 	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{0}
 }
 
+type ProviderCredentialRefreshStrategy int32
+
+const (
+	ProviderCredentialRefreshStrategy_PROVIDER_CREDENTIAL_REFRESH_STRATEGY_UNSPECIFIED                ProviderCredentialRefreshStrategy = 0
+	ProviderCredentialRefreshStrategy_PROVIDER_CREDENTIAL_REFRESH_STRATEGY_STATIC                     ProviderCredentialRefreshStrategy = 1
+	ProviderCredentialRefreshStrategy_PROVIDER_CREDENTIAL_REFRESH_STRATEGY_EXTERNAL                   ProviderCredentialRefreshStrategy = 2
+	ProviderCredentialRefreshStrategy_PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_REFRESH_TOKEN       ProviderCredentialRefreshStrategy = 3
+	ProviderCredentialRefreshStrategy_PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_CLIENT_CREDENTIALS  ProviderCredentialRefreshStrategy = 4
+	ProviderCredentialRefreshStrategy_PROVIDER_CREDENTIAL_REFRESH_STRATEGY_GOOGLE_SERVICE_ACCOUNT_JWT ProviderCredentialRefreshStrategy = 5
+)
+
+// Enum value maps for ProviderCredentialRefreshStrategy.
+var (
+	ProviderCredentialRefreshStrategy_name = map[int32]string{
+		0: "PROVIDER_CREDENTIAL_REFRESH_STRATEGY_UNSPECIFIED",
+		1: "PROVIDER_CREDENTIAL_REFRESH_STRATEGY_STATIC",
+		2: "PROVIDER_CREDENTIAL_REFRESH_STRATEGY_EXTERNAL",
+		3: "PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_REFRESH_TOKEN",
+		4: "PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_CLIENT_CREDENTIALS",
+		5: "PROVIDER_CREDENTIAL_REFRESH_STRATEGY_GOOGLE_SERVICE_ACCOUNT_JWT",
+	}
+	ProviderCredentialRefreshStrategy_value = map[string]int32{
+		"PROVIDER_CREDENTIAL_REFRESH_STRATEGY_UNSPECIFIED":                0,
+		"PROVIDER_CREDENTIAL_REFRESH_STRATEGY_STATIC":                     1,
+		"PROVIDER_CREDENTIAL_REFRESH_STRATEGY_EXTERNAL":                   2,
+		"PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_REFRESH_TOKEN":       3,
+		"PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_CLIENT_CREDENTIALS":  4,
+		"PROVIDER_CREDENTIAL_REFRESH_STRATEGY_GOOGLE_SERVICE_ACCOUNT_JWT": 5,
+	}
+)
+
+func (x ProviderCredentialRefreshStrategy) Enum() *ProviderCredentialRefreshStrategy {
+	p := new(ProviderCredentialRefreshStrategy)
+	*p = x
+	return p
+}
+
+func (x ProviderCredentialRefreshStrategy) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ProviderCredentialRefreshStrategy) Descriptor() protoreflect.EnumDescriptor {
+	return file_openshell_v1_openshell_proto_enumTypes[1].Descriptor()
+}
+
+func (ProviderCredentialRefreshStrategy) Type() protoreflect.EnumType {
+	return &file_openshell_v1_openshell_proto_enumTypes[1]
+}
+
+func (x ProviderCredentialRefreshStrategy) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ProviderCredentialRefreshStrategy.Descriptor instead.
+func (ProviderCredentialRefreshStrategy) EnumDescriptor() ([]byte, []int) {
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{1}
+}
+
 type Sandbox struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Metadata      *v1.ObjectMeta         `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
@@ -1425,6 +1483,498 @@ func (x *ExecSandboxExit) GetExitCode() int32 {
 	return 0
 }
 
+type UpdateConfigRequest struct {
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	Name                    string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Policy                  *v11.SandboxPolicy     `protobuf:"bytes,2,opt,name=policy,proto3" json:"policy,omitempty"`
+	SettingKey              string                 `protobuf:"bytes,3,opt,name=setting_key,json=settingKey,proto3" json:"setting_key,omitempty"`
+	SettingValue            *v11.SettingValue      `protobuf:"bytes,4,opt,name=setting_value,json=settingValue,proto3" json:"setting_value,omitempty"`
+	DeleteSetting           bool                   `protobuf:"varint,5,opt,name=delete_setting,json=deleteSetting,proto3" json:"delete_setting,omitempty"`
+	Global                  bool                   `protobuf:"varint,6,opt,name=global,proto3" json:"global,omitempty"`
+	ExpectedResourceVersion uint64                 `protobuf:"varint,8,opt,name=expected_resource_version,json=expectedResourceVersion,proto3" json:"expected_resource_version,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
+}
+
+func (x *UpdateConfigRequest) Reset() {
+	*x = UpdateConfigRequest{}
+	mi := &file_openshell_v1_openshell_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateConfigRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateConfigRequest) ProtoMessage() {}
+
+func (x *UpdateConfigRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_openshell_v1_openshell_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateConfigRequest.ProtoReflect.Descriptor instead.
+func (*UpdateConfigRequest) Descriptor() ([]byte, []int) {
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *UpdateConfigRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *UpdateConfigRequest) GetPolicy() *v11.SandboxPolicy {
+	if x != nil {
+		return x.Policy
+	}
+	return nil
+}
+
+func (x *UpdateConfigRequest) GetSettingKey() string {
+	if x != nil {
+		return x.SettingKey
+	}
+	return ""
+}
+
+func (x *UpdateConfigRequest) GetSettingValue() *v11.SettingValue {
+	if x != nil {
+		return x.SettingValue
+	}
+	return nil
+}
+
+func (x *UpdateConfigRequest) GetDeleteSetting() bool {
+	if x != nil {
+		return x.DeleteSetting
+	}
+	return false
+}
+
+func (x *UpdateConfigRequest) GetGlobal() bool {
+	if x != nil {
+		return x.Global
+	}
+	return false
+}
+
+func (x *UpdateConfigRequest) GetExpectedResourceVersion() uint64 {
+	if x != nil {
+		return x.ExpectedResourceVersion
+	}
+	return 0
+}
+
+type UpdateConfigResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Version          uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	PolicyHash       string                 `protobuf:"bytes,2,opt,name=policy_hash,json=policyHash,proto3" json:"policy_hash,omitempty"`
+	SettingsRevision uint64                 `protobuf:"varint,3,opt,name=settings_revision,json=settingsRevision,proto3" json:"settings_revision,omitempty"`
+	Deleted          bool                   `protobuf:"varint,4,opt,name=deleted,proto3" json:"deleted,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *UpdateConfigResponse) Reset() {
+	*x = UpdateConfigResponse{}
+	mi := &file_openshell_v1_openshell_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateConfigResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateConfigResponse) ProtoMessage() {}
+
+func (x *UpdateConfigResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_openshell_v1_openshell_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateConfigResponse.ProtoReflect.Descriptor instead.
+func (*UpdateConfigResponse) Descriptor() ([]byte, []int) {
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *UpdateConfigResponse) GetVersion() uint32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *UpdateConfigResponse) GetPolicyHash() string {
+	if x != nil {
+		return x.PolicyHash
+	}
+	return ""
+}
+
+func (x *UpdateConfigResponse) GetSettingsRevision() uint64 {
+	if x != nil {
+		return x.SettingsRevision
+	}
+	return 0
+}
+
+func (x *UpdateConfigResponse) GetDeleted() bool {
+	if x != nil {
+		return x.Deleted
+	}
+	return false
+}
+
+type ProviderCredentialRefreshStatus struct {
+	state           protoimpl.MessageState            `protogen:"open.v1"`
+	ProviderName    string                            `protobuf:"bytes,1,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
+	ProviderId      string                            `protobuf:"bytes,2,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	CredentialKey   string                            `protobuf:"bytes,3,opt,name=credential_key,json=credentialKey,proto3" json:"credential_key,omitempty"`
+	Strategy        ProviderCredentialRefreshStrategy `protobuf:"varint,4,opt,name=strategy,proto3,enum=openshell.v1.ProviderCredentialRefreshStrategy" json:"strategy,omitempty"`
+	Status          string                            `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	ExpiresAtMs     int64                             `protobuf:"varint,6,opt,name=expires_at_ms,json=expiresAtMs,proto3" json:"expires_at_ms,omitempty"`
+	NextRefreshAtMs int64                             `protobuf:"varint,7,opt,name=next_refresh_at_ms,json=nextRefreshAtMs,proto3" json:"next_refresh_at_ms,omitempty"`
+	LastRefreshAtMs int64                             `protobuf:"varint,8,opt,name=last_refresh_at_ms,json=lastRefreshAtMs,proto3" json:"last_refresh_at_ms,omitempty"`
+	LastError       string                            `protobuf:"bytes,9,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ProviderCredentialRefreshStatus) Reset() {
+	*x = ProviderCredentialRefreshStatus{}
+	mi := &file_openshell_v1_openshell_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProviderCredentialRefreshStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProviderCredentialRefreshStatus) ProtoMessage() {}
+
+func (x *ProviderCredentialRefreshStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_openshell_v1_openshell_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProviderCredentialRefreshStatus.ProtoReflect.Descriptor instead.
+func (*ProviderCredentialRefreshStatus) Descriptor() ([]byte, []int) {
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ProviderCredentialRefreshStatus) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
+}
+
+func (x *ProviderCredentialRefreshStatus) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *ProviderCredentialRefreshStatus) GetCredentialKey() string {
+	if x != nil {
+		return x.CredentialKey
+	}
+	return ""
+}
+
+func (x *ProviderCredentialRefreshStatus) GetStrategy() ProviderCredentialRefreshStrategy {
+	if x != nil {
+		return x.Strategy
+	}
+	return ProviderCredentialRefreshStrategy_PROVIDER_CREDENTIAL_REFRESH_STRATEGY_UNSPECIFIED
+}
+
+func (x *ProviderCredentialRefreshStatus) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *ProviderCredentialRefreshStatus) GetExpiresAtMs() int64 {
+	if x != nil {
+		return x.ExpiresAtMs
+	}
+	return 0
+}
+
+func (x *ProviderCredentialRefreshStatus) GetNextRefreshAtMs() int64 {
+	if x != nil {
+		return x.NextRefreshAtMs
+	}
+	return 0
+}
+
+func (x *ProviderCredentialRefreshStatus) GetLastRefreshAtMs() int64 {
+	if x != nil {
+		return x.LastRefreshAtMs
+	}
+	return 0
+}
+
+func (x *ProviderCredentialRefreshStatus) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
+type ConfigureProviderRefreshRequest struct {
+	state              protoimpl.MessageState            `protogen:"open.v1"`
+	Provider           string                            `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	CredentialKey      string                            `protobuf:"bytes,2,opt,name=credential_key,json=credentialKey,proto3" json:"credential_key,omitempty"`
+	Strategy           ProviderCredentialRefreshStrategy `protobuf:"varint,3,opt,name=strategy,proto3,enum=openshell.v1.ProviderCredentialRefreshStrategy" json:"strategy,omitempty"`
+	Material           map[string]string                 `protobuf:"bytes,4,rep,name=material,proto3" json:"material,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	SecretMaterialKeys []string                          `protobuf:"bytes,5,rep,name=secret_material_keys,json=secretMaterialKeys,proto3" json:"secret_material_keys,omitempty"`
+	ExpiresAtMs        *int64                            `protobuf:"varint,6,opt,name=expires_at_ms,json=expiresAtMs,proto3,oneof" json:"expires_at_ms,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *ConfigureProviderRefreshRequest) Reset() {
+	*x = ConfigureProviderRefreshRequest{}
+	mi := &file_openshell_v1_openshell_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfigureProviderRefreshRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfigureProviderRefreshRequest) ProtoMessage() {}
+
+func (x *ConfigureProviderRefreshRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_openshell_v1_openshell_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfigureProviderRefreshRequest.ProtoReflect.Descriptor instead.
+func (*ConfigureProviderRefreshRequest) Descriptor() ([]byte, []int) {
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ConfigureProviderRefreshRequest) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *ConfigureProviderRefreshRequest) GetCredentialKey() string {
+	if x != nil {
+		return x.CredentialKey
+	}
+	return ""
+}
+
+func (x *ConfigureProviderRefreshRequest) GetStrategy() ProviderCredentialRefreshStrategy {
+	if x != nil {
+		return x.Strategy
+	}
+	return ProviderCredentialRefreshStrategy_PROVIDER_CREDENTIAL_REFRESH_STRATEGY_UNSPECIFIED
+}
+
+func (x *ConfigureProviderRefreshRequest) GetMaterial() map[string]string {
+	if x != nil {
+		return x.Material
+	}
+	return nil
+}
+
+func (x *ConfigureProviderRefreshRequest) GetSecretMaterialKeys() []string {
+	if x != nil {
+		return x.SecretMaterialKeys
+	}
+	return nil
+}
+
+func (x *ConfigureProviderRefreshRequest) GetExpiresAtMs() int64 {
+	if x != nil && x.ExpiresAtMs != nil {
+		return *x.ExpiresAtMs
+	}
+	return 0
+}
+
+type ConfigureProviderRefreshResponse struct {
+	state         protoimpl.MessageState           `protogen:"open.v1"`
+	Status        *ProviderCredentialRefreshStatus `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfigureProviderRefreshResponse) Reset() {
+	*x = ConfigureProviderRefreshResponse{}
+	mi := &file_openshell_v1_openshell_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfigureProviderRefreshResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfigureProviderRefreshResponse) ProtoMessage() {}
+
+func (x *ConfigureProviderRefreshResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_openshell_v1_openshell_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfigureProviderRefreshResponse.ProtoReflect.Descriptor instead.
+func (*ConfigureProviderRefreshResponse) Descriptor() ([]byte, []int) {
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ConfigureProviderRefreshResponse) GetStatus() *ProviderCredentialRefreshStatus {
+	if x != nil {
+		return x.Status
+	}
+	return nil
+}
+
+type RotateProviderCredentialRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	CredentialKey string                 `protobuf:"bytes,2,opt,name=credential_key,json=credentialKey,proto3" json:"credential_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RotateProviderCredentialRequest) Reset() {
+	*x = RotateProviderCredentialRequest{}
+	mi := &file_openshell_v1_openshell_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RotateProviderCredentialRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RotateProviderCredentialRequest) ProtoMessage() {}
+
+func (x *RotateProviderCredentialRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_openshell_v1_openshell_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RotateProviderCredentialRequest.ProtoReflect.Descriptor instead.
+func (*RotateProviderCredentialRequest) Descriptor() ([]byte, []int) {
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *RotateProviderCredentialRequest) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *RotateProviderCredentialRequest) GetCredentialKey() string {
+	if x != nil {
+		return x.CredentialKey
+	}
+	return ""
+}
+
+type RotateProviderCredentialResponse struct {
+	state         protoimpl.MessageState           `protogen:"open.v1"`
+	Status        *ProviderCredentialRefreshStatus `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RotateProviderCredentialResponse) Reset() {
+	*x = RotateProviderCredentialResponse{}
+	mi := &file_openshell_v1_openshell_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RotateProviderCredentialResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RotateProviderCredentialResponse) ProtoMessage() {}
+
+func (x *RotateProviderCredentialResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_openshell_v1_openshell_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RotateProviderCredentialResponse.ProtoReflect.Descriptor instead.
+func (*RotateProviderCredentialResponse) Descriptor() ([]byte, []int) {
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *RotateProviderCredentialResponse) GetStatus() *ProviderCredentialRefreshStatus {
+	if x != nil {
+		return x.Status
+	}
+	return nil
+}
+
 var File_openshell_v1_openshell_proto protoreflect.FileDescriptor
 
 const file_openshell_v1_openshell_proto_rawDesc = "" +
@@ -1539,14 +2089,66 @@ const file_openshell_v1_openshell_proto_rawDesc = "" +
 	"\x11ExecSandboxStderr\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\".\n" +
 	"\x0fExecSandboxExit\x12\x1b\n" +
-	"\texit_code\x18\x01 \x01(\x05R\bexitCode*\xb6\x01\n" +
+	"\texit_code\x18\x01 \x01(\x05R\bexitCode\"\xcb\x02\n" +
+	"\x13UpdateConfigRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12;\n" +
+	"\x06policy\x18\x02 \x01(\v2#.openshell.sandbox.v1.SandboxPolicyR\x06policy\x12\x1f\n" +
+	"\vsetting_key\x18\x03 \x01(\tR\n" +
+	"settingKey\x12G\n" +
+	"\rsetting_value\x18\x04 \x01(\v2\".openshell.sandbox.v1.SettingValueR\fsettingValue\x12%\n" +
+	"\x0edelete_setting\x18\x05 \x01(\bR\rdeleteSetting\x12\x16\n" +
+	"\x06global\x18\x06 \x01(\bR\x06global\x12:\n" +
+	"\x19expected_resource_version\x18\b \x01(\x04R\x17expectedResourceVersion\"\x98\x01\n" +
+	"\x14UpdateConfigResponse\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\rR\aversion\x12\x1f\n" +
+	"\vpolicy_hash\x18\x02 \x01(\tR\n" +
+	"policyHash\x12+\n" +
+	"\x11settings_revision\x18\x03 \x01(\x04R\x10settingsRevision\x12\x18\n" +
+	"\adeleted\x18\x04 \x01(\bR\adeleted\"\x90\x03\n" +
+	"\x1fProviderCredentialRefreshStatus\x12#\n" +
+	"\rprovider_name\x18\x01 \x01(\tR\fproviderName\x12\x1f\n" +
+	"\vprovider_id\x18\x02 \x01(\tR\n" +
+	"providerId\x12%\n" +
+	"\x0ecredential_key\x18\x03 \x01(\tR\rcredentialKey\x12K\n" +
+	"\bstrategy\x18\x04 \x01(\x0e2/.openshell.v1.ProviderCredentialRefreshStrategyR\bstrategy\x12\x16\n" +
+	"\x06status\x18\x05 \x01(\tR\x06status\x12\"\n" +
+	"\rexpires_at_ms\x18\x06 \x01(\x03R\vexpiresAtMs\x12+\n" +
+	"\x12next_refresh_at_ms\x18\a \x01(\x03R\x0fnextRefreshAtMs\x12+\n" +
+	"\x12last_refresh_at_ms\x18\b \x01(\x03R\x0flastRefreshAtMs\x12\x1d\n" +
+	"\n" +
+	"last_error\x18\t \x01(\tR\tlastError\"\xb4\x03\n" +
+	"\x1fConfigureProviderRefreshRequest\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\x12%\n" +
+	"\x0ecredential_key\x18\x02 \x01(\tR\rcredentialKey\x12K\n" +
+	"\bstrategy\x18\x03 \x01(\x0e2/.openshell.v1.ProviderCredentialRefreshStrategyR\bstrategy\x12W\n" +
+	"\bmaterial\x18\x04 \x03(\v2;.openshell.v1.ConfigureProviderRefreshRequest.MaterialEntryR\bmaterial\x120\n" +
+	"\x14secret_material_keys\x18\x05 \x03(\tR\x12secretMaterialKeys\x12'\n" +
+	"\rexpires_at_ms\x18\x06 \x01(\x03H\x00R\vexpiresAtMs\x88\x01\x01\x1a;\n" +
+	"\rMaterialEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x10\n" +
+	"\x0e_expires_at_ms\"i\n" +
+	" ConfigureProviderRefreshResponse\x12E\n" +
+	"\x06status\x18\x01 \x01(\v2-.openshell.v1.ProviderCredentialRefreshStatusR\x06status\"d\n" +
+	"\x1fRotateProviderCredentialRequest\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\x12%\n" +
+	"\x0ecredential_key\x18\x02 \x01(\tR\rcredentialKey\"i\n" +
+	" RotateProviderCredentialResponse\x12E\n" +
+	"\x06status\x18\x01 \x01(\v2-.openshell.v1.ProviderCredentialRefreshStatusR\x06status*\xb6\x01\n" +
 	"\fSandboxPhase\x12\x1d\n" +
 	"\x19SANDBOX_PHASE_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aSANDBOX_PHASE_PROVISIONING\x10\x01\x12\x17\n" +
 	"\x13SANDBOX_PHASE_READY\x10\x02\x12\x17\n" +
 	"\x13SANDBOX_PHASE_ERROR\x10\x03\x12\x1a\n" +
 	"\x16SANDBOX_PHASE_DELETING\x10\x04\x12\x19\n" +
-	"\x15SANDBOX_PHASE_UNKNOWN\x10\x052\xb3\x05\n" +
+	"\x15SANDBOX_PHASE_UNKNOWN\x10\x05*\x85\x03\n" +
+	"!ProviderCredentialRefreshStrategy\x124\n" +
+	"0PROVIDER_CREDENTIAL_REFRESH_STRATEGY_UNSPECIFIED\x10\x00\x12/\n" +
+	"+PROVIDER_CREDENTIAL_REFRESH_STRATEGY_STATIC\x10\x01\x121\n" +
+	"-PROVIDER_CREDENTIAL_REFRESH_STRATEGY_EXTERNAL\x10\x02\x12=\n" +
+	"9PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_REFRESH_TOKEN\x10\x03\x12B\n" +
+	">PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_CLIENT_CREDENTIALS\x10\x04\x12C\n" +
+	"?PROVIDER_CREDENTIAL_REFRESH_STRATEGY_GOOGLE_SERVICE_ACCOUNT_JWT\x10\x052\x80\b\n" +
 	"\tOpenShell\x12R\n" +
 	"\rCreateSandbox\x12\".openshell.v1.CreateSandboxRequest\x1a\x1d.openshell.v1.SandboxResponse\x12L\n" +
 	"\n" +
@@ -1556,7 +2158,10 @@ const file_openshell_v1_openshell_proto_rawDesc = "" +
 	"\x0eCreateProvider\x12#.openshell.v1.CreateProviderRequest\x1a\x1e.openshell.v1.ProviderResponse\x12U\n" +
 	"\x0eUpdateProvider\x12#.openshell.v1.UpdateProviderRequest\x1a\x1e.openshell.v1.ProviderResponse\x12O\n" +
 	"\vGetProvider\x12 .openshell.v1.GetProviderRequest\x1a\x1e.openshell.v1.ProviderResponse\x12X\n" +
-	"\rListProviders\x12\".openshell.v1.ListProvidersRequest\x1a#.openshell.v1.ListProvidersResponseBuZsgithub.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1;openshell_v1b\x06proto3"
+	"\rListProviders\x12\".openshell.v1.ListProvidersRequest\x1a#.openshell.v1.ListProvidersResponse\x12U\n" +
+	"\fUpdateConfig\x12!.openshell.v1.UpdateConfigRequest\x1a\".openshell.v1.UpdateConfigResponse\x12y\n" +
+	"\x18ConfigureProviderRefresh\x12-.openshell.v1.ConfigureProviderRefreshRequest\x1a..openshell.v1.ConfigureProviderRefreshResponse\x12y\n" +
+	"\x18RotateProviderCredential\x12-.openshell.v1.RotateProviderCredentialRequest\x1a..openshell.v1.RotateProviderCredentialResponseBuZsgithub.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1;openshell_v1b\x06proto3"
 
 var (
 	file_openshell_v1_openshell_proto_rawDescOnce sync.Once
@@ -1570,89 +2175,112 @@ func file_openshell_v1_openshell_proto_rawDescGZIP() []byte {
 	return file_openshell_v1_openshell_proto_rawDescData
 }
 
-var file_openshell_v1_openshell_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_openshell_v1_openshell_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_openshell_v1_openshell_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_openshell_v1_openshell_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
 var file_openshell_v1_openshell_proto_goTypes = []any{
-	(SandboxPhase)(0),              // 0: openshell.v1.SandboxPhase
-	(*Sandbox)(nil),                // 1: openshell.v1.Sandbox
-	(*SandboxSpec)(nil),            // 2: openshell.v1.SandboxSpec
-	(*SandboxTemplate)(nil),        // 3: openshell.v1.SandboxTemplate
-	(*SandboxStatus)(nil),          // 4: openshell.v1.SandboxStatus
-	(*SandboxCondition)(nil),       // 5: openshell.v1.SandboxCondition
-	(*CreateSandboxRequest)(nil),   // 6: openshell.v1.CreateSandboxRequest
-	(*GetSandboxRequest)(nil),      // 7: openshell.v1.GetSandboxRequest
-	(*DeleteSandboxRequest)(nil),   // 8: openshell.v1.DeleteSandboxRequest
-	(*SandboxResponse)(nil),        // 9: openshell.v1.SandboxResponse
-	(*DeleteSandboxResponse)(nil),  // 10: openshell.v1.DeleteSandboxResponse
-	(*CreateProviderRequest)(nil),  // 11: openshell.v1.CreateProviderRequest
-	(*GetProviderRequest)(nil),     // 12: openshell.v1.GetProviderRequest
-	(*ListProvidersRequest)(nil),   // 13: openshell.v1.ListProvidersRequest
-	(*UpdateProviderRequest)(nil),  // 14: openshell.v1.UpdateProviderRequest
-	(*ProviderResponse)(nil),       // 15: openshell.v1.ProviderResponse
-	(*ListProvidersResponse)(nil),  // 16: openshell.v1.ListProvidersResponse
-	(*DeleteProviderRequest)(nil),  // 17: openshell.v1.DeleteProviderRequest
-	(*DeleteProviderResponse)(nil), // 18: openshell.v1.DeleteProviderResponse
-	(*ExecSandboxRequest)(nil),     // 19: openshell.v1.ExecSandboxRequest
-	(*ExecSandboxEvent)(nil),       // 20: openshell.v1.ExecSandboxEvent
-	(*ExecSandboxStdout)(nil),      // 21: openshell.v1.ExecSandboxStdout
-	(*ExecSandboxStderr)(nil),      // 22: openshell.v1.ExecSandboxStderr
-	(*ExecSandboxExit)(nil),        // 23: openshell.v1.ExecSandboxExit
-	nil,                            // 24: openshell.v1.SandboxSpec.EnvironmentEntry
-	nil,                            // 25: openshell.v1.SandboxTemplate.LabelsEntry
-	nil,                            // 26: openshell.v1.SandboxTemplate.AnnotationsEntry
-	nil,                            // 27: openshell.v1.SandboxTemplate.EnvironmentEntry
-	nil,                            // 28: openshell.v1.CreateSandboxRequest.LabelsEntry
-	nil,                            // 29: openshell.v1.UpdateProviderRequest.CredentialExpiresAtMsEntry
-	nil,                            // 30: openshell.v1.ExecSandboxRequest.EnvironmentEntry
-	(*v1.ObjectMeta)(nil),          // 31: openshell.datamodel.v1.ObjectMeta
-	(*v11.SandboxPolicy)(nil),      // 32: openshell.sandbox.v1.SandboxPolicy
-	(*v1.Provider)(nil),            // 33: openshell.datamodel.v1.Provider
+	(SandboxPhase)(0),                        // 0: openshell.v1.SandboxPhase
+	(ProviderCredentialRefreshStrategy)(0),   // 1: openshell.v1.ProviderCredentialRefreshStrategy
+	(*Sandbox)(nil),                          // 2: openshell.v1.Sandbox
+	(*SandboxSpec)(nil),                      // 3: openshell.v1.SandboxSpec
+	(*SandboxTemplate)(nil),                  // 4: openshell.v1.SandboxTemplate
+	(*SandboxStatus)(nil),                    // 5: openshell.v1.SandboxStatus
+	(*SandboxCondition)(nil),                 // 6: openshell.v1.SandboxCondition
+	(*CreateSandboxRequest)(nil),             // 7: openshell.v1.CreateSandboxRequest
+	(*GetSandboxRequest)(nil),                // 8: openshell.v1.GetSandboxRequest
+	(*DeleteSandboxRequest)(nil),             // 9: openshell.v1.DeleteSandboxRequest
+	(*SandboxResponse)(nil),                  // 10: openshell.v1.SandboxResponse
+	(*DeleteSandboxResponse)(nil),            // 11: openshell.v1.DeleteSandboxResponse
+	(*CreateProviderRequest)(nil),            // 12: openshell.v1.CreateProviderRequest
+	(*GetProviderRequest)(nil),               // 13: openshell.v1.GetProviderRequest
+	(*ListProvidersRequest)(nil),             // 14: openshell.v1.ListProvidersRequest
+	(*UpdateProviderRequest)(nil),            // 15: openshell.v1.UpdateProviderRequest
+	(*ProviderResponse)(nil),                 // 16: openshell.v1.ProviderResponse
+	(*ListProvidersResponse)(nil),            // 17: openshell.v1.ListProvidersResponse
+	(*DeleteProviderRequest)(nil),            // 18: openshell.v1.DeleteProviderRequest
+	(*DeleteProviderResponse)(nil),           // 19: openshell.v1.DeleteProviderResponse
+	(*ExecSandboxRequest)(nil),               // 20: openshell.v1.ExecSandboxRequest
+	(*ExecSandboxEvent)(nil),                 // 21: openshell.v1.ExecSandboxEvent
+	(*ExecSandboxStdout)(nil),                // 22: openshell.v1.ExecSandboxStdout
+	(*ExecSandboxStderr)(nil),                // 23: openshell.v1.ExecSandboxStderr
+	(*ExecSandboxExit)(nil),                  // 24: openshell.v1.ExecSandboxExit
+	(*UpdateConfigRequest)(nil),              // 25: openshell.v1.UpdateConfigRequest
+	(*UpdateConfigResponse)(nil),             // 26: openshell.v1.UpdateConfigResponse
+	(*ProviderCredentialRefreshStatus)(nil),  // 27: openshell.v1.ProviderCredentialRefreshStatus
+	(*ConfigureProviderRefreshRequest)(nil),  // 28: openshell.v1.ConfigureProviderRefreshRequest
+	(*ConfigureProviderRefreshResponse)(nil), // 29: openshell.v1.ConfigureProviderRefreshResponse
+	(*RotateProviderCredentialRequest)(nil),  // 30: openshell.v1.RotateProviderCredentialRequest
+	(*RotateProviderCredentialResponse)(nil), // 31: openshell.v1.RotateProviderCredentialResponse
+	nil,                                      // 32: openshell.v1.SandboxSpec.EnvironmentEntry
+	nil,                                      // 33: openshell.v1.SandboxTemplate.LabelsEntry
+	nil,                                      // 34: openshell.v1.SandboxTemplate.AnnotationsEntry
+	nil,                                      // 35: openshell.v1.SandboxTemplate.EnvironmentEntry
+	nil,                                      // 36: openshell.v1.CreateSandboxRequest.LabelsEntry
+	nil,                                      // 37: openshell.v1.UpdateProviderRequest.CredentialExpiresAtMsEntry
+	nil,                                      // 38: openshell.v1.ExecSandboxRequest.EnvironmentEntry
+	nil,                                      // 39: openshell.v1.ConfigureProviderRefreshRequest.MaterialEntry
+	(*v1.ObjectMeta)(nil),                    // 40: openshell.datamodel.v1.ObjectMeta
+	(*v11.SandboxPolicy)(nil),                // 41: openshell.sandbox.v1.SandboxPolicy
+	(*v1.Provider)(nil),                      // 42: openshell.datamodel.v1.Provider
+	(*v11.SettingValue)(nil),                 // 43: openshell.sandbox.v1.SettingValue
 }
 var file_openshell_v1_openshell_proto_depIdxs = []int32{
-	31, // 0: openshell.v1.Sandbox.metadata:type_name -> openshell.datamodel.v1.ObjectMeta
-	2,  // 1: openshell.v1.Sandbox.spec:type_name -> openshell.v1.SandboxSpec
-	4,  // 2: openshell.v1.Sandbox.status:type_name -> openshell.v1.SandboxStatus
-	24, // 3: openshell.v1.SandboxSpec.environment:type_name -> openshell.v1.SandboxSpec.EnvironmentEntry
-	3,  // 4: openshell.v1.SandboxSpec.template:type_name -> openshell.v1.SandboxTemplate
-	32, // 5: openshell.v1.SandboxSpec.policy:type_name -> openshell.sandbox.v1.SandboxPolicy
-	25, // 6: openshell.v1.SandboxTemplate.labels:type_name -> openshell.v1.SandboxTemplate.LabelsEntry
-	26, // 7: openshell.v1.SandboxTemplate.annotations:type_name -> openshell.v1.SandboxTemplate.AnnotationsEntry
-	27, // 8: openshell.v1.SandboxTemplate.environment:type_name -> openshell.v1.SandboxTemplate.EnvironmentEntry
-	5,  // 9: openshell.v1.SandboxStatus.conditions:type_name -> openshell.v1.SandboxCondition
+	40, // 0: openshell.v1.Sandbox.metadata:type_name -> openshell.datamodel.v1.ObjectMeta
+	3,  // 1: openshell.v1.Sandbox.spec:type_name -> openshell.v1.SandboxSpec
+	5,  // 2: openshell.v1.Sandbox.status:type_name -> openshell.v1.SandboxStatus
+	32, // 3: openshell.v1.SandboxSpec.environment:type_name -> openshell.v1.SandboxSpec.EnvironmentEntry
+	4,  // 4: openshell.v1.SandboxSpec.template:type_name -> openshell.v1.SandboxTemplate
+	41, // 5: openshell.v1.SandboxSpec.policy:type_name -> openshell.sandbox.v1.SandboxPolicy
+	33, // 6: openshell.v1.SandboxTemplate.labels:type_name -> openshell.v1.SandboxTemplate.LabelsEntry
+	34, // 7: openshell.v1.SandboxTemplate.annotations:type_name -> openshell.v1.SandboxTemplate.AnnotationsEntry
+	35, // 8: openshell.v1.SandboxTemplate.environment:type_name -> openshell.v1.SandboxTemplate.EnvironmentEntry
+	6,  // 9: openshell.v1.SandboxStatus.conditions:type_name -> openshell.v1.SandboxCondition
 	0,  // 10: openshell.v1.SandboxStatus.phase:type_name -> openshell.v1.SandboxPhase
-	2,  // 11: openshell.v1.CreateSandboxRequest.spec:type_name -> openshell.v1.SandboxSpec
-	28, // 12: openshell.v1.CreateSandboxRequest.labels:type_name -> openshell.v1.CreateSandboxRequest.LabelsEntry
-	1,  // 13: openshell.v1.SandboxResponse.sandbox:type_name -> openshell.v1.Sandbox
-	33, // 14: openshell.v1.CreateProviderRequest.provider:type_name -> openshell.datamodel.v1.Provider
-	33, // 15: openshell.v1.UpdateProviderRequest.provider:type_name -> openshell.datamodel.v1.Provider
-	29, // 16: openshell.v1.UpdateProviderRequest.credential_expires_at_ms:type_name -> openshell.v1.UpdateProviderRequest.CredentialExpiresAtMsEntry
-	33, // 17: openshell.v1.ProviderResponse.provider:type_name -> openshell.datamodel.v1.Provider
-	33, // 18: openshell.v1.ListProvidersResponse.providers:type_name -> openshell.datamodel.v1.Provider
-	30, // 19: openshell.v1.ExecSandboxRequest.environment:type_name -> openshell.v1.ExecSandboxRequest.EnvironmentEntry
-	21, // 20: openshell.v1.ExecSandboxEvent.stdout:type_name -> openshell.v1.ExecSandboxStdout
-	22, // 21: openshell.v1.ExecSandboxEvent.stderr:type_name -> openshell.v1.ExecSandboxStderr
-	23, // 22: openshell.v1.ExecSandboxEvent.exit:type_name -> openshell.v1.ExecSandboxExit
-	6,  // 23: openshell.v1.OpenShell.CreateSandbox:input_type -> openshell.v1.CreateSandboxRequest
-	7,  // 24: openshell.v1.OpenShell.GetSandbox:input_type -> openshell.v1.GetSandboxRequest
-	8,  // 25: openshell.v1.OpenShell.DeleteSandbox:input_type -> openshell.v1.DeleteSandboxRequest
-	19, // 26: openshell.v1.OpenShell.ExecSandbox:input_type -> openshell.v1.ExecSandboxRequest
-	11, // 27: openshell.v1.OpenShell.CreateProvider:input_type -> openshell.v1.CreateProviderRequest
-	14, // 28: openshell.v1.OpenShell.UpdateProvider:input_type -> openshell.v1.UpdateProviderRequest
-	12, // 29: openshell.v1.OpenShell.GetProvider:input_type -> openshell.v1.GetProviderRequest
-	13, // 30: openshell.v1.OpenShell.ListProviders:input_type -> openshell.v1.ListProvidersRequest
-	9,  // 31: openshell.v1.OpenShell.CreateSandbox:output_type -> openshell.v1.SandboxResponse
-	9,  // 32: openshell.v1.OpenShell.GetSandbox:output_type -> openshell.v1.SandboxResponse
-	10, // 33: openshell.v1.OpenShell.DeleteSandbox:output_type -> openshell.v1.DeleteSandboxResponse
-	20, // 34: openshell.v1.OpenShell.ExecSandbox:output_type -> openshell.v1.ExecSandboxEvent
-	15, // 35: openshell.v1.OpenShell.CreateProvider:output_type -> openshell.v1.ProviderResponse
-	15, // 36: openshell.v1.OpenShell.UpdateProvider:output_type -> openshell.v1.ProviderResponse
-	15, // 37: openshell.v1.OpenShell.GetProvider:output_type -> openshell.v1.ProviderResponse
-	16, // 38: openshell.v1.OpenShell.ListProviders:output_type -> openshell.v1.ListProvidersResponse
-	31, // [31:39] is the sub-list for method output_type
-	23, // [23:31] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	3,  // 11: openshell.v1.CreateSandboxRequest.spec:type_name -> openshell.v1.SandboxSpec
+	36, // 12: openshell.v1.CreateSandboxRequest.labels:type_name -> openshell.v1.CreateSandboxRequest.LabelsEntry
+	2,  // 13: openshell.v1.SandboxResponse.sandbox:type_name -> openshell.v1.Sandbox
+	42, // 14: openshell.v1.CreateProviderRequest.provider:type_name -> openshell.datamodel.v1.Provider
+	42, // 15: openshell.v1.UpdateProviderRequest.provider:type_name -> openshell.datamodel.v1.Provider
+	37, // 16: openshell.v1.UpdateProviderRequest.credential_expires_at_ms:type_name -> openshell.v1.UpdateProviderRequest.CredentialExpiresAtMsEntry
+	42, // 17: openshell.v1.ProviderResponse.provider:type_name -> openshell.datamodel.v1.Provider
+	42, // 18: openshell.v1.ListProvidersResponse.providers:type_name -> openshell.datamodel.v1.Provider
+	38, // 19: openshell.v1.ExecSandboxRequest.environment:type_name -> openshell.v1.ExecSandboxRequest.EnvironmentEntry
+	22, // 20: openshell.v1.ExecSandboxEvent.stdout:type_name -> openshell.v1.ExecSandboxStdout
+	23, // 21: openshell.v1.ExecSandboxEvent.stderr:type_name -> openshell.v1.ExecSandboxStderr
+	24, // 22: openshell.v1.ExecSandboxEvent.exit:type_name -> openshell.v1.ExecSandboxExit
+	41, // 23: openshell.v1.UpdateConfigRequest.policy:type_name -> openshell.sandbox.v1.SandboxPolicy
+	43, // 24: openshell.v1.UpdateConfigRequest.setting_value:type_name -> openshell.sandbox.v1.SettingValue
+	1,  // 25: openshell.v1.ProviderCredentialRefreshStatus.strategy:type_name -> openshell.v1.ProviderCredentialRefreshStrategy
+	1,  // 26: openshell.v1.ConfigureProviderRefreshRequest.strategy:type_name -> openshell.v1.ProviderCredentialRefreshStrategy
+	39, // 27: openshell.v1.ConfigureProviderRefreshRequest.material:type_name -> openshell.v1.ConfigureProviderRefreshRequest.MaterialEntry
+	27, // 28: openshell.v1.ConfigureProviderRefreshResponse.status:type_name -> openshell.v1.ProviderCredentialRefreshStatus
+	27, // 29: openshell.v1.RotateProviderCredentialResponse.status:type_name -> openshell.v1.ProviderCredentialRefreshStatus
+	7,  // 30: openshell.v1.OpenShell.CreateSandbox:input_type -> openshell.v1.CreateSandboxRequest
+	8,  // 31: openshell.v1.OpenShell.GetSandbox:input_type -> openshell.v1.GetSandboxRequest
+	9,  // 32: openshell.v1.OpenShell.DeleteSandbox:input_type -> openshell.v1.DeleteSandboxRequest
+	20, // 33: openshell.v1.OpenShell.ExecSandbox:input_type -> openshell.v1.ExecSandboxRequest
+	12, // 34: openshell.v1.OpenShell.CreateProvider:input_type -> openshell.v1.CreateProviderRequest
+	15, // 35: openshell.v1.OpenShell.UpdateProvider:input_type -> openshell.v1.UpdateProviderRequest
+	13, // 36: openshell.v1.OpenShell.GetProvider:input_type -> openshell.v1.GetProviderRequest
+	14, // 37: openshell.v1.OpenShell.ListProviders:input_type -> openshell.v1.ListProvidersRequest
+	25, // 38: openshell.v1.OpenShell.UpdateConfig:input_type -> openshell.v1.UpdateConfigRequest
+	28, // 39: openshell.v1.OpenShell.ConfigureProviderRefresh:input_type -> openshell.v1.ConfigureProviderRefreshRequest
+	30, // 40: openshell.v1.OpenShell.RotateProviderCredential:input_type -> openshell.v1.RotateProviderCredentialRequest
+	10, // 41: openshell.v1.OpenShell.CreateSandbox:output_type -> openshell.v1.SandboxResponse
+	10, // 42: openshell.v1.OpenShell.GetSandbox:output_type -> openshell.v1.SandboxResponse
+	11, // 43: openshell.v1.OpenShell.DeleteSandbox:output_type -> openshell.v1.DeleteSandboxResponse
+	21, // 44: openshell.v1.OpenShell.ExecSandbox:output_type -> openshell.v1.ExecSandboxEvent
+	16, // 45: openshell.v1.OpenShell.CreateProvider:output_type -> openshell.v1.ProviderResponse
+	16, // 46: openshell.v1.OpenShell.UpdateProvider:output_type -> openshell.v1.ProviderResponse
+	16, // 47: openshell.v1.OpenShell.GetProvider:output_type -> openshell.v1.ProviderResponse
+	17, // 48: openshell.v1.OpenShell.ListProviders:output_type -> openshell.v1.ListProvidersResponse
+	26, // 49: openshell.v1.OpenShell.UpdateConfig:output_type -> openshell.v1.UpdateConfigResponse
+	29, // 50: openshell.v1.OpenShell.ConfigureProviderRefresh:output_type -> openshell.v1.ConfigureProviderRefreshResponse
+	31, // 51: openshell.v1.OpenShell.RotateProviderCredential:output_type -> openshell.v1.RotateProviderCredentialResponse
+	41, // [41:52] is the sub-list for method output_type
+	30, // [30:41] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_openshell_v1_openshell_proto_init() }
@@ -1665,13 +2293,14 @@ func file_openshell_v1_openshell_proto_init() {
 		(*ExecSandboxEvent_Stderr)(nil),
 		(*ExecSandboxEvent_Exit)(nil),
 	}
+	file_openshell_v1_openshell_proto_msgTypes[26].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_openshell_v1_openshell_proto_rawDesc), len(file_openshell_v1_openshell_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   30,
+			NumEnums:      2,
+			NumMessages:   38,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

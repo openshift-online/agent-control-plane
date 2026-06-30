@@ -22,6 +22,9 @@ service OpenShell {
   rpc UpdateProvider(UpdateProviderRequest) returns (ProviderResponse);
   rpc GetProvider(GetProviderRequest) returns (ProviderResponse);
   rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
+  rpc UpdateConfig(UpdateConfigRequest) returns (UpdateConfigResponse);
+  rpc ConfigureProviderRefresh(ConfigureProviderRefreshRequest) returns (ConfigureProviderRefreshResponse);
+  rpc RotateProviderCredential(RotateProviderCredentialRequest) returns (RotateProviderCredentialResponse);
 }
 
 message Sandbox {
@@ -165,4 +168,64 @@ message ExecSandboxStderr {
 
 message ExecSandboxExit {
   int32 exit_code = 1;
+}
+
+message UpdateConfigRequest {
+  string name = 1;
+  openshell.sandbox.v1.SandboxPolicy policy = 2;
+  string setting_key = 3;
+  openshell.sandbox.v1.SettingValue setting_value = 4;
+  bool delete_setting = 5;
+  bool global = 6;
+  uint64 expected_resource_version = 8;
+}
+
+message UpdateConfigResponse {
+  uint32 version = 1;
+  string policy_hash = 2;
+  uint64 settings_revision = 3;
+  bool deleted = 4;
+}
+
+enum ProviderCredentialRefreshStrategy {
+  PROVIDER_CREDENTIAL_REFRESH_STRATEGY_UNSPECIFIED = 0;
+  PROVIDER_CREDENTIAL_REFRESH_STRATEGY_STATIC = 1;
+  PROVIDER_CREDENTIAL_REFRESH_STRATEGY_EXTERNAL = 2;
+  PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_REFRESH_TOKEN = 3;
+  PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_CLIENT_CREDENTIALS = 4;
+  PROVIDER_CREDENTIAL_REFRESH_STRATEGY_GOOGLE_SERVICE_ACCOUNT_JWT = 5;
+}
+
+message ProviderCredentialRefreshStatus {
+  string provider_name = 1;
+  string provider_id = 2;
+  string credential_key = 3;
+  ProviderCredentialRefreshStrategy strategy = 4;
+  string status = 5;
+  int64 expires_at_ms = 6;
+  int64 next_refresh_at_ms = 7;
+  int64 last_refresh_at_ms = 8;
+  string last_error = 9;
+}
+
+message ConfigureProviderRefreshRequest {
+  string provider = 1;
+  string credential_key = 2;
+  ProviderCredentialRefreshStrategy strategy = 3;
+  map<string, string> material = 4;
+  repeated string secret_material_keys = 5;
+  optional int64 expires_at_ms = 6;
+}
+
+message ConfigureProviderRefreshResponse {
+  ProviderCredentialRefreshStatus status = 1;
+}
+
+message RotateProviderCredentialRequest {
+  string provider = 1;
+  string credential_key = 2;
+}
+
+message RotateProviderCredentialResponse {
+  ProviderCredentialRefreshStatus status = 1;
 }

@@ -163,6 +163,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		OpenShellRunnerImage:  cfg.OpenShellRunnerImage,
 		OpenShellPolicyName:   cfg.OpenShellPolicyName,
 		ServiceIdentity:       cfg.ServiceIdentity,
+		CACertFile:            cfg.CACertFile,
 	}
 
 	conn, err := grpc.NewClient(cfg.GRPCServerAddr, grpc.WithTransportCredentials(grpcCredentials(cfg.GRPCUseTLS)))

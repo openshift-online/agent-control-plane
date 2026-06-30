@@ -6,6 +6,7 @@ import (
 	"io"
 	"sync"
 
+	inferencepb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/inference/v1"
 	pb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
@@ -206,6 +207,50 @@ func (g *GatewayClient) ExecSandbox(ctx context.Context, namespace string, req *
 		}
 	}
 	return result, nil
+}
+
+func (g *GatewayClient) inferenceClientForNamespace(ctx context.Context, namespace string) (inferencepb.InferenceClient, error) {
+	conn, err := g.getOrCreateConn(ctx, namespace)
+	if err != nil {
+		return nil, err
+	}
+	return inferencepb.NewInferenceClient(conn), nil
+}
+
+func (g *GatewayClient) SetClusterInference(ctx context.Context, namespace string, req *inferencepb.SetClusterInferenceRequest) (*inferencepb.SetClusterInferenceResponse, error) {
+	client, err := g.inferenceClientForNamespace(ctx, namespace)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.SetClusterInference(ctx, req)
+	if err != nil && g.shouldEvict(err) {
+		g.evictConn(namespace)
+	}
+	return resp, err
+}
+
+func (g *GatewayClient) ConfigureProviderRefresh(ctx context.Context, namespace string, req *pb.ConfigureProviderRefreshRequest) (*pb.ConfigureProviderRefreshResponse, error) {
+	client, err := g.clientForNamespace(ctx, namespace)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.ConfigureProviderRefresh(ctx, req)
+	if err != nil && g.shouldEvict(err) {
+		g.evictConn(namespace)
+	}
+	return resp, err
+}
+
+func (g *GatewayClient) RotateProviderCredential(ctx context.Context, namespace string, req *pb.RotateProviderCredentialRequest) (*pb.RotateProviderCredentialResponse, error) {
+	client, err := g.clientForNamespace(ctx, namespace)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.RotateProviderCredential(ctx, req)
+	if err != nil && g.shouldEvict(err) {
+		g.evictConn(namespace)
+	}
+	return resp, err
 }
 
 const maxLogChunkSize = 512

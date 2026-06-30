@@ -1,0 +1,47 @@
+// Vendored subset of the OpenShell inference proto.
+// Source: github.com/nvidia/openshell  proto/inference.proto
+// Only SetClusterInference and GetClusterInference are needed for ACP.
+
+syntax = "proto3";
+
+package openshell.inference.v1;
+
+option go_package = "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/inference/v1";
+
+service Inference {
+  rpc SetClusterInference(SetClusterInferenceRequest)
+      returns (SetClusterInferenceResponse);
+
+  rpc GetClusterInference(GetClusterInferenceRequest)
+      returns (GetClusterInferenceResponse);
+}
+
+message SetClusterInferenceRequest {
+  string provider_name = 1;
+  string model_id = 2;
+  string route_name = 3;
+  bool verify = 4;
+  bool no_verify = 5;
+  uint64 timeout_secs = 6;
+}
+
+message SetClusterInferenceResponse {
+  string provider_name = 1;
+  string model_id = 2;
+  uint64 version = 3;
+  string route_name = 4;
+  bool validation_performed = 5;
+  uint64 timeout_secs = 7;
+}
+
+message GetClusterInferenceRequest {
+  string route_name = 1;
+}
+
+message GetClusterInferenceResponse {
+  string provider_name = 1;
+  string model_id = 2;
+  uint64 version = 3;
+  string route_name = 4;
+  uint64 timeout_secs = 5;
+}
