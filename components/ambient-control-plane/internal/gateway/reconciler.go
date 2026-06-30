@@ -378,6 +378,11 @@ func reconcileResource(ctx context.Context, dynamicClient dynamic.Interface, obj
 			Msg("added restart annotation to StatefulSet (DNS or config changed)")
 	}
 
+	// For ClusterRoleBindings, merge subjects from existing to support multi-tenant
+	if gvk.Kind == "ClusterRoleBinding" {
+		mergeClusterRoleBindingSubjects(existing, obj)
+	}
+
 	// Preserve resourceVersion for optimistic concurrency
 	obj.SetResourceVersion(existing.GetResourceVersion())
 
@@ -436,4 +441,40 @@ func setOwnerReference(obj *unstructured.Unstructured, platformConfigCM *v1.Conf
 			// BlockOwnerDeletion omitted per project convention
 		},
 	})
+}
+
+// mergeClusterRoleBindingSubjects merges subjects from an existing ClusterRoleBinding
+// into the desired one, ensuring all tenant namespaces are represented. Without this,
+// the last tenant reconciled would overwrite subjects from earlier tenants.
+func mergeClusterRoleBindingSubjects(existing, desired *unstructured.Unstructured) {
+	existingSubjects, _, _ := unstructured.NestedSlice(existing.Object, "subjects")
+	desiredSubjects, _, _ := unstructured.NestedSlice(desired.Object, "subjects")
+
+	// Build a set of subjects already in the desired spec (keyed by SA name + namespace)
+	seen := make(map[string]bool)
+	for _, s := range desiredSubjects {
+		sub, ok := s.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		name, _ := sub["name"].(string)
+		ns, _ := sub["namespace"].(string)
+		seen[name+"/"+ns] = true
+	}
+
+	// Add any existing subjects not already present
+	for _, s := range existingSubjects {
+		sub, ok := s.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		name, _ := sub["name"].(string)
+		ns, _ := sub["namespace"].(string)
+		if !seen[name+"/"+ns] {
+			desiredSubjects = append(desiredSubjects, s)
+			seen[name+"/"+ns] = true
+		}
+	}
+
+	_ = unstructured.SetNestedSlice(desired.Object, desiredSubjects, "subjects")
 }
