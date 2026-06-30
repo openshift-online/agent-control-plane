@@ -89,6 +89,8 @@ When `OPENSHELL_USE_GATEWAY` is true, the control plane SHALL create agent sandb
 - AND an OpenShell gateway is running in the project namespace
 - WHEN a session transitions to `Pending` phase
 - THEN the control plane SHALL look up the project by `session.ProjectID` and resolve the gateway namespace from the project's **Name** field (lowercased via `NamespaceName()`), not from `session.ProjectID` directly
+- AND it SHALL ensure credential providers exist via `CreateProvider` (see [Credential Mapping](#requirement-credential-mapping-to-openshell-providers))
+- AND it SHALL configure inference routing via `UpdateConfig` if an inference-capable credential is present (see [Inference Configuration](#requirement-inference-configuration-via-updateconfig))
 - AND it SHALL call `CreateSandbox` on the gateway in that namespace
 - AND the sandbox SHALL be created with the runner image, session environment variables, and attached credential providers
 - AND the session phase SHALL transition to `Running`
@@ -223,9 +225,42 @@ In iteration 1, all providers in the namespace are attached to every sandbox. A 
 | `claude` | `claude` |
 | `jira` | `generic` |
 | `google` | `generic` |
-| `vertex` | `vertex-prod` |
+| `vertex` | `google-vertex-ai` |
 | `kubeconfig` | `generic` |
 | (unknown) | `generic` |
+
+### Requirement: Inference Configuration via UpdateConfig
+
+After ensuring credential providers exist, the control plane SHALL configure the gateway's inference routing so that sandboxes can reach an LLM via the `inference.local` endpoint. This is equivalent to the CLI command `openshell inference set --provider <name> --model <model>` and is performed via the `UpdateConfig` gRPC RPC with global-scope settings. See [OpenShell inference routing docs](https://docs.nvidia.com/openshell/sandboxes/inference-routing) for details on how `inference.local` routes requests through the gateway's privacy router.
+
+The control plane iterates all bound credentials and configures inference routing for every provider whose OpenShell type is inference-capable. Inference-capable types are those that support the `inference.local` routing endpoint: `google-vertex-ai`, `claude`, `anthropic`, `nvidia`, `openai`, and `aws-bedrock`. For each qualifying provider, the control plane sets two global gateway settings via `UpdateConfig`: `inference.provider` (the provider name as created by `ensureGatewayProviders`) and `inference.model`. These settings are applied per namespace after provider creation.
+
+> **TODO:** The inference model is currently hardcoded to `claude-sonnet-4-6`. A future iteration should allow the model to be configured per-session via `session.LlmModel`, falling back to a sensible default when unset.
+
+#### Scenario: Inference configuration with an inference-capable credential
+
+- GIVEN a project has a credential whose OpenShell provider type is inference-capable (e.g., `vertex` → `google-vertex-ai`, `anthropic` → `claude`)
+- AND the control plane has created the corresponding provider via `CreateProvider`
+- WHEN the control plane provisions a sandbox in that project's namespace
+- THEN it SHALL call `UpdateConfig` with `global=true`, `setting_key="inference.provider"`, `setting_value=<provider-name>` (string, the name returned by `ProviderName(projectName, ambientProvider)`)
+- AND it SHALL call `UpdateConfig` with `global=true`, `setting_key="inference.model"`, `setting_value="claude-sonnet-4-6"` (string)
+- AND both calls SHALL complete before sandbox creation proceeds
+- AND failure in either call SHALL prevent sandbox creation (the session remains in `Pending` phase)
+
+#### Scenario: No inference-capable credential — inference configuration skipped
+
+- GIVEN a project has only credentials for non-inference-capable types (e.g., `github`, `jira`, `kubeconfig`)
+- WHEN the control plane provisions a sandbox
+- THEN it SHALL NOT call `UpdateConfig` for inference settings
+- AND sandbox creation SHALL proceed normally
+
+#### Scenario: UpdateConfig RPC vendoring
+
+- GIVEN the control plane proto definitions
+- THEN the vendored `openshell.v1.OpenShell` service SHALL include the `UpdateConfig` RPC
+- AND the vendored `openshell.sandbox.v1` package SHALL include the `SettingValue` message (oneof: `string_value`, `bool_value`, `int_value`, `bytes_value`)
+- AND the `UpdateConfigRequest` message SHALL include fields: `name` (string), `policy` (SandboxPolicy), `setting_key` (string), `setting_value` (SettingValue), `delete_setting` (bool), `global` (bool), `expected_resource_version` (uint64)
+- AND the `UpdateConfigResponse` message SHALL include fields: `version` (uint32), `policy_hash` (string), `settings_revision` (uint64), `deleted` (bool)
 
 ### Requirement: Sandbox Environment Variables
 
@@ -260,7 +295,7 @@ The `ExecSandbox` RPC is a server-streaming call that returns stdout, stderr, an
 
 - GIVEN a sandbox has been created via `CreateSandbox`
 - WHEN the sandbox reaches `SANDBOX_PHASE_READY`
-- THEN the control plane SHALL call `ExecSandbox` with the command `["/bin/bash", "-c", "cd /sandbox/runner/ambient-runner && uvicorn main:app --host 0.0.0.0 --port 8001"]`
+- THEN the control plane SHALL call `ExecSandbox` with the command `["/bin/bash", "-c", "cd /sandbox/runner/ambient-runner && PATH=/sandbox/.venv/bin:$PATH uvicorn main:app --host 0.0.0.0 --port 8001"]`
 - AND the `SandboxId` SHALL be the gateway's internal UUID obtained from `GetSandbox` response metadata
 - AND the exec SHALL run asynchronously (fire-and-forget) — the control plane launches a goroutine that consumes the exec stream but does not block reconciliation
 - AND the exec goroutine SHALL use a separate context from the readiness-polling context — the polling context has a 120-second timeout suitable for provisioning, but the exec context must remain open for the lifetime of the uvicorn process (which runs until session completion)
@@ -389,6 +424,86 @@ The OpenShell sandbox network policy SHALL permit the runner process to push gRP
 - WHEN the runner process attempts to push AG-UI events to the control plane's gRPC endpoint
 - THEN the sandbox network policy SHALL allow the connection
 - AND the runner SHALL push events using the same gRPC protocol as in file mode and direct pod mode
+
+### Requirement: Sandbox Network Namespace Isolation
+
+In gateway mode, the OpenShell supervisor creates a separate network namespace for sandboxed processes. All traffic from within the sandbox namespace MUST traverse the supervisor's HTTP CONNECT proxy at `10.200.0.1:3128` — there is no direct route to cluster IPs or external DNS from the sandbox namespace.
+
+The supervisor automatically injects proxy and TLS environment variables into processes started via `ExecSandbox` (SSH path). The SSH path calls `env_clear()` on the child process and rebuilds the environment from `child_env::proxy_env_vars()` (9 vars: `ALL_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, their lowercase equivalents, `grpc_proxy`, `NODE_USE_ENV_PROXY=1`) and `child_env::tls_env_vars()` (6 vars: `NODE_EXTRA_CA_CERTS`, `DENO_CERT`, `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`), plus the `user_environment` from the `CreateSandboxRequest`.
+
+#### Scenario: ExecSandbox PATH requirement
+
+- GIVEN the supervisor's SSH path calls `env_clear()` on the child process
+- AND `env_clear()` strips all inherited environment variables including `PATH`
+- AND the SSH path rebuilds `PATH` from a minimal set (`/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`)
+- WHEN the control plane starts the runner via `ExecSandbox`
+- THEN the command SHALL prepend `/sandbox/.venv/bin` to `PATH` (e.g., `PATH=/sandbox/.venv/bin:$PATH uvicorn ...`)
+- AND without this, `uvicorn` and other Python venv binaries will not be found, causing the exec to exit with code 3
+
+#### Scenario: NO_PROXY must exclude cluster service domains
+
+- GIVEN the sandbox network namespace has no direct route to cluster IPs or DNS
+- AND all non-loopback traffic MUST traverse the supervisor proxy at `10.200.0.1:3128`
+- WHEN the control plane builds the sandbox environment map
+- THEN `NO_PROXY` SHALL be set to `127.0.0.1,localhost` only
+- AND `NO_PROXY` SHALL NOT include `.svc.cluster.local` or any cluster-internal domain suffix
+- AND if `.svc.cluster.local` is included in `NO_PROXY`, the runner's gRPC client and HTTP calls to the API server will attempt direct connections that fail because the sandbox namespace has no route to cluster IPs
+- AND this differs from non-gateway modes where the pod has direct cluster connectivity and `.svc.cluster.local` in `NO_PROXY` is correct
+
+#### Scenario: Supervisor proxy and TLS CA
+
+- GIVEN the supervisor creates an ephemeral self-signed CA per sandbox
+- AND the CA certificate is written to `/etc/openshell-tls/openshell-ca.pem`
+- WHEN the supervisor injects TLS environment variables via `child_env::tls_env_vars()`
+- THEN `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`, and `DENO_CERT` SHALL all point to the CA certificate path
+- AND the runner SHALL trust this CA for all HTTPS connections routed through the proxy
+- AND `inference.local` TLS connections are terminated by the proxy using this CA — there is no DNS entry for `inference.local`; the proxy intercepts the CONNECT request by hostname
+
+#### Scenario: Security parity between ExecSandbox and entrypoint
+
+- GIVEN the supervisor's ExecSandbox (SSH) path and entrypoint path
+- WHEN a process is spawned via either path
+- THEN both paths SHALL apply identical pre-exec security restrictions:
+  1. `setns(fd, CLONE_NEWNET)` — enter the sandbox network namespace
+  2. `supervisor_identity_mount` — filesystem identity isolation
+  3. `drop_privileges(setgroups/setgid/setuid)` — switch to sandbox user
+  4. `harden_child_process(RLIMIT_CORE=0, PR_SET_DUMPABLE=0, PR_SET_NO_NEW_PRIVS=1)`
+  5. `landlock::enforce(restrict_self)` — filesystem allowlist
+  6. `seccomp::apply(bpf_filter)` — syscall blocklist
+- AND the SSH path is stricter because it calls `env_clear()` (the entrypoint inherits the supervisor's environment minus 4 supervisor-only vars: `SANDBOX_TOKEN`, `SANDBOX_TOKEN_FILE`, `K8S_SA_TOKEN_FILE`, `PROVIDER_SPIFFE_WORKLOAD_API_SOCKET`)
+- AND the `ns_fd` for `setns()` can silently be `None` if the namespace file open fails (the supervisor logs a warning and falls back to running without network namespace isolation)
+
+### Requirement: OPA Network Policy for ACP Internal Traffic
+
+The sandbox OPA network policy SHALL permit the runner process (Python/uvicorn) to reach the ACP control plane and API server through the supervisor proxy. Without this, all cluster-internal traffic from the runner will be denied by the OPA policy engine with `DENIED FORWARD`.
+
+#### Scenario: ACP internal endpoints whitelisted
+
+- GIVEN the runner process runs inside the sandbox network namespace
+- AND all traffic routes through the supervisor's HTTP CONNECT proxy at `10.200.0.1:3128`
+- AND the proxy evaluates each CONNECT request against the OPA policy
+- WHEN the runner attempts to reach the control plane token endpoint or the API server gRPC/HTTP endpoints
+- THEN the OPA policy SHALL include an `acp_internal` network policy section that allows:
+
+| Endpoint | Port | Purpose |
+|----------|------|---------|
+| `ambient-control-plane.ambient-code.svc` | 8080 | CP token endpoint |
+| `ambient-control-plane.ambient-code.svc.cluster.local` | 8080 | CP token endpoint (FQDN) |
+| `ambient-api-server.ambient-code.svc` | 8000 | API server HTTP |
+| `ambient-api-server.ambient-code.svc.cluster.local` | 8000 | API server HTTP (FQDN) |
+| `ambient-api-server.ambient-code.svc` | 9000 | API server gRPC |
+| `ambient-api-server.ambient-code.svc.cluster.local` | 9000 | API server gRPC (FQDN) |
+
+- AND allowed binaries SHALL include `/sandbox/.venv/bin/python`, `/sandbox/.venv/bin/python3`, and `/sandbox/.venv/bin/uvicorn`
+- AND both short (`svc`) and fully-qualified (`svc.cluster.local`) hostnames SHALL be listed because the proxy resolves based on the exact hostname in the CONNECT request
+
+#### Scenario: Missing ACP internal policy causes runner failure
+
+- GIVEN the OPA policy does not include the `acp_internal` section
+- WHEN the runner starts and attempts to fetch a CP token via `AMBIENT_CP_TOKEN_URL`
+- THEN the supervisor proxy SHALL deny the CONNECT request
+- AND the runner SHALL fail to authenticate and exit with a non-zero exit code
+- AND the sandbox logs SHALL show `DENIED FORWARD` for the control plane hostname
 
 ### Requirement: Proto Vendoring and Code Generation
 
@@ -586,6 +701,7 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | `OPENSHELL_GATEWAY_TLS` | `true` (enabled unless set to `false`) | Enable mTLS when connecting to the gateway |
 | `OPENSHELL_GATEWAY_CLIENT_TLS_SECRET` | `openshell-client-tls` | Name of the Kubernetes TLS Secret (per project namespace) containing `tls.crt`, `tls.key`, and `ca.crt` for mTLS client authentication |
 | `OPENSHELL_GATEWAY_TLS_SERVER_NAME` | (empty — uses actual DNS name) | Override TLS ServerName for certificate verification; set when the gateway's server certificate SANs don't match the Service DNS name |
+| `OPENSHELL_RUNNER_IMAGE` | `quay.io/ambient_code/acp_runner_openshell:latest` | Container image used for gateway-mode sandboxes (built from `Dockerfile.openshell`); separate from `RUNNER_IMAGE` which is used for direct pod creation |
 
 #### Scenario: Mode interaction
 
@@ -614,13 +730,17 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | [kube_reconciler.go] `buildRunnerSecurityContext()` | Preserved unchanged; not invoked in gateway mode (gateway owns pod security settings) |
 | [pod_sync.go] | Extended with sandbox sync branch for gateway mode |
 | `main.go` | Extended to create and wire `GatewayClient` when `OPENSHELL_USE_GATEWAY=true` |
-| [config.go] | Extended with `OpenShellUseGateway` field |
+| [config.go] | Extended with `OpenShellUseGateway` and `OpenShellRunnerImage` fields |
 | `StandardNamespaceProvisioner` | Used only in pod mode (`OPENSHELL_USE_GATEWAY=false`). `ProvisionNamespace` creates the namespace if absent, updates labels if it exists (update-or-create). `DeprovisionNamespace` deletes the namespace |
 | `provisionSessionGateway()` | Bypasses the provisioner entirely — uses a direct `GetNamespace` check so no provisioner implementation can inadvertently create or modify the namespace |
 | `cleanupSessionGateway()` | Does not call `DeprovisionNamespace` — namespace lifecycle is fully external in gateway mode |
 | [openshell-sandbox.spec.md] | Unchanged — file-mode spec remains authoritative when `OPENSHELL_USE_GATEWAY=false` |
-| Runner pod | Same image and env vars, but the runner process is started via `ExecSandbox` with `["/bin/bash", "-c", "cd /sandbox/runner/ambient-runner && uvicorn main:app --host 0.0.0.0 --port 8001"]` after the sandbox reaches Ready — the gateway overrides the container entrypoint to the supervisor binary with `sleep infinity`, so the image's CMD is never executed directly. The exec goroutine must use a long-lived context (not the 120s polling context) and must not accumulate stdout/stderr in memory |
+| Runner pod | Same image and env vars, but the runner process is started via `ExecSandbox` with `["/bin/bash", "-c", "cd /sandbox/runner/ambient-runner && PATH=/sandbox/.venv/bin:$PATH uvicorn main:app --host 0.0.0.0 --port 8001"]` after the sandbox reaches Ready — the gateway overrides the container entrypoint to the supervisor binary with `sleep infinity`, so the image's CMD is never executed directly. The exec goroutine must use a long-lived context (not the 120s polling context) and must not accumulate stdout/stderr in memory |
 | `GatewayClient.ExecSandbox()` | Current implementation blocks on the full stream and accumulates output — must be updated to support fire-and-forget semantics for long-running processes (discard/stream output, use caller-provided context) |
+| `GatewayClient.UpdateConfig()` | New method — calls the `UpdateConfig` gRPC RPC; used by `configureInference` to set `inference.provider` and `inference.model` gateway settings |
+| [kube_reconciler.go] `configureInference()` | New method — called after `ensureGatewayProviders`; sets gateway inference routing when an inference-capable credential is present |
+| `provider_mapping.go` | Updated `vertex` mapping from `vertex-prod` to `google-vertex-ai` to match the OpenShell CLI's provider type |
+| Vendored proto (`openshell.proto`, `sandbox.proto`) | Extended with `UpdateConfig` RPC, `UpdateConfigRequest`/`UpdateConfigResponse` messages, and `SettingValue` message |
 
 ### Backward compatibility
 

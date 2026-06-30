@@ -61,6 +61,7 @@ IMAGE_TAG ?= latest
 
 # Image names
 RUNNER_IMAGE ?= acp_claude_runner:$(IMAGE_TAG)
+RUNNER_OPENSHELL_IMAGE ?= acp_runner_openshell:$(IMAGE_TAG)
 API_SERVER_IMAGE ?= acp_api_server:$(IMAGE_TAG)
 GITHUB_MCP_IMAGE ?= acp_credential_github:$(IMAGE_TAG)
 JIRA_MCP_IMAGE ?= acp_credential_jira:$(IMAGE_TAG)
@@ -187,7 +188,7 @@ ifeq ($(OPENSHELL_USE_GATEWAY),true)
 MCP_BUILD_TARGETS :=
 endif
 
-build-all: build-runner build-api-server build-control-plane build-ambient-ui $(MCP_BUILD_TARGETS) ## Build all container images
+build-all: build-runner build-runner-openshell build-api-server build-control-plane build-ambient-ui $(MCP_BUILD_TARGETS) ## Build all container images
 
 build-ambient-ui: ## Build ambient-ui image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building ambient-ui with $(CONTAINER_ENGINE)..."
@@ -203,6 +204,14 @@ build-runner: ## Build Claude Code runner image
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(RUNNER_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner built: $(RUNNER_IMAGE)"
+
+build-runner-openshell: ## Build OpenShell runner image
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building OpenShell runner with $(CONTAINER_ENGINE)..."
+	@cd components/runners/ambient-runner && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
+		-f Dockerfile.openshell \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		-t $(RUNNER_OPENSHELL_IMAGE) .
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell runner built: $(RUNNER_OPENSHELL_IMAGE)"
 
 build-api-server: ## Build ambient API server image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building ambient-api-server with $(CONTAINER_ENGINE)..."
@@ -1311,7 +1320,7 @@ _kind-require-cluster: ## Internal: Fail fast if kind cluster is not running
 	@$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$' || \
 		(echo "$(COLOR_RED)✗$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' not found. Run 'make kind-up LOCAL_IMAGES=true' first, or set KIND_CLUSTER_NAME to an existing cluster." && exit 1)
 
-KIND_CORE_IMAGES := $(RUNNER_IMAGE) $(API_SERVER_IMAGE) $(CONTROL_PLANE_IMAGE) $(AMBIENT_UI_IMAGE)
+KIND_CORE_IMAGES := $(RUNNER_IMAGE) $(RUNNER_OPENSHELL_IMAGE) $(API_SERVER_IMAGE) $(CONTROL_PLANE_IMAGE) $(AMBIENT_UI_IMAGE)
 KIND_MCP_IMAGES := $(MCP_IMAGE) $(GITHUB_MCP_IMAGE) $(JIRA_MCP_IMAGE) $(K8S_MCP_IMAGE) $(GOOGLE_MCP_IMAGE)
 ifeq ($(OPENSHELL_USE_GATEWAY),true)
 KIND_MCP_IMAGES :=

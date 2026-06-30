@@ -564,12 +564,17 @@ func (r *SimpleKubeReconciler) configureInference(ctx context.Context, namespace
 }
 
 func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session types.Session, projectName string, sdk *sdkclient.Client, providerNames []string) map[string]string {
+	workspacePath := "/workspace"
+	if r.cfg.OpenShellUseGateway {
+		workspacePath = "/sandbox/workspace"
+	}
+
 	env := map[string]string{
 		"SESSION_ID":                  session.ID,
 		"AGENTIC_SESSION_NAME":        session.Name,
 		"AGENTIC_SESSION_NAMESPACE":   r.provisioner.NamespaceName(projectName),
 		"PROJECT_NAME":                projectName,
-		"WORKSPACE_PATH":              "/workspace",
+		"WORKSPACE_PATH":              workspacePath,
 		"ARTIFACTS_DIR":               "artifacts",
 		"AGUI_PORT":                   "8001",
 		"USE_AGUI":                    "true",

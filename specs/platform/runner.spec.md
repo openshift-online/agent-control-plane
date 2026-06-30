@@ -646,6 +646,83 @@ When enabled, the reconciler:
 4. Overrides the runner security context with elevated capabilities and root UID
 5. Sets pod-level seccomp profile to `Unconfined`
 
+### Gateway Mode (OpenShell Gateway)
+
+When `OPENSHELL_USE_GATEWAY=true`, the runner operates inside an OpenShell gateway-managed sandbox instead of a file-mode sandbox. The runner image is built from `Dockerfile.openshell` and uses a separate image (`OPENSHELL_RUNNER_IMAGE`, default `quay.io/ambient_code/acp_runner_openshell:latest`).
+
+Key differences from file mode:
+
+| Aspect | File Mode | Gateway Mode |
+|--------|-----------|--------------|
+| Image | `Dockerfile` (`RUNNER_IMAGE`) | `Dockerfile.openshell` (`OPENSHELL_RUNNER_IMAGE`) |
+| Runner path | `/app/ambient-runner` | `/sandbox/runner/ambient-runner` |
+| Process start | Container `CMD` | `ExecSandbox` gRPC after sandbox reaches Ready |
+| Credentials | Sidecar containers | Gateway providers (egress proxy injection) |
+| Sandbox isolation | In-container Supervisor (file mode) | Gateway-managed Supervisor |
+| Inference routing | Runner env vars (`USE_VERTEX`, `ANTHROPIC_VERTEX_PROJECT_ID`) | Gateway `UpdateConfig` settings (`inference.provider`, `inference.model`) |
+
+#### Inference Configuration
+
+In gateway mode, the control plane configures the gateway's [inference routing](https://docs.nvidia.com/openshell/sandboxes/inference-routing) after creating credential providers. The gateway exposes an `inference.local` HTTPS endpoint inside each sandbox that strips sandbox credentials, injects backend credentials, and forwards requests to the configured LLM provider.
+
+The control plane iterates all bound credentials and configures inference routing for every inference-capable provider type (e.g., `google-vertex-ai`, `claude`, `anthropic`, `nvidia`, `openai`, `aws-bedrock`). For each qualifying provider, it calls `UpdateConfig` with two global settings:
+- `inference.provider` = `<provider-name>` — the provider name created by `ensureGatewayProviders`
+- `inference.model` = `"claude-sonnet-4-6"` — the model to use for generation requests
+
+> **TODO:** The inference model is currently hardcoded. A future iteration should derive it from `session.LlmModel`.
+
+The gateway's privacy router uses these settings to route inference requests through the configured provider, injecting credentials transparently. For Vertex AI, the runner still receives `USE_VERTEX=1` and related env vars for its own setup, but the actual credential injection is handled by the gateway proxy.
+
+See `openshell-sandbox-provisioning.spec.md` § Inference Configuration via UpdateConfig for the full requirement.
+
+#### Runner-Side Inference Routing (`ACP_OPENSHELL_INFERENCE`)
+
+When the control plane sets `ACP_OPENSHELL_INFERENCE=true` in the sandbox environment, the runner's `setup_sdk_authentication()` (`bridges/claude/auth.py`) activates inference routing mode instead of direct Vertex AI or Anthropic API key authentication.
+
+In inference routing mode, the runner sets:
+
+| Env Var | Value | Purpose |
+|---------|-------|---------|
+| `ANTHROPIC_API_KEY` | `"inference-routing"` | Placeholder — Claude SDK requires a non-empty key |
+| `ANTHROPIC_BASE_URL` | `https://inference.local` | Virtual hostname intercepted by the supervisor proxy |
+| `HTTPS_PROXY` | `http://10.200.0.1:3128` | Route all HTTPS through the supervisor's CONNECT proxy |
+| `SSL_CERT_FILE` | `/etc/openshell-tls/openshell-ca.pem` | Trust the sandbox's ephemeral CA (Python `ssl` module) |
+| `REQUESTS_CA_BUNDLE` | `/etc/openshell-tls/openshell-ca.pem` | Trust the sandbox's ephemeral CA (`requests` library) |
+| `NODE_EXTRA_CA_CERTS` | `/etc/openshell-tls/openshell-ca.pem` | Trust the sandbox's ephemeral CA (Node.js / Claude Code CLI) |
+
+The runner also clears `USE_VERTEX` and `CLAUDE_CODE_USE_VERTEX` — inference routing replaces direct Vertex API access with the proxy-mediated path. The model is set from `LLM_MODEL` env var or defaults to `claude-sonnet-4-6`.
+
+`inference.local` has no DNS entry. The supervisor proxy intercepts the CONNECT request by hostname and routes it to the upstream inference provider configured via `UpdateConfig`. The proxy terminates TLS using the sandbox's ephemeral self-signed CA.
+
+#### Sandbox Network Namespace and Proxy Routing
+
+In gateway mode, the runner process runs inside a sandbox network namespace with no direct route to cluster IPs or DNS. All traffic MUST traverse the supervisor's HTTP CONNECT proxy at `10.200.0.1:3128`.
+
+**Critical constraint — `NO_PROXY`:** The control plane sets `NO_PROXY=127.0.0.1,localhost` for gateway-mode sandboxes. `NO_PROXY` MUST NOT include `.svc.cluster.local` or any cluster-internal domain suffix. If it does, the runner's HTTP/gRPC clients will attempt direct connections to cluster services that fail because the sandbox namespace has no route to those IPs. This is different from non-gateway modes where the pod has direct cluster connectivity.
+
+**Automatic proxy/TLS injection:** The supervisor's SSH path (used by `ExecSandbox`) calls `env_clear()` on the child process and rebuilds the environment from:
+- `child_env::proxy_env_vars()` — 9 vars: `ALL_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, lowercase variants, `grpc_proxy`, `NODE_USE_ENV_PROXY=1`
+- `child_env::tls_env_vars()` — 6 vars: `NODE_EXTRA_CA_CERTS`, `DENO_CERT`, `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`
+- `user_environment` from the `CreateSandboxRequest`
+
+The runner does not need to set proxy or TLS CA vars for general cluster traffic — the supervisor handles this. The runner only sets inference-specific vars (`ANTHROPIC_BASE_URL`, `HTTPS_PROXY` for inference.local routing) via `setup_sdk_authentication()`.
+
+#### OPA Network Policy for ACP Internal Traffic
+
+The runner's OPA policy (`policy.yaml`) MUST include an `acp_internal` network policy section that whitelists the control plane and API server endpoints for the runner's Python binaries. Without this, the supervisor proxy denies all cluster-internal traffic from the runner with `DENIED FORWARD`.
+
+Required endpoints:
+
+| Host | Port | Purpose |
+|------|------|---------|
+| `ambient-control-plane.ambient-code.svc[.cluster.local]` | 8080 | CP token endpoint |
+| `ambient-api-server.ambient-code.svc[.cluster.local]` | 8000 | API server HTTP |
+| `ambient-api-server.ambient-code.svc[.cluster.local]` | 9000 | API server gRPC |
+
+Allowed binaries: `/sandbox/.venv/bin/python`, `/sandbox/.venv/bin/python3`, `/sandbox/.venv/bin/uvicorn`
+
+Both short (`svc`) and fully-qualified (`svc.cluster.local`) hostnames must be listed because the proxy matches on the exact hostname in the CONNECT request.
+
 ### Environment Variables (OpenShell-specific)
 
 | Var | Injected By | Purpose |
@@ -654,6 +731,7 @@ When enabled, the reconciler:
 | `OPENSHELL_POLICY_RULES` | CP reconciler | Path to Rego policy file (`/etc/openshell/policy.rego`) |
 | `OPENSHELL_POLICY_DATA` | CP reconciler | Path to YAML policy data (`/etc/openshell/policy.yaml`) |
 | `OPENSHELL_LOG_LEVEL` | Wrapper script default | Supervisor log level (`warn` default) |
+| `ACP_OPENSHELL_INFERENCE` | CP reconciler (gateway mode) | When `true`, activates runner-side inference routing via `inference.local` proxy instead of direct Vertex/Anthropic API |
 
 ### Files Modified
 

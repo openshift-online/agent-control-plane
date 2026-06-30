@@ -49,6 +49,9 @@ images:
 - name: quay.io/ambient_code/acp_claude_runner
   newName: localhost/acp_claude_runner
   newTag: latest
+- name: quay.io/ambient_code/acp_runner_openshell
+  newName: localhost/acp_runner_openshell
+  newTag: latest
 - name: quay.io/ambient_code/acp_mcp
   newName: localhost/acp_mcp
   newTag: latest

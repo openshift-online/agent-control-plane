@@ -135,6 +135,9 @@ COPY . /sandbox/runner/ambient-runner
 
 RUN uv pip install --python /sandbox/.venv/bin/python '/sandbox/runner/ambient-runner[all]'
 
+RUN mkdir -p /sandbox/workspace/artifacts /sandbox/workspace/file-uploads && \
+    chown -R sandbox:sandbox /sandbox/workspace
+
 ENV RUNNER_TYPE=claude-agent-sdk \
     HOME=/sandbox \
     SHELL=/bin/bash \
