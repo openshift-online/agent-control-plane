@@ -268,8 +268,12 @@ func (s *ConfigMapSyncer) syncNamespaceAgents(ctx context.Context, namespace, pr
 
 	declaredAgents := map[string]bool{}
 
-	for _, cm := range cmList.Items {
+	for i := range cmList.Items {
+		cm := &cmList.Items[i]
 		data, _, _ := unstructured.NestedStringMap(cm.Object, "data")
+		cmAnnotations := cm.GetAnnotations()
+		needsAnnotationUpdate := false
+
 		for key, yamlStr := range data {
 			decl, err := parseAgentDeclaration(yamlStr)
 			if err != nil {
@@ -290,11 +294,30 @@ func (s *ConfigMapSyncer) syncNamespaceAgents(ctx context.Context, namespace, pr
 			}
 
 			declaredAgents[decl.Name] = true
-			if err := s.upsertAgent(ctx, sdk, projectID, namespace, decl); err != nil {
-				s.logger.Warn().Err(err).
+			uidKey := resourceUIDAnnotationKey("agent", decl.Name)
+			storedUID := cmAnnotations[uidKey]
+
+			resourceID, upsertErr := s.upsertAgent(ctx, sdk, projectID, namespace, decl, storedUID)
+			if upsertErr != nil {
+				s.logger.Warn().Err(upsertErr).
 					Str("namespace", namespace).
 					Str("agent", decl.Name).
 					Msg("failed to upsert agent from configmap")
+				continue
+			}
+			if resourceID != "" && resourceID != storedUID {
+				if cmAnnotations == nil {
+					cmAnnotations = map[string]string{}
+				}
+				cmAnnotations[uidKey] = resourceID
+				needsAnnotationUpdate = true
+			}
+		}
+
+		if needsAnnotationUpdate {
+			cm.SetAnnotations(cmAnnotations)
+			if _, updateErr := s.kube.UpdateConfigMap(ctx, cm); updateErr != nil {
+				s.logger.Warn().Err(updateErr).Str("configmap", cm.GetName()).Msg("failed to annotate configmap with agent UIDs")
 			}
 		}
 	}
@@ -320,6 +343,10 @@ func parseAgentDeclaration(yamlStr string) (*AgentDeclaration, error) {
 	return &decl, nil
 }
 
+func resourceUIDAnnotationKey(resourceType, name string) string {
+	return fmt.Sprintf("ambient.ai/%s.%s.uid", resourceType, name)
+}
+
 func (s *ConfigMapSyncer) buildOriginAnnotations(namespace string, userAnnotations map[string]string) (string, error) {
 	merged := make(map[string]string, len(userAnnotations)+2)
 	for k, v := range userAnnotations {
@@ -334,12 +361,21 @@ func (s *ConfigMapSyncer) buildOriginAnnotations(namespace string, userAnnotatio
 	return string(raw), nil
 }
 
-func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, decl *AgentDeclaration) error {
-	existing := s.findAgentByName(ctx, projectID, decl.Name)
+func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, decl *AgentDeclaration, storedUID string) (string, error) {
+	var existing *resourceRef
+	if storedUID != "" {
+		items, err := s.queryAPI(ctx, projectID, "agents", fmt.Sprintf("id = '%s'", storedUID), 1)
+		if err == nil && len(items) > 0 {
+			existing = &items[0]
+		}
+	}
+	if existing == nil {
+		existing = s.findAgentByName(ctx, projectID, decl.Name)
+	}
 
 	annJSON, err := s.buildOriginAnnotations(namespace, decl.Annotations)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	patch := map[string]interface{}{
@@ -381,17 +417,17 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 	if len(decl.Labels) > 0 {
 		labelsJSON, err := json.Marshal(decl.Labels)
 		if err != nil {
-			return fmt.Errorf("marshalling agent labels: %w", err)
+			return "", fmt.Errorf("marshalling agent labels: %w", err)
 		}
 		patch["labels"] = string(labelsJSON)
 	}
 
 	if existing != nil {
 		if err := s.patchAPI(ctx, projectID, "agents", existing.ID, patch); err != nil {
-			return fmt.Errorf("updating agent %s: %w", decl.Name, err)
+			return "", fmt.Errorf("updating agent %s: %w", decl.Name, err)
 		}
 		s.logger.Debug().Str("agent", decl.Name).Str("id", existing.ID).Msg("agent updated from configmap")
-		return nil
+		return existing.ID, nil
 	}
 
 	agent, err := types.NewAgentBuilder().
@@ -399,18 +435,18 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 		ProjectID(projectID).
 		Build()
 	if err != nil {
-		return fmt.Errorf("building agent %s: %w", decl.Name, err)
+		return "", fmt.Errorf("building agent %s: %w", decl.Name, err)
 	}
 
 	created, err := sdk.Agents().Create(ctx, agent)
 	if err != nil {
-		return fmt.Errorf("creating agent %s: %w", decl.Name, err)
+		return "", fmt.Errorf("creating agent %s: %w", decl.Name, err)
 	}
 	if err := s.patchAPI(ctx, projectID, "agents", created.ID, patch); err != nil {
-		return fmt.Errorf("updating newly created agent %s: %w", decl.Name, err)
+		return "", fmt.Errorf("updating newly created agent %s: %w", decl.Name, err)
 	}
 	s.logger.Info().Str("agent", decl.Name).Str("id", created.ID).Msg("agent created from configmap")
-	return nil
+	return created.ID, nil
 }
 
 func (s *ConfigMapSyncer) findAgentByName(ctx context.Context, projectID, name string) *resourceRef {
@@ -477,7 +513,8 @@ func (s *ConfigMapSyncer) syncNamespaceProviders(ctx context.Context, namespace,
 
 	declared := map[string]bool{}
 
-	for _, cm := range cmList.Items {
+	for i := range cmList.Items {
+		cm := &cmList.Items[i]
 		data, found, nestedErr := unstructured.NestedStringMap(cm.Object, "data")
 		if nestedErr != nil {
 			s.logger.Warn().Err(nestedErr).Str("configmap", cm.GetName()).Msg("failed to read provider configmap data")
@@ -486,6 +523,9 @@ func (s *ConfigMapSyncer) syncNamespaceProviders(ctx context.Context, namespace,
 		if !found {
 			continue
 		}
+		cmAnnotations := cm.GetAnnotations()
+		needsAnnotationUpdate := false
+
 		for key, yamlStr := range data {
 			var decl ProviderDeclaration
 			if unmarshalErr := yaml.Unmarshal([]byte(yamlStr), &decl); unmarshalErr != nil {
@@ -506,11 +546,30 @@ func (s *ConfigMapSyncer) syncNamespaceProviders(ctx context.Context, namespace,
 			}
 
 			declared[decl.Name] = true
-			if upsertErr := s.upsertProvider(ctx, sdk, projectID, namespace, &decl); upsertErr != nil {
+			uidKey := resourceUIDAnnotationKey("provider", decl.Name)
+			storedUID := cmAnnotations[uidKey]
+
+			resourceID, upsertErr := s.upsertProvider(ctx, sdk, projectID, namespace, &decl, storedUID)
+			if upsertErr != nil {
 				s.logger.Warn().Err(upsertErr).
 					Str("namespace", namespace).
 					Str("provider", decl.Name).
 					Msg("failed to upsert provider from configmap")
+				continue
+			}
+			if resourceID != "" && resourceID != storedUID {
+				if cmAnnotations == nil {
+					cmAnnotations = map[string]string{}
+				}
+				cmAnnotations[uidKey] = resourceID
+				needsAnnotationUpdate = true
+			}
+		}
+
+		if needsAnnotationUpdate {
+			cm.SetAnnotations(cmAnnotations)
+			if _, updateErr := s.kube.UpdateConfigMap(ctx, cm); updateErr != nil {
+				s.logger.Warn().Err(updateErr).Str("configmap", cm.GetName()).Msg("failed to annotate configmap with provider UIDs")
 			}
 		}
 	}
@@ -518,12 +577,21 @@ func (s *ConfigMapSyncer) syncNamespaceProviders(ctx context.Context, namespace,
 	s.pruneRemovedProviders(ctx, sdk, projectID, namespace, declared)
 }
 
-func (s *ConfigMapSyncer) upsertProvider(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, decl *ProviderDeclaration) error {
-	existing := s.findProviderByName(ctx, sdk, projectID, decl.Name)
+func (s *ConfigMapSyncer) upsertProvider(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, decl *ProviderDeclaration, storedUID string) (string, error) {
+	var existing *resourceRef
+	if storedUID != "" {
+		items, err := s.queryAPI(ctx, projectID, "providers", fmt.Sprintf("id = '%s'", storedUID), 1)
+		if err == nil && len(items) > 0 {
+			existing = &items[0]
+		}
+	}
+	if existing == nil {
+		existing = s.findProviderByName(ctx, projectID, decl.Name)
+	}
 
 	annJSON, err := s.buildOriginAnnotations(namespace, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	patch := map[string]interface{}{
@@ -537,11 +605,11 @@ func (s *ConfigMapSyncer) upsertProvider(ctx context.Context, sdk *sdkclient.Cli
 	}
 
 	if existing != nil {
-		if _, updateErr := sdk.Providers().Update(ctx, existing.ID, patch); updateErr != nil {
-			return fmt.Errorf("updating provider %s: %w", decl.Name, updateErr)
+		if err := s.patchAPI(ctx, projectID, "providers", existing.ID, patch); err != nil {
+			return "", fmt.Errorf("updating provider %s: %w", decl.Name, err)
 		}
 		s.logger.Debug().Str("provider", decl.Name).Str("id", existing.ID).Msg("provider updated from configmap")
-		return nil
+		return existing.ID, nil
 	}
 
 	provider, err := types.NewProviderBuilder().
@@ -550,51 +618,46 @@ func (s *ConfigMapSyncer) upsertProvider(ctx context.Context, sdk *sdkclient.Cli
 		Namespace(namespace).
 		Build()
 	if err != nil {
-		return fmt.Errorf("building provider %s: %w", decl.Name, err)
+		return "", fmt.Errorf("building provider %s: %w", decl.Name, err)
 	}
 
 	created, createErr := sdk.Providers().Create(ctx, provider)
 	if createErr != nil {
-		return fmt.Errorf("creating provider %s: %w", decl.Name, createErr)
+		return "", fmt.Errorf("creating provider %s: %w", decl.Name, createErr)
 	}
-	if _, updateErr := sdk.Providers().Update(ctx, created.ID, patch); updateErr != nil {
-		return fmt.Errorf("updating newly created provider %s: %w", decl.Name, updateErr)
+	if err := s.patchAPI(ctx, projectID, "providers", created.ID, patch); err != nil {
+		return "", fmt.Errorf("updating newly created provider %s: %w", decl.Name, err)
 	}
 	s.logger.Info().Str("provider", decl.Name).Str("id", created.ID).Msg("provider created from configmap")
-	return nil
+	return created.ID, nil
 }
 
-func (s *ConfigMapSyncer) findProviderByName(ctx context.Context, sdk *sdkclient.Client, projectID, name string) *types.Provider {
+func (s *ConfigMapSyncer) findProviderByName(ctx context.Context, projectID, name string) *resourceRef {
 	if err := validateResourceName(name); err != nil {
 		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("invalid provider name")
 		return nil
 	}
-	providers, err := sdk.Providers().List(ctx, &types.ListOptions{
-		Size:   1,
-		Search: fmt.Sprintf("name = '%s'", name),
-	})
+	items, err := s.queryAPI(ctx, projectID, "providers", fmt.Sprintf("name = '%s'", name), 1)
 	if err != nil {
 		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("failed to search for existing provider")
 		return nil
 	}
-	for _, p := range providers.Items {
-		if p.Name == name && p.ProjectID == projectID {
-			return &p
+	for _, item := range items {
+		if item.Name == name && item.ProjectID == projectID {
+			return &item
 		}
 	}
 	return nil
 }
 
 func (s *ConfigMapSyncer) pruneRemovedProviders(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, declared map[string]bool) {
-	providers, err := sdk.Providers().List(ctx, &types.ListOptions{
-		Size: 500,
-	})
+	items, err := s.queryAPI(ctx, projectID, "providers", "", 500)
 	if err != nil {
 		s.logger.Warn().Err(err).Str("project_id", projectID).Msg("failed to list providers for pruning")
 		return
 	}
 
-	for _, p := range providers.Items {
+	for _, p := range items {
 		if s.isConfigMapManaged(p.Annotations, namespace) && !declared[p.Name] {
 			if deleteErr := sdk.Providers().Delete(ctx, p.ID); deleteErr != nil {
 				s.logger.Warn().Err(deleteErr).Str("provider", p.Name).Msg("failed to delete stale provider")
@@ -622,7 +685,8 @@ func (s *ConfigMapSyncer) syncNamespacePolicies(ctx context.Context, namespace, 
 
 	declared := map[string]bool{}
 
-	for _, cm := range cmList.Items {
+	for i := range cmList.Items {
+		cm := &cmList.Items[i]
 		data, found, nestedErr := unstructured.NestedStringMap(cm.Object, "data")
 		if nestedErr != nil {
 			s.logger.Warn().Err(nestedErr).Str("configmap", cm.GetName()).Msg("failed to read policy configmap data")
@@ -631,6 +695,9 @@ func (s *ConfigMapSyncer) syncNamespacePolicies(ctx context.Context, namespace, 
 		if !found {
 			continue
 		}
+		cmAnnotations := cm.GetAnnotations()
+		needsAnnotationUpdate := false
+
 		for key, yamlStr := range data {
 			name, spec, parseErr := parsePolicyDeclaration(yamlStr)
 			if parseErr != nil {
@@ -651,11 +718,30 @@ func (s *ConfigMapSyncer) syncNamespacePolicies(ctx context.Context, namespace, 
 			}
 
 			declared[name] = true
-			if upsertErr := s.upsertPolicy(ctx, sdk, projectID, namespace, name, spec); upsertErr != nil {
+			uidKey := resourceUIDAnnotationKey("policy", name)
+			storedUID := cmAnnotations[uidKey]
+
+			resourceID, upsertErr := s.upsertPolicy(ctx, sdk, projectID, namespace, name, spec, storedUID)
+			if upsertErr != nil {
 				s.logger.Warn().Err(upsertErr).
 					Str("namespace", namespace).
 					Str("policy", name).
 					Msg("failed to upsert policy from configmap")
+				continue
+			}
+			if resourceID != "" && resourceID != storedUID {
+				if cmAnnotations == nil {
+					cmAnnotations = map[string]string{}
+				}
+				cmAnnotations[uidKey] = resourceID
+				needsAnnotationUpdate = true
+			}
+		}
+
+		if needsAnnotationUpdate {
+			cm.SetAnnotations(cmAnnotations)
+			if _, updateErr := s.kube.UpdateConfigMap(ctx, cm); updateErr != nil {
+				s.logger.Warn().Err(updateErr).Str("configmap", cm.GetName()).Msg("failed to annotate configmap with policy UIDs")
 			}
 		}
 	}
@@ -679,12 +765,21 @@ func parsePolicyDeclaration(yamlStr string) (name string, spec map[string]interf
 	return name, raw, nil
 }
 
-func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Client, projectID, namespace, name string, spec map[string]interface{}) error {
-	existing := s.findPolicyByName(ctx, projectID, name)
+func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Client, projectID, namespace, name string, spec map[string]interface{}, storedUID string) (string, error) {
+	var existing *resourceRef
+	if storedUID != "" {
+		items, err := s.queryAPI(ctx, projectID, "policies", fmt.Sprintf("id = '%s'", storedUID), 1)
+		if err == nil && len(items) > 0 {
+			existing = &items[0]
+		}
+	}
+	if existing == nil {
+		existing = s.findPolicyByName(ctx, projectID, name)
+	}
 
 	annJSON, err := s.buildOriginAnnotations(namespace, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	patch := map[string]interface{}{
@@ -694,10 +789,10 @@ func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Clien
 
 	if existing != nil {
 		if err := s.patchAPI(ctx, projectID, "policies", existing.ID, patch); err != nil {
-			return fmt.Errorf("updating policy %s: %w", name, err)
+			return "", fmt.Errorf("updating policy %s: %w", name, err)
 		}
 		s.logger.Debug().Str("policy", name).Str("id", existing.ID).Msg("policy updated from configmap")
-		return nil
+		return existing.ID, nil
 	}
 
 	policy, err := types.NewPolicyBuilder().
@@ -706,18 +801,18 @@ func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Clien
 		Namespace(namespace).
 		Build()
 	if err != nil {
-		return fmt.Errorf("building policy %s: %w", name, err)
+		return "", fmt.Errorf("building policy %s: %w", name, err)
 	}
 
 	created, createErr := sdk.Policys().Create(ctx, policy)
 	if createErr != nil {
-		return fmt.Errorf("creating policy %s: %w", name, createErr)
+		return "", fmt.Errorf("creating policy %s: %w", name, createErr)
 	}
 	if err := s.patchAPI(ctx, projectID, "policies", created.ID, patch); err != nil {
-		return fmt.Errorf("updating newly created policy %s: %w", name, err)
+		return "", fmt.Errorf("updating newly created policy %s: %w", name, err)
 	}
 	s.logger.Info().Str("policy", name).Str("id", created.ID).Msg("policy created from configmap")
-	return nil
+	return created.ID, nil
 }
 
 func (s *ConfigMapSyncer) findPolicyByName(ctx context.Context, projectID, name string) *resourceRef {
