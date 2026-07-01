@@ -6,13 +6,33 @@ import (
 )
 
 var providerTypeMapping = map[string]string{
-	"github":     "github",
-	"anthropic":  "claude",
-	"claude":     "claude",
+	// Source control
+	"github": "github",
+	// Agent profiles
+	"anthropic":   "claude-code",
+	"claude":      "claude-code",
+	"claude-code": "claude-code",
+	"codex":       "codex",
+	"copilot":     "copilot",
+	"cursor":      "cursor",
+	// Inference profiles
+	"vertex":    "google-vertex-ai",
+	"deepinfra": "deepinfra",
+	"nvidia":    "nvidia",
+	// Data profiles
+	"pypi": "pypi",
+	// Unmapped ACP types → generic
 	"jira":       "generic",
 	"google":     "generic",
-	"vertex":     "google-vertex-ai",
 	"kubeconfig": "generic",
+}
+
+func KnownAmbientProviderTypes() []string {
+	types := make([]string, 0, len(providerTypeMapping))
+	for k := range providerTypeMapping {
+		types = append(types, k)
+	}
+	return types
 }
 
 func OpenShellProviderType(ambientProvider string) string {
@@ -27,8 +47,13 @@ func ProviderName(projectName, ambientProvider string) string {
 }
 
 var providerInjectedEnvVars = map[string][]string{
-	"github": {"GITHUB_TOKEN"},
-	"claude": {"ANTHROPIC_API_KEY"},
+	"github":           {"GITHUB_TOKEN", "GH_TOKEN"},
+	"claude-code":      {"ANTHROPIC_API_KEY", "CLAUDE_API_KEY"},
+	"codex":            {"CODEX_AUTH_ACCESS_TOKEN", "CODEX_AUTH_REFRESH_TOKEN", "CODEX_AUTH_ACCOUNT_ID", "CODEX_AUTH_ID_TOKEN"},
+	"copilot":          {"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"},
+	"google-vertex-ai": {"GOOGLE_SERVICE_ACCOUNT_KEY", "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_TOKEN"},
+	"deepinfra":        {"DEEPINFRA_API_KEY"},
+	"nvidia":           {"NVIDIA_API_KEY"},
 }
 
 func ProviderInjectedEnvVars(openshellType string) []string {
@@ -37,11 +62,9 @@ func ProviderInjectedEnvVars(openshellType string) []string {
 
 var inferenceCapableTypes = map[string]bool{
 	"google-vertex-ai": true,
-	"claude":           true,
-	"anthropic":        true,
+	"claude-code":      true,
+	"deepinfra":        true,
 	"nvidia":           true,
-	"openai":           true,
-	"aws-bedrock":      true,
 }
 
 func IsInferenceCapable(ambientProvider string) bool {
@@ -53,10 +76,14 @@ func IsInferenceCapable(ambientProvider string) bool {
 // key name expected by the OpenShell provider profile. For these types, the
 // secret must have a "token" key whose value is mapped to the standard name.
 var knownProviderCredentialKey = map[string]string{
-	"vertex":    "GOOGLE_SERVICE_ACCOUNT_KEY",
-	"anthropic": "ANTHROPIC_API_KEY",
-	"claude":    "ANTHROPIC_API_KEY",
-	"github":    "GITHUB_TOKEN",
+	"vertex":      "GOOGLE_SERVICE_ACCOUNT_KEY",
+	"anthropic":   "ANTHROPIC_API_KEY",
+	"claude":      "ANTHROPIC_API_KEY",
+	"claude-code": "ANTHROPIC_API_KEY",
+	"github":      "GITHUB_TOKEN",
+	"copilot":     "COPILOT_GITHUB_TOKEN",
+	"deepinfra":   "DEEPINFRA_API_KEY",
+	"nvidia":      "NVIDIA_API_KEY",
 }
 
 // ProviderCredentials maps a single token to the credential key expected by

@@ -912,7 +912,7 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 
 	injected := map[string]bool{}
 	for _, pn := range providerNames {
-		for ambientProvider := range providerTypeMapping() {
+		for _, ambientProvider := range openshell.KnownAmbientProviderTypes() {
 			if pn == openshell.ProviderName(env["PROJECT_NAME"], ambientProvider) {
 				osType := openshell.OpenShellProviderType(ambientProvider)
 				for _, envName := range openshell.ProviderInjectedEnvVars(osType) {
@@ -930,13 +930,6 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 	}
 
 	return env
-}
-
-func providerTypeMapping() map[string]bool {
-	return map[string]bool{
-		"github": true, "anthropic": true, "claude": true,
-		"jira": true, "google": true, "vertex": true, "kubeconfig": true,
-	}
 }
 
 func (r *SimpleKubeReconciler) deprovisionSession(ctx context.Context, session types.Session, nextPhase string) error {
