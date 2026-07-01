@@ -314,14 +314,6 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 
 	entrypoint := r.resolveEntrypoint(agent)
 
-	existing, err := r.gateway.GetSandbox(ctx, namespace, sbxName)
-	if err == nil && existing != nil && existing.Sandbox != nil {
-		r.logger.Debug().Str("sandbox", sbxName).Msg("sandbox already exists")
-		go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk)
-		r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
-		return nil
-	}
-
 	// Enable providers_v2 on the gateway before configuring providers or
 	// inference routing — required for v0.0.72+ gateways to correctly proxy
 	// inference traffic instead of attempting local execution.
@@ -336,6 +328,14 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 
 	if err := r.configureInferenceFromProviders(ctx, namespace, session.LlmModel, inferenceProviders); err != nil {
 		return fmt.Errorf("configuring inference: %w", err)
+	}
+
+	existing, err := r.gateway.GetSandbox(ctx, namespace, sbxName)
+	if err == nil && existing != nil && existing.Sandbox != nil {
+		r.logger.Debug().Str("sandbox", sbxName).Msg("sandbox already exists")
+		go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk)
+		r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
+		return nil
 	}
 
 	env := r.buildSandboxEnv(ctx, session, project.Name, sdk, providerNames)
