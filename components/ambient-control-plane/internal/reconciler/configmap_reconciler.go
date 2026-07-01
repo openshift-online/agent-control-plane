@@ -364,9 +364,10 @@ func (s *ConfigMapSyncer) buildOriginAnnotations(namespace string, userAnnotatio
 	return string(raw), nil
 }
 
-func computePatchHash(patch map[string]interface{}) string {
+func (s *ConfigMapSyncer) computePatchHash(patch map[string]interface{}) string {
 	data, err := json.Marshal(patch)
 	if err != nil {
+		s.logger.Warn().Err(err).Msg("failed to marshal patch for content hash, will force update")
 		return ""
 	}
 	h := sha256.Sum256(data)
@@ -463,7 +464,7 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 		patch["labels"] = string(labelsJSON)
 	}
 
-	hash := computePatchHash(patch)
+	hash := s.computePatchHash(patch)
 
 	if existing != nil {
 		if extractContentHash(existing.Annotations) == hash {
@@ -657,7 +658,7 @@ func (s *ConfigMapSyncer) upsertProvider(ctx context.Context, sdk *sdkclient.Cli
 		patch["secret"] = decl.Secret
 	}
 
-	hash := computePatchHash(patch)
+	hash := s.computePatchHash(patch)
 
 	if existing != nil {
 		if extractContentHash(existing.Annotations) == hash {
@@ -852,7 +853,7 @@ func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Clien
 		"spec":        spec,
 	}
 
-	hash := computePatchHash(patch)
+	hash := s.computePatchHash(patch)
 
 	if existing != nil {
 		if extractContentHash(existing.Annotations) == hash {
