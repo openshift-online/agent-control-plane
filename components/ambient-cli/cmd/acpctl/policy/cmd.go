@@ -1,3 +1,4 @@
+// Package policy implements the policy subcommand for managing policies.
 package policy
 
 import (

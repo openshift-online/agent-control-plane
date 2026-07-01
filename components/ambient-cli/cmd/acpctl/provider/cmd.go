@@ -1,3 +1,4 @@
+// Package provider implements the provider subcommand for managing providers.
 package provider
 
 import (
