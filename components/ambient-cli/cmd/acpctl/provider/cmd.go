@@ -3,9 +3,7 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
@@ -124,12 +122,17 @@ var getCmd = &cobra.Command{
 	},
 }
 
+var exportArgs struct {
+	namespace string
+}
+
 var exportCmd = &cobra.Command{
 	Use:   "export <name-or-id>",
 	Short: "Export provider as ConfigMap YAML",
 	Long:  "Export a provider definition as a Kubernetes ConfigMap YAML suitable for kubectl apply.",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl provider export my-provider
+  acpctl provider export my-provider --namespace my-ns
   acpctl provider export my-provider > provider.yaml
   acpctl provider export my-provider | kubectl apply -f -`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -151,7 +154,11 @@ var exportCmd = &cobra.Command{
 			return fmt.Errorf("get provider %q: %w", args[0], err)
 		}
 
-		fmt.Fprint(cmd.OutOrStdout(), providerToConfigMapYaml(provider))
+		out, err := providerToConfigMapYaml(provider, exportArgs.namespace)
+		if err != nil {
+			return err
+		}
+		fmt.Fprint(cmd.OutOrStdout(), out)
 		return nil
 	},
 }
@@ -165,6 +172,8 @@ func init() {
 	listCmd.Flags().IntVar(&listArgs.limit, "limit", 100, "Maximum number of items to return")
 
 	getCmd.Flags().StringVarP(&getArgs.outputFormat, "output", "o", "", "Output format: json|yaml")
+
+	exportCmd.Flags().StringVar(&exportArgs.namespace, "namespace", "", "Kubernetes namespace for the ConfigMap")
 }
 
 func printProviderTable(printer *output.Printer, providers []sdktypes.Provider) error {
@@ -207,57 +216,26 @@ func printProviderDetail(cmd *cobra.Command, p *sdktypes.Provider) error {
 		fmt.Fprintf(w, "Updated:     %s\n", p.UpdatedAt.Format(time.RFC3339))
 	}
 
-	printMetadata(w, "Annotations", p.Annotations)
-	printMetadata(w, "Labels", p.Labels)
+	output.PrintMetadata(w, "Annotations", p.Annotations)
+	output.PrintMetadata(w, "Labels", p.Labels)
 
 	return nil
 }
 
-func printMetadata(w interface{ Write([]byte) (int, error) }, heading, jsonStr string) {
-	if jsonStr == "" || jsonStr == "{}" {
-		return
-	}
-	var m map[string]string
-	if err := json.Unmarshal([]byte(jsonStr), &m); err != nil {
-		return
-	}
-	if len(m) == 0 {
-		return
-	}
-	fmt.Fprintf(w, "%s:\n", heading)
-	for k, v := range m {
-		fmt.Fprintf(w, "  %s: %s\n", k, v)
-	}
+type providerExportData struct {
+	Name   string `yaml:"name"`
+	Type   string `yaml:"type,omitempty"`
+	Secret string `yaml:"secret,omitempty"`
 }
 
-func providerToConfigMapYaml(p *sdktypes.Provider) string {
-	dataLines := []string{
-		"    name: " + p.Name,
-	}
-	if p.Type != "" {
-		dataLines = append(dataLines, "    type: "+p.Type)
-	}
-	if p.Secret != "" {
-		dataLines = append(dataLines, "    secret: "+p.Secret)
-	}
-
-	namespace := p.Namespace
+func providerToConfigMapYaml(p *sdktypes.Provider, namespace string) (string, error) {
 	if namespace == "" {
-		namespace = p.ProjectID
+		namespace = p.Namespace
 	}
-
-	lines := []string{
-		"apiVersion: v1",
-		"kind: ConfigMap",
-		"metadata:",
-		"  name: provider-" + p.Name,
-		"  namespace: " + namespace,
-		"  labels:",
-		"    ambient.ai/kind: provider",
-		"data:",
-		"  " + p.Name + ": |",
+	data := providerExportData{
+		Name:   p.Name,
+		Type:   p.Type,
+		Secret: p.Secret,
 	}
-	lines = append(lines, dataLines...)
-
-	return strings.Join(lines, "\n") + "\n"
+	return output.ConfigMapYAML("provider", p.Name, namespace, data)
 }

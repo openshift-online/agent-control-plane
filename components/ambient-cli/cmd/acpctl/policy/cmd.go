@@ -126,12 +126,17 @@ var getCmd = &cobra.Command{
 	},
 }
 
+var exportArgs struct {
+	namespace string
+}
+
 var exportCmd = &cobra.Command{
 	Use:   "export <name-or-id>",
 	Short: "Export policy as ConfigMap YAML",
 	Long:  "Export a policy definition as a Kubernetes ConfigMap YAML suitable for kubectl apply.",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl policy export my-policy
+  acpctl policy export my-policy --namespace my-ns
   acpctl policy export my-policy > policy.yaml
   acpctl policy export my-policy | kubectl apply -f -`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -153,7 +158,7 @@ var exportCmd = &cobra.Command{
 			return fmt.Errorf("get policy %q: %w", args[0], err)
 		}
 
-		out, err := policyToConfigMapYaml(policy)
+		out, err := policyToConfigMapYaml(policy, exportArgs.namespace)
 		if err != nil {
 			return err
 		}
@@ -171,6 +176,8 @@ func init() {
 	listCmd.Flags().IntVar(&listArgs.limit, "limit", 100, "Maximum number of items to return")
 
 	getCmd.Flags().StringVarP(&getArgs.outputFormat, "output", "o", "", "Output format: json|yaml")
+
+	exportCmd.Flags().StringVar(&exportArgs.namespace, "namespace", "", "Kubernetes namespace for the ConfigMap")
 }
 
 func specSections(specJSON string) string {
@@ -231,8 +238,8 @@ func printPolicyDetail(cmd *cobra.Command, p *sdktypes.Policy) error {
 		fmt.Fprintf(w, "Updated:     %s\n", p.UpdatedAt.Format(time.RFC3339))
 	}
 
-	printMetadata(w, "Annotations", p.Annotations)
-	printMetadata(w, "Labels", p.Labels)
+	output.PrintMetadata(w, "Annotations", p.Annotations)
+	output.PrintMetadata(w, "Labels", p.Labels)
 
 	if p.Spec != "" && p.Spec != "{}" {
 		fmt.Fprintf(w, "\nSpec:\n")
@@ -249,23 +256,6 @@ func printPolicyDetail(cmd *cobra.Command, p *sdktypes.Policy) error {
 	return nil
 }
 
-func printMetadata(w interface{ Write([]byte) (int, error) }, heading, jsonStr string) {
-	if jsonStr == "" || jsonStr == "{}" {
-		return
-	}
-	var m map[string]string
-	if err := json.Unmarshal([]byte(jsonStr), &m); err != nil {
-		return
-	}
-	if len(m) == 0 {
-		return
-	}
-	fmt.Fprintf(w, "%s:\n", heading)
-	for k, v := range m {
-		fmt.Fprintf(w, "  %s: %s\n", k, v)
-	}
-}
-
 func specToYaml(specJSON string) (string, error) {
 	var specMap interface{}
 	if err := json.Unmarshal([]byte(specJSON), &specMap); err != nil {
@@ -278,40 +268,19 @@ func specToYaml(specJSON string) (string, error) {
 	return strings.TrimRight(string(data), "\n"), nil
 }
 
-func policyToConfigMapYaml(p *sdktypes.Policy) (string, error) {
-	dataLines := []string{
-		"    name: " + p.Name,
-	}
-
-	if p.Spec != "" && p.Spec != "{}" {
-		specYaml, err := specToYaml(p.Spec)
-		if err != nil {
-			return "", err
-		}
-		for _, line := range strings.Split(specYaml, "\n") {
-			if line != "" {
-				dataLines = append(dataLines, "    "+line)
-			}
-		}
-	}
-
-	namespace := p.Namespace
+func policyToConfigMapYaml(p *sdktypes.Policy, namespace string) (string, error) {
 	if namespace == "" {
-		namespace = p.ProjectID
+		namespace = p.Namespace
 	}
-
-	lines := []string{
-		"apiVersion: v1",
-		"kind: ConfigMap",
-		"metadata:",
-		"  name: policy-" + p.Name,
-		"  namespace: " + namespace,
-		"  labels:",
-		"    ambient.ai/kind: policy",
-		"data:",
-		"  " + p.Name + ": |",
+	data := map[string]any{"name": p.Name}
+	if p.Spec != "" && p.Spec != "{}" {
+		var specMap map[string]any
+		if err := json.Unmarshal([]byte(p.Spec), &specMap); err != nil {
+			return "", fmt.Errorf("parse policy spec: %w", err)
+		}
+		for k, v := range specMap {
+			data[k] = v
+		}
 	}
-	lines = append(lines, dataLines...)
-
-	return strings.Join(lines, "\n") + "\n", nil
+	return output.ConfigMapYAML("policy", p.Name, namespace, data)
 }

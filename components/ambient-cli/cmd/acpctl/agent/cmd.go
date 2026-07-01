@@ -3,7 +3,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -692,6 +691,7 @@ func stopAllAgents(ctx context.Context, cmd *cobra.Command, client *sdkclient.Cl
 
 var exportArgs struct {
 	projectID string
+	namespace string
 }
 
 var exportCmd = &cobra.Command{
@@ -700,6 +700,7 @@ var exportCmd = &cobra.Command{
 	Long:  "Export an agent definition as a Kubernetes ConfigMap YAML suitable for kubectl apply.",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl agent export api
+  acpctl agent export api --namespace my-ns
   acpctl agent export api > agent.yaml
   acpctl agent export api | kubectl apply -f -`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -726,7 +727,11 @@ var exportCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprint(cmd.OutOrStdout(), agentToConfigMapYaml(pa, ""))
+		out, err := agentToConfigMapYaml(pa, exportArgs.namespace)
+		if err != nil {
+			return err
+		}
+		fmt.Fprint(cmd.OutOrStdout(), out)
 		return nil
 	},
 }
@@ -781,6 +786,7 @@ func init() {
 	sessionsCmd.Flags().IntVar(&sessionsArgs.limit, "limit", 100, "Maximum number of items to return")
 
 	exportCmd.Flags().StringVar(&exportArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	exportCmd.Flags().StringVar(&exportArgs.namespace, "namespace", "", "Kubernetes namespace for the ConfigMap")
 }
 
 func printAgentTable(printer *output.Printer, agents []sdktypes.Agent) error {
@@ -909,132 +915,99 @@ func printAgentDetail(cmd *cobra.Command, a *sdktypes.Agent) error {
 		fmt.Fprintf(w, "Updated:          %s\n", a.UpdatedAt.Format(time.RFC3339))
 	}
 
-	printAgentMetadata(w, "Annotations", a.Annotations)
-	printAgentMetadata(w, "Labels", a.Labels)
+	output.PrintMetadata(w, "Annotations", a.Annotations)
+	output.PrintMetadata(w, "Labels", a.Labels)
 
 	return nil
 }
 
-func printAgentMetadata(w interface{ Write([]byte) (int, error) }, heading, jsonStr string) {
-	if jsonStr == "" || jsonStr == "{}" {
-		return
-	}
-	var m map[string]string
-	if err := json.Unmarshal([]byte(jsonStr), &m); err != nil {
-		return
-	}
-	if len(m) == 0 {
-		return
-	}
-	fmt.Fprintf(w, "%s:\n", heading)
-	for k, v := range m {
-		fmt.Fprintf(w, "  %s: %s\n", k, v)
-	}
+type agentExportData struct {
+	Name            string            `yaml:"name"`
+	DisplayName     string            `yaml:"display_name,omitempty"`
+	Description     string            `yaml:"description,omitempty"`
+	Model           string            `yaml:"model,omitempty"`
+	Entrypoint      string            `yaml:"entrypoint,omitempty"`
+	RepoURL         string            `yaml:"repo_url,omitempty"`
+	Prompt          string            `yaml:"prompt,omitempty"`
+	Providers       []string          `yaml:"providers,omitempty"`
+	Payloads        []payloadExport   `yaml:"payloads,omitempty"`
+	Environment     map[string]string `yaml:"environment,omitempty"`
+	SandboxTemplate *sandboxExport    `yaml:"sandbox_template,omitempty"`
+	SandboxPolicy   string            `yaml:"sandbox_policy,omitempty"`
 }
 
-func agentToConfigMapYaml(a *sdktypes.Agent, namespace string) string {
-	dataLines := []string{
-		"    name: " + a.Name,
+type payloadExport struct {
+	SandboxPath string `yaml:"sandbox_path"`
+	RepoURL     string `yaml:"repo_url,omitempty"`
+	Ref         string `yaml:"ref,omitempty"`
+	Content     string `yaml:"content,omitempty"`
+}
+
+type sandboxExport struct {
+	Image     string          `yaml:"image,omitempty"`
+	Resources *resourceExport `yaml:"resources,omitempty"`
+	Gpu       *gpuExport      `yaml:"gpu,omitempty"`
+}
+
+type resourceExport struct {
+	CPU    string `yaml:"cpu,omitempty"`
+	Memory string `yaml:"memory,omitempty"`
+}
+
+type gpuExport struct {
+	Count int `yaml:"count,omitempty"`
+}
+
+func agentToConfigMapYaml(a *sdktypes.Agent, namespace string) (string, error) {
+	data := agentExportData{
+		Name:          a.Name,
+		DisplayName:   a.DisplayName,
+		Description:   a.Description,
+		Model:         a.LlmModel,
+		Entrypoint:    a.Entrypoint,
+		RepoURL:       a.RepoURL,
+		Prompt:        a.Prompt,
+		Providers:     a.Providers,
+		Environment:   a.Environment,
+		SandboxPolicy: a.SandboxPolicy,
 	}
-	if a.DisplayName != "" {
-		dataLines = append(dataLines, "    display_name: "+a.DisplayName)
-	}
-	if a.Description != "" {
-		dataLines = append(dataLines, "    description: "+a.Description)
-	}
-	if a.LlmModel != "" {
-		dataLines = append(dataLines, "    model: "+a.LlmModel)
-	}
-	if a.Entrypoint != "" {
-		dataLines = append(dataLines, "    entrypoint: "+a.Entrypoint)
-	}
-	if a.RepoURL != "" {
-		dataLines = append(dataLines, "    repo_url: "+a.RepoURL)
-	}
-	if a.Prompt != "" {
-		dataLines = append(dataLines, "    prompt: |")
-		for _, line := range strings.Split(a.Prompt, "\n") {
-			dataLines = append(dataLines, "      "+line)
-		}
-	}
-	if len(a.Providers) > 0 {
-		dataLines = append(dataLines, "    providers:")
-		for _, p := range a.Providers {
-			dataLines = append(dataLines, "      - "+p)
-		}
-	}
+
 	if len(a.Payloads) > 0 {
-		dataLines = append(dataLines, "    payloads:")
-		for _, p := range a.Payloads {
-			dataLines = append(dataLines, "      - sandbox_path: "+p.SandboxPath)
-			if p.RepoURL != "" {
-				dataLines = append(dataLines, "        repo_url: "+p.RepoURL)
-			}
-			if p.Ref != "" {
-				dataLines = append(dataLines, "        ref: "+p.Ref)
-			}
-			if p.Content != "" {
-				dataLines = append(dataLines, "        content: |")
-				for _, cl := range strings.Split(p.Content, "\n") {
-					dataLines = append(dataLines, "          "+cl)
-				}
+		data.Payloads = make([]payloadExport, len(a.Payloads))
+		for i, p := range a.Payloads {
+			data.Payloads[i] = payloadExport{
+				SandboxPath: p.SandboxPath,
+				RepoURL:     p.RepoURL,
+				Ref:         p.Ref,
+				Content:     p.Content,
 			}
 		}
 	}
-	if len(a.Environment) > 0 {
-		dataLines = append(dataLines, "    environment:")
-		for k, v := range a.Environment {
-			dataLines = append(dataLines, fmt.Sprintf("      %s: %q", k, v))
-		}
-	}
+
 	if a.SandboxTemplate != nil {
-		hasFields := a.SandboxTemplate.Image != "" ||
-			(a.SandboxTemplate.Resources != nil && (a.SandboxTemplate.Resources.CPU != "" || a.SandboxTemplate.Resources.Memory != "")) ||
-			(a.SandboxTemplate.Gpu != nil && a.SandboxTemplate.Gpu.Count > 0)
-		if hasFields {
-			dataLines = append(dataLines, "    sandbox_template:")
-			if a.SandboxTemplate.Image != "" {
-				dataLines = append(dataLines, "      image: "+a.SandboxTemplate.Image)
-			}
-			if a.SandboxTemplate.Resources != nil {
-				if a.SandboxTemplate.Resources.CPU != "" || a.SandboxTemplate.Resources.Memory != "" {
-					dataLines = append(dataLines, "      resources:")
-					if a.SandboxTemplate.Resources.CPU != "" {
-						dataLines = append(dataLines, fmt.Sprintf("        cpu: %q", a.SandboxTemplate.Resources.CPU))
-					}
-					if a.SandboxTemplate.Resources.Memory != "" {
-						dataLines = append(dataLines, "        memory: "+a.SandboxTemplate.Resources.Memory)
-					}
-				}
-			}
-			if a.SandboxTemplate.Gpu != nil && a.SandboxTemplate.Gpu.Count > 0 {
-				dataLines = append(dataLines, "      gpu:")
-				dataLines = append(dataLines, fmt.Sprintf("        count: %d", a.SandboxTemplate.Gpu.Count))
-			}
+		st := &sandboxExport{
+			Image: a.SandboxTemplate.Image,
 		}
-	}
-	if a.SandboxPolicy != "" {
-		dataLines = append(dataLines, "    sandbox_policy: "+a.SandboxPolicy)
+		if a.SandboxTemplate.Resources != nil {
+			r := &resourceExport{
+				CPU:    a.SandboxTemplate.Resources.CPU,
+				Memory: a.SandboxTemplate.Resources.Memory,
+			}
+			if r.CPU == "" && r.Memory == "" {
+				r = nil
+			}
+			st.Resources = r
+		}
+		if a.SandboxTemplate.Gpu != nil && a.SandboxTemplate.Gpu.Count > 0 {
+			st.Gpu = &gpuExport{Count: a.SandboxTemplate.Gpu.Count}
+		}
+		if st.Image == "" && st.Resources == nil && st.Gpu == nil {
+			st = nil
+		}
+		data.SandboxTemplate = st
 	}
 
-	if namespace == "" {
-		namespace = a.ProjectID
-	}
-
-	lines := []string{
-		"apiVersion: v1",
-		"kind: ConfigMap",
-		"metadata:",
-		"  name: agent-" + a.Name,
-		"  namespace: " + namespace,
-		"  labels:",
-		"    ambient.ai/kind: agent",
-		"data:",
-		"  " + a.Name + ": |",
-	}
-	lines = append(lines, dataLines...)
-
-	return strings.Join(lines, "\n") + "\n"
+	return output.ConfigMapYAML("agent", a.Name, namespace, data)
 }
 
 func printSessionTable(printer *output.Printer, sessions []sdktypes.Session) error {
