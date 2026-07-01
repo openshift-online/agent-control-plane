@@ -189,8 +189,14 @@ func (r *SimpleKubeReconciler) Reconcile(ctx context.Context, event informer.Res
 			return r.provisionSession(ctx, session)
 		case PhaseStopping:
 			return r.deprovisionSession(ctx, session, PhaseStopped)
-		case PhaseCompleted, PhaseFailed:
+		case PhaseFailed:
 			return r.deprovisionSession(ctx, session, session.Phase)
+		case PhaseCompleted:
+			// FIXME: Enable gateway sandbox cleanup once session lifecycle is ironed out.
+			// Merge back into the PhaseFailed case above to auto-delete the sandbox on completion.
+			if !r.cfg.OpenShellUseGateway {
+				return r.deprovisionSession(ctx, session, session.Phase)
+			}
 		}
 	case informer.EventDeleted:
 		return r.cleanupSession(ctx, session)
@@ -505,18 +511,13 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				failSession(fmt.Sprintf("failed to start runner exec: %v", err))
 				return
 			}
-
-			now := time.Now()
-			if _, err := sdk.Sessions().UpdateStatus(execCtx, sessionID, map[string]interface{}{
-				"phase":           PhaseCompleted,
-				"completion_time": &now,
-			}); err != nil {
-				r.logger.Warn().Err(err).Str("session_id", sessionID).Msg("failed to mark session completed")
-			}
+			// FIXME: Mark session PhaseCompleted and set completion_time here once
+			// session lifecycle is ironed out. Currently left Running so the sandbox
+			// isn't orphaned (Completed triggers deprovision).
 			r.logger.Info().
 				Str("sandbox", sbxName).
 				Str("session_id", sessionID).
-				Msg("runner exec stream finished, session completed")
+				Msg("runner exec stream finished")
 			return
 		}
 	}
