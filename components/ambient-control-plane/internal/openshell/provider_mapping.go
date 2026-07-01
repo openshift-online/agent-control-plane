@@ -66,6 +66,30 @@ func ProviderCredentials(ambientProvider, token string) map[string]string {
 
 const VertexAIRefreshCredentialKey = "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_TOKEN"
 
+type GoogleCredentialType int
+
+const (
+	GoogleCredentialServiceAccount GoogleCredentialType = iota
+	GoogleCredentialAuthorizedUser
+)
+
+func DetectGoogleCredentialType(credJSON string) (GoogleCredentialType, error) {
+	var header struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal([]byte(credJSON), &header); err != nil {
+		return GoogleCredentialServiceAccount, fmt.Errorf("parsing credential JSON: %w", err)
+	}
+	switch header.Type {
+	case "authorized_user":
+		return GoogleCredentialAuthorizedUser, nil
+	case "service_account", "":
+		return GoogleCredentialServiceAccount, nil
+	default:
+		return GoogleCredentialServiceAccount, fmt.Errorf("unsupported Google credential type: %s", header.Type)
+	}
+}
+
 type ServiceAccountJWTMaterial struct {
 	ClientEmail string
 	PrivateKey  string
@@ -85,6 +109,43 @@ func ExtractServiceAccountJWTMaterial(saKeyJSON string) (*ServiceAccountJWTMater
 	return &ServiceAccountJWTMaterial{
 		ClientEmail: parsed.ClientEmail,
 		PrivateKey:  parsed.PrivateKey,
+	}, nil
+}
+
+const DefaultGoogleTokenURI = "https://oauth2.googleapis.com/token"
+
+type OAuth2RefreshMaterial struct {
+	ClientID     string
+	ClientSecret string
+	RefreshToken string
+	TokenURI     string
+	Account      string
+}
+
+func ExtractOAuth2RefreshMaterial(credJSON string) (*OAuth2RefreshMaterial, error) {
+	var parsed struct {
+		ClientID     string `json:"client_id"`
+		ClientSecret string `json:"client_secret"`
+		RefreshToken string `json:"refresh_token"`
+		TokenURI     string `json:"token_uri"`
+		Account      string `json:"account"`
+	}
+	if err := json.Unmarshal([]byte(credJSON), &parsed); err != nil {
+		return nil, err
+	}
+	if parsed.ClientID == "" || parsed.ClientSecret == "" || parsed.RefreshToken == "" {
+		return nil, fmt.Errorf("authorized_user JSON missing client_id, client_secret, or refresh_token")
+	}
+	tokenURI := parsed.TokenURI
+	if tokenURI == "" {
+		tokenURI = DefaultGoogleTokenURI
+	}
+	return &OAuth2RefreshMaterial{
+		ClientID:     parsed.ClientID,
+		ClientSecret: parsed.ClientSecret,
+		RefreshToken: parsed.RefreshToken,
+		TokenURI:     tokenURI,
+		Account:      parsed.Account,
 	}, nil
 }
 

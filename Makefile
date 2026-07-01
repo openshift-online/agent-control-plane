@@ -913,6 +913,9 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 		NAMESPACE=$(NAMESPACE) \
 		OPENSHELL_TENANTS="$(OPENSHELL_TENANTS)" \
 		AGENT_SANDBOX_VERSION="$(AGENT_SANDBOX_VERSION)" \
+		GOOGLE_APPLICATION_CREDENTIALS="$(GOOGLE_APPLICATION_CREDENTIALS)" \
+		ANTHROPIC_VERTEX_PROJECT_ID="$(ANTHROPIC_VERTEX_PROJECT_ID)" \
+		CLOUD_ML_REGION="$(CLOUD_ML_REGION)" \
 		./scripts/setup-kind-openshell.sh; \
 	fi
 	@# Vertex AI setup if requested

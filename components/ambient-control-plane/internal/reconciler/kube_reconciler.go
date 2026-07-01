@@ -391,7 +391,7 @@ func (r *SimpleKubeReconciler) resolveEntrypoint(agent *types.Agent) []string {
 	if agent != nil && agent.Entrypoint != "" {
 		return []string{agent.Entrypoint}
 	}
-	return []string{"claude"}
+	return []string{"/sandbox/runner/entrypoint.sh"}
 }
 
 func (r *SimpleKubeReconciler) resolveSandboxImage(agent *types.Agent) string {
@@ -584,24 +584,63 @@ func (r *SimpleKubeReconciler) ensureGatewayProviders(ctx context.Context, names
 	return providerNames, nil
 }
 
-func (r *SimpleKubeReconciler) ensureVertexCredentialRefresh(ctx context.Context, namespace, provName, saKeyJSON string) error {
-	material, err := openshell.ExtractServiceAccountJWTMaterial(saKeyJSON)
+func (r *SimpleKubeReconciler) ensureVertexCredentialRefresh(ctx context.Context, namespace, provName, credJSON string) error {
+	credType, err := openshell.DetectGoogleCredentialType(credJSON)
 	if err != nil {
-		return fmt.Errorf("parsing service account key: %w", err)
+		return fmt.Errorf("detecting credential type: %w", err)
 	}
 
 	credKey := openshell.VertexAIRefreshCredentialKey
+	var refreshReq *openshellpb.ConfigureProviderRefreshRequest
 
-	if _, err := r.gateway.ConfigureProviderRefresh(ctx, namespace, &openshellpb.ConfigureProviderRefreshRequest{
-		Provider:      provName,
-		CredentialKey: credKey,
-		Strategy:      openshellpb.ProviderCredentialRefreshStrategy_PROVIDER_CREDENTIAL_REFRESH_STRATEGY_GOOGLE_SERVICE_ACCOUNT_JWT,
-		Material: map[string]string{
-			"client_email": material.ClientEmail,
-			"private_key":  material.PrivateKey,
-		},
-		SecretMaterialKeys: []string{"private_key"},
-	}); err != nil {
+	switch credType {
+	case openshell.GoogleCredentialServiceAccount:
+		material, err := openshell.ExtractServiceAccountJWTMaterial(credJSON)
+		if err != nil {
+			return fmt.Errorf("parsing service account key: %w", err)
+		}
+		refreshReq = &openshellpb.ConfigureProviderRefreshRequest{
+			Provider:      provName,
+			CredentialKey: credKey,
+			Strategy:      openshellpb.ProviderCredentialRefreshStrategy_PROVIDER_CREDENTIAL_REFRESH_STRATEGY_GOOGLE_SERVICE_ACCOUNT_JWT,
+			Material: map[string]string{
+				"client_email": material.ClientEmail,
+				"private_key":  material.PrivateKey,
+			},
+			SecretMaterialKeys: []string{"private_key"},
+		}
+		r.logger.Info().
+			Str("provider", provName).
+			Msg("using service account JWT strategy for vertex credential refresh")
+
+	case openshell.GoogleCredentialAuthorizedUser:
+		material, err := openshell.ExtractOAuth2RefreshMaterial(credJSON)
+		if err != nil {
+			return fmt.Errorf("parsing authorized_user credential: %w", err)
+		}
+		clientEmail := material.Account
+		if clientEmail == "" {
+			clientEmail = "authorized-user@adc.local"
+		}
+		refreshReq = &openshellpb.ConfigureProviderRefreshRequest{
+			Provider:      provName,
+			CredentialKey: credKey,
+			Strategy:      openshellpb.ProviderCredentialRefreshStrategy_PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_REFRESH_TOKEN,
+			Material: map[string]string{
+				"client_id":     material.ClientID,
+				"client_secret": material.ClientSecret,
+				"refresh_token": material.RefreshToken,
+				"client_email":  clientEmail,
+				"private_key":   "unused-for-oauth2-refresh",
+			},
+			SecretMaterialKeys: []string{"client_secret", "refresh_token", "private_key"},
+		}
+		r.logger.Info().
+			Str("provider", provName).
+			Msg("using OAuth2 refresh token strategy for vertex credential refresh")
+	}
+
+	if _, err := r.gateway.ConfigureProviderRefresh(ctx, namespace, refreshReq); err != nil {
 		return fmt.Errorf("configuring refresh: %w", err)
 	}
 
