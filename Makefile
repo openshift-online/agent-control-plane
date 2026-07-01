@@ -1274,13 +1274,13 @@ kind-status: check-kind ## Show all kind clusters and their port assignments
 		done; \
 	fi
 
-kind-setup-vertex: check-kubectl _kind-require-cluster ## Configure Vertex AI for the kind cluster
+kind-setup-vertex: check-kubectl _kind-require-cluster ## Configure Vertex AI for the kind cluster (VERTEX_KEY_FILE=./vertex.json)
 	@if kubectl get pods --all-namespaces -l app.kubernetes.io/instance=openshell-gateway -o name 2>/dev/null | grep -q .; then \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) OpenShell gateway detected — using provider declarations"; \
 		GW_NAMESPACES=$$(kubectl get pods --all-namespaces -l app.kubernetes.io/instance=openshell-gateway -o jsonpath='{range .items[*]}{.metadata.namespace}{"\n"}{end}' | sort -u); \
 		for ns in $$GW_NAMESPACES; do \
 			echo "$(COLOR_BLUE)▶$(COLOR_RESET) Setting up vertex provider in $$ns..."; \
-			./scripts/setup-vertex-provider.sh "$$ns"; \
+			./scripts/setup-vertex-provider.sh "$$ns" "$${VERTEX_KEY_FILE:-./vertex.json}"; \
 		done; \
 	else \
 		NAMESPACE=$(NAMESPACE) \

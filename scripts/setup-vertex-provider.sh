@@ -9,7 +9,7 @@
 #   ./scripts/setup-vertex-provider.sh [NAMESPACE] [VERTEX_KEY_FILE]
 #
 #   NAMESPACE       Target tenant namespace (default: tenant-a)
-#   VERTEX_KEY_FILE Path to GCP service account JSON key (default: ~/scripts/vertex.json)
+#   VERTEX_KEY_FILE Path to GCP service account JSON key (default: ./vertex.json)
 #
 # WHAT THIS DOES:
 #   1. Creates a K8s Secret (vertex-sa-key) with the SA JSON under a "token" key
@@ -28,7 +28,7 @@
 #   After running, wait ~30s for the ConfigMap syncer, then:
 #     acpctl create session --project-id tenant-a --agent default \
 #       --name test --prompt "say hello"
-#     openshell sandbox list --gateway <registered-gateway-name>
+#     openshell sandbox list --gateway tenant-a
 #
 
 set -e
@@ -38,7 +38,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 EXAMPLE_FILE="$REPO_ROOT/examples/agent-sandbox-config.yaml"
 
 NAMESPACE="${1:-tenant-a}"
-VERTEX_KEY_FILE="${2:-$HOME/scripts/vertex.json}"
+VERTEX_KEY_FILE="${2:-./vertex.json}"
 
 echo "=== Vertex Provider Setup ==="
 echo "  Namespace:  $NAMESPACE"
@@ -93,8 +93,8 @@ echo "Next steps:"
 echo "  # Set up openshell CLI gateway connectivity (if not already done):"
 echo "  make kind-setup-openshell-cli NAMESPACES=$NAMESPACE"
 echo ""
-echo "  # Create a session using an agent with vertex (agent names come from the ConfigMap):"
-echo "  acpctl create session --project-id $NAMESPACE --agent <agent-name> \\"
+echo "  # Create a session using an agent with vertex (agent names come from the ConfigMap, for example 'default'):"
+echo "  acpctl create session --project-id $NAMESPACE --agent default \\"
 echo "    --name test --prompt 'say hello'"
 echo ""
 echo "  # Verify sandbox was created:"
