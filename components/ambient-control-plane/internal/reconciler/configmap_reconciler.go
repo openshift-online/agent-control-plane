@@ -207,9 +207,9 @@ func (s *ConfigMapSyncer) syncOnce(ctx context.Context) {
 	}
 
 	for _, ns := range namespaces {
-		s.syncNamespaceAgents(ctx, ns.name, ns.projectID)
-		s.syncNamespaceProviders(ctx, ns.name, ns.projectID)
-		s.syncNamespacePolicies(ctx, ns.name, ns.projectID)
+		s.syncNamespaceAgents(ctx, ns.name)
+		s.syncNamespaceProviders(ctx, ns.name)
+		s.syncNamespacePolicies(ctx, ns.name)
 	}
 }
 
@@ -223,14 +223,10 @@ func (s *ConfigMapSyncer) syncNamespace(ctx context.Context, namespace string) {
 	if labels[LabelManaged] != "true" {
 		return
 	}
-	projectID := labels[LabelProjectID]
-	if projectID == "" {
-		return
-	}
-	s.logger.Debug().Str("namespace", namespace).Str("project_id", projectID).Msg("syncing namespace from configmap event")
-	s.syncNamespaceAgents(ctx, namespace, projectID)
-	s.syncNamespaceProviders(ctx, namespace, projectID)
-	s.syncNamespacePolicies(ctx, namespace, projectID)
+	s.logger.Debug().Str("namespace", namespace).Str("project_id", namespace).Msg("syncing namespace from configmap event")
+	s.syncNamespaceAgents(ctx, namespace)
+	s.syncNamespaceProviders(ctx, namespace)
+	s.syncNamespacePolicies(ctx, namespace)
 }
 
 type nsInfo struct {
@@ -246,25 +242,21 @@ func (s *ConfigMapSyncer) listManagedNamespaces(ctx context.Context) ([]nsInfo, 
 
 	var result []nsInfo
 	for _, ns := range nsList.Items {
-		projectID := ns.GetLabels()[LabelProjectID]
-		if projectID == "" {
-			continue
-		}
-		result = append(result, nsInfo{name: ns.GetName(), projectID: projectID})
+		result = append(result, nsInfo{name: ns.GetName(), projectID: ns.GetNamespace()})
 	}
 	return result, nil
 }
 
-func (s *ConfigMapSyncer) syncNamespaceAgents(ctx context.Context, namespace, projectID string) {
+func (s *ConfigMapSyncer) syncNamespaceAgents(ctx context.Context, namespace string) {
 	cmList, err := s.kube.ListConfigMapsByLabel(ctx, namespace, agentDeclarationLabel)
 	if err != nil {
 		s.logger.Warn().Err(err).Str("namespace", namespace).Msg("failed to list agent configmaps")
 		return
 	}
 
-	sdk, err := s.factory.ForProject(ctx, projectID)
+	sdk, err := s.factory.ForProject(ctx, namespace)
 	if err != nil {
-		s.logger.Warn().Err(err).Str("project_id", projectID).Msg("failed to get SDK client for configmap sync")
+		s.logger.Warn().Err(err).Str("project_id", namespace).Msg("failed to get SDK client for configmap sync")
 		return
 	}
 
@@ -299,7 +291,7 @@ func (s *ConfigMapSyncer) syncNamespaceAgents(ctx context.Context, namespace, pr
 			uidKey := resourceUIDAnnotationKey("agent", decl.Name)
 			storedUID := cmAnnotations[uidKey]
 
-			resourceID, upsertErr := s.upsertAgent(ctx, sdk, projectID, namespace, decl, storedUID)
+			resourceID, upsertErr := s.upsertAgent(ctx, sdk, namespace, decl, storedUID)
 			if upsertErr != nil {
 				s.logger.Warn().Err(upsertErr).
 					Str("namespace", namespace).
@@ -324,7 +316,7 @@ func (s *ConfigMapSyncer) syncNamespaceAgents(ctx context.Context, namespace, pr
 		}
 	}
 
-	s.pruneRemovedAgents(ctx, sdk, projectID, namespace, declaredAgents)
+	s.pruneRemovedAgents(ctx, sdk, namespace, declaredAgents)
 }
 
 func parseAgentDeclaration(yamlStr string) (*AgentDeclaration, error) {
@@ -402,16 +394,16 @@ func setPatchContentHash(patch map[string]interface{}, hash string) error {
 	return nil
 }
 
-func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, decl *AgentDeclaration, storedUID string) (string, error) {
+func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client, namespace string, decl *AgentDeclaration, storedUID string) (string, error) {
 	var existing *resourceRef
 	if storedUID != "" {
-		items, err := s.queryAPI(ctx, projectID, "agents", fmt.Sprintf("id = '%s'", storedUID), 1)
+		items, err := s.queryAPI(ctx, namespace, "agents", fmt.Sprintf("id = '%s'", storedUID), 1)
 		if err == nil && len(items) > 0 {
 			existing = &items[0]
 		}
 	}
 	if existing == nil {
-		existing = s.findAgentByName(ctx, projectID, decl.Name)
+		existing = s.findAgentByName(ctx, namespace, decl.Name)
 	}
 
 	annJSON, err := s.buildOriginAnnotations(namespace, decl.Annotations)
@@ -473,7 +465,7 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 		if err := setPatchContentHash(patch, hash); err != nil {
 			return "", fmt.Errorf("setting content hash for agent %s: %w", decl.Name, err)
 		}
-		if err := s.patchAPI(ctx, projectID, "agents", existing.ID, patch); err != nil {
+		if err := s.patchAPI(ctx, namespace, "agents", existing.ID, patch); err != nil {
 			return "", fmt.Errorf("updating agent %s: %w", decl.Name, err)
 		}
 		s.logger.Debug().Str("agent", decl.Name).Str("id", existing.ID).Msg("agent updated from configmap")
@@ -484,7 +476,8 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 		return "", fmt.Errorf("setting content hash for agent %s: %w", decl.Name, err)
 	}
 	patch["name"] = decl.Name
-	createdID, err := s.createAPI(ctx, projectID, "agents", patch)
+	patch["project_id"] = namespace
+	createdID, err := s.createAPI(ctx, namespace, "agents", patch)
 	if err != nil {
 		return "", fmt.Errorf("creating agent %s: %w", decl.Name, err)
 	}
@@ -492,18 +485,18 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 	return createdID, nil
 }
 
-func (s *ConfigMapSyncer) findAgentByName(ctx context.Context, projectID, name string) *resourceRef {
+func (s *ConfigMapSyncer) findAgentByName(ctx context.Context, namespace, name string) *resourceRef {
 	if err := validateResourceName(name); err != nil {
-		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("invalid agent name")
+		s.logger.Warn().Err(err).Str("name", name).Str("project_id", namespace).Msg("invalid agent name")
 		return nil
 	}
-	items, err := s.queryAPI(ctx, projectID, "agents", fmt.Sprintf("name = '%s'", name), 1)
+	items, err := s.queryAPI(ctx, namespace, "agents", fmt.Sprintf("name = '%s'", name), 1)
 	if err != nil {
-		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("failed to search for existing agent")
+		s.logger.Warn().Err(err).Str("name", name).Str("project_id", namespace).Msg("failed to search for existing agent")
 		return nil
 	}
 	for _, item := range items {
-		if item.Name == name && item.ProjectID == projectID {
+		if item.Name == name && item.ProjectID == namespace {
 			return &item
 		}
 	}
@@ -521,10 +514,10 @@ func (s *ConfigMapSyncer) isConfigMapManaged(annotations string, namespace strin
 	return ann[annotationSource] == annotationSourceCM && ann[annotationSourceNS] == namespace
 }
 
-func (s *ConfigMapSyncer) pruneRemovedAgents(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, declaredAgents map[string]bool) {
-	items, err := s.queryAPI(ctx, projectID, "agents", "", 500)
+func (s *ConfigMapSyncer) pruneRemovedAgents(ctx context.Context, sdk *sdkclient.Client, namespace string, declaredAgents map[string]bool) {
+	items, err := s.queryAPI(ctx, namespace, "agents", "", 500)
 	if err != nil {
-		s.logger.Warn().Err(err).Str("project_id", projectID).Msg("failed to list agents for pruning")
+		s.logger.Warn().Err(err).Str("project_id", namespace).Msg("failed to list agents for pruning")
 		return
 	}
 
@@ -541,16 +534,16 @@ func (s *ConfigMapSyncer) pruneRemovedAgents(ctx context.Context, sdk *sdkclient
 
 // --- Provider ConfigMap sync ---
 
-func (s *ConfigMapSyncer) syncNamespaceProviders(ctx context.Context, namespace, projectID string) {
+func (s *ConfigMapSyncer) syncNamespaceProviders(ctx context.Context, namespace string) {
 	cmList, err := s.kube.ListConfigMapsByLabel(ctx, namespace, providerDeclarationLabel)
 	if err != nil {
 		s.logger.Warn().Err(err).Str("namespace", namespace).Msg("failed to list provider configmaps")
 		return
 	}
 
-	sdk, err := s.factory.ForProject(ctx, projectID)
+	sdk, err := s.factory.ForProject(ctx, namespace)
 	if err != nil {
-		s.logger.Warn().Err(err).Str("project_id", projectID).Msg("failed to get SDK client for provider sync")
+		s.logger.Warn().Err(err).Str("project_id", namespace).Msg("failed to get SDK client for provider sync")
 		return
 	}
 
@@ -592,7 +585,7 @@ func (s *ConfigMapSyncer) syncNamespaceProviders(ctx context.Context, namespace,
 			uidKey := resourceUIDAnnotationKey("provider", decl.Name)
 			storedUID := cmAnnotations[uidKey]
 
-			resourceID, upsertErr := s.upsertProvider(ctx, sdk, projectID, namespace, &decl, storedUID)
+			resourceID, upsertErr := s.upsertProvider(ctx, sdk, namespace, &decl, storedUID)
 			if upsertErr != nil {
 				s.logger.Warn().Err(upsertErr).
 					Str("namespace", namespace).
@@ -617,19 +610,19 @@ func (s *ConfigMapSyncer) syncNamespaceProviders(ctx context.Context, namespace,
 		}
 	}
 
-	s.pruneRemovedProviders(ctx, sdk, projectID, namespace, declared)
+	s.pruneRemovedProviders(ctx, sdk, namespace, declared)
 }
 
-func (s *ConfigMapSyncer) upsertProvider(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, decl *ProviderDeclaration, storedUID string) (string, error) {
+func (s *ConfigMapSyncer) upsertProvider(ctx context.Context, sdk *sdkclient.Client, namespace string, decl *ProviderDeclaration, storedUID string) (string, error) {
 	var existing *resourceRef
 	if storedUID != "" {
-		items, err := s.queryAPI(ctx, projectID, "providers", fmt.Sprintf("id = '%s'", storedUID), 1)
+		items, err := s.queryAPI(ctx, namespace, "providers", fmt.Sprintf("id = '%s'", storedUID), 1)
 		if err == nil && len(items) > 0 {
 			existing = &items[0]
 		}
 	}
 	if existing == nil {
-		existing = s.findProviderByName(ctx, projectID, decl.Name)
+		existing = s.findProviderByName(ctx, namespace, decl.Name)
 	}
 
 	annJSON, err := s.buildOriginAnnotations(namespace, nil)
@@ -657,7 +650,7 @@ func (s *ConfigMapSyncer) upsertProvider(ctx context.Context, sdk *sdkclient.Cli
 		if err := setPatchContentHash(patch, hash); err != nil {
 			return "", fmt.Errorf("setting content hash for provider %s: %w", decl.Name, err)
 		}
-		if err := s.patchAPI(ctx, projectID, "providers", existing.ID, patch); err != nil {
+		if err := s.patchAPI(ctx, namespace, "providers", existing.ID, patch); err != nil {
 			return "", fmt.Errorf("updating provider %s: %w", decl.Name, err)
 		}
 		s.logger.Debug().Str("provider", decl.Name).Str("id", existing.ID).Msg("provider updated from configmap")
@@ -669,7 +662,8 @@ func (s *ConfigMapSyncer) upsertProvider(ctx context.Context, sdk *sdkclient.Cli
 	}
 	patch["name"] = decl.Name
 	patch["namespace"] = namespace
-	createdID, createErr := s.createAPI(ctx, projectID, "providers", patch)
+	patch["project_id"] = namespace
+	createdID, createErr := s.createAPI(ctx, namespace, "providers", patch)
 	if createErr != nil {
 		return "", fmt.Errorf("creating provider %s: %w", decl.Name, createErr)
 	}
@@ -677,28 +671,28 @@ func (s *ConfigMapSyncer) upsertProvider(ctx context.Context, sdk *sdkclient.Cli
 	return createdID, nil
 }
 
-func (s *ConfigMapSyncer) findProviderByName(ctx context.Context, projectID, name string) *resourceRef {
+func (s *ConfigMapSyncer) findProviderByName(ctx context.Context, namespace, name string) *resourceRef {
 	if err := validateResourceName(name); err != nil {
-		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("invalid provider name")
+		s.logger.Warn().Err(err).Str("name", name).Str("project_id", namespace).Msg("invalid provider name")
 		return nil
 	}
-	items, err := s.queryAPI(ctx, projectID, "providers", fmt.Sprintf("name = '%s'", name), 1)
+	items, err := s.queryAPI(ctx, namespace, "providers", fmt.Sprintf("name = '%s'", name), 1)
 	if err != nil {
-		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("failed to search for existing provider")
+		s.logger.Warn().Err(err).Str("name", name).Str("project_id", namespace).Msg("failed to search for existing provider")
 		return nil
 	}
 	for _, item := range items {
-		if item.Name == name && item.ProjectID == projectID {
+		if item.Name == name && item.ProjectID == namespace {
 			return &item
 		}
 	}
 	return nil
 }
 
-func (s *ConfigMapSyncer) pruneRemovedProviders(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, declared map[string]bool) {
-	items, err := s.queryAPI(ctx, projectID, "providers", "", 500)
+func (s *ConfigMapSyncer) pruneRemovedProviders(ctx context.Context, sdk *sdkclient.Client, namespace string, declared map[string]bool) {
+	items, err := s.queryAPI(ctx, namespace, "providers", "", 500)
 	if err != nil {
-		s.logger.Warn().Err(err).Str("project_id", projectID).Msg("failed to list providers for pruning")
+		s.logger.Warn().Err(err).Str("project_id", namespace).Msg("failed to list providers for pruning")
 		return
 	}
 
@@ -715,16 +709,16 @@ func (s *ConfigMapSyncer) pruneRemovedProviders(ctx context.Context, sdk *sdkcli
 
 // --- Policy ConfigMap sync ---
 
-func (s *ConfigMapSyncer) syncNamespacePolicies(ctx context.Context, namespace, projectID string) {
+func (s *ConfigMapSyncer) syncNamespacePolicies(ctx context.Context, namespace string) {
 	cmList, err := s.kube.ListConfigMapsByLabel(ctx, namespace, policyDeclarationLabel)
 	if err != nil {
 		s.logger.Warn().Err(err).Str("namespace", namespace).Msg("failed to list policy configmaps")
 		return
 	}
 
-	sdk, err := s.factory.ForProject(ctx, projectID)
+	sdk, err := s.factory.ForProject(ctx, namespace)
 	if err != nil {
-		s.logger.Warn().Err(err).Str("project_id", projectID).Msg("failed to get SDK client for policy sync")
+		s.logger.Warn().Err(err).Str("project_id", namespace).Msg("failed to get SDK client for policy sync")
 		return
 	}
 
@@ -766,7 +760,7 @@ func (s *ConfigMapSyncer) syncNamespacePolicies(ctx context.Context, namespace, 
 			uidKey := resourceUIDAnnotationKey("policy", name)
 			storedUID := cmAnnotations[uidKey]
 
-			resourceID, upsertErr := s.upsertPolicy(ctx, sdk, projectID, namespace, name, spec, storedUID)
+			resourceID, upsertErr := s.upsertPolicy(ctx, sdk, namespace, name, spec, storedUID)
 			if upsertErr != nil {
 				s.logger.Warn().Err(upsertErr).
 					Str("namespace", namespace).
@@ -791,7 +785,7 @@ func (s *ConfigMapSyncer) syncNamespacePolicies(ctx context.Context, namespace, 
 		}
 	}
 
-	s.pruneRemovedPolicies(ctx, sdk, projectID, namespace, declared)
+	s.pruneRemovedPolicies(ctx, sdk, namespace, declared)
 }
 
 func parsePolicyDeclaration(yamlStr string) (name string, spec map[string]interface{}, err error) {
@@ -810,16 +804,16 @@ func parsePolicyDeclaration(yamlStr string) (name string, spec map[string]interf
 	return name, raw, nil
 }
 
-func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Client, projectID, namespace, name string, spec map[string]interface{}, storedUID string) (string, error) {
+func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Client, namespace, name string, spec map[string]interface{}, storedUID string) (string, error) {
 	var existing *resourceRef
 	if storedUID != "" {
-		items, err := s.queryAPI(ctx, projectID, "policies", fmt.Sprintf("id = '%s'", storedUID), 1)
+		items, err := s.queryAPI(ctx, namespace, "policies", fmt.Sprintf("id = '%s'", storedUID), 1)
 		if err == nil && len(items) > 0 {
 			existing = &items[0]
 		}
 	}
 	if existing == nil {
-		existing = s.findPolicyByName(ctx, projectID, name)
+		existing = s.findPolicyByName(ctx, namespace, name)
 	}
 
 	annJSON, err := s.buildOriginAnnotations(namespace, nil)
@@ -842,7 +836,7 @@ func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Clien
 		if err := setPatchContentHash(patch, hash); err != nil {
 			return "", fmt.Errorf("setting content hash for policy %s: %w", name, err)
 		}
-		if err := s.patchAPI(ctx, projectID, "policies", existing.ID, patch); err != nil {
+		if err := s.patchAPI(ctx, namespace, "policies", existing.ID, patch); err != nil {
 			return "", fmt.Errorf("updating policy %s: %w", name, err)
 		}
 		s.logger.Debug().Str("policy", name).Str("id", existing.ID).Msg("policy updated from configmap")
@@ -854,7 +848,8 @@ func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Clien
 	}
 	patch["name"] = name
 	patch["namespace"] = namespace
-	createdID, createErr := s.createAPI(ctx, projectID, "policies", patch)
+	patch["project_id"] = namespace
+	createdID, createErr := s.createAPI(ctx, namespace, "policies", patch)
 	if createErr != nil {
 		return "", fmt.Errorf("creating policy %s: %w", name, createErr)
 	}
@@ -862,28 +857,28 @@ func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Clien
 	return createdID, nil
 }
 
-func (s *ConfigMapSyncer) findPolicyByName(ctx context.Context, projectID, name string) *resourceRef {
+func (s *ConfigMapSyncer) findPolicyByName(ctx context.Context, namespace, name string) *resourceRef {
 	if err := validateResourceName(name); err != nil {
-		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("invalid policy name")
+		s.logger.Warn().Err(err).Str("name", name).Str("project_id", namespace).Msg("invalid policy name")
 		return nil
 	}
-	items, err := s.queryAPI(ctx, projectID, "policies", fmt.Sprintf("name = '%s'", name), 1)
+	items, err := s.queryAPI(ctx, namespace, "policies", fmt.Sprintf("name = '%s'", name), 1)
 	if err != nil {
-		s.logger.Warn().Err(err).Str("name", name).Str("project_id", projectID).Msg("failed to search for existing policy")
+		s.logger.Warn().Err(err).Str("name", name).Str("project_id", namespace).Msg("failed to search for existing policy")
 		return nil
 	}
 	for _, item := range items {
-		if item.Name == name && item.ProjectID == projectID {
+		if item.Name == name && item.ProjectID == namespace {
 			return &item
 		}
 	}
 	return nil
 }
 
-func (s *ConfigMapSyncer) pruneRemovedPolicies(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, declared map[string]bool) {
-	items, err := s.queryAPI(ctx, projectID, "policies", "", 500)
+func (s *ConfigMapSyncer) pruneRemovedPolicies(ctx context.Context, sdk *sdkclient.Client, namespace string, declared map[string]bool) {
+	items, err := s.queryAPI(ctx, namespace, "policies", "", 500)
 	if err != nil {
-		s.logger.Warn().Err(err).Str("project_id", projectID).Msg("failed to list policies for pruning")
+		s.logger.Warn().Err(err).Str("project_id", namespace).Msg("failed to list policies for pruning")
 		return
 	}
 
@@ -918,7 +913,7 @@ type resourceRefList struct {
 // the API returns as JSON objects/arrays (environment, providers, spec, etc.),
 // causing json.Unmarshal to fail. This helper uses resourceRef which only has
 // string fields, so complex JSON fields are silently ignored.
-func (s *ConfigMapSyncer) queryAPI(ctx context.Context, projectID, resource, search string, size int) ([]resourceRef, error) {
+func (s *ConfigMapSyncer) queryAPI(ctx context.Context, namespace, resource, search string, size int) ([]resourceRef, error) {
 	token, err := s.factory.Token(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("getting token: %w", err)
@@ -932,7 +927,7 @@ func (s *ConfigMapSyncer) queryAPI(ctx context.Context, projectID, resource, sea
 		params.Set("size", fmt.Sprintf("%d", size))
 	}
 
-	reqURL := fmt.Sprintf("%s/api/ambient/v1/projects/%s/%s", s.factory.BaseURL(), projectID, resource)
+	reqURL := fmt.Sprintf("%s/api/ambient/v1/projects/%s/%s", s.factory.BaseURL(), namespace, resource)
 	if len(params) > 0 {
 		reqURL += "?" + params.Encode()
 	}
@@ -942,7 +937,7 @@ func (s *ConfigMapSyncer) queryAPI(ctx context.Context, projectID, resource, sea
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-Ambient-Project", projectID)
+	req.Header.Set("X-Ambient-Project", namespace)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -972,7 +967,7 @@ func (s *ConfigMapSyncer) queryAPI(ctx context.Context, projectID, resource, sea
 // single call, returning the created resource's ID. This avoids the SDK's
 // typed Create + separate PATCH pattern, ensuring the content hash annotation
 // is set atomically with the resource.
-func (s *ConfigMapSyncer) createAPI(ctx context.Context, projectID, resource string, body map[string]interface{}) (string, error) {
+func (s *ConfigMapSyncer) createAPI(ctx context.Context, namespace, resource string, body map[string]interface{}) (string, error) {
 	token, err := s.factory.Token(ctx)
 	if err != nil {
 		return "", fmt.Errorf("getting token: %w", err)
@@ -983,14 +978,14 @@ func (s *ConfigMapSyncer) createAPI(ctx context.Context, projectID, resource str
 		return "", fmt.Errorf("marshalling body: %w", err)
 	}
 
-	reqURL := fmt.Sprintf("%s/api/ambient/v1/projects/%s/%s", s.factory.BaseURL(), projectID, resource)
+	reqURL := fmt.Sprintf("%s/api/ambient/v1/projects/%s/%s", s.factory.BaseURL(), namespace, resource)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(string(data)))
 	if err != nil {
 		return "", fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-Ambient-Project", projectID)
+	req.Header.Set("X-Ambient-Project", namespace)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
@@ -1022,7 +1017,7 @@ func (s *ConfigMapSyncer) createAPI(ctx context.Context, projectID, resource str
 // patchAPI sends a PATCH request to update a resource, ignoring the response
 // body. The SDK's Update methods unmarshal the response into typed structs
 // that fail on complex JSON fields, so this helper discards the response.
-func (s *ConfigMapSyncer) patchAPI(ctx context.Context, projectID, resource, id string, patch map[string]interface{}) error {
+func (s *ConfigMapSyncer) patchAPI(ctx context.Context, namespace, resource, id string, patch map[string]interface{}) error {
 	token, err := s.factory.Token(ctx)
 	if err != nil {
 		return fmt.Errorf("getting token: %w", err)
@@ -1033,14 +1028,14 @@ func (s *ConfigMapSyncer) patchAPI(ctx context.Context, projectID, resource, id 
 		return fmt.Errorf("marshalling patch: %w", err)
 	}
 
-	reqURL := fmt.Sprintf("%s/api/ambient/v1/projects/%s/%s/%s", s.factory.BaseURL(), projectID, resource, id)
+	reqURL := fmt.Sprintf("%s/api/ambient/v1/projects/%s/%s/%s", s.factory.BaseURL(), namespace, resource, id)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, reqURL, strings.NewReader(string(body)))
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-Ambient-Project", projectID)
+	req.Header.Set("X-Ambient-Project", namespace)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
