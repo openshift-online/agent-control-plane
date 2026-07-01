@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -311,7 +312,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	existing, err := r.gateway.GetSandbox(ctx, namespace, sbxName)
 	if err == nil && existing != nil && existing.Sandbox != nil {
 		r.logger.Debug().Str("sandbox", sbxName).Msg("sandbox already exists")
-		go r.execAfterReady(namespace, sbxName, session.ID, entrypoint)
+		go r.execAfterReady(namespace, sbxName, session.ID, session.ProjectID, entrypoint, agentPayloads(agent))
 		r.updateSessionPhaseWithNamespace(ctx, session, PhaseRunning, namespace)
 		return nil
 	}
@@ -370,6 +371,8 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		},
 	}
 
+	r.applySandboxTemplate(req, agent)
+
 	if _, err := r.gateway.CreateSandbox(ctx, namespace, req); err != nil {
 		return fmt.Errorf("creating sandbox %s: %w", sbxName, err)
 	}
@@ -381,7 +384,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		Int("providers", len(providerNames)).
 		Msg("sandbox created via gateway")
 
-	go r.execAfterReady(namespace, sbxName, session.ID, entrypoint)
+	go r.execAfterReady(namespace, sbxName, session.ID, session.ProjectID, entrypoint, agentPayloads(agent))
 
 	r.updateSessionPhaseWithNamespace(ctx, session, PhaseRunning, namespace)
 	return nil
@@ -414,6 +417,60 @@ func (r *SimpleKubeReconciler) isAllowedRegistry(image string) bool {
 	return false
 }
 
+func (r *SimpleKubeReconciler) applySandboxTemplate(req *openshellpb.CreateSandboxRequest, agent *types.Agent) {
+	if agent == nil || agent.SandboxTemplate == nil {
+		return
+	}
+	tmpl := agent.SandboxTemplate
+	spec := req.Spec
+
+	if tmpl.RuntimeClassName != "" {
+		spec.Template.RuntimeClassName = tmpl.RuntimeClassName
+	}
+
+	if tmpl.LogLevel != "" {
+		spec.LogLevel = tmpl.LogLevel
+	}
+
+	if tmpl.Gpu != nil && tmpl.Gpu.Count > 0 {
+		spec.Gpu = true
+	}
+
+	for k, v := range tmpl.Labels {
+		if _, isSystem := req.Labels[k]; !isSystem {
+			req.Labels[k] = v
+		}
+		if spec.Template.Labels == nil {
+			spec.Template.Labels = make(map[string]string)
+		}
+		spec.Template.Labels[k] = v
+	}
+
+	if len(tmpl.Annotations) > 0 {
+		if spec.Template.Annotations == nil {
+			spec.Template.Annotations = make(map[string]string)
+		}
+		for k, v := range tmpl.Annotations {
+			spec.Template.Annotations[k] = v
+		}
+	}
+
+	if tmpl.Resources != nil && (tmpl.Resources.CPU != "" || tmpl.Resources.Memory != "") {
+		r.logger.Warn().
+			Str("agent", agent.Name).
+			Str("cpu", tmpl.Resources.CPU).
+			Str("memory", tmpl.Resources.Memory).
+			Msg("sandbox_template.resources (cpu/memory) not supported in gateway mode; ignored")
+	}
+}
+
+func agentPayloads(agent *types.Agent) []types.Payload {
+	if agent == nil {
+		return nil
+	}
+	return agent.Payloads
+}
+
 func (r *SimpleKubeReconciler) mergeAgentEnvironment(env map[string]string, agent *types.Agent) {
 	if agent == nil || len(agent.Environment) == 0 {
 		return
@@ -421,11 +478,13 @@ func (r *SimpleKubeReconciler) mergeAgentEnvironment(env map[string]string, agen
 	for k, v := range agent.Environment {
 		if _, exists := env[k]; !exists {
 			env[k] = v
+		} else {
+			r.logger.Debug().Str("key", k).Msg("agent env var skipped: already set by system")
 		}
 	}
 }
 
-func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string) {
+func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID, projectID string, entrypoint []string, payloads []types.Payload) {
 	pollCtx, pollCancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer pollCancel()
 
@@ -470,6 +529,24 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				sandboxID = resp.Sandbox.Metadata.Id
 			}
 
+			if len(payloads) > 0 {
+				injectCtx, injectCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+				if err := r.injectPayloads(injectCtx, namespace, sandboxID, payloads); err != nil {
+					injectCancel()
+					r.logger.Error().Err(err).
+						Str("sandbox", sbxName).
+						Str("session_id", sessionID).
+						Msg("payload injection failed; aborting session")
+					r.failSessionFromBackground(sessionID, projectID, fmt.Sprintf("Payload injection failed: %s", err.Error()))
+					return
+				}
+				injectCancel()
+				r.logger.Info().
+					Str("sandbox", sbxName).
+					Int("payload_count", len(payloads)).
+					Msg("all payloads injected successfully")
+			}
+
 			r.logger.Info().
 				Str("sandbox", sbxName).
 				Str("sandbox_id", sandboxID).
@@ -478,13 +555,6 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				Msg("sandbox is ready, executing entrypoint")
 
 			execCtx := context.Background()
-			// Patch ndots before starting the runner. The OpenShell supervisor is
-			// statically linked with musl libc, whose getaddrinfo sends A+AAAA
-			// queries simultaneously. With Kubernetes' default ndots:5, external
-			// FQDNs get expanded through all search domains first, causing musl's
-			// DNS resolver to mishandle the many concurrent responses and return
-			// zero usable addresses (manifests as 503 "inference service unavailable").
-			// Setting ndots:1 makes musl resolve FQDNs directly.
 			err = r.gateway.ExecSandboxStreaming(execCtx, namespace, &openshellpb.ExecSandboxRequest{
 				SandboxId: sandboxID,
 				Command:   entrypoint,
@@ -500,6 +570,132 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			return
 		}
 	}
+}
+
+func (r *SimpleKubeReconciler) injectPayloads(ctx context.Context, namespace, sandboxID string, payloads []types.Payload) error {
+	for i, p := range payloads {
+		if p.SandboxPath == "" {
+			return fmt.Errorf("payload[%d]: sandbox_path is required", i)
+		}
+		var err error
+		if p.Content != "" {
+			err = r.injectInlinePayload(ctx, namespace, sandboxID, p)
+		} else if p.RepoURL != "" {
+			err = r.injectGitPayload(ctx, namespace, sandboxID, p)
+		} else {
+			r.logger.Warn().Int("index", i).Str("path", p.SandboxPath).Msg("payload has neither content nor repo_url; skipping")
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("payload[%d] (path=%s): %w", i, p.SandboxPath, err)
+		}
+	}
+	return nil
+}
+
+func (r *SimpleKubeReconciler) injectInlinePayload(ctx context.Context, namespace, sandboxID string, p types.Payload) error {
+	dir := filepath.Dir(p.SandboxPath)
+
+	mkdirResult, err := r.gateway.ExecSandbox(ctx, namespace, &openshellpb.ExecSandboxRequest{
+		SandboxId:      sandboxID,
+		Command:        []string{"mkdir", "-p", dir},
+		TimeoutSeconds: 10,
+	})
+	if err != nil {
+		return fmt.Errorf("mkdir exec failed: %w", err)
+	}
+	if mkdirResult.ExitCode != 0 {
+		return fmt.Errorf("mkdir failed (exit %d): %s", mkdirResult.ExitCode, string(mkdirResult.Stderr))
+	}
+
+	writeResult, err := r.gateway.ExecSandbox(ctx, namespace, &openshellpb.ExecSandboxRequest{
+		SandboxId:      sandboxID,
+		Command:        []string{"sh", "-c", "cat > \"$1\"", "--", p.SandboxPath},
+		Stdin:          []byte(p.Content),
+		TimeoutSeconds: 30,
+	})
+	if err != nil {
+		return fmt.Errorf("write exec failed: %w", err)
+	}
+	if writeResult.ExitCode != 0 {
+		return fmt.Errorf("write failed (exit %d): %s", writeResult.ExitCode, string(writeResult.Stderr))
+	}
+
+	r.logger.Info().
+		Str("sandbox_id", sandboxID).
+		Str("path", p.SandboxPath).
+		Int("size", len(p.Content)).
+		Msg("inline payload injected")
+	return nil
+}
+
+func (r *SimpleKubeReconciler) injectGitPayload(ctx context.Context, namespace, sandboxID string, p types.Payload) error {
+	cmd := []string{"git", "clone", "--depth", "1"}
+	if p.Ref != "" {
+		cmd = append(cmd, "--branch", p.Ref)
+	}
+	cmd = append(cmd, p.RepoURL, p.SandboxPath)
+
+	result, err := r.gateway.ExecSandbox(ctx, namespace, &openshellpb.ExecSandboxRequest{
+		SandboxId:      sandboxID,
+		Command:        cmd,
+		TimeoutSeconds: 300,
+	})
+	if err != nil {
+		return fmt.Errorf("git clone exec failed: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("git clone failed (exit %d): %s", result.ExitCode, string(result.Stderr))
+	}
+
+	r.logger.Info().
+		Str("sandbox_id", sandboxID).
+		Str("repo", p.RepoURL).
+		Str("ref", p.Ref).
+		Str("path", p.SandboxPath).
+		Msg("git payload cloned")
+	return nil
+}
+
+func (r *SimpleKubeReconciler) failSessionFromBackground(sessionID, projectID, reason string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	sdk, err := r.factory.ForProject(ctx, projectID)
+	if err != nil {
+		r.logger.Error().Err(err).Str("session_id", sessionID).Msg("cannot get SDK client to fail session")
+		return
+	}
+
+	condition := map[string]interface{}{
+		"type":               "Provisioning",
+		"status":             "False",
+		"reason":             "PayloadInjectionFailed",
+		"message":            reason,
+		"lastTransitionTime": time.Now().UTC().Format(time.RFC3339),
+	}
+	conditionsJSON, marshalErr := json.Marshal([]interface{}{condition})
+	if marshalErr != nil {
+		r.logger.Error().Err(marshalErr).Str("session_id", sessionID).Msg("failed to marshal conditions for payload failure")
+		return
+	}
+
+	now := time.Now()
+	patch := map[string]interface{}{
+		"phase":           PhaseFailed,
+		"conditions":      string(conditionsJSON),
+		"completion_time": &now,
+	}
+
+	if _, updateErr := sdk.Sessions().UpdateStatus(ctx, sessionID, patch); updateErr != nil {
+		r.logger.Error().Err(updateErr).Str("session_id", sessionID).Msg("failed to update session to Failed after payload injection error")
+		return
+	}
+
+	r.logger.Info().
+		Str("session_id", sessionID).
+		Str("reason", reason).
+		Msg("session marked as Failed due to payload injection error")
 }
 
 func (r *SimpleKubeReconciler) enableProvidersV2(ctx context.Context, namespace string) error {

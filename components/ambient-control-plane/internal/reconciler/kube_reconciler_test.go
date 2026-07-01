@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	openshellpb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -418,4 +419,275 @@ func TestUseMCPSidecar_GatewayModeDisablesMCP(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMergeAgentEnvironment(t *testing.T) {
+	t.Run("nil agent is safe", func(t *testing.T) {
+		r := &SimpleKubeReconciler{cfg: KubeReconcilerConfig{}}
+		r.logger = r.logger.With().Logger()
+		env := map[string]string{"SESSION_ID": "s1"}
+		r.mergeAgentEnvironment(env, nil)
+		if len(env) != 1 {
+			t.Errorf("expected 1 env var, got %d", len(env))
+		}
+	})
+
+	t.Run("empty environment is safe", func(t *testing.T) {
+		r := &SimpleKubeReconciler{cfg: KubeReconcilerConfig{}}
+		r.logger = r.logger.With().Logger()
+		env := map[string]string{"SESSION_ID": "s1"}
+		agent := &types.Agent{Name: "test", Environment: map[string]string{}}
+		r.mergeAgentEnvironment(env, agent)
+		if len(env) != 1 {
+			t.Errorf("expected 1 env var, got %d", len(env))
+		}
+	})
+
+	t.Run("adds new vars", func(t *testing.T) {
+		r := &SimpleKubeReconciler{cfg: KubeReconcilerConfig{}}
+		r.logger = r.logger.With().Logger()
+		env := map[string]string{"SESSION_ID": "s1"}
+		agent := &types.Agent{
+			Name:        "test",
+			Environment: map[string]string{"LOG_LEVEL": "debug", "REVIEW_MODE": "strict"},
+		}
+		r.mergeAgentEnvironment(env, agent)
+		if env["LOG_LEVEL"] != "debug" {
+			t.Errorf("expected LOG_LEVEL=debug, got %q", env["LOG_LEVEL"])
+		}
+		if env["REVIEW_MODE"] != "strict" {
+			t.Errorf("expected REVIEW_MODE=strict, got %q", env["REVIEW_MODE"])
+		}
+		if len(env) != 3 {
+			t.Errorf("expected 3 env vars, got %d", len(env))
+		}
+	})
+
+	t.Run("does not override system vars", func(t *testing.T) {
+		r := &SimpleKubeReconciler{cfg: KubeReconcilerConfig{}}
+		r.logger = r.logger.With().Logger()
+		env := map[string]string{"SESSION_ID": "s1", "LOG_LEVEL": "info"}
+		agent := &types.Agent{
+			Name:        "test",
+			Environment: map[string]string{"SESSION_ID": "attacker", "LOG_LEVEL": "debug", "NEW_VAR": "val"},
+		}
+		r.mergeAgentEnvironment(env, agent)
+		if env["SESSION_ID"] != "s1" {
+			t.Errorf("system SESSION_ID overridden: got %q", env["SESSION_ID"])
+		}
+		if env["LOG_LEVEL"] != "info" {
+			t.Errorf("system LOG_LEVEL overridden: got %q", env["LOG_LEVEL"])
+		}
+		if env["NEW_VAR"] != "val" {
+			t.Errorf("expected NEW_VAR=val, got %q", env["NEW_VAR"])
+		}
+	})
+}
+
+func TestAgentPayloads(t *testing.T) {
+	t.Run("nil agent returns nil", func(t *testing.T) {
+		result := agentPayloads(nil)
+		if result != nil {
+			t.Errorf("expected nil, got %v", result)
+		}
+	})
+
+	t.Run("agent without payloads returns nil", func(t *testing.T) {
+		agent := &types.Agent{Name: "test"}
+		result := agentPayloads(agent)
+		if result != nil {
+			t.Errorf("expected nil, got %v", result)
+		}
+	})
+
+	t.Run("agent with payloads returns them", func(t *testing.T) {
+		agent := &types.Agent{
+			Name: "test",
+			Payloads: []types.Payload{
+				{SandboxPath: "/sandbox/CLAUDE.md", Content: "# Test"},
+				{SandboxPath: "/sandbox/workspace", RepoURL: "https://github.com/example/repo", Ref: "main"},
+			},
+		}
+		result := agentPayloads(agent)
+		if len(result) != 2 {
+			t.Fatalf("expected 2 payloads, got %d", len(result))
+		}
+		if result[0].SandboxPath != "/sandbox/CLAUDE.md" {
+			t.Errorf("unexpected path: %s", result[0].SandboxPath)
+		}
+		if result[1].RepoURL != "https://github.com/example/repo" {
+			t.Errorf("unexpected repo_url: %s", result[1].RepoURL)
+		}
+	})
+}
+
+func TestApplySandboxTemplate(t *testing.T) {
+	newReq := func() *openshellpb.CreateSandboxRequest {
+		return &openshellpb.CreateSandboxRequest{
+			Labels: map[string]string{
+				"ambient-code.io/session-id": "s1",
+				"ambient-code.io/project-id": "p1",
+				"ambient-code.io/managed":    "true",
+				"ambient-code.io/managed-by": "ambient-control-plane",
+			},
+			Spec: &openshellpb.SandboxSpec{
+				Template: &openshellpb.SandboxTemplate{
+					Image: "runner:latest",
+				},
+			},
+		}
+	}
+
+	t.Run("nil agent is safe", func(t *testing.T) {
+		r := &SimpleKubeReconciler{cfg: KubeReconcilerConfig{}}
+		r.logger = r.logger.With().Logger()
+		req := newReq()
+		r.applySandboxTemplate(req, nil)
+		if req.Spec.Template.RuntimeClassName != "" {
+			t.Errorf("unexpected runtime class: %s", req.Spec.Template.RuntimeClassName)
+		}
+	})
+
+	t.Run("nil sandbox template is safe", func(t *testing.T) {
+		r := &SimpleKubeReconciler{cfg: KubeReconcilerConfig{}}
+		r.logger = r.logger.With().Logger()
+		req := newReq()
+		agent := &types.Agent{Name: "test"}
+		r.applySandboxTemplate(req, agent)
+		if req.Spec.Template.RuntimeClassName != "" {
+			t.Errorf("unexpected runtime class: %s", req.Spec.Template.RuntimeClassName)
+		}
+	})
+
+	t.Run("runtime class name passthrough", func(t *testing.T) {
+		r := &SimpleKubeReconciler{cfg: KubeReconcilerConfig{}}
+		r.logger = r.logger.With().Logger()
+		req := newReq()
+		agent := &types.Agent{
+			Name: "test",
+			SandboxTemplate: &types.SandboxTemplate{
+				RuntimeClassName: "nvidia",
+			},
+		}
+		r.applySandboxTemplate(req, agent)
+		if req.Spec.Template.RuntimeClassName != "nvidia" {
+			t.Errorf("expected nvidia, got %q", req.Spec.Template.RuntimeClassName)
+		}
+	})
+
+	t.Run("log level passthrough", func(t *testing.T) {
+		r := &SimpleKubeReconciler{cfg: KubeReconcilerConfig{}}
+		r.logger = r.logger.With().Logger()
+		req := newReq()
+		agent := &types.Agent{
+			Name: "test",
+			SandboxTemplate: &types.SandboxTemplate{
+				LogLevel: "debug",
+			},
+		}
+		r.applySandboxTemplate(req, agent)
+		if req.Spec.LogLevel != "debug" {
+			t.Errorf("expected debug, got %q", req.Spec.LogLevel)
+		}
+	})
+
+	t.Run("GPU enabled", func(t *testing.T) {
+		r := &SimpleKubeReconciler{cfg: KubeReconcilerConfig{}}
+		r.logger = r.logger.With().Logger()
+		req := newReq()
+		agent := &types.Agent{
+			Name: "test",
+			SandboxTemplate: &types.SandboxTemplate{
+				Gpu: &types.GpuRequirements{Count: 2},
+			},
+		}
+		r.applySandboxTemplate(req, agent)
+		if !req.Spec.Gpu {
+			t.Error("expected GPU=true")
+		}
+	})
+
+	t.Run("GPU zero count does not enable", func(t *testing.T) {
+		r := &SimpleKubeReconciler{cfg: KubeReconcilerConfig{}}
+		r.logger = r.logger.With().Logger()
+		req := newReq()
+		agent := &types.Agent{
+			Name: "test",
+			SandboxTemplate: &types.SandboxTemplate{
+				Gpu: &types.GpuRequirements{Count: 0},
+			},
+		}
+		r.applySandboxTemplate(req, agent)
+		if req.Spec.Gpu {
+			t.Error("expected GPU=false for count=0")
+		}
+	})
+
+	t.Run("labels merge without overriding system labels", func(t *testing.T) {
+		r := &SimpleKubeReconciler{cfg: KubeReconcilerConfig{}}
+		r.logger = r.logger.With().Logger()
+		req := newReq()
+		agent := &types.Agent{
+			Name: "test",
+			SandboxTemplate: &types.SandboxTemplate{
+				Labels: map[string]string{
+					"ambient-code.io/session-id": "attacker",
+					"team":                       "security",
+				},
+			},
+		}
+		r.applySandboxTemplate(req, agent)
+		if req.Labels["ambient-code.io/session-id"] != "s1" {
+			t.Errorf("system label overridden: got %q", req.Labels["ambient-code.io/session-id"])
+		}
+		if req.Labels["team"] != "security" {
+			t.Errorf("expected team=security, got %q", req.Labels["team"])
+		}
+		if req.Spec.Template.Labels["team"] != "security" {
+			t.Errorf("expected template label team=security, got %q", req.Spec.Template.Labels["team"])
+		}
+	})
+
+	t.Run("annotations passthrough", func(t *testing.T) {
+		r := &SimpleKubeReconciler{cfg: KubeReconcilerConfig{}}
+		r.logger = r.logger.With().Logger()
+		req := newReq()
+		agent := &types.Agent{
+			Name: "test",
+			SandboxTemplate: &types.SandboxTemplate{
+				Annotations: map[string]string{
+					"example.com/purpose": "security-review",
+				},
+			},
+		}
+		r.applySandboxTemplate(req, agent)
+		if req.Spec.Template.Annotations["example.com/purpose"] != "security-review" {
+			t.Errorf("expected annotation, got %q", req.Spec.Template.Annotations["example.com/purpose"])
+		}
+	})
+}
+
+func TestInjectPayloads_Validation(t *testing.T) {
+	r := &SimpleKubeReconciler{cfg: KubeReconcilerConfig{}}
+	r.logger = r.logger.With().Logger()
+
+	t.Run("empty sandbox_path returns error", func(t *testing.T) {
+		payloads := []types.Payload{
+			{Content: "hello"},
+		}
+		err := r.injectPayloads(nil, "ns", "sbx-1", payloads)
+		if err == nil {
+			t.Fatal("expected error for missing sandbox_path")
+		}
+		if !strings.Contains(err.Error(), "sandbox_path is required") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("empty payloads succeeds", func(t *testing.T) {
+		err := r.injectPayloads(nil, "ns", "sbx-1", nil)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
 }
