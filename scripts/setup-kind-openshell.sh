@@ -125,7 +125,9 @@ else
   kill "${PF_PID}" 2>/dev/null || true
 fi
 
-# 4. Patch control plane with the gateway flag (skip if already set)
+# 4. Patch control plane with gateway flag (skip if already set)
+#    TLS is left at its default (true) — certgen-job creates openshell-client-tls
+#    and openshell-server-tls secrets so mTLS works out of the box in Kind.
 CURRENT_GW=$(kubectl get deployment ambient-control-plane -n "$NAMESPACE" \
   -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="OPENSHELL_USE_GATEWAY")].value}' 2>/dev/null || echo "")
 if [ "$CURRENT_GW" = "true" ]; then
@@ -133,7 +135,8 @@ if [ "$CURRENT_GW" = "true" ]; then
 else
   kubectl set env deployment/ambient-control-plane -n "$NAMESPACE" \
     OPENSHELL_USE_GATEWAY=true >/dev/null
-  echo "  Patched ambient-control-plane with OPENSHELL_USE_GATEWAY=true"
+  kubectl rollout status deployment/ambient-control-plane -n "$NAMESPACE" --timeout=60s >/dev/null 2>&1
+  echo "  Patched ambient-control-plane with OPENSHELL_USE_GATEWAY=true (TLS enabled by default)"
 fi
 echo "  Note: ambient-ui gateway mode is baked in at build time via --build-arg OPENSHELL_USE_GATEWAY=true"
 
