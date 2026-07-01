@@ -4,6 +4,7 @@ package credential
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
@@ -13,6 +14,8 @@ import (
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/spf13/cobra"
 )
+
+var safeTSLPattern = regexp.MustCompile(`^[a-zA-Z0-9_.@:\-]+$`)
 
 var Cmd = &cobra.Command{
 	Use:   "credential",
@@ -466,11 +469,13 @@ func init() {
 // resolveCredential looks up a credential by name, falling back to treating
 // the argument as an ID. Returns (id, displayName, error).
 func resolveCredential(ctx context.Context, client *sdkclient.Client, nameOrID string) (string, string, error) {
-	opts := sdktypes.NewListOptions().Size(10).Build()
-	opts.Search = fmt.Sprintf("name = '%s'", nameOrID)
-	list, err := client.Credentials().List(ctx, opts)
-	if err == nil && list.Total > 0 {
-		return list.Items[0].ID, list.Items[0].Name, nil
+	if safeTSLPattern.MatchString(nameOrID) {
+		opts := sdktypes.NewListOptions().Size(10).Build()
+		opts.Search = fmt.Sprintf("name = '%s'", nameOrID)
+		list, err := client.Credentials().List(ctx, opts)
+		if err == nil && list.Total > 0 {
+			return list.Items[0].ID, list.Items[0].Name, nil
+		}
 	}
 
 	// Fall back: treat the argument as an ID directly
