@@ -109,7 +109,7 @@ type SimpleKubeReconciler struct {
 	kube        *kubeclient.KubeClient
 	projectKube *kubeclient.KubeClient
 	provisioner kubeclient.NamespaceProvisioner
-	gateway     *openshell.GatewayClient
+	gateway     gatewayClient
 	cfg         KubeReconcilerConfig
 	logger      zerolog.Logger
 }
@@ -121,7 +121,7 @@ func (r *SimpleKubeReconciler) nsKube() *kubeclient.KubeClient {
 	return r.kube
 }
 
-func NewKubeReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, gateway *openshell.GatewayClient, cfg KubeReconcilerConfig, logger zerolog.Logger) *SimpleKubeReconciler {
+func NewKubeReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, gateway gatewayClient, cfg KubeReconcilerConfig, logger zerolog.Logger) *SimpleKubeReconciler {
 	return &SimpleKubeReconciler{
 		factory:     factory,
 		kube:        kube,
