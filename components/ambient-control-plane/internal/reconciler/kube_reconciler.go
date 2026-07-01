@@ -788,19 +788,12 @@ func (r *SimpleKubeReconciler) readProviderSecretToken(ctx context.Context, name
 		return "", fmt.Errorf("getting secret %s/%s: %w", namespace, secretName, err)
 	}
 
-	data, ok := secret.Object["data"].(map[string]interface{})
-	if !ok {
-		return "", fmt.Errorf("secret %s/%s has no data field", namespace, secretName)
+	encodedStr, found, err := unstructured.NestedString(secret.Object, "data", "token")
+	if err != nil {
+		return "", fmt.Errorf("reading token from %s/%s: %w", namespace, secretName, err)
 	}
-
-	encoded, ok := data["token"]
-	if !ok {
+	if !found || encodedStr == "" {
 		return "", fmt.Errorf("secret %s/%s has no 'token' key", namespace, secretName)
-	}
-
-	encodedStr, ok := encoded.(string)
-	if !ok {
-		return "", fmt.Errorf("secret %s/%s 'token' key is not a string", namespace, secretName)
 	}
 
 	decoded, err := base64.StdEncoding.DecodeString(encodedStr)
@@ -876,39 +869,6 @@ func (r *SimpleKubeReconciler) resolveAgentSandboxPolicy(ctx context.Context, sd
 
 	r.logger.Info().Str("policy", policyName).Msg("resolved sandbox policy from agent config")
 	return &sbxPolicy, nil
-}
-
-func (r *SimpleKubeReconciler) configureInference(ctx context.Context, namespace, projectName, sessionModel string, credentialIDs map[string]string) error {
-	inferenceModel := sessionModel
-	if inferenceModel == "" {
-		inferenceModel = "claude-sonnet-4-6"
-	}
-
-	for ambientProvider := range credentialIDs {
-		if !openshell.IsInferenceCapable(ambientProvider) {
-			continue
-		}
-
-		provName := openshell.ProviderName(projectName, ambientProvider)
-
-		resp, err := r.gateway.SetClusterInference(ctx, namespace, &inferencepb.SetClusterInferenceRequest{
-			ProviderName: provName,
-			ModelId:      inferenceModel,
-			NoVerify:     true,
-		})
-		if err != nil {
-			return fmt.Errorf("setting inference for provider %s: %w", provName, err)
-		}
-
-		r.logger.Info().
-			Str("namespace", namespace).
-			Str("provider", provName).
-			Str("model", inferenceModel).
-			Uint64("version", resp.Version).
-			Msg("inference routing configured")
-	}
-
-	return nil
 }
 
 func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session types.Session, projectName string, sdk *sdkclient.Client, providerNames []string) map[string]string {
