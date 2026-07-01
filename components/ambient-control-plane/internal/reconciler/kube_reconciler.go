@@ -691,7 +691,7 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 		// Set at sandbox level so every tool (claude, opencode, etc.) gets
 		// them — not just processes launched through a specific wrapper.
 		env["ANTHROPIC_BASE_URL"] = "https://inference.local"
-		env["ANTHROPIC_API_KEY"] = "unused-for-inference-routing"
+		env["ANTHROPIC_API_KEY"] = "notused"
 	} else if r.cfg.VertexEnabled {
 		env["USE_VERTEX"] = "1"
 		env["CLAUDE_CODE_USE_VERTEX"] = "1"

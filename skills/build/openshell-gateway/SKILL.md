@@ -23,7 +23,7 @@ chart is involved.
 
 ## Full Workflow: Cluster → Credential → Sandbox
 
-### Step 1 — Deploy the Kind Cluster
+### Step 1 — Deploy the Kind Cluster (REQUIRED)
 
 ```bash
 make kind-up OPENSHELL_USE_GATEWAY=true
@@ -70,7 +70,7 @@ This is the most common failure when `kind-up` appears to succeed but sessions
 fail with `openshell-client-tls not found`. Always check and fix before
 proceeding.
 
-### Step 2 — Login with acpctl
+### Step 2 — Login with acpctl (REQUIRED)
 
 The `acpctl` binary lives at `components/ambient-cli/acpctl` (prebuilt).
 
@@ -83,7 +83,13 @@ components/ambient-cli/acpctl login --url http://localhost:$API_PORT --token "$T
 Get `$API_PORT` from `make kind-status` (the "backend" port, typically 12856 on
 the main branch).
 
-### Step 3 — Create and Bind a Credential
+### Step 3 — Create and Bind a Credential (REQUIRED)
+
+Without this step the gateway will have **zero providers** and sandboxes will
+fail with no inference routing. Do NOT skip this — `make kind-setup-vertex`
+only sets up the K8s-level operator-config; it does NOT register the credential
+in ACP. You must create the credential through `acpctl` and bind it to the
+tenant via the API.
 
 #### Create
 
@@ -136,7 +142,7 @@ curl -s -X POST \
   }"
 ```
 
-### Step 3b — Set Vertex AI Config on Control Plane
+### Step 3b — Set Vertex AI Config on Control Plane (REQUIRED)
 
 The gateway requires `VERTEX_AI_PROJECT_ID` and `CLOUD_ML_REGION` for inference
 routing. Set these on the control plane deployment:
@@ -144,14 +150,19 @@ routing. Set these on the control plane deployment:
 ```bash
 kubectl set env deployment/ambient-control-plane -n ambient-code \
   ANTHROPIC_VERTEX_PROJECT_ID=<your-gcp-project-id> \
-  CLOUD_ML_REGION=us-east5
+  CLOUD_ML_REGION=global
 kubectl rollout status deployment/ambient-control-plane -n ambient-code --timeout=60s
 ```
 
 The `project_id` value comes from your service account JSON file. The region
 must match where your Vertex AI API is enabled.
 
-### Step 4 — Create a Session
+### Step 4 — Create a Session (This Creates the Sandbox) (REQUIRED)
+
+Sandboxes are created **through the control plane** by creating a session. The
+control plane reconciler watches for new sessions and provisions sandboxes via
+the gateway automatically. **Do NOT use `openshell sandbox create`** — that
+bypasses the platform and creates an unmanaged sandbox.
 
 ```bash
 components/ambient-cli/acpctl create session \
@@ -159,6 +170,12 @@ components/ambient-cli/acpctl create session \
   --name "gateway-test" \
   --prompt "Say hello and list your current working directory"
 ```
+
+The control plane will:
+1. Detect the new session
+2. Call the gateway's gRPC API to create a `Sandbox` CR in the tenant namespace
+3. Copy the vertex credential secret into the tenant namespace
+4. Configure inference routing on the gateway
 
 ### Step 5 — Verify Sandbox Reaches Ready
 
