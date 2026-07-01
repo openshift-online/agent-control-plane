@@ -631,13 +631,15 @@ func (r *SimpleKubeReconciler) ensureVertexCredentialRefresh(ctx context.Context
 				"client_secret": material.ClientSecret,
 				"refresh_token": material.RefreshToken,
 				"client_email":  clientEmail,
-				"private_key":   "unused-for-oauth2-refresh",
 			},
-			SecretMaterialKeys: []string{"client_secret", "refresh_token", "private_key"},
+			SecretMaterialKeys: []string{"client_secret", "refresh_token"},
 		}
 		r.logger.Info().
 			Str("provider", provName).
 			Msg("using OAuth2 refresh token strategy for vertex credential refresh")
+
+	default:
+		return fmt.Errorf("unsupported Google credential type %q", credType)
 	}
 
 	if _, err := r.gateway.ConfigureProviderRefresh(ctx, namespace, refreshReq); err != nil {
