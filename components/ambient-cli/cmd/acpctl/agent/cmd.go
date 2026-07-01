@@ -3,7 +3,9 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
@@ -22,14 +24,15 @@ var Cmd = &cobra.Command{
 	Long: `Manage project-scoped agents.
 
 Subcommands:
-  list        List agents in a project
-  get         Get a specific agent
-  create      Create an agent in a project
-  update      Update an agent's name, prompt, labels, or annotations
-  delete      Delete an agent
-  start       Start a session for an agent (idempotent)
-  stop        Stop the running session for an agent (idempotent)
-  start-preview  Preview start context (dry run)`,
+  list           List agents in a project
+  get            Get a specific agent
+  create         Create an agent in a project
+  update         Update an agent's name, prompt, labels, or annotations
+  delete         Delete an agent
+  start          Start a session for an agent (idempotent)
+  stop           Stop the running session for an agent (idempotent)
+  start-preview  Preview start context (dry run)
+  export         Export agent as ConfigMap YAML`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()
 	},
@@ -133,6 +136,9 @@ var listCmd = &cobra.Command{
 		if printer.Format() == output.FormatJSON {
 			return printer.PrintJSON(list)
 		}
+		if printer.Format() == output.FormatYAML {
+			return printer.PrintYAML(list)
+		}
 
 		return printAgentTable(printer, list.Items)
 	},
@@ -186,7 +192,10 @@ var getCmd = &cobra.Command{
 		if printer.Format() == output.FormatJSON {
 			return printer.PrintJSON(pa)
 		}
-		return printAgentTable(printer, []sdktypes.Agent{*pa})
+		if printer.Format() == output.FormatYAML {
+			return printer.PrintYAML(pa)
+		}
+		return printAgentDetail(cmd, pa)
 	},
 }
 
@@ -681,6 +690,47 @@ func stopAllAgents(ctx context.Context, cmd *cobra.Command, client *sdkclient.Cl
 	return nil
 }
 
+var exportArgs struct {
+	projectID string
+}
+
+var exportCmd = &cobra.Command{
+	Use:   "export <name-or-id>",
+	Short: "Export agent as ConfigMap YAML",
+	Long:  "Export an agent definition as a Kubernetes ConfigMap YAML suitable for kubectl apply.",
+	Args:  cobra.ExactArgs(1),
+	Example: `  acpctl agent export api
+  acpctl agent export api > agent.yaml
+  acpctl agent export api | kubectl apply -f -`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		projectID, err := resolveProject(exportArgs.projectID)
+		if err != nil {
+			return err
+		}
+
+		client, err := connection.NewClientFromConfig()
+		if err != nil {
+			return err
+		}
+
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
+		defer cancel()
+
+		pa, err := resolveAgentFull(ctx, client, projectID, args[0])
+		if err != nil {
+			return err
+		}
+
+		fmt.Fprint(cmd.OutOrStdout(), agentToConfigMapYaml(pa, ""))
+		return nil
+	},
+}
+
 func init() {
 	Cmd.AddCommand(listCmd)
 	Cmd.AddCommand(getCmd)
@@ -691,13 +741,14 @@ func init() {
 	Cmd.AddCommand(agentStopCmd)
 	Cmd.AddCommand(startPreviewCmd)
 	Cmd.AddCommand(sessionsCmd)
+	Cmd.AddCommand(exportCmd)
 
 	listCmd.Flags().StringVar(&listArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
-	listCmd.Flags().StringVarP(&listArgs.outputFormat, "output", "o", "", "Output format: json|wide")
+	listCmd.Flags().StringVarP(&listArgs.outputFormat, "output", "o", "", "Output format: json|yaml")
 	listCmd.Flags().IntVar(&listArgs.limit, "limit", 100, "Maximum number of items to return")
 
 	getCmd.Flags().StringVar(&getArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
-	getCmd.Flags().StringVarP(&getArgs.outputFormat, "output", "o", "", "Output format: json")
+	getCmd.Flags().StringVarP(&getArgs.outputFormat, "output", "o", "", "Output format: json|yaml")
 
 	createCmd.Flags().StringVar(&createArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 	createCmd.Flags().StringVar(&createArgs.name, "name", "", "Agent name (required)")
@@ -728,13 +779,16 @@ func init() {
 	sessionsCmd.Flags().StringVar(&sessionsArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 	sessionsCmd.Flags().StringVarP(&sessionsArgs.outputFormat, "output", "o", "", "Output format: json")
 	sessionsCmd.Flags().IntVar(&sessionsArgs.limit, "limit", 100, "Maximum number of items to return")
+
+	exportCmd.Flags().StringVar(&exportArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 }
 
 func printAgentTable(printer *output.Printer, agents []sdktypes.Agent) error {
 	columns := []output.Column{
-		{Name: "ID", Width: 27},
-		{Name: "NAME", Width: 24},
-		{Name: "PROJECT", Width: 27},
+		{Name: "NAME", Width: 20},
+		{Name: "DISPLAY NAME", Width: 18},
+		{Name: "MODEL", Width: 20},
+		{Name: "OWNER", Width: 16},
 		{Name: "SESSION", Width: 27},
 		{Name: "AGE", Width: 10},
 	}
@@ -744,12 +798,243 @@ func printAgentTable(printer *output.Printer, agents []sdktypes.Agent) error {
 
 	for _, a := range agents {
 		age := ""
-		if a.CreatedAt != nil {
+		if a.UpdatedAt != nil {
+			age = output.FormatAge(time.Since(*a.UpdatedAt))
+		} else if a.CreatedAt != nil {
 			age = output.FormatAge(time.Since(*a.CreatedAt))
 		}
-		table.WriteRow(a.ID, a.Name, a.ProjectID, a.CurrentSessionID, age)
+		table.WriteRow(a.Name, a.DisplayName, a.LlmModel, a.OwnerUserID, a.CurrentSessionID, age)
 	}
 	return nil
+}
+
+func printAgentDetail(cmd *cobra.Command, a *sdktypes.Agent) error {
+	w := cmd.OutOrStdout()
+	fmt.Fprintf(w, "Name:             %s\n", a.Name)
+	if a.DisplayName != "" {
+		fmt.Fprintf(w, "Display Name:     %s\n", a.DisplayName)
+	}
+	fmt.Fprintf(w, "ID:               %s\n", a.ID)
+	if a.Description != "" {
+		fmt.Fprintf(w, "Description:      %s\n", a.Description)
+	}
+	fmt.Fprintf(w, "Project ID:       %s\n", a.ProjectID)
+	if a.OwnerUserID != "" {
+		fmt.Fprintf(w, "Owner:            %s\n", a.OwnerUserID)
+	}
+	fmt.Fprintf(w, "Model:            %s\n", a.LlmModel)
+	if a.LlmTemperature != 0 {
+		fmt.Fprintf(w, "Temperature:      %.1f\n", a.LlmTemperature)
+	}
+	if a.LlmMaxTokens != 0 {
+		fmt.Fprintf(w, "Max Tokens:       %d\n", a.LlmMaxTokens)
+	}
+	if a.Entrypoint != "" {
+		fmt.Fprintf(w, "Entrypoint:       %s\n", a.Entrypoint)
+	}
+	if a.RepoURL != "" {
+		fmt.Fprintf(w, "Repo URL:         %s\n", a.RepoURL)
+	}
+	if a.WorkflowID != "" {
+		fmt.Fprintf(w, "Workflow ID:      %s\n", a.WorkflowID)
+	}
+	if a.CurrentSessionID != "" {
+		fmt.Fprintf(w, "Current Session:  %s\n", a.CurrentSessionID)
+	}
+	if a.SandboxPolicy != "" {
+		fmt.Fprintf(w, "Sandbox Policy:   %s\n", a.SandboxPolicy)
+	}
+
+	if len(a.Providers) > 0 {
+		fmt.Fprintf(w, "Providers:        %s\n", strings.Join(a.Providers, ", "))
+	}
+
+	if a.SandboxTemplate != nil {
+		fmt.Fprintf(w, "Sandbox Template:\n")
+		if a.SandboxTemplate.Image != "" {
+			fmt.Fprintf(w, "  Image:          %s\n", a.SandboxTemplate.Image)
+		}
+		if a.SandboxTemplate.Resources != nil {
+			if a.SandboxTemplate.Resources.CPU != "" {
+				fmt.Fprintf(w, "  CPU:            %s\n", a.SandboxTemplate.Resources.CPU)
+			}
+			if a.SandboxTemplate.Resources.Memory != "" {
+				fmt.Fprintf(w, "  Memory:         %s\n", a.SandboxTemplate.Resources.Memory)
+			}
+		}
+		if a.SandboxTemplate.Gpu != nil && a.SandboxTemplate.Gpu.Count > 0 {
+			fmt.Fprintf(w, "  GPU Count:      %d\n", a.SandboxTemplate.Gpu.Count)
+		}
+		if a.SandboxTemplate.RuntimeClassName != "" {
+			fmt.Fprintf(w, "  Runtime Class:  %s\n", a.SandboxTemplate.RuntimeClassName)
+		}
+		if a.SandboxTemplate.LogLevel != "" {
+			fmt.Fprintf(w, "  Log Level:      %s\n", a.SandboxTemplate.LogLevel)
+		}
+	}
+
+	if len(a.Payloads) > 0 {
+		fmt.Fprintf(w, "Payloads:\n")
+		for _, p := range a.Payloads {
+			fmt.Fprintf(w, "  - %s", p.SandboxPath)
+			if p.RepoURL != "" {
+				fmt.Fprintf(w, " (repo: %s", p.RepoURL)
+				if p.Ref != "" {
+					fmt.Fprintf(w, ", ref: %s", p.Ref)
+				}
+				fmt.Fprint(w, ")")
+			}
+			fmt.Fprintln(w)
+		}
+	}
+
+	if len(a.Environment) > 0 {
+		fmt.Fprintf(w, "Environment:\n")
+		for k, v := range a.Environment {
+			fmt.Fprintf(w, "  %s: %s\n", k, v)
+		}
+	}
+
+	if a.Prompt != "" {
+		fmt.Fprintf(w, "Prompt:\n")
+		for _, line := range strings.Split(a.Prompt, "\n") {
+			fmt.Fprintf(w, "  %s\n", line)
+		}
+	}
+
+	if a.CreatedAt != nil {
+		fmt.Fprintf(w, "Created:          %s\n", a.CreatedAt.Format(time.RFC3339))
+	}
+	if a.UpdatedAt != nil {
+		fmt.Fprintf(w, "Updated:          %s\n", a.UpdatedAt.Format(time.RFC3339))
+	}
+
+	printAgentMetadata(w, "Annotations", a.Annotations)
+	printAgentMetadata(w, "Labels", a.Labels)
+
+	return nil
+}
+
+func printAgentMetadata(w interface{ Write([]byte) (int, error) }, heading, jsonStr string) {
+	if jsonStr == "" || jsonStr == "{}" {
+		return
+	}
+	var m map[string]string
+	if err := json.Unmarshal([]byte(jsonStr), &m); err != nil {
+		return
+	}
+	if len(m) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "%s:\n", heading)
+	for k, v := range m {
+		fmt.Fprintf(w, "  %s: %s\n", k, v)
+	}
+}
+
+func agentToConfigMapYaml(a *sdktypes.Agent, namespace string) string {
+	dataLines := []string{
+		"    name: " + a.Name,
+	}
+	if a.DisplayName != "" {
+		dataLines = append(dataLines, "    display_name: "+a.DisplayName)
+	}
+	if a.Description != "" {
+		dataLines = append(dataLines, "    description: "+a.Description)
+	}
+	if a.LlmModel != "" {
+		dataLines = append(dataLines, "    model: "+a.LlmModel)
+	}
+	if a.Entrypoint != "" {
+		dataLines = append(dataLines, "    entrypoint: "+a.Entrypoint)
+	}
+	if a.RepoURL != "" {
+		dataLines = append(dataLines, "    repo_url: "+a.RepoURL)
+	}
+	if a.Prompt != "" {
+		dataLines = append(dataLines, "    prompt: |")
+		for _, line := range strings.Split(a.Prompt, "\n") {
+			dataLines = append(dataLines, "      "+line)
+		}
+	}
+	if len(a.Providers) > 0 {
+		dataLines = append(dataLines, "    providers:")
+		for _, p := range a.Providers {
+			dataLines = append(dataLines, "      - "+p)
+		}
+	}
+	if len(a.Payloads) > 0 {
+		dataLines = append(dataLines, "    payloads:")
+		for _, p := range a.Payloads {
+			dataLines = append(dataLines, "      - sandbox_path: "+p.SandboxPath)
+			if p.RepoURL != "" {
+				dataLines = append(dataLines, "        repo_url: "+p.RepoURL)
+			}
+			if p.Ref != "" {
+				dataLines = append(dataLines, "        ref: "+p.Ref)
+			}
+			if p.Content != "" {
+				dataLines = append(dataLines, "        content: |")
+				for _, cl := range strings.Split(p.Content, "\n") {
+					dataLines = append(dataLines, "          "+cl)
+				}
+			}
+		}
+	}
+	if len(a.Environment) > 0 {
+		dataLines = append(dataLines, "    environment:")
+		for k, v := range a.Environment {
+			dataLines = append(dataLines, fmt.Sprintf("      %s: %q", k, v))
+		}
+	}
+	if a.SandboxTemplate != nil {
+		hasFields := a.SandboxTemplate.Image != "" ||
+			(a.SandboxTemplate.Resources != nil && (a.SandboxTemplate.Resources.CPU != "" || a.SandboxTemplate.Resources.Memory != "")) ||
+			(a.SandboxTemplate.Gpu != nil && a.SandboxTemplate.Gpu.Count > 0)
+		if hasFields {
+			dataLines = append(dataLines, "    sandbox_template:")
+			if a.SandboxTemplate.Image != "" {
+				dataLines = append(dataLines, "      image: "+a.SandboxTemplate.Image)
+			}
+			if a.SandboxTemplate.Resources != nil {
+				if a.SandboxTemplate.Resources.CPU != "" || a.SandboxTemplate.Resources.Memory != "" {
+					dataLines = append(dataLines, "      resources:")
+					if a.SandboxTemplate.Resources.CPU != "" {
+						dataLines = append(dataLines, fmt.Sprintf("        cpu: %q", a.SandboxTemplate.Resources.CPU))
+					}
+					if a.SandboxTemplate.Resources.Memory != "" {
+						dataLines = append(dataLines, "        memory: "+a.SandboxTemplate.Resources.Memory)
+					}
+				}
+			}
+			if a.SandboxTemplate.Gpu != nil && a.SandboxTemplate.Gpu.Count > 0 {
+				dataLines = append(dataLines, "      gpu:")
+				dataLines = append(dataLines, fmt.Sprintf("        count: %d", a.SandboxTemplate.Gpu.Count))
+			}
+		}
+	}
+	if a.SandboxPolicy != "" {
+		dataLines = append(dataLines, "    sandbox_policy: "+a.SandboxPolicy)
+	}
+
+	if namespace == "" {
+		namespace = a.ProjectID
+	}
+
+	lines := []string{
+		"apiVersion: v1",
+		"kind: ConfigMap",
+		"metadata:",
+		"  name: agent-" + a.Name,
+		"  namespace: " + namespace,
+		"  labels:",
+		"    ambient.ai/kind: agent",
+		"data:",
+		"  " + a.Name + ": |",
+	}
+	lines = append(lines, dataLines...)
+
+	return strings.Join(lines, "\n") + "\n"
 }
 
 func printSessionTable(printer *output.Printer, sessions []sdktypes.Session) error {

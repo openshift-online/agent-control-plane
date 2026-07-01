@@ -17,7 +17,9 @@ import (
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/inbox"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/login"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/logout"
+	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/policy"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/project"
+	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/provider"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/scheduledsession"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/session"
 	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/start"
@@ -65,6 +67,8 @@ func init() {
 	root.AddCommand(agent.Cmd)
 	root.AddCommand(scheduledsession.Cmd)
 	root.AddCommand(credential.Cmd)
+	root.AddCommand(provider.Cmd)
+	root.AddCommand(policy.Cmd)
 	root.AddCommand(inbox.Cmd)
 	root.AddCommand(get.Cmd)
 	root.AddCommand(create.Cmd)
