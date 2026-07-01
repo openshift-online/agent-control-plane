@@ -54,29 +54,29 @@ func NewTierResolver() (*TierResolver, error) {
 // their effective ACP tier. Returns TierNone if gateway mode is inactive
 // or the check fails.
 //
-// Mapping:
+// Mapping (based on representative capabilities):
 //
-//	admin/cluster-admin verb access → TierAdmin
-//	edit verb access → TierEditor
-//	view verb access → TierViewer
+//	delete namespace → TierAdmin (only admin/cluster-admin can)
+//	create deployments → TierEditor (edit role grants, view does not)
+//	get pods → TierViewer (basic read access)
 //	no access → TierNone
 func (r *TierResolver) ResolveTier(ctx context.Context, username, namespace string) Tier {
 	if !r.enabled || r.k8sClient == nil {
 		return TierNone
 	}
 
-	// Check admin access (verb: admin or cluster-admin)
-	if r.hasAccess(ctx, username, namespace, "admin") {
+	// Check admin access — can delete the namespace itself
+	if r.hasAccess(ctx, username, namespace, "delete", "namespaces", "") {
 		return TierAdmin
 	}
 
-	// Check edit access
-	if r.hasAccess(ctx, username, namespace, "edit") {
+	// Check editor access — can create deployments
+	if r.hasAccess(ctx, username, namespace, "create", "deployments", "apps") {
 		return TierEditor
 	}
 
-	// Check view access
-	if r.hasAccess(ctx, username, namespace, "view") {
+	// Check viewer access — can get pods
+	if r.hasAccess(ctx, username, namespace, "get", "pods", "") {
 		return TierViewer
 	}
 
@@ -84,14 +84,15 @@ func (r *TierResolver) ResolveTier(ctx context.Context, username, namespace stri
 }
 
 // hasAccess performs a SubjectAccessReview to check if the user has the
-// specified verb access on the namespace.
-func (r *TierResolver) hasAccess(ctx context.Context, username, namespace, verb string) bool {
+// specified verb access on the given resource.
+func (r *TierResolver) hasAccess(ctx context.Context, username, namespace, verb, resource, apiGroup string) bool {
 	sar := &authv1.SubjectAccessReview{
 		Spec: authv1.SubjectAccessReviewSpec{
 			ResourceAttributes: &authv1.ResourceAttributes{
 				Namespace: namespace,
 				Verb:      verb,
-				Resource:  "namespaces",
+				Resource:  resource,
+				Group:     apiGroup,
 			},
 			User: username,
 		},
@@ -99,7 +100,8 @@ func (r *TierResolver) hasAccess(ctx context.Context, username, namespace, verb 
 
 	result, err := r.k8sClient.AuthorizationV1().SubjectAccessReviews().Create(ctx, sar, metav1.CreateOptions{})
 	if err != nil {
-		glog.Warningf("SubjectAccessReview failed for user=%s namespace=%s verb=%s: %v", username, namespace, verb, err)
+		glog.Warningf("SubjectAccessReview failed for user=%s namespace=%s verb=%s resource=%s: %v",
+			username, namespace, verb, resource, err)
 		return false
 	}
 

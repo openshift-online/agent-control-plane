@@ -58,6 +58,12 @@ func (h *startHandler) Start(w http.ResponseWriter, r *http.Request) {
 	// Gateway mode tier check
 	if gateway.IsGatewayModeActive() {
 		username := auth.GetUsernameFromContext(ctx)
+		if username == "" {
+			handlers.HandleError(ctx, w, pkgerrors.Unauthenticated(
+				"Username required for gateway mode tier resolution"))
+			return
+		}
+
 		tier := gateway.GetTierResolver().ResolveTier(ctx, username, projectID)
 
 		// Fallback to ACP internal roles if K8s tier is None

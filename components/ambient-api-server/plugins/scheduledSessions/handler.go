@@ -31,6 +31,10 @@ func checkTierForMutation(ctx context.Context, projectID string) *errors.Service
 	}
 
 	username := auth.GetUsernameFromContext(ctx)
+	if username == "" {
+		return errors.Unauthenticated("Username required for gateway mode tier resolution")
+	}
+
 	tier := gateway.GetTierResolver().ResolveTier(ctx, username, projectID)
 
 	// ACP internal role fallback

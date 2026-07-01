@@ -12,33 +12,33 @@ import (
 
 func TestResolveTier(t *testing.T) {
 	tests := []struct {
-		name         string
-		username     string
-		namespace    string
-		adminAllowed bool
-		editAllowed  bool
-		viewAllowed  bool
-		expectedTier Tier
+		name                string
+		username            string
+		namespace           string
+		canDeleteNamespace  bool
+		canCreateDeployment bool
+		canGetPods          bool
+		expectedTier        Tier
 	}{
 		{
-			name:         "admin access",
-			username:     "alice",
-			namespace:    "proj-1",
-			adminAllowed: true,
-			expectedTier: TierAdmin,
+			name:               "admin access - can delete namespace",
+			username:           "alice",
+			namespace:          "proj-1",
+			canDeleteNamespace: true,
+			expectedTier:       TierAdmin,
 		},
 		{
-			name:         "edit access",
-			username:     "bob",
-			namespace:    "proj-1",
-			editAllowed:  true,
-			expectedTier: TierEditor,
+			name:                "edit access - can create deployments",
+			username:            "bob",
+			namespace:           "proj-1",
+			canCreateDeployment: true,
+			expectedTier:        TierEditor,
 		},
 		{
-			name:         "view access",
+			name:         "view access - can get pods",
 			username:     "charlie",
 			namespace:    "proj-1",
-			viewAllowed:  true,
+			canGetPods:   true,
 			expectedTier: TierViewer,
 		},
 		{
@@ -53,7 +53,7 @@ func TestResolveTier(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client := fake.NewSimpleClientset()
 
-			// Mock SubjectAccessReview responses
+			// Mock SubjectAccessReview responses based on the new verb structure
 			client.PrependReactor("create", "subjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
 				createAction := action.(k8stesting.CreateAction)
 				sar := createAction.GetObject().(*authv1.SubjectAccessReview)
@@ -64,15 +64,25 @@ func TestResolveTier(t *testing.T) {
 					},
 				}
 
-				// Check which verb is being tested
+				// Check user and namespace match
 				if sar.Spec.User == tt.username && sar.Spec.ResourceAttributes.Namespace == tt.namespace {
-					switch sar.Spec.ResourceAttributes.Verb {
-					case "admin":
-						result.Status.Allowed = tt.adminAllowed
-					case "edit":
-						result.Status.Allowed = tt.editAllowed
-					case "view":
-						result.Status.Allowed = tt.viewAllowed
+					// Admin tier check: delete namespaces
+					if sar.Spec.ResourceAttributes.Verb == "delete" &&
+						sar.Spec.ResourceAttributes.Resource == "namespaces" {
+						result.Status.Allowed = tt.canDeleteNamespace
+					}
+
+					// Editor tier check: create deployments in apps group
+					if sar.Spec.ResourceAttributes.Verb == "create" &&
+						sar.Spec.ResourceAttributes.Resource == "deployments" &&
+						sar.Spec.ResourceAttributes.Group == "apps" {
+						result.Status.Allowed = tt.canCreateDeployment
+					}
+
+					// Viewer tier check: get pods
+					if sar.Spec.ResourceAttributes.Verb == "get" &&
+						sar.Spec.ResourceAttributes.Resource == "pods" {
+						result.Status.Allowed = tt.canGetPods
 					}
 				}
 
@@ -80,7 +90,6 @@ func TestResolveTier(t *testing.T) {
 			})
 
 			// Create resolver with the fake client
-			// Note: fake.Clientset satisfies the kubernetes.Interface
 			resolver := &TierResolver{
 				k8sClient: client,
 				enabled:   true,
