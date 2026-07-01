@@ -865,6 +865,7 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 		// them — not just processes launched through a specific wrapper.
 		env["ANTHROPIC_BASE_URL"] = "https://inference.local"
 		env["ANTHROPIC_API_KEY"] = "notused"
+		env["CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"] = "1"
 	} else if r.cfg.VertexEnabled {
 		env["USE_VERTEX"] = "1"
 		env["CLAUDE_CODE_USE_VERTEX"] = "1"
