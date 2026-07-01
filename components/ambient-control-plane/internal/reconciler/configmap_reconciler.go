@@ -2,6 +2,8 @@ package reconciler
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,7 +16,6 @@ import (
 
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
-	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/rs/zerolog"
 	"gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,6 +34,7 @@ const (
 	annotationSource         = "ambient.ai/source"
 	annotationSourceCM       = "configmap"
 	annotationSourceNS       = "ambient.ai/source-namespace"
+	annotationContentHash    = "ambient.ai/content-hash"
 )
 
 var dnsLabelRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9\-]*[a-z0-9])?$`)
@@ -361,6 +363,45 @@ func (s *ConfigMapSyncer) buildOriginAnnotations(namespace string, userAnnotatio
 	return string(raw), nil
 }
 
+func (s *ConfigMapSyncer) computePatchHash(patch map[string]interface{}) string {
+	data, err := json.Marshal(patch)
+	if err != nil {
+		s.logger.Warn().Err(err).Msg("failed to marshal patch for content hash, will force update")
+		return ""
+	}
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:])
+}
+
+func extractContentHash(annotationsJSON string) string {
+	if annotationsJSON == "" {
+		return ""
+	}
+	var ann map[string]string
+	if err := json.Unmarshal([]byte(annotationsJSON), &ann); err != nil {
+		return ""
+	}
+	return ann[annotationContentHash]
+}
+
+func setPatchContentHash(patch map[string]interface{}, hash string) error {
+	annStr, ok := patch["annotations"].(string)
+	if !ok {
+		return fmt.Errorf("annotations field is not a string")
+	}
+	var ann map[string]string
+	if err := json.Unmarshal([]byte(annStr), &ann); err != nil {
+		return fmt.Errorf("parsing annotations: %w", err)
+	}
+	ann[annotationContentHash] = hash
+	data, err := json.Marshal(ann)
+	if err != nil {
+		return fmt.Errorf("marshalling annotations: %w", err)
+	}
+	patch["annotations"] = string(data)
+	return nil
+}
+
 func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, decl *AgentDeclaration, storedUID string) (string, error) {
 	var existing *resourceRef
 	if storedUID != "" {
@@ -422,7 +463,16 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 		patch["labels"] = string(labelsJSON)
 	}
 
+	hash := s.computePatchHash(patch)
+
 	if existing != nil {
+		if extractContentHash(existing.Annotations) == hash {
+			s.logger.Debug().Str("agent", decl.Name).Str("id", existing.ID).Msg("agent unchanged, skipping update")
+			return existing.ID, nil
+		}
+		if err := setPatchContentHash(patch, hash); err != nil {
+			return "", fmt.Errorf("setting content hash for agent %s: %w", decl.Name, err)
+		}
 		if err := s.patchAPI(ctx, projectID, "agents", existing.ID, patch); err != nil {
 			return "", fmt.Errorf("updating agent %s: %w", decl.Name, err)
 		}
@@ -430,23 +480,16 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 		return existing.ID, nil
 	}
 
-	agent, err := types.NewAgentBuilder().
-		Name(decl.Name).
-		ProjectID(projectID).
-		Build()
-	if err != nil {
-		return "", fmt.Errorf("building agent %s: %w", decl.Name, err)
+	if err := setPatchContentHash(patch, hash); err != nil {
+		return "", fmt.Errorf("setting content hash for agent %s: %w", decl.Name, err)
 	}
-
-	created, err := sdk.Agents().Create(ctx, agent)
+	patch["name"] = decl.Name
+	createdID, err := s.createAPI(ctx, projectID, "agents", patch)
 	if err != nil {
 		return "", fmt.Errorf("creating agent %s: %w", decl.Name, err)
 	}
-	if err := s.patchAPI(ctx, projectID, "agents", created.ID, patch); err != nil {
-		return "", fmt.Errorf("updating newly created agent %s: %w", decl.Name, err)
-	}
-	s.logger.Info().Str("agent", decl.Name).Str("id", created.ID).Msg("agent created from configmap")
-	return created.ID, nil
+	s.logger.Info().Str("agent", decl.Name).Str("id", createdID).Msg("agent created from configmap")
+	return createdID, nil
 }
 
 func (s *ConfigMapSyncer) findAgentByName(ctx context.Context, projectID, name string) *resourceRef {
@@ -604,7 +647,16 @@ func (s *ConfigMapSyncer) upsertProvider(ctx context.Context, sdk *sdkclient.Cli
 		patch["secret"] = decl.Secret
 	}
 
+	hash := s.computePatchHash(patch)
+
 	if existing != nil {
+		if extractContentHash(existing.Annotations) == hash {
+			s.logger.Debug().Str("provider", decl.Name).Str("id", existing.ID).Msg("provider unchanged, skipping update")
+			return existing.ID, nil
+		}
+		if err := setPatchContentHash(patch, hash); err != nil {
+			return "", fmt.Errorf("setting content hash for provider %s: %w", decl.Name, err)
+		}
 		if err := s.patchAPI(ctx, projectID, "providers", existing.ID, patch); err != nil {
 			return "", fmt.Errorf("updating provider %s: %w", decl.Name, err)
 		}
@@ -612,24 +664,17 @@ func (s *ConfigMapSyncer) upsertProvider(ctx context.Context, sdk *sdkclient.Cli
 		return existing.ID, nil
 	}
 
-	provider, err := types.NewProviderBuilder().
-		Name(decl.Name).
-		ProjectID(projectID).
-		Namespace(namespace).
-		Build()
-	if err != nil {
-		return "", fmt.Errorf("building provider %s: %w", decl.Name, err)
+	if err := setPatchContentHash(patch, hash); err != nil {
+		return "", fmt.Errorf("setting content hash for provider %s: %w", decl.Name, err)
 	}
-
-	created, createErr := sdk.Providers().Create(ctx, provider)
+	patch["name"] = decl.Name
+	patch["namespace"] = namespace
+	createdID, createErr := s.createAPI(ctx, projectID, "providers", patch)
 	if createErr != nil {
 		return "", fmt.Errorf("creating provider %s: %w", decl.Name, createErr)
 	}
-	if err := s.patchAPI(ctx, projectID, "providers", created.ID, patch); err != nil {
-		return "", fmt.Errorf("updating newly created provider %s: %w", decl.Name, err)
-	}
-	s.logger.Info().Str("provider", decl.Name).Str("id", created.ID).Msg("provider created from configmap")
-	return created.ID, nil
+	s.logger.Info().Str("provider", decl.Name).Str("id", createdID).Msg("provider created from configmap")
+	return createdID, nil
 }
 
 func (s *ConfigMapSyncer) findProviderByName(ctx context.Context, projectID, name string) *resourceRef {
@@ -787,7 +832,16 @@ func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Clien
 		"spec":        spec,
 	}
 
+	hash := s.computePatchHash(patch)
+
 	if existing != nil {
+		if extractContentHash(existing.Annotations) == hash {
+			s.logger.Debug().Str("policy", name).Str("id", existing.ID).Msg("policy unchanged, skipping update")
+			return existing.ID, nil
+		}
+		if err := setPatchContentHash(patch, hash); err != nil {
+			return "", fmt.Errorf("setting content hash for policy %s: %w", name, err)
+		}
 		if err := s.patchAPI(ctx, projectID, "policies", existing.ID, patch); err != nil {
 			return "", fmt.Errorf("updating policy %s: %w", name, err)
 		}
@@ -795,24 +849,17 @@ func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Clien
 		return existing.ID, nil
 	}
 
-	policy, err := types.NewPolicyBuilder().
-		Name(name).
-		ProjectID(projectID).
-		Namespace(namespace).
-		Build()
-	if err != nil {
-		return "", fmt.Errorf("building policy %s: %w", name, err)
+	if err := setPatchContentHash(patch, hash); err != nil {
+		return "", fmt.Errorf("setting content hash for policy %s: %w", name, err)
 	}
-
-	created, createErr := sdk.Policys().Create(ctx, policy)
+	patch["name"] = name
+	patch["namespace"] = namespace
+	createdID, createErr := s.createAPI(ctx, projectID, "policies", patch)
 	if createErr != nil {
 		return "", fmt.Errorf("creating policy %s: %w", name, createErr)
 	}
-	if err := s.patchAPI(ctx, projectID, "policies", created.ID, patch); err != nil {
-		return "", fmt.Errorf("updating newly created policy %s: %w", name, err)
-	}
-	s.logger.Info().Str("policy", name).Str("id", created.ID).Msg("policy created from configmap")
-	return created.ID, nil
+	s.logger.Info().Str("policy", name).Str("id", createdID).Msg("policy created from configmap")
+	return createdID, nil
 }
 
 func (s *ConfigMapSyncer) findPolicyByName(ctx context.Context, projectID, name string) *resourceRef {
@@ -919,6 +966,57 @@ func (s *ConfigMapSyncer) queryAPI(ctx context.Context, projectID, resource, sea
 	}
 
 	return result.Items, nil
+}
+
+// createAPI sends a POST request to create a resource with all fields in a
+// single call, returning the created resource's ID. This avoids the SDK's
+// typed Create + separate PATCH pattern, ensuring the content hash annotation
+// is set atomically with the resource.
+func (s *ConfigMapSyncer) createAPI(ctx context.Context, projectID, resource string, body map[string]interface{}) (string, error) {
+	token, err := s.factory.Token(ctx)
+	if err != nil {
+		return "", fmt.Errorf("getting token: %w", err)
+	}
+
+	data, err := json.Marshal(body)
+	if err != nil {
+		return "", fmt.Errorf("marshalling body: %w", err)
+	}
+
+	reqURL := fmt.Sprintf("%s/api/ambient/v1/projects/%s/%s", s.factory.BaseURL(), projectID, resource)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(string(data)))
+	if err != nil {
+		return "", fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Ambient-Project", projectID)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("API returned %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return "", fmt.Errorf("parsing response ID: %w", err)
+	}
+
+	return result.ID, nil
 }
 
 // patchAPI sends a PATCH request to update a resource, ignoring the response

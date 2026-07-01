@@ -6,13 +6,33 @@ import (
 )
 
 var providerTypeMapping = map[string]string{
-	"github":     "github",
-	"anthropic":  "claude",
-	"claude":     "claude",
+	// Source control
+	"github": "github",
+	// Agent profiles
+	"anthropic":   "claude-code",
+	"claude":      "claude-code",
+	"claude-code": "claude-code",
+	"codex":       "codex",
+	"copilot":     "copilot",
+	"cursor":      "cursor",
+	// Inference profiles
+	"vertex":    "google-vertex-ai",
+	"deepinfra": "deepinfra",
+	"nvidia":    "nvidia",
+	// Data profiles
+	"pypi": "pypi",
+	// Unmapped ACP types → generic
 	"jira":       "generic",
 	"google":     "generic",
-	"vertex":     "google-vertex-ai",
 	"kubeconfig": "generic",
+}
+
+func KnownAmbientProviderTypes() []string {
+	types := make([]string, 0, len(providerTypeMapping))
+	for k := range providerTypeMapping {
+		types = append(types, k)
+	}
+	return types
 }
 
 func OpenShellProviderType(ambientProvider string) string {
@@ -27,8 +47,13 @@ func ProviderName(projectName, ambientProvider string) string {
 }
 
 var providerInjectedEnvVars = map[string][]string{
-	"github": {"GITHUB_TOKEN"},
-	"claude": {"ANTHROPIC_API_KEY"},
+	"github":           {"GITHUB_TOKEN", "GH_TOKEN"},
+	"claude-code":      {"ANTHROPIC_API_KEY", "CLAUDE_API_KEY"},
+	"codex":            {"CODEX_AUTH_ACCESS_TOKEN", "CODEX_AUTH_REFRESH_TOKEN", "CODEX_AUTH_ACCOUNT_ID", "CODEX_AUTH_ID_TOKEN"},
+	"copilot":          {"COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"},
+	"google-vertex-ai": {"GOOGLE_SERVICE_ACCOUNT_KEY", "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_TOKEN"},
+	"deepinfra":        {"DEEPINFRA_API_KEY"},
+	"nvidia":           {"NVIDIA_API_KEY"},
 }
 
 func ProviderInjectedEnvVars(openshellType string) []string {
@@ -37,11 +62,9 @@ func ProviderInjectedEnvVars(openshellType string) []string {
 
 var inferenceCapableTypes = map[string]bool{
 	"google-vertex-ai": true,
-	"claude":           true,
-	"anthropic":        true,
+	"claude-code":      true,
+	"deepinfra":        true,
 	"nvidia":           true,
-	"openai":           true,
-	"aws-bedrock":      true,
 }
 
 func IsInferenceCapable(ambientProvider string) bool {
@@ -49,22 +72,67 @@ func IsInferenceCapable(ambientProvider string) bool {
 	return inferenceCapableTypes[osType]
 }
 
-// ProviderCredentials maps an ACP credential token to the OpenShell credential
-// key names expected by each provider type's profile.
-func ProviderCredentials(ambientProvider, token string) map[string]string {
-	switch ambientProvider {
-	case "vertex":
-		return map[string]string{"GOOGLE_SERVICE_ACCOUNT_KEY": token}
-	case "anthropic", "claude":
-		return map[string]string{"ANTHROPIC_API_KEY": token}
-	case "github":
-		return map[string]string{"GITHUB_TOKEN": token}
-	default:
-		return map[string]string{"token": token}
-	}
+// knownProviderCredentialKey maps known provider types to the single credential
+// key name expected by the OpenShell provider profile. For these types, the
+// secret must have a "token" key whose value is mapped to the standard name.
+var knownProviderCredentialKey = map[string]string{
+	"vertex":      "GOOGLE_SERVICE_ACCOUNT_KEY",
+	"anthropic":   "ANTHROPIC_API_KEY",
+	"claude":      "ANTHROPIC_API_KEY",
+	"claude-code": "ANTHROPIC_API_KEY",
+	"github":      "GITHUB_TOKEN",
+	"copilot":     "COPILOT_GITHUB_TOKEN",
+	"deepinfra":   "DEEPINFRA_API_KEY",
+	"nvidia":      "NVIDIA_API_KEY",
 }
 
-const VertexAIRefreshCredentialKey = "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_TOKEN"
+// ProviderCredentials maps a single token to the credential key expected by
+// the OpenShell provider profile for known types. Used by the credential-based
+// (non-gateway) provider path.
+func ProviderCredentials(ambientProvider, token string) map[string]string {
+	if credKey, ok := knownProviderCredentialKey[ambientProvider]; ok {
+		return map[string]string{credKey: token}
+	}
+	return map[string]string{"token": token}
+}
+
+// ProviderCredentialsFromSecret builds the credential map for an OpenShell
+// provider. For known types (vertex, github, anthropic), it reads the "token"
+// key from the secret and maps it to the standard credential name. For unknown
+// types, all secret keys are passed through as-is — the secret key names become
+// the env var names in the sandbox.
+//
+// Vertex is special: SA keys are set as GOOGLE_SERVICE_ACCOUNT_KEY (the gateway
+// strips the raw key after configuring refresh). ADC credentials are NOT set as
+// initial credentials — the refresh flow mints the first access token.
+func ProviderCredentialsFromSecret(ambientProvider string, secretData map[string]string) map[string]string {
+	if ambientProvider == "vertex" {
+		if token, has := secretData["token"]; has {
+			credType, err := DetectGoogleCredentialType(token)
+			if err == nil && credType == GoogleCredentialAuthorizedUser {
+				return map[string]string{}
+			}
+			return map[string]string{"GOOGLE_SERVICE_ACCOUNT_KEY": token}
+		}
+	}
+	if credKey, ok := knownProviderCredentialKey[ambientProvider]; ok {
+		if token, has := secretData["token"]; has {
+			return map[string]string{credKey: token}
+		}
+	}
+	return secretData
+}
+
+// VertexRefreshCredentialKey returns the credential key where rotated access
+// tokens are stored, based on the Google credential type.
+// SA keys → GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_TOKEN
+// ADC      → GOOGLE_VERTEX_AI_TOKEN
+func VertexRefreshCredentialKey(credType GoogleCredentialType) string {
+	if credType == GoogleCredentialAuthorizedUser {
+		return "GOOGLE_VERTEX_AI_TOKEN"
+	}
+	return "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_TOKEN"
+}
 
 type GoogleCredentialType int
 

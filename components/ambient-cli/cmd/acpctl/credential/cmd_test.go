@@ -251,18 +251,22 @@ func TestGetCredential_MissingID(t *testing.T) {
 func TestUpdateCredential_Success(t *testing.T) {
 	srv := testhelper.NewServer(t)
 	srv.Handle("/api/ambient/v1/credentials/cred-u1", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPatch {
-			t.Errorf("expected PATCH, got %s", r.Method)
+		switch r.Method {
+		case http.MethodGet:
+			srv.RespondJSON(t, w, http.StatusOK, sampleCredential("cred-u1", "updated-cred", "github"))
+		case http.MethodPatch:
+			body, _ := io.ReadAll(r.Body)
+			var patch map[string]interface{}
+			if err := json.Unmarshal(body, &patch); err != nil {
+				t.Fatalf("unmarshal patch body: %v", err)
+			}
+			if patch["description"] != "updated desc" {
+				t.Errorf("expected description 'updated desc', got %v", patch["description"])
+			}
+			srv.RespondJSON(t, w, http.StatusOK, sampleCredential("cred-u1", "updated-cred", "github"))
+		default:
+			t.Errorf("unexpected method %s", r.Method)
 		}
-		body, _ := io.ReadAll(r.Body)
-		var patch map[string]interface{}
-		if err := json.Unmarshal(body, &patch); err != nil {
-			t.Fatalf("unmarshal patch body: %v", err)
-		}
-		if patch["description"] != "updated desc" {
-			t.Errorf("expected description 'updated desc', got %v", patch["description"])
-		}
-		srv.RespondJSON(t, w, http.StatusOK, sampleCredential("cred-u1", "updated-cred", "github"))
 	})
 
 	testhelper.Configure(t, srv.URL)
@@ -287,10 +291,14 @@ func TestUpdateCredential_MissingID(t *testing.T) {
 func TestDeleteCredential_Success(t *testing.T) {
 	srv := testhelper.NewServer(t)
 	srv.Handle("/api/ambient/v1/credentials/cred-d1", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete {
-			t.Errorf("expected DELETE, got %s", r.Method)
+		switch r.Method {
+		case http.MethodGet:
+			srv.RespondJSON(t, w, http.StatusOK, sampleCredential("cred-d1", "cred-d1", "github"))
+		case http.MethodDelete:
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Errorf("unexpected method %s", r.Method)
 		}
-		w.WriteHeader(http.StatusNoContent)
 	})
 
 	testhelper.Configure(t, srv.URL)
@@ -326,6 +334,9 @@ func TestDeleteCredential_MissingID(t *testing.T) {
 
 func TestTokenCredential_Success(t *testing.T) {
 	srv := testhelper.NewServer(t)
+	srv.Handle("/api/ambient/v1/credentials/cred-t1", func(w http.ResponseWriter, r *http.Request) {
+		srv.RespondJSON(t, w, http.StatusOK, sampleCredential("cred-t1", "cred-t1", "github"))
+	})
 	srv.Handle("/api/ambient/v1/credentials/cred-t1/token", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			t.Errorf("expected GET, got %s", r.Method)
@@ -345,6 +356,9 @@ func TestTokenCredential_Success(t *testing.T) {
 
 func TestTokenCredential_JSON(t *testing.T) {
 	srv := testhelper.NewServer(t)
+	srv.Handle("/api/ambient/v1/credentials/cred-tj", func(w http.ResponseWriter, r *http.Request) {
+		srv.RespondJSON(t, w, http.StatusOK, sampleCredential("cred-tj", "cred-tj", "gitlab"))
+	})
 	srv.Handle("/api/ambient/v1/credentials/cred-tj/token", func(w http.ResponseWriter, r *http.Request) {
 		srv.RespondJSON(t, w, http.StatusOK, sampleTokenResponse("cred-tj", "gitlab", "test-value-gl"))
 	})

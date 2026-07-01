@@ -194,6 +194,10 @@ func (s *PodStatusSyncer) syncSandboxStatus(ctx context.Context, sdk *sdkclient.
 
 func mapSandboxPhaseToSessionPhase(phase openshellpb.SandboxPhase) string {
 	switch phase {
+	case openshellpb.SandboxPhase_SANDBOX_PHASE_PROVISIONING:
+		return PhaseCreating
+	case openshellpb.SandboxPhase_SANDBOX_PHASE_READY:
+		return PhaseRunning
 	case openshellpb.SandboxPhase_SANDBOX_PHASE_ERROR:
 		return PhaseFailed
 	case openshellpb.SandboxPhase_SANDBOX_PHASE_DELETING:

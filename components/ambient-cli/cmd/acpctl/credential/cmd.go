@@ -4,14 +4,18 @@ package credential
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/output"
+	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/spf13/cobra"
 )
+
+var safeTSLPattern = regexp.MustCompile(`^[a-zA-Z0-9_.@:\-]+$`)
 
 var Cmd = &cobra.Command{
 	Use:   "credential",
@@ -84,11 +88,11 @@ var getArgs struct {
 }
 
 var getCmd = &cobra.Command{
-	Use:   "get <id>",
+	Use:   "get <name-or-id>",
 	Short: "Get a specific credential",
 	Args:  cobra.ExactArgs(1),
-	Example: `  acpctl credential get <id>
-  acpctl credential get <id> -o json`,
+	Example: `  acpctl credential get my-credential
+  acpctl credential get my-credential -o json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := connection.NewClientFromConfig()
 		if err != nil {
@@ -103,7 +107,12 @@ var getCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		credential, err := client.Credentials().Get(ctx, args[0])
+		credID, _, err := resolveCredential(ctx, client, args[0])
+		if err != nil {
+			return err
+		}
+
+		credential, err := client.Credentials().Get(ctx, credID)
 		if err != nil {
 			return fmt.Errorf("get credential %q: %w", args[0], err)
 		}
@@ -217,11 +226,11 @@ var updateArgs struct {
 }
 
 var updateCmd = &cobra.Command{
-	Use:   "update <id>",
+	Use:   "update <name-or-id>",
 	Short: "Update a credential",
 	Args:  cobra.ExactArgs(1),
-	Example: `  acpctl credential update <id> --token ghp_newtoken
-  acpctl credential update <id> --description "updated description"`,
+	Example: `  acpctl credential update my-credential --token ghp_newtoken
+  acpctl credential update my-credential --description "updated description"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := connection.NewClientFromConfig()
 		if err != nil {
@@ -235,6 +244,11 @@ var updateCmd = &cobra.Command{
 
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
+
+		credID, _, err := resolveCredential(ctx, client, args[0])
+		if err != nil {
+			return err
+		}
 
 		patch := sdktypes.NewCredentialPatchBuilder()
 		if cmd.Flags().Changed("name") {
@@ -259,7 +273,7 @@ var updateCmd = &cobra.Command{
 			patch = patch.Annotations(updateArgs.annotations)
 		}
 
-		updated, err := client.Credentials().Update(ctx, args[0], patch.Build())
+		updated, err := client.Credentials().Update(ctx, credID, patch.Build())
 		if err != nil {
 			return fmt.Errorf("update credential: %w", err)
 		}
@@ -274,10 +288,10 @@ var deleteArgs struct {
 }
 
 var deleteCmd = &cobra.Command{
-	Use:     "delete <id>",
+	Use:     "delete <name-or-id>",
 	Short:   "Delete a credential",
 	Args:    cobra.ExactArgs(1),
-	Example: `  acpctl credential delete <id> --confirm`,
+	Example: `  acpctl credential delete my-credential --confirm`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if !deleteArgs.confirm {
 			return fmt.Errorf("add --confirm to delete credential/%s", args[0])
@@ -296,11 +310,16 @@ var deleteCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		if err := client.Credentials().Delete(ctx, args[0]); err != nil {
+		credID, credName, err := resolveCredential(ctx, client, args[0])
+		if err != nil {
+			return err
+		}
+
+		if err := client.Credentials().Delete(ctx, credID); err != nil {
 			return fmt.Errorf("delete credential: %w", err)
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "credential/%s deleted\n", args[0])
+		fmt.Fprintf(cmd.OutOrStdout(), "credential/%s deleted\n", credName)
 		return nil
 	},
 }
@@ -310,11 +329,11 @@ var tokenArgs struct {
 }
 
 var tokenCmd = &cobra.Command{
-	Use:   "token <id>",
+	Use:   "token <name-or-id>",
 	Short: "Retrieve the token for a credential",
 	Args:  cobra.ExactArgs(1),
-	Example: `  acpctl credential token <id>
-  acpctl credential token <id> -o json`,
+	Example: `  acpctl credential token my-credential
+  acpctl credential token my-credential -o json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := connection.NewClientFromConfig()
 		if err != nil {
@@ -329,7 +348,12 @@ var tokenCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		resp, err := client.Credentials().GetToken(ctx, args[0])
+		credID, _, err := resolveCredential(ctx, client, args[0])
+		if err != nil {
+			return err
+		}
+
+		resp, err := client.Credentials().GetToken(ctx, credID)
 		if err != nil {
 			return fmt.Errorf("get token for credential %q: %w", args[0], err)
 		}
@@ -378,19 +402,10 @@ in that project. Creates a RoleBinding with scope=credential.`,
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		// Resolve credential name → ID
-		credName := args[0]
-		opts := sdktypes.NewListOptions().Size(10).Build()
-		opts.Search = fmt.Sprintf("name = '%s'", credName)
-		list, err := client.Credentials().List(ctx, opts)
+		credID, credName, err := resolveCredential(ctx, client, args[0])
 		if err != nil {
-			return fmt.Errorf("look up credential %q: %w", credName, err)
+			return err
 		}
-		if list.Total == 0 {
-			return fmt.Errorf("credential %q not found", credName)
-		}
-
-		credID := list.Items[0].ID
 
 		binding, err := sdktypes.NewRoleBindingBuilder().
 			RoleID("credential:viewer").
@@ -449,6 +464,26 @@ func init() {
 	tokenCmd.Flags().StringVarP(&tokenArgs.outputFormat, "output", "o", "", "Output format: json")
 
 	bindCmd.Flags().StringVar(&bindArgs.project, "project", "", "Project to bind the credential to (required)")
+}
+
+// resolveCredential looks up a credential by name, falling back to treating
+// the argument as an ID. Returns (id, displayName, error).
+func resolveCredential(ctx context.Context, client *sdkclient.Client, nameOrID string) (string, string, error) {
+	if safeTSLPattern.MatchString(nameOrID) {
+		opts := sdktypes.NewListOptions().Size(10).Build()
+		opts.Search = fmt.Sprintf("name = '%s'", nameOrID)
+		list, err := client.Credentials().List(ctx, opts)
+		if err == nil && list.Total > 0 {
+			return list.Items[0].ID, list.Items[0].Name, nil
+		}
+	}
+
+	// Fall back: treat the argument as an ID directly
+	cred, err := client.Credentials().Get(ctx, nameOrID)
+	if err != nil {
+		return "", "", fmt.Errorf("credential %q not found", nameOrID)
+	}
+	return cred.ID, cred.Name, nil
 }
 
 func printCredentialTable(printer *output.Printer, credentials []sdktypes.Credential) error {

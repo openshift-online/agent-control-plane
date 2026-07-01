@@ -3,7 +3,7 @@
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-api-server local-logs-ui local-logs-control-plane local-shell-api-server local-shell-ui
 .PHONY: local-test local-test-dev local-test-quick test-all local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-reload-ambient-control-plane kind-reload-ambient-api-server kind-reload-runner-openshell kind-status kind-login kind-sso-toggle kind-setup-vertex
+.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-reload-ambient-control-plane kind-reload-ambient-api-server kind-reload-runner-openshell kind-status kind-login kind-sso-toggle kind-setup-vertex kind-setup-openshell-cli
 .PHONY: preflight-cluster preflight dev-env dev
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: unleash-port-forward unleash-status
@@ -921,11 +921,7 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 	@# Vertex AI setup if requested
 	@if [ "$(LOCAL_VERTEX)" = "true" ]; then \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring Vertex AI..."; \
-		ANTHROPIC_VERTEX_PROJECT_ID="$(ANTHROPIC_VERTEX_PROJECT_ID)" \
-		CLOUD_ML_REGION="$(CLOUD_ML_REGION)" \
-		GOOGLE_APPLICATION_CREDENTIALS="$(GOOGLE_APPLICATION_CREDENTIALS)" \
-		AMBIENT_UI_URL="http://$$(if [ -n "$(KIND_HOST)" ]; then echo "$(KIND_HOST)"; else echo "localhost"; fi):$(KIND_FWD_AMBIENT_UI_PORT)" \
-		./scripts/setup-vertex-kind.sh; \
+		$(MAKE) --no-print-directory kind-setup-vertex; \
 	fi
 	@if [ -f .dev-bootstrap.env ] && [ -f ./scripts/bootstrap-workspace.sh ]; then \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Bootstrapping developer workspace..."; \
@@ -1274,10 +1270,28 @@ kind-status: check-kind ## Show all kind clusters and their port assignments
 		done; \
 	fi
 
-kind-setup-vertex: check-kubectl _kind-require-cluster ## Configure Vertex AI for the kind cluster
-	@NAMESPACE=$(NAMESPACE) \
-		AMBIENT_UI_URL="http://$$(if [ -n "$(KIND_HOST)" ]; then echo "$(KIND_HOST)"; else echo "localhost"; fi):$(KIND_FWD_AMBIENT_UI_PORT)" \
-		./scripts/setup-vertex-kind.sh
+kind-setup-vertex: check-kubectl _kind-require-cluster ## Configure Vertex AI for the kind cluster (VERTEX_CRED=./vertex.json)
+	@if kubectl get pods --all-namespaces -l app.kubernetes.io/instance=openshell-gateway -o name 2>/dev/null | grep -q .; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) OpenShell gateway detected — using provider declarations"; \
+		GW_NAMESPACES=$$(kubectl get pods --all-namespaces -l app.kubernetes.io/instance=openshell-gateway -o jsonpath='{range .items[*]}{.metadata.namespace}{"\n"}{end}' | sort -u); \
+		for ns in $$GW_NAMESPACES; do \
+			echo "$(COLOR_BLUE)▶$(COLOR_RESET) Setting up vertex provider in $$ns..."; \
+			./scripts/setup-vertex-provider.sh "$$ns" "$${VERTEX_CRED:-./vertex.json}"; \
+		done; \
+	else \
+		NAMESPACE=$(NAMESPACE) \
+			AMBIENT_UI_URL="http://$$(if [ -n "$(KIND_HOST)" ]; then echo "$(KIND_HOST)"; else echo "localhost"; fi):$(KIND_FWD_AMBIENT_UI_PORT)" \
+			./scripts/setup-vertex-kind.sh; \
+	fi
+
+kind-setup-openshell-cli: check-kubectl _kind-require-cluster ## Auto-discover tenant gateways and register openshell CLI access
+	@NAMESPACES=$$(kubectl get pods --all-namespaces -l app.kubernetes.io/instance=openshell-gateway -o jsonpath='{range .items[*]}{.metadata.namespace}{"\n"}{end}' 2>/dev/null | sort -u); \
+	if [ -z "$$NAMESPACES" ]; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) No openshell-gateway pods found in any namespace"; \
+		exit 1; \
+	fi; \
+	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Found openshell-gateway in: $$NAMESPACES"; \
+	./scripts/setup-gateway-cli.sh $$NAMESPACES
 
 kind-clean: kind-down ## Alias for kind-down
 
@@ -1456,13 +1470,13 @@ local-dev-token: check-kubectl ## Print a TokenRequest token for local-dev-user 
 
 _create-operator-config: ## Internal: Create operator config from environment variables
 	@VERTEX_PROJECT_ID=$${ANTHROPIC_VERTEX_PROJECT_ID:-""}; \
-	VERTEX_KEY_FILE=$${GOOGLE_APPLICATION_CREDENTIALS:-""}; \
+	VERTEX_CRED=$${GOOGLE_APPLICATION_CREDENTIALS:-""}; \
 	ADC_FILE="$$HOME/.config/gcloud/application_default_credentials.json"; \
 	CLOUD_REGION=$${CLOUD_ML_REGION:-"global"}; \
 	USE_VERTEX="0"; \
 	AUTH_METHOD="none"; \
 	if [ -n "$$VERTEX_PROJECT_ID" ]; then \
-		if [ -n "$$VERTEX_KEY_FILE" ] && [ -f "$$VERTEX_KEY_FILE" ]; then \
+		if [ -n "$$VERTEX_CRED" ] && [ -f "$$VERTEX_CRED" ]; then \
 			USE_VERTEX="1"; \
 			AUTH_METHOD="service-account"; \
 			echo "  $(COLOR_GREEN)✓$(COLOR_RESET) Found Vertex AI config (service account)"; \
@@ -1470,7 +1484,7 @@ _create-operator-config: ## Internal: Create operator config from environment va
 			echo "    Region: $$CLOUD_REGION"; \
 			kubectl delete secret ambient-vertex -n $(NAMESPACE) 2>/dev/null || true; \
 			kubectl create secret generic ambient-vertex \
-				--from-file=ambient-code-key.json="$$VERTEX_KEY_FILE" \
+				--from-file=ambient-code-key.json="$$VERTEX_CRED" \
 				-n $(NAMESPACE) >/dev/null 2>&1; \
 		elif [ -f "$$ADC_FILE" ]; then \
 			USE_VERTEX="1"; \
