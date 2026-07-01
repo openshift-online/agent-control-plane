@@ -7,6 +7,7 @@
 .PHONY: preflight-cluster preflight dev-env dev
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: unleash-port-forward unleash-status
+.PHONY: kind-port-forward kind-port-forward-stop _kind-start-port-forward kind-acpctl-login
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health benchmark benchmark-ci
 .PHONY: _create-operator-config _auto-port-forward _show-access-info _kind-load-images
@@ -928,15 +929,15 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 		./scripts/bootstrap-workspace.sh || \
 		echo "$(COLOR_YELLOW)⚠$(COLOR_RESET)  Bootstrap failed (non-fatal). Run 'make dev-bootstrap' manually."; \
 	fi
+	@$(MAKE) --no-print-directory _kind-start-port-forward
 	@echo ""
 	@echo "$(COLOR_BOLD)Access the platform:$(COLOR_RESET)"
 	@echo "  Cluster:  $(KIND_CLUSTER_NAME) (slug: $(CLUSTER_SLUG))"
-	@echo "  Run in another terminal: $(COLOR_BLUE)make kind-port-forward$(COLOR_RESET)"
 	@echo ""
-	@echo "  Then access:"
-	@echo "  Frontend: http://localhost:$(KIND_FWD_AMBIENT_UI_PORT)"
-	@echo "  Backend:  http://localhost:$(KIND_FWD_BACKEND_PORT)"
-	@echo "  Keycloak: http://localhost:$(KIND_FWD_KEYCLOAK_PORT)"
+	@echo "  Frontend:   http://localhost:$(KIND_FWD_FRONTEND_PORT)"
+	@echo "  Backend:    http://localhost:$(KIND_FWD_BACKEND_PORT)"
+	@echo "  Ambient UI: http://localhost:$(KIND_FWD_AMBIENT_UI_PORT)"
+	@echo "  Keycloak:   http://localhost:$(KIND_FWD_KEYCLOAK_PORT)"
 	@echo ""
 	@echo "$(COLOR_BOLD)Default SSO users:$(COLOR_RESET)"
 	@echo "  Developer: developer / developer (ambient-users group)"
@@ -944,8 +945,9 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 	@echo ""
 	@echo "  Get test token: kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d"
 	@echo ""
-	@echo "Run tests:"
-	@echo "  make test-e2e"
+	@echo "  Configure CLI:      $(COLOR_BOLD)make kind-acpctl-login$(COLOR_RESET)"
+	@echo "  Stop port-forwards: $(COLOR_BOLD)make kind-port-forward-stop$(COLOR_RESET)"
+	@echo "  Run tests:          $(COLOR_BOLD)make test-e2e$(COLOR_RESET)"
 
 kind-down: ## Stop and delete kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Cleaning up kind cluster '$(KIND_CLUSTER_NAME)'..."
@@ -989,7 +991,32 @@ kind-login: check-kubectl check-local-context ## Set kubectl context, port-forwa
 		echo "$$TOKEN"; \
 	fi
 
-kind-port-forward: check-kubectl check-local-context ## Port-forward kind services (for remote Podman)
+kind-acpctl-login: check-kubectl ## Configure acpctl CLI against the kind cluster
+	@TOKEN=$$(kubectl get secret test-user-token -n $(NAMESPACE) -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null); \
+	if [ -z "$$TOKEN" ]; then \
+		echo "$(COLOR_RED)\u2717$(COLOR_RESET) test-user-token not found in namespace $(NAMESPACE)"; \
+		exit 1; \
+	fi; \
+	ACPCTL=""; \
+	if command -v acpctl >/dev/null 2>&1; then \
+		ACPCTL=acpctl; \
+	elif [ -x components/ambient-cli/acpctl ]; then \
+		ACPCTL=components/ambient-cli/acpctl; \
+	elif [ -x ./acpctl ]; then \
+		ACPCTL=./acpctl; \
+	fi; \
+	if [ -n "$$ACPCTL" ]; then \
+		$$ACPCTL login --url http://localhost:$(KIND_FWD_BACKEND_PORT) --token "$$TOKEN" && \
+		echo "$(COLOR_GREEN)\u2713$(COLOR_RESET) acpctl configured: http://localhost:$(KIND_FWD_BACKEND_PORT)"; \
+	else \
+		echo "$(COLOR_YELLOW)acpctl not found — build it first: make build-cli$(COLOR_RESET)"; \
+		echo "  Then run manually:"; \
+		echo "  acpctl login --url http://localhost:$(KIND_FWD_BACKEND_PORT) --token $$TOKEN"; \
+	fi
+
+KIND_PF_DIR := /tmp/ambient-code
+
+kind-port-forward: check-kubectl check-local-context ## Port-forward kind services in background (stop with: make kind-port-forward-stop)
 	@echo "$(COLOR_BOLD)Port forwarding kind services ($(KIND_CLUSTER_NAME))$(COLOR_RESET)"
 	@echo ""
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring SSO for port-forwarded URLs..."
@@ -998,6 +1025,9 @@ kind-port-forward: check-kubectl check-local-context ## Port-forward kind servic
 	@kubectl rollout restart deployment/ambient-ui -n $(NAMESPACE) >/dev/null 2>&1
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for ambient-ui to be ready..."
 	@kubectl wait --for=condition=ready pod -l app=ambient-ui -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1
+	@$(MAKE) --no-print-directory _kind-start-port-forward
+	@echo ""
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port forwarding started in background"
 	@echo ""
 	@echo "  Frontend:   http://localhost:$(KIND_FWD_FRONTEND_PORT)"
 	@echo "  Backend:    http://localhost:$(KIND_FWD_BACKEND_PORT)"
@@ -1008,14 +1038,48 @@ kind-port-forward: check-kubectl check-local-context ## Port-forward kind servic
 	@echo "  Developer: developer / developer"
 	@echo "  Admin:     admin / admin"
 	@echo ""
-	@echo "$(COLOR_YELLOW)Press Ctrl+C to stop$(COLOR_RESET)"
-	@echo ""
-	@trap 'echo ""; echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port forwarding stopped"; kill 0; exit 0' INT TERM; \
-	kubectl port-forward -n ambient-code svc/ambient-ui-service $(KIND_FWD_FRONTEND_PORT):3000 >/dev/null 2>&1 & \
-	kubectl port-forward -n ambient-code svc/ambient-api-server $(KIND_FWD_BACKEND_PORT):8000 >/dev/null 2>&1 & \
-	kubectl port-forward -n ambient-code svc/ambient-ui-service $(KIND_FWD_AMBIENT_UI_PORT):3000 >/dev/null 2>&1 & \
-	kubectl port-forward -n ambient-code svc/keycloak-service $(KIND_FWD_KEYCLOAK_PORT):8080 >/dev/null 2>&1 & \
-	wait
+	@echo "  Stop with: $(COLOR_BOLD)make kind-port-forward-stop$(COLOR_RESET)"
+
+_kind-start-port-forward:
+	@$(MAKE) --no-print-directory kind-port-forward-stop 2>/dev/null || true
+	@mkdir -p $(KIND_PF_DIR)
+	@kubectl port-forward -n $(NAMESPACE) svc/ambient-ui-service $(KIND_FWD_FRONTEND_PORT):3000 >$(KIND_PF_DIR)/kind-pf-frontend.log 2>&1 & echo $$! > $(KIND_PF_DIR)/kind-pf-frontend.pid
+	@kubectl port-forward -n $(NAMESPACE) svc/ambient-api-server $(KIND_FWD_BACKEND_PORT):8000 >$(KIND_PF_DIR)/kind-pf-backend.log 2>&1 & echo $$! > $(KIND_PF_DIR)/kind-pf-backend.pid
+	@kubectl port-forward -n $(NAMESPACE) svc/ambient-ui-service $(KIND_FWD_AMBIENT_UI_PORT):3000 >$(KIND_PF_DIR)/kind-pf-ambient-ui.log 2>&1 & echo $$! > $(KIND_PF_DIR)/kind-pf-ambient-ui.pid
+	@kubectl port-forward -n $(NAMESPACE) svc/keycloak-service $(KIND_FWD_KEYCLOAK_PORT):8080 >$(KIND_PF_DIR)/kind-pf-keycloak.log 2>&1 & echo $$! > $(KIND_PF_DIR)/kind-pf-keycloak.pid
+	@sleep 1
+	@FAILED=0; \
+	for svc in frontend backend ambient-ui keycloak; do \
+		PID_FILE="$(KIND_PF_DIR)/kind-pf-$$svc.pid"; \
+		if [ -f "$$PID_FILE" ] && ps -p $$(cat "$$PID_FILE") >/dev/null 2>&1; then \
+			true; \
+		else \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) $$svc port-forward failed to start (check $(KIND_PF_DIR)/kind-pf-$$svc.log)"; \
+			FAILED=1; \
+		fi; \
+	done; \
+	if [ "$$FAILED" -ne 0 ]; then exit 1; fi
+
+kind-port-forward-stop: ## Stop background kind port-forwarding
+	@STOPPED=0; \
+	for svc in frontend backend ambient-ui keycloak; do \
+		PID_FILE="$(KIND_PF_DIR)/kind-pf-$$svc.pid"; \
+		if [ -f "$$PID_FILE" ]; then \
+			PID=$$(cat "$$PID_FILE"); \
+			if ps -p "$$PID" >/dev/null 2>&1; then \
+				kill "$$PID" 2>/dev/null || true; \
+				echo "  Stopped $$svc port-forward (PID $$PID)"; \
+				STOPPED=1; \
+			fi; \
+			rm -f "$$PID_FILE"; \
+		fi; \
+		rm -f "$(KIND_PF_DIR)/kind-pf-$$svc.log"; \
+	done; \
+	if [ "$$STOPPED" -eq 1 ]; then \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port forwarding stopped"; \
+	else \
+		echo "$(COLOR_YELLOW)No active kind port-forwards found$(COLOR_RESET)"; \
+	fi
 
 dev-bootstrap: check-kubectl check-local-context ## Bootstrap developer workspace with API key and integrations
 	@if [ -f ./scripts/bootstrap-workspace.sh ]; then \

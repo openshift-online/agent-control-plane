@@ -25,26 +25,30 @@ echo "Setting up OpenShell gateway prerequisites (tenants: ${TENANTS[*]})..."
 #    resolver tries IPv6 first and fails without falling back to IPv4, causing
 #    503 on inference calls (Vertex AI) and DENIED on api.anthropic.com, github.com, etc.
 echo "  Patching CoreDNS to suppress AAAA records (IPv4-only)..."
-kubectl get configmap coredns -n kube-system -o json \
-  | python3 -c '
+COREFILE=$(kubectl get configmap coredns -n kube-system -o jsonpath='{.data.Corefile}')
+if echo "$COREFILE" | grep -q "template IN AAAA"; then
+  echo "  CoreDNS already patched — skipping restart"
+else
+  kubectl get configmap coredns -n kube-system -o json \
+    | python3 -c '
 import json, sys, re
 cm = json.load(sys.stdin)
 corefile = cm["data"]["Corefile"]
-if "template IN AAAA" not in corefile:
-    corefile = re.sub(
-        r"([ \t]+forward \. /etc/resolv\.conf)",
-        "        template IN AAAA {\n"
-        "            rcode NOERROR\n"
-        "        }\n"
-        r"\1",
-        corefile,
-    )
-    cm["data"]["Corefile"] = corefile
+corefile = re.sub(
+    r"([ \t]+forward \. /etc/resolv\.conf)",
+    "        template IN AAAA {\n"
+    "            rcode NOERROR\n"
+    "        }\n"
+    r"\1",
+    corefile,
+)
+cm["data"]["Corefile"] = corefile
 json.dump(cm, sys.stdout)
 ' | kubectl apply -f - >/dev/null 2>&1
-kubectl rollout restart deployment coredns -n kube-system >/dev/null 2>&1
-kubectl rollout status deployment coredns -n kube-system --timeout=60s >/dev/null 2>&1
-echo "  CoreDNS patched (IPv4-only for all external domains)"
+  kubectl rollout restart deployment coredns -n kube-system >/dev/null 2>&1
+  kubectl rollout status deployment coredns -n kube-system --timeout=60s >/dev/null 2>&1
+  echo "  CoreDNS patched (IPv4-only for all external domains)"
+fi
 
 # 1. Install Agent Sandbox CRD + controller (once, cluster-scoped)
 echo "  Installing agent-sandbox CRD ${AGENT_SANDBOX_VERSION}..."
@@ -97,12 +101,13 @@ else
   else
     for TENANT in "${TENANTS[@]}"; do
       # Check whether a project with this name already exists
+      SEARCH_QUERY=$(printf "name = '%s'" "${TENANT}")
       EXISTING=$(curl -sf \
         -H "Authorization: Bearer ${TOKEN}" \
-        "http://localhost:${PF_PORT}/api/ambient/v1/projects?search=${TENANT}" 2>/dev/null || echo "")
+        --data-urlencode "search=${SEARCH_QUERY}" \
+        -G "http://localhost:${PF_PORT}/api/ambient/v1/projects" 2>/dev/null || echo "{}")
       MATCH_COUNT=$(echo "$EXISTING" \
-        | jq -r '[.items[] | select(.name == "'"${TENANT}"'")] | length' 2>/dev/null)
-      MATCH_COUNT="${MATCH_COUNT:-0}"
+        | jq -r '[(.items // [])[] | select(.name == "'"${TENANT}"'")] | length' 2>/dev/null || echo "0")
 
       if [ "${MATCH_COUNT}" -gt 0 ]; then
         echo "    ACP project '${TENANT}' already exists"
@@ -120,10 +125,16 @@ else
   kill "${PF_PID}" 2>/dev/null || true
 fi
 
-# 4. Patch control plane with the gateway flag
-kubectl set env deployment/ambient-control-plane -n "$NAMESPACE" \
-  OPENSHELL_USE_GATEWAY=true >/dev/null
-echo "  Patched ambient-control-plane with OPENSHELL_USE_GATEWAY=true"
+# 4. Patch control plane with the gateway flag (skip if already set)
+CURRENT_GW=$(kubectl get deployment ambient-control-plane -n "$NAMESPACE" \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="OPENSHELL_USE_GATEWAY")].value}' 2>/dev/null || echo "")
+if [ "$CURRENT_GW" = "true" ]; then
+  echo "  ambient-control-plane already has OPENSHELL_USE_GATEWAY=true — skipping"
+else
+  kubectl set env deployment/ambient-control-plane -n "$NAMESPACE" \
+    OPENSHELL_USE_GATEWAY=true >/dev/null
+  echo "  Patched ambient-control-plane with OPENSHELL_USE_GATEWAY=true"
+fi
 echo "  Note: ambient-ui gateway mode is baked in at build time via --build-arg OPENSHELL_USE_GATEWAY=true"
 
 echo "OpenShell gateway setup complete (${TENANTS[*]})."

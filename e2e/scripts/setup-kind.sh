@@ -42,9 +42,10 @@ fi
 
 # Check if kind cluster already exists
 if kind get clusters 2>/dev/null | grep -q "^${KIND_CLUSTER_NAME}$"; then
-  echo "Kind cluster '${KIND_CLUSTER_NAME}' already exists"
-  echo "   Run 'make kind-down' or delete manually: kind delete cluster --name ${KIND_CLUSTER_NAME}"
-  exit 1
+  echo "Kind cluster '${KIND_CLUSTER_NAME}' already exists — skipping creation"
+  kubectl config use-context "kind-${KIND_CLUSTER_NAME}" >/dev/null 2>&1 || true
+  echo "Returning control to the Makefile for platform deployment..."
+  exit 0
 fi
 
 echo ""
