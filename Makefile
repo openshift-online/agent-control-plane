@@ -3,7 +3,7 @@
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-api-server local-logs-ui local-logs-control-plane local-shell-api-server local-shell-ui
 .PHONY: local-test local-test-dev local-test-quick test-all local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-reload-ambient-control-plane kind-reload-ambient-api-server kind-reload-runner-openshell kind-status kind-login kind-sso-toggle kind-setup-vertex
+.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-reload-ambient-control-plane kind-reload-ambient-api-server kind-reload-runner-openshell kind-status kind-login kind-sso-toggle kind-setup-vertex kind-setup-openshell-cli
 .PHONY: preflight-cluster preflight dev-env dev
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
 .PHONY: unleash-port-forward unleash-status
@@ -1275,9 +1275,27 @@ kind-status: check-kind ## Show all kind clusters and their port assignments
 	fi
 
 kind-setup-vertex: check-kubectl _kind-require-cluster ## Configure Vertex AI for the kind cluster
-	@NAMESPACE=$(NAMESPACE) \
-		AMBIENT_UI_URL="http://$$(if [ -n "$(KIND_HOST)" ]; then echo "$(KIND_HOST)"; else echo "localhost"; fi):$(KIND_FWD_AMBIENT_UI_PORT)" \
-		./scripts/setup-vertex-kind.sh
+	@if kubectl get pods --all-namespaces -l app.kubernetes.io/instance=openshell-gateway -o name 2>/dev/null | grep -q .; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) OpenShell gateway detected — using provider declarations"; \
+		GW_NAMESPACES=$$(kubectl get pods --all-namespaces -l app.kubernetes.io/instance=openshell-gateway -o jsonpath='{range .items[*]}{.metadata.namespace}{"\n"}{end}' | sort -u); \
+		for ns in $$GW_NAMESPACES; do \
+			echo "$(COLOR_BLUE)▶$(COLOR_RESET) Setting up vertex provider in $$ns..."; \
+			./scripts/setup-vertex-provider.sh "$$ns"; \
+		done; \
+	else \
+		NAMESPACE=$(NAMESPACE) \
+			AMBIENT_UI_URL="http://$$(if [ -n "$(KIND_HOST)" ]; then echo "$(KIND_HOST)"; else echo "localhost"; fi):$(KIND_FWD_AMBIENT_UI_PORT)" \
+			./scripts/setup-vertex-kind.sh; \
+	fi
+
+kind-setup-openshell-cli: check-kubectl _kind-require-cluster ## Auto-discover tenant gateways and register openshell CLI access
+	@NAMESPACES=$$(kubectl get pods --all-namespaces -l app.kubernetes.io/instance=openshell-gateway -o jsonpath='{range .items[*]}{.metadata.namespace}{"\n"}{end}' 2>/dev/null | sort -u); \
+	if [ -z "$$NAMESPACES" ]; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) No openshell-gateway pods found in any namespace"; \
+		exit 1; \
+	fi; \
+	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Found openshell-gateway in: $$NAMESPACES"; \
+	./scripts/setup-gateway-cli.sh $$NAMESPACES
 
 kind-clean: kind-down ## Alias for kind-down
 

@@ -316,12 +316,6 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		return nil
 	}
 
-	credentialIDs, err := r.resolveCredentialIDs(ctx, sdk, session.ProjectID, session.AgentID)
-	if err != nil {
-		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("credential resolution failed; continuing without credentials")
-		credentialIDs = map[string]string{}
-	}
-
 	// Enable providers_v2 on the gateway before configuring providers or
 	// inference routing — required for v0.0.72+ gateways to correctly proxy
 	// inference traffic instead of attempting local execution.
@@ -329,16 +323,13 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		return fmt.Errorf("enabling providers_v2: %w", err)
 	}
 
-	providerNames, err := r.ensureGatewayProviders(ctx, namespace, project.Name, sdk, credentialIDs)
+	providerNames, inferenceProviders, err := r.resolveAgentProviders(ctx, sdk, namespace, project.Name, session, agent)
 	if err != nil {
-		return fmt.Errorf("ensuring gateway providers: %w", err)
+		return fmt.Errorf("resolving agent providers: %w", err)
 	}
 
-	if err := r.configureInference(ctx, namespace, project.Name, session.LlmModel, credentialIDs); err != nil {
-		r.logger.Warn().Err(err).
-			Str("namespace", namespace).
-			Str("session_id", session.ID).
-			Msg("inference configuration failed; sandbox will be created without inference routing")
+	if err := r.configureInferenceFromProviders(ctx, namespace, session.LlmModel, inferenceProviders); err != nil {
+		return fmt.Errorf("configuring inference: %w", err)
 	}
 
 	env := r.buildSandboxEnv(ctx, session, project.Name, sdk, providerNames)
@@ -352,6 +343,11 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	}
 
 	sandboxImage := r.resolveSandboxImage(agent)
+
+	sandboxPolicy, policyErr := r.resolveAgentSandboxPolicy(ctx, sdk, session.ProjectID, agent)
+	if policyErr != nil {
+		return fmt.Errorf("resolving sandbox policy: %w", policyErr)
+	}
 
 	req := &openshellpb.CreateSandboxRequest{
 		Name: sbxName,
@@ -367,6 +363,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 			},
 			Environment: env,
 			Providers:   providerNames,
+			Policy:      sandboxPolicy,
 		},
 	}
 
@@ -661,6 +658,200 @@ func (r *SimpleKubeReconciler) ensureVertexCredentialRefresh(ctx context.Context
 		Msg("vertex credential refresh configured and rotated")
 
 	return nil
+}
+
+func (r *SimpleKubeReconciler) resolveAgentProviders(
+	ctx context.Context,
+	sdk *sdkclient.Client,
+	namespace, projectName string,
+	session types.Session,
+	agent *types.Agent,
+) (providerNames []string, inferenceProviders map[string]string, err error) {
+	if agent == nil || len(agent.Providers) == 0 {
+		r.logger.Info().
+			Str("session_id", session.ID).
+			Msg("agent has no provider declarations; sandbox will have no providers")
+		return nil, nil, nil
+	}
+
+	inferenceProviders = map[string]string{}
+
+	for _, declName := range agent.Providers {
+		if err := validateTSLValue(declName); err != nil {
+			r.logger.Warn().Err(err).Str("provider", declName).Msg("invalid provider name; skipping")
+			continue
+		}
+
+		provList, listErr := sdk.Providers().List(ctx, &types.ListOptions{
+			Search: fmt.Sprintf("name = '%s'", declName),
+			Size:   1,
+		})
+		if listErr != nil {
+			r.logger.Warn().Err(listErr).Str("provider", declName).Msg("failed to look up provider declaration; skipping")
+			continue
+		}
+		if len(provList.Items) == 0 {
+			r.logger.Warn().Str("provider", declName).Msg("provider declaration not found in API; skipping")
+			continue
+		}
+
+		provDecl := provList.Items[0]
+		if provDecl.Secret == "" {
+			r.logger.Warn().Str("provider", declName).Msg("provider declaration has no secret reference; skipping")
+			continue
+		}
+
+		provType := provDecl.Type
+		if provType == "" {
+			provType = declName
+		}
+
+		token, readErr := r.readProviderSecretToken(ctx, namespace, provDecl.Secret)
+		if readErr != nil {
+			return nil, nil, fmt.Errorf("reading secret %s for provider %s: %w", provDecl.Secret, declName, readErr)
+		}
+
+		osType := openshell.OpenShellProviderType(provType)
+		osName := openshell.ProviderName(projectName, declName)
+
+		providerData := &datapb.Provider{
+			Metadata:    &datapb.ObjectMeta{Name: osName},
+			Type:        osType,
+			Credentials: openshell.ProviderCredentials(provType, token),
+			Config:      openshell.ProviderConfig(provType, "", ""),
+		}
+
+		_, getErr := r.gateway.GetProvider(ctx, namespace, osName)
+		if getErr == nil {
+			if _, updErr := r.gateway.UpdateProvider(ctx, namespace, &openshellpb.UpdateProviderRequest{Provider: providerData}); updErr != nil {
+				return nil, nil, fmt.Errorf("updating provider %s: %w", osName, updErr)
+			}
+			r.logger.Info().Str("provider", osName).Str("type", osType).Msg("gateway provider updated from declaration")
+		} else if st, ok := status.FromError(getErr); ok && st.Code() == codes.NotFound {
+			if _, crErr := r.gateway.CreateProvider(ctx, namespace, &openshellpb.CreateProviderRequest{Provider: providerData}); crErr != nil {
+				return nil, nil, fmt.Errorf("creating provider %s: %w", osName, crErr)
+			}
+			r.logger.Info().Str("provider", osName).Str("type", osType).Msg("gateway provider created from declaration")
+		} else {
+			return nil, nil, fmt.Errorf("checking provider %s: %w", osName, getErr)
+		}
+
+		// Vertex uses short-lived access tokens; configure the gateway to auto-rotate
+		// them using the SA private key (JWT → OAuth2 token exchange).
+		if provType == "vertex" {
+			if refreshErr := r.ensureVertexCredentialRefresh(ctx, namespace, osName, token); refreshErr != nil {
+				return nil, nil, fmt.Errorf("configuring credential refresh for provider %s: %w", osName, refreshErr)
+			}
+		}
+
+		providerNames = append(providerNames, osName)
+		if openshell.IsInferenceCapable(provType) {
+			inferenceProviders[osName] = provType
+		}
+	}
+
+	r.logger.Info().
+		Int("count", len(providerNames)).
+		Strs("providers", providerNames).
+		Msg("resolved providers from agent declarations")
+
+	return providerNames, inferenceProviders, nil
+}
+
+func (r *SimpleKubeReconciler) readProviderSecretToken(ctx context.Context, namespace, secretName string) (string, error) {
+	secret, err := r.kube.GetSecret(ctx, namespace, secretName)
+	if err != nil {
+		return "", fmt.Errorf("getting secret %s/%s: %w", namespace, secretName, err)
+	}
+
+	data, ok := secret.Object["data"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("secret %s/%s has no data field", namespace, secretName)
+	}
+
+	encoded, ok := data["token"]
+	if !ok {
+		return "", fmt.Errorf("secret %s/%s has no 'token' key", namespace, secretName)
+	}
+
+	encodedStr, ok := encoded.(string)
+	if !ok {
+		return "", fmt.Errorf("secret %s/%s 'token' key is not a string", namespace, secretName)
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(encodedStr)
+	if err != nil {
+		return "", fmt.Errorf("base64-decoding token from %s/%s: %w", namespace, secretName, err)
+	}
+
+	return string(decoded), nil
+}
+
+func (r *SimpleKubeReconciler) configureInferenceFromProviders(ctx context.Context, namespace, sessionModel string, inferenceProviders map[string]string) error {
+	inferenceModel := sessionModel
+	if inferenceModel == "" {
+		inferenceModel = "claude-sonnet-4-6"
+	}
+
+	for osName, provType := range inferenceProviders {
+		if !openshell.IsInferenceCapable(provType) {
+			continue
+		}
+
+		resp, err := r.gateway.SetClusterInference(ctx, namespace, &inferencepb.SetClusterInferenceRequest{
+			ProviderName: osName,
+			ModelId:      inferenceModel,
+			NoVerify:     true,
+		})
+		if err != nil {
+			return fmt.Errorf("setting inference for provider %s: %w", osName, err)
+		}
+
+		r.logger.Info().
+			Str("namespace", namespace).
+			Str("provider", osName).
+			Str("model", inferenceModel).
+			Uint64("version", resp.Version).
+			Msg("inference routing configured")
+	}
+
+	return nil
+}
+
+func (r *SimpleKubeReconciler) resolveAgentSandboxPolicy(ctx context.Context, sdk *sdkclient.Client, projectID string, agent *types.Agent) (*sandboxpb.SandboxPolicy, error) {
+	if agent == nil || agent.SandboxPolicy == "" {
+		return nil, nil
+	}
+
+	policyName := agent.SandboxPolicy
+	if err := validateTSLValue(policyName); err != nil {
+		return nil, fmt.Errorf("invalid policy name %q: %w", policyName, err)
+	}
+
+	policyList, err := sdk.Policys().List(ctx, &types.ListOptions{
+		Search: fmt.Sprintf("name = '%s'", policyName),
+		Size:   1,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("looking up policy %s: %w", policyName, err)
+	}
+	if len(policyList.Items) == 0 {
+		return nil, fmt.Errorf("policy %s not found", policyName)
+	}
+
+	policySpec := policyList.Items[0].Spec
+	if policySpec == "" {
+		r.logger.Warn().Str("policy", policyName).Msg("policy has empty spec")
+		return nil, nil
+	}
+
+	var sbxPolicy sandboxpb.SandboxPolicy
+	if err := json.Unmarshal([]byte(policySpec), &sbxPolicy); err != nil {
+		return nil, fmt.Errorf("deserializing policy %s spec: %w", policyName, err)
+	}
+
+	r.logger.Info().Str("policy", policyName).Msg("resolved sandbox policy from agent config")
+	return &sbxPolicy, nil
 }
 
 func (r *SimpleKubeReconciler) configureInference(ctx context.Context, namespace, projectName, sessionModel string, credentialIDs map[string]string) error {
