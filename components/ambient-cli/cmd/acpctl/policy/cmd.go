@@ -31,7 +31,23 @@ Subcommands:
 	},
 }
 
+func resolveProject(projectID string) (string, error) {
+	if projectID != "" {
+		return projectID, nil
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return "", err
+	}
+	p := cfg.GetProject()
+	if p == "" {
+		return "", fmt.Errorf("no project set; use --project-id or run 'acpctl config set project <name>'")
+	}
+	return p, nil
+}
+
 var listArgs struct {
+	projectID    string
 	outputFormat string
 	limit        int
 }
@@ -40,10 +56,20 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List policies in a project",
 	Example: `  acpctl policy list
-  acpctl policy list -o json
+  acpctl policy list --project-id <id> -o json
   acpctl policy list -o yaml`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := connection.NewClientFromConfig()
+		projectID, err := resolveProject(listArgs.projectID)
+		if err != nil {
+			return err
+		}
+
+		factory, err := connection.NewClientFactory()
+		if err != nil {
+			return err
+		}
+
+		client, err := factory.ForProject(projectID)
 		if err != nil {
 			return err
 		}
@@ -80,6 +106,7 @@ var listCmd = &cobra.Command{
 }
 
 var getArgs struct {
+	projectID    string
 	outputFormat string
 }
 
@@ -88,10 +115,21 @@ var getCmd = &cobra.Command{
 	Short: "Get a specific policy",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl policy get my-policy
+  acpctl policy get my-policy --project-id <id>
   acpctl policy get my-policy -o json
   acpctl policy get my-policy -o yaml`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := connection.NewClientFromConfig()
+		projectID, err := resolveProject(getArgs.projectID)
+		if err != nil {
+			return err
+		}
+
+		factory, err := connection.NewClientFactory()
+		if err != nil {
+			return err
+		}
+
+		client, err := factory.ForProject(projectID)
 		if err != nil {
 			return err
 		}
@@ -127,6 +165,7 @@ var getCmd = &cobra.Command{
 }
 
 var exportArgs struct {
+	projectID string
 	namespace string
 }
 
@@ -136,11 +175,22 @@ var exportCmd = &cobra.Command{
 	Long:  "Export a policy definition as a Kubernetes ConfigMap YAML suitable for kubectl apply.",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl policy export my-policy
+  acpctl policy export my-policy --project-id <id>
   acpctl policy export my-policy --namespace my-ns
   acpctl policy export my-policy > policy.yaml
   acpctl policy export my-policy | kubectl apply -f -`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := connection.NewClientFromConfig()
+		projectID, err := resolveProject(exportArgs.projectID)
+		if err != nil {
+			return err
+		}
+
+		factory, err := connection.NewClientFactory()
+		if err != nil {
+			return err
+		}
+
+		client, err := factory.ForProject(projectID)
 		if err != nil {
 			return err
 		}
@@ -172,11 +222,14 @@ func init() {
 	Cmd.AddCommand(getCmd)
 	Cmd.AddCommand(exportCmd)
 
+	listCmd.Flags().StringVar(&listArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 	listCmd.Flags().StringVarP(&listArgs.outputFormat, "output", "o", "", "Output format: json|yaml")
 	listCmd.Flags().IntVar(&listArgs.limit, "limit", 100, "Maximum number of items to return")
 
+	getCmd.Flags().StringVar(&getArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 	getCmd.Flags().StringVarP(&getArgs.outputFormat, "output", "o", "", "Output format: json|yaml")
 
+	exportCmd.Flags().StringVar(&exportArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 	exportCmd.Flags().StringVar(&exportArgs.namespace, "namespace", "", "Kubernetes namespace for the ConfigMap")
 }
 
@@ -201,20 +254,18 @@ func printPolicyTable(printer *output.Printer, policies []sdktypes.Policy) error
 		{Name: "NAME", Width: 24},
 		{Name: "NAMESPACE", Width: 20},
 		{Name: "SECTIONS", Width: 32},
-		{Name: "AGE", Width: 10},
+		{Name: "UPDATED", Width: 20},
 	}
 
 	table := output.NewTable(printer.Writer(), columns)
 	table.WriteHeaders()
 
 	for _, p := range policies {
-		age := ""
+		updated := ""
 		if p.UpdatedAt != nil {
-			age = output.FormatAge(time.Since(*p.UpdatedAt))
-		} else if p.CreatedAt != nil {
-			age = output.FormatAge(time.Since(*p.CreatedAt))
+			updated = p.UpdatedAt.Format(time.RFC3339)
 		}
-		table.WriteRow(p.Name, p.Namespace, specSections(p.Spec), age)
+		table.WriteRow(p.Name, p.Namespace, specSections(p.Spec), updated)
 	}
 	return nil
 }

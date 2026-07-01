@@ -796,20 +796,18 @@ func printAgentTable(printer *output.Printer, agents []sdktypes.Agent) error {
 		{Name: "MODEL", Width: 20},
 		{Name: "OWNER", Width: 16},
 		{Name: "SESSION", Width: 27},
-		{Name: "AGE", Width: 10},
+		{Name: "UPDATED", Width: 20},
 	}
 
 	table := output.NewTable(printer.Writer(), columns)
 	table.WriteHeaders()
 
 	for _, a := range agents {
-		age := ""
+		updated := ""
 		if a.UpdatedAt != nil {
-			age = output.FormatAge(time.Since(*a.UpdatedAt))
-		} else if a.CreatedAt != nil {
-			age = output.FormatAge(time.Since(*a.CreatedAt))
+			updated = a.UpdatedAt.Format(time.RFC3339)
 		}
-		table.WriteRow(a.Name, a.DisplayName, a.LlmModel, a.OwnerUserID, a.CurrentSessionID, age)
+		table.WriteRow(a.Name, a.DisplayName, a.LlmModel, a.OwnerUserID, a.CurrentSessionID, updated)
 	}
 	return nil
 }

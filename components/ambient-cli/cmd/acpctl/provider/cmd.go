@@ -27,7 +27,23 @@ Subcommands:
 	},
 }
 
+func resolveProject(projectID string) (string, error) {
+	if projectID != "" {
+		return projectID, nil
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return "", err
+	}
+	p := cfg.GetProject()
+	if p == "" {
+		return "", fmt.Errorf("no project set; use --project-id or run 'acpctl config set project <name>'")
+	}
+	return p, nil
+}
+
 var listArgs struct {
+	projectID    string
 	outputFormat string
 	limit        int
 }
@@ -36,10 +52,20 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List providers in a project",
 	Example: `  acpctl provider list
-  acpctl provider list -o json
+  acpctl provider list --project-id <id> -o json
   acpctl provider list -o yaml`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := connection.NewClientFromConfig()
+		projectID, err := resolveProject(listArgs.projectID)
+		if err != nil {
+			return err
+		}
+
+		factory, err := connection.NewClientFactory()
+		if err != nil {
+			return err
+		}
+
+		client, err := factory.ForProject(projectID)
 		if err != nil {
 			return err
 		}
@@ -76,6 +102,7 @@ var listCmd = &cobra.Command{
 }
 
 var getArgs struct {
+	projectID    string
 	outputFormat string
 }
 
@@ -84,10 +111,21 @@ var getCmd = &cobra.Command{
 	Short: "Get a specific provider",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl provider get my-provider
+  acpctl provider get my-provider --project-id <id>
   acpctl provider get my-provider -o json
   acpctl provider get my-provider -o yaml`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := connection.NewClientFromConfig()
+		projectID, err := resolveProject(getArgs.projectID)
+		if err != nil {
+			return err
+		}
+
+		factory, err := connection.NewClientFactory()
+		if err != nil {
+			return err
+		}
+
+		client, err := factory.ForProject(projectID)
 		if err != nil {
 			return err
 		}
@@ -123,6 +161,7 @@ var getCmd = &cobra.Command{
 }
 
 var exportArgs struct {
+	projectID string
 	namespace string
 }
 
@@ -132,11 +171,22 @@ var exportCmd = &cobra.Command{
 	Long:  "Export a provider definition as a Kubernetes ConfigMap YAML suitable for kubectl apply.",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl provider export my-provider
+  acpctl provider export my-provider --project-id <id>
   acpctl provider export my-provider --namespace my-ns
   acpctl provider export my-provider > provider.yaml
   acpctl provider export my-provider | kubectl apply -f -`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := connection.NewClientFromConfig()
+		projectID, err := resolveProject(exportArgs.projectID)
+		if err != nil {
+			return err
+		}
+
+		factory, err := connection.NewClientFactory()
+		if err != nil {
+			return err
+		}
+
+		client, err := factory.ForProject(projectID)
 		if err != nil {
 			return err
 		}
@@ -168,11 +218,14 @@ func init() {
 	Cmd.AddCommand(getCmd)
 	Cmd.AddCommand(exportCmd)
 
+	listCmd.Flags().StringVar(&listArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 	listCmd.Flags().StringVarP(&listArgs.outputFormat, "output", "o", "", "Output format: json|yaml")
 	listCmd.Flags().IntVar(&listArgs.limit, "limit", 100, "Maximum number of items to return")
 
+	getCmd.Flags().StringVar(&getArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 	getCmd.Flags().StringVarP(&getArgs.outputFormat, "output", "o", "", "Output format: json|yaml")
 
+	exportCmd.Flags().StringVar(&exportArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
 	exportCmd.Flags().StringVar(&exportArgs.namespace, "namespace", "", "Kubernetes namespace for the ConfigMap")
 }
 
@@ -182,20 +235,18 @@ func printProviderTable(printer *output.Printer, providers []sdktypes.Provider) 
 		{Name: "TYPE", Width: 14},
 		{Name: "SECRET", Width: 24},
 		{Name: "NAMESPACE", Width: 20},
-		{Name: "AGE", Width: 10},
+		{Name: "UPDATED", Width: 20},
 	}
 
 	table := output.NewTable(printer.Writer(), columns)
 	table.WriteHeaders()
 
 	for _, p := range providers {
-		age := ""
+		updated := ""
 		if p.UpdatedAt != nil {
-			age = output.FormatAge(time.Since(*p.UpdatedAt))
-		} else if p.CreatedAt != nil {
-			age = output.FormatAge(time.Since(*p.CreatedAt))
+			updated = p.UpdatedAt.Format(time.RFC3339)
 		}
-		table.WriteRow(p.Name, p.Type, p.Secret, p.Namespace, age)
+		table.WriteRow(p.Name, p.Type, p.Secret, p.Namespace, updated)
 	}
 	return nil
 }
