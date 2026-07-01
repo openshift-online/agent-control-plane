@@ -28,6 +28,10 @@ Declarative agent YAML schema for ConfigMap-based agent definitions. Covers entr
 
 Configuration reuse patterns using Kustomize bases and overlays for agent, provider, and policy composition. Composition happens at apply time — the control plane only sees fully-resolved ConfigMaps. Extension to the Agent Sandbox Configuration spec.
 
+### [MLflow Tracing](mlflow-tracing.spec.md)
+
+Opt-in MLflow tracing of Claude SDK interactions. Covers the `mlflow` credential provider, runner image CA trust, conditional autologging activation, and OPA network policy for gateway mode.
+
 ### [MCP Server](mcp-server.spec.md)
 
 Model Context Protocol server that exposes platform resources as MCP tools. Covers tool definitions, transport, authentication, @mention resolution, and sidecar deployment.
