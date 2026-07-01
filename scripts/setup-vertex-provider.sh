@@ -26,7 +26,7 @@
 #
 # VERIFICATION:
 #   After running, wait ~30s for the ConfigMap syncer, then:
-#     acpctl create session --project-id tenant-a --agent default \
+#     acpctl create session --project-id tenant-a --agent-id <agent-id> \
 #       --name test --prompt "say hello"
 #     openshell sandbox list --gateway tenant-a
 #
@@ -94,7 +94,7 @@ echo "  # Set up openshell CLI gateway connectivity (if not already done):"
 echo "  make kind-setup-openshell-cli NAMESPACES=$NAMESPACE"
 echo ""
 echo "  # Create a session using an agent with vertex (agent names come from the ConfigMap, for example 'default'):"
-echo "  acpctl create session --project-id $NAMESPACE --agent default \\"
+echo "  acpctl create session --project-id $NAMESPACE --agent-id <agent-id> \\"
 echo "    --name test --prompt 'say hello'"
 echo ""
 echo "  # Verify sandbox was created:"

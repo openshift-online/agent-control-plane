@@ -102,6 +102,23 @@ for NS in "${NAMESPACES[@]}"; do
   echo ""
 done
 
+# Configure acpctl to point at the API server port-forward
+API_NS="${ACP_NAMESPACE:-ambient-code}"
+API_PORT=$(ps aux | grep -oE "port-forward.*svc/ambient-api-server [0-9]+:8000" | grep -oE ' [0-9]+:' | tr -d ' :' | head -1)
+if [ -n "$API_PORT" ]; then
+  TOKEN=$(kubectl get secret test-user-token -n "$API_NS" -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null)
+  if [ -n "$TOKEN" ]; then
+    acpctl login --url "http://localhost:$API_PORT" --token "$TOKEN" 2>/dev/null && \
+      echo "acpctl configured: http://localhost:$API_PORT" || \
+      echo "Warning: acpctl login failed — run 'make build-cli' or 'make kind-login'"
+  else
+    echo "Warning: test-user-token not found in $API_NS — acpctl not configured"
+  fi
+else
+  echo "Warning: no API server port-forward detected — run 'make kind-login' first"
+fi
+echo ""
+
 echo "=== Gateway CLI Setup Complete ==="
 echo ""
 echo "Registered gateways:"
