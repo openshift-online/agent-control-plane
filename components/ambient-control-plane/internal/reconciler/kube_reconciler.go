@@ -440,9 +440,10 @@ func (r *SimpleKubeReconciler) applySandboxTemplate(req *openshellpb.CreateSandb
 	}
 
 	for k, v := range tmpl.Labels {
-		if _, isSystem := req.Labels[k]; !isSystem {
-			req.Labels[k] = v
+		if _, isSystem := req.Labels[k]; isSystem {
+			continue
 		}
+		req.Labels[k] = v
 		if spec.Template.Labels == nil {
 			spec.Template.Labels = make(map[string]string)
 		}
@@ -551,8 +552,8 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 
 			if len(payloads) > 0 {
 				injectCtx, injectCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+				defer injectCancel()
 				if err := r.injectPayloads(injectCtx, namespace, sandboxID, payloads); err != nil {
-					injectCancel()
 					r.logger.Error().Err(err).
 						Str("sandbox", sbxName).
 						Str("session_id", sessionID).
@@ -560,7 +561,6 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 					failSession(fmt.Sprintf("payload injection failed: %s", err.Error()))
 					return
 				}
-				injectCancel()
 				r.logger.Info().
 					Str("sandbox", sbxName).
 					Int("payload_count", len(payloads)).
@@ -596,6 +596,14 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 	}
 }
 
+func sanitizeStderr(raw []byte) string {
+	s := strings.ReplaceAll(string(raw), "\n", " ")
+	if len(s) > 256 {
+		s = s[:256] + "...(truncated)"
+	}
+	return s
+}
+
 func (r *SimpleKubeReconciler) injectPayloads(ctx context.Context, namespace, sandboxID string, payloads []types.Payload) error {
 	for i, p := range payloads {
 		if p.SandboxPath == "" {
@@ -629,7 +637,7 @@ func (r *SimpleKubeReconciler) injectInlinePayload(ctx context.Context, namespac
 		return fmt.Errorf("mkdir exec failed: %w", err)
 	}
 	if mkdirResult.ExitCode != 0 {
-		return fmt.Errorf("mkdir failed (exit %d): %s", mkdirResult.ExitCode, string(mkdirResult.Stderr))
+		return fmt.Errorf("mkdir failed (exit %d): %s", mkdirResult.ExitCode, sanitizeStderr(mkdirResult.Stderr))
 	}
 
 	writeResult, err := r.gateway.ExecSandbox(ctx, namespace, &openshellpb.ExecSandboxRequest{
@@ -642,7 +650,7 @@ func (r *SimpleKubeReconciler) injectInlinePayload(ctx context.Context, namespac
 		return fmt.Errorf("write exec failed: %w", err)
 	}
 	if writeResult.ExitCode != 0 {
-		return fmt.Errorf("write failed (exit %d): %s", writeResult.ExitCode, string(writeResult.Stderr))
+		return fmt.Errorf("write failed (exit %d): %s", writeResult.ExitCode, sanitizeStderr(writeResult.Stderr))
 	}
 
 	r.logger.Info().
@@ -654,6 +662,10 @@ func (r *SimpleKubeReconciler) injectInlinePayload(ctx context.Context, namespac
 }
 
 func (r *SimpleKubeReconciler) injectGitPayload(ctx context.Context, namespace, sandboxID string, p types.Payload) error {
+	if !strings.HasPrefix(p.RepoURL, "https://") && !strings.HasPrefix(p.RepoURL, "ssh://") && !strings.HasPrefix(p.RepoURL, "git@") {
+		return fmt.Errorf("repo_url must use https://, ssh://, or git@ scheme, got: %s", p.RepoURL)
+	}
+
 	cmd := []string{"git", "clone", "--depth", "1"}
 	if p.Ref != "" {
 		cmd = append(cmd, "--branch", p.Ref)
@@ -669,7 +681,7 @@ func (r *SimpleKubeReconciler) injectGitPayload(ctx context.Context, namespace, 
 		return fmt.Errorf("git clone exec failed: %w", err)
 	}
 	if result.ExitCode != 0 {
-		return fmt.Errorf("git clone failed (exit %d): %s", result.ExitCode, string(result.Stderr))
+		return fmt.Errorf("git clone failed (exit %d): %s", result.ExitCode, sanitizeStderr(result.Stderr))
 	}
 
 	r.logger.Info().

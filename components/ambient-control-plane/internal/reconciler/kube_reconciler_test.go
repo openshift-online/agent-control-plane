@@ -646,6 +646,9 @@ func TestApplySandboxTemplate(t *testing.T) {
 		if req.Spec.Template.Labels["team"] != "security" {
 			t.Errorf("expected template label team=security, got %q", req.Spec.Template.Labels["team"])
 		}
+		if v, ok := req.Spec.Template.Labels["ambient-code.io/session-id"]; ok {
+			t.Errorf("system label should not appear in template labels, got %q", v)
+		}
 	})
 
 	t.Run("annotations passthrough", func(t *testing.T) {
@@ -688,6 +691,75 @@ func TestInjectPayloads_Validation(t *testing.T) {
 		err := r.injectPayloads(nil, "ns", "sbx-1", nil)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("git payload rejects file:// scheme", func(t *testing.T) {
+		err := r.injectGitPayload(nil, "ns", "sbx-1", types.Payload{
+			SandboxPath: "/workspace/repo",
+			RepoURL:     "file:///etc/passwd",
+		})
+		if err == nil {
+			t.Fatal("expected error for file:// scheme")
+		}
+		if !strings.Contains(err.Error(), "must use https://, ssh://, or git@") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("git payload rejects git:// scheme", func(t *testing.T) {
+		err := r.injectGitPayload(nil, "ns", "sbx-1", types.Payload{
+			SandboxPath: "/workspace/repo",
+			RepoURL:     "git://internal-host/repo",
+		})
+		if err == nil {
+			t.Fatal("expected error for git:// scheme")
+		}
+	})
+
+	t.Run("git payload rejects http:// scheme", func(t *testing.T) {
+		err := r.injectGitPayload(nil, "ns", "sbx-1", types.Payload{
+			SandboxPath: "/workspace/repo",
+			RepoURL:     "http://example.com/repo",
+		})
+		if err == nil {
+			t.Fatal("expected error for http:// scheme")
+		}
+		if !strings.Contains(err.Error(), "must use https://") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestSanitizeStderr(t *testing.T) {
+	t.Run("replaces newlines", func(t *testing.T) {
+		result := sanitizeStderr([]byte("line1\nline2\nline3"))
+		if strings.Contains(result, "\n") {
+			t.Errorf("expected newlines removed, got: %s", result)
+		}
+		if result != "line1 line2 line3" {
+			t.Errorf("unexpected result: %s", result)
+		}
+	})
+
+	t.Run("truncates long output", func(t *testing.T) {
+		long := make([]byte, 300)
+		for i := range long {
+			long[i] = 'x'
+		}
+		result := sanitizeStderr(long)
+		if len(result) > 280 {
+			t.Errorf("expected truncation, got len %d", len(result))
+		}
+		if !strings.HasSuffix(result, "...(truncated)") {
+			t.Errorf("expected truncation suffix, got: %s", result[len(result)-20:])
+		}
+	})
+
+	t.Run("empty input", func(t *testing.T) {
+		result := sanitizeStderr(nil)
+		if result != "" {
+			t.Errorf("expected empty, got: %s", result)
 		}
 	})
 }
