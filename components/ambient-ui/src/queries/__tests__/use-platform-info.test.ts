@@ -83,14 +83,9 @@ describe('usePlatformInfo', () => {
       return createElement(QueryClientProvider, { client: queryClient }, children)
     }
 
-    const { result } = renderHook(() => usePlatformInfo(), { wrapper })
+    renderHook(() => usePlatformInfo(), { wrapper })
 
-    // Verify the query key
-    const queryKey = result.current.data !== undefined
-      ? queryClient.getQueryState(['platform-info'])?.dataUpdatedAt
-      : undefined
-
-    // The query should be registered
+    // The query should be registered with the correct key
     expect(queryClient.getQueryCache().find({ queryKey: ['platform-info'] })).toBeDefined()
   })
 })

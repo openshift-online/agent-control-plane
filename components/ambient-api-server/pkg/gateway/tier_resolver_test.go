@@ -12,13 +12,13 @@ import (
 
 func TestResolveTier(t *testing.T) {
 	tests := []struct {
-		name          string
-		username      string
-		namespace     string
-		adminAllowed  bool
-		editAllowed   bool
-		viewAllowed   bool
-		expectedTier  Tier
+		name         string
+		username     string
+		namespace    string
+		adminAllowed bool
+		editAllowed  bool
+		viewAllowed  bool
+		expectedTier Tier
 	}{
 		{
 			name:         "admin access",

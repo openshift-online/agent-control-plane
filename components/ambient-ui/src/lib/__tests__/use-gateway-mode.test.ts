@@ -1,6 +1,8 @@
 import { renderHook } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import { useGatewayMode } from '../use-gateway-mode'
+import type { UseQueryResult } from '@tanstack/react-query'
+import type { PlatformInfo } from '@/queries/use-platform-info'
 
 vi.mock('@/queries/use-platform-info', () => ({
   usePlatformInfo: vi.fn(),
@@ -15,7 +17,7 @@ describe('useGatewayMode', () => {
       isLoading: false,
       isError: false,
       error: null,
-    } as any)
+    } as UseQueryResult<PlatformInfo, Error>)
 
     const { result } = renderHook(() => useGatewayMode())
     expect(result.current.enabled).toBe(true)
@@ -28,7 +30,7 @@ describe('useGatewayMode', () => {
       isLoading: false,
       isError: false,
       error: null,
-    } as any)
+    } as UseQueryResult<PlatformInfo, Error>)
 
     const { result } = renderHook(() => useGatewayMode())
     expect(result.current.enabled).toBe(false)
@@ -41,7 +43,7 @@ describe('useGatewayMode', () => {
       isLoading: false,
       isError: false,
       error: null,
-    } as any)
+    } as UseQueryResult<PlatformInfo, Error>)
 
     const { result } = renderHook(() => useGatewayMode())
     expect(result.current.enabled).toBe(false)
@@ -54,7 +56,7 @@ describe('useGatewayMode', () => {
       isLoading: true,
       isError: false,
       error: null,
-    } as any)
+    } as UseQueryResult<PlatformInfo, Error>)
 
     const { result } = renderHook(() => useGatewayMode())
     expect(result.current.enabled).toBe(false)
