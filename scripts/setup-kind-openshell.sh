@@ -6,7 +6,9 @@
 #   1. Agent Sandbox CRD + controller (once, cluster-scoped)
 #   2. Tenant namespaces
 #   3. ACP project via the API
+#   3b. Vertex AI credentials bound to each project (if GOOGLE_APPLICATION_CREDENTIALS is set)
 #   4. Patches the control plane deployment with OPENSHELL_USE_GATEWAY=true
+#      and Vertex AI env vars (ANTHROPIC_VERTEX_PROJECT_ID, CLOUD_ML_REGION) if set
 #
 # The control plane reconciler handles gateway resource deployment via
 # the platform-config ConfigMap — no Helm chart needed.
@@ -122,21 +124,123 @@ else
     done
   fi
 
+  # 3b. Provision Vertex AI credentials for each tenant project (if available)
+  if [ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ] && [ -f "${GOOGLE_APPLICATION_CREDENTIALS}" ]; then
+    echo "  Provisioning Vertex AI credentials for tenant projects..."
+    SA_KEY_JSON=$(cat "$GOOGLE_APPLICATION_CREDENTIALS")
+
+    CREDENTIAL_VIEWER_ROLE_ID=$(curl -sf \
+      -H "Authorization: Bearer ${TOKEN}" \
+      "http://localhost:${PF_PORT}/api/ambient/v1/roles?page=1&size=100" 2>/dev/null \
+      | jq -r '.items[] | select(.name == "credential:viewer") | .id' 2>/dev/null || echo "")
+
+    if [ -z "$CREDENTIAL_VIEWER_ROLE_ID" ]; then
+      echo "  Warning: could not resolve credential:viewer role ID; skipping vertex credential binding"
+    else
+      for TENANT in "${TENANTS[@]}"; do
+        SEARCH_QUERY=$(printf "name = '%s'" "${TENANT}")
+        PROJECT_ID=$(curl -sf \
+          -H "Authorization: Bearer ${TOKEN}" \
+          --data-urlencode "search=${SEARCH_QUERY}" \
+          -G "http://localhost:${PF_PORT}/api/ambient/v1/projects" 2>/dev/null \
+          | jq -r '[(.items // [])[] | select(.name == "'"${TENANT}"'")] | .[0].id // empty' 2>/dev/null || echo "")
+
+        if [ -z "$PROJECT_ID" ]; then
+          echo "    Warning: project '${TENANT}' not found; skipping vertex credential"
+          continue
+        fi
+
+        VERTEX_CRED_NAME="vertex-${TENANT}"
+        EXISTING_CRED_ID=$(curl -sf \
+          -H "Authorization: Bearer ${TOKEN}" \
+          "http://localhost:${PF_PORT}/api/ambient/v1/credentials?search=name%3D'${VERTEX_CRED_NAME}'" 2>/dev/null \
+          | jq -r '[(.items // [])[] | select(.name == "'"${VERTEX_CRED_NAME}"'")] | .[0].id // empty' 2>/dev/null || echo "")
+
+        if [ -n "$EXISTING_CRED_ID" ]; then
+          echo "    Vertex credential '${VERTEX_CRED_NAME}' already exists (${EXISTING_CRED_ID})"
+        else
+          CRED_RESPONSE=$(curl -sf -X POST \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg name "$VERTEX_CRED_NAME" \
+              --arg token "$SA_KEY_JSON" \
+              '{name: $name, provider: "vertex", token: $token}')" \
+            "http://localhost:${PF_PORT}/api/ambient/v1/credentials" 2>/dev/null || echo "{}")
+          EXISTING_CRED_ID=$(echo "$CRED_RESPONSE" | jq -r '.id // empty' 2>/dev/null || echo "")
+
+          if [ -z "$EXISTING_CRED_ID" ]; then
+            echo "    Warning: failed to create vertex credential for '${TENANT}'"
+            continue
+          fi
+          echo "    Created vertex credential '${VERTEX_CRED_NAME}' (${EXISTING_CRED_ID})"
+        fi
+
+        EXISTING_BINDING=$(curl -sf \
+          -H "Authorization: Bearer ${TOKEN}" \
+          "http://localhost:${PF_PORT}/api/ambient/v1/role_bindings?search=scope%3D'credential'" 2>/dev/null \
+          | jq -r '[(.items // [])[] | select(.credential_id == "'"${EXISTING_CRED_ID}"'" and .project_id == "'"${PROJECT_ID}"'")] | length' 2>/dev/null || echo "0")
+
+        if [ "${EXISTING_BINDING}" -gt 0 ] 2>/dev/null; then
+          echo "    Vertex credential already bound to project '${TENANT}'"
+        else
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg role_id "$CREDENTIAL_VIEWER_ROLE_ID" \
+              --arg credential_id "$EXISTING_CRED_ID" \
+              --arg project_id "$PROJECT_ID" \
+              '{role_id: $role_id, scope: "credential", credential_id: $credential_id, project_id: $project_id}')" \
+            "http://localhost:${PF_PORT}/api/ambient/v1/role_bindings" >/dev/null 2>&1
+          echo "    Bound vertex credential to project '${TENANT}'"
+        fi
+      done
+    fi
+  else
+    echo "  Skipping Vertex AI credentials (GOOGLE_APPLICATION_CREDENTIALS not set)"
+  fi
+
   kill "${PF_PID}" 2>/dev/null || true
 fi
 
-# 4. Patch control plane with gateway flag (skip if already set)
+# 4. Patch control plane with gateway flag and vertex env vars (idempotent)
 #    TLS is left at its default (true) — certgen-job creates openshell-client-tls
 #    and openshell-server-tls secrets so mTLS works out of the box in Kind.
+CP_ENV_ARGS="OPENSHELL_USE_GATEWAY=true"
+CP_NEEDS_PATCH=false
+
 CURRENT_GW=$(kubectl get deployment ambient-control-plane -n "$NAMESPACE" \
   -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="OPENSHELL_USE_GATEWAY")].value}' 2>/dev/null || echo "")
-if [ "$CURRENT_GW" = "true" ]; then
-  echo "  ambient-control-plane already has OPENSHELL_USE_GATEWAY=true — skipping"
-else
-  kubectl set env deployment/ambient-control-plane -n "$NAMESPACE" \
-    OPENSHELL_USE_GATEWAY=true >/dev/null
+if [ "$CURRENT_GW" != "true" ]; then
+  CP_NEEDS_PATCH=true
+fi
+
+if [ -n "${ANTHROPIC_VERTEX_PROJECT_ID:-}" ]; then
+  CURRENT_PROJECT=$(kubectl get deployment ambient-control-plane -n "$NAMESPACE" \
+    -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ANTHROPIC_VERTEX_PROJECT_ID")].value}' 2>/dev/null || echo "")
+  if [ "$CURRENT_PROJECT" != "$ANTHROPIC_VERTEX_PROJECT_ID" ]; then
+    CP_NEEDS_PATCH=true
+  fi
+  CP_ENV_ARGS="$CP_ENV_ARGS ANTHROPIC_VERTEX_PROJECT_ID=${ANTHROPIC_VERTEX_PROJECT_ID}"
+fi
+
+if [ -n "${CLOUD_ML_REGION:-}" ]; then
+  CURRENT_REGION=$(kubectl get deployment ambient-control-plane -n "$NAMESPACE" \
+    -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="CLOUD_ML_REGION")].value}' 2>/dev/null || echo "")
+  if [ "$CURRENT_REGION" != "$CLOUD_ML_REGION" ]; then
+    CP_NEEDS_PATCH=true
+  fi
+  CP_ENV_ARGS="$CP_ENV_ARGS CLOUD_ML_REGION=${CLOUD_ML_REGION}"
+fi
+
+if [ "$CP_NEEDS_PATCH" = "true" ]; then
+  # shellcheck disable=SC2086
+  kubectl set env deployment/ambient-control-plane -n "$NAMESPACE" $CP_ENV_ARGS >/dev/null
   kubectl rollout status deployment/ambient-control-plane -n "$NAMESPACE" --timeout=60s >/dev/null 2>&1
-  echo "  Patched ambient-control-plane with OPENSHELL_USE_GATEWAY=true (TLS enabled by default)"
+  echo "  Patched ambient-control-plane with: $CP_ENV_ARGS"
+else
+  echo "  ambient-control-plane env already up to date — skipping"
 fi
 echo "  Note: ambient-ui gateway mode is baked in at build time via --build-arg OPENSHELL_USE_GATEWAY=true"
 
