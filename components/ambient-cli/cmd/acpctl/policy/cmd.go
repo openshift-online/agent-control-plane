@@ -12,6 +12,7 @@ import (
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/output"
+	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -44,6 +45,24 @@ func resolveProject(projectID string) (string, error) {
 		return "", fmt.Errorf("no project set; use --project-id or run 'acpctl config set project <name>'")
 	}
 	return p, nil
+}
+
+func resolvePolicy(ctx context.Context, client *sdkclient.Client, nameOrID string) (*sdktypes.Policy, error) {
+	p, err := client.Policys().Get(ctx, nameOrID)
+	if err == nil {
+		return p, nil
+	}
+	opts := &sdktypes.ListOptions{Search: "name = '" + nameOrID + "'"}
+	list, err2 := client.Policys().List(ctx, opts)
+	if err2 != nil {
+		return nil, fmt.Errorf("policy %q not found", nameOrID)
+	}
+	for i := range list.Items {
+		if list.Items[i].Name == nameOrID {
+			return &list.Items[i], nil
+		}
+	}
+	return nil, fmt.Errorf("policy %q not found", nameOrID)
 }
 
 var listArgs struct {
@@ -142,9 +161,9 @@ var getCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		policy, err := client.Policys().Get(ctx, args[0])
+		policy, err := resolvePolicy(ctx, client, args[0])
 		if err != nil {
-			return fmt.Errorf("get policy %q: %w", args[0], err)
+			return err
 		}
 
 		format, err := output.ParseFormat(getArgs.outputFormat)
@@ -203,9 +222,9 @@ var exportCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
 		defer cancel()
 
-		policy, err := client.Policys().Get(ctx, args[0])
+		policy, err := resolvePolicy(ctx, client, args[0])
 		if err != nil {
-			return fmt.Errorf("get policy %q: %w", args[0], err)
+			return err
 		}
 
 		out, err := policyToConfigMapYaml(policy, exportArgs.namespace)
@@ -251,6 +270,7 @@ func specSections(specJSON string) string {
 
 func printPolicyTable(printer *output.Printer, policies []sdktypes.Policy) error {
 	columns := []output.Column{
+		{Name: "ID", Width: 27},
 		{Name: "NAME", Width: 24},
 		{Name: "NAMESPACE", Width: 20},
 		{Name: "SECTIONS", Width: 32},
@@ -265,7 +285,7 @@ func printPolicyTable(printer *output.Printer, policies []sdktypes.Policy) error
 		if p.UpdatedAt != nil {
 			updated = p.UpdatedAt.Format(time.RFC3339)
 		}
-		table.WriteRow(p.Name, p.Namespace, specSections(p.Spec), updated)
+		table.WriteRow(p.ID, p.Name, p.Namespace, specSections(p.Spec), updated)
 	}
 	return nil
 }

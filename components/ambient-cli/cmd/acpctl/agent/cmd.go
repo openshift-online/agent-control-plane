@@ -791,6 +791,7 @@ func init() {
 
 func printAgentTable(printer *output.Printer, agents []sdktypes.Agent) error {
 	columns := []output.Column{
+		{Name: "ID", Width: 27},
 		{Name: "NAME", Width: 20},
 		{Name: "DISPLAY NAME", Width: 18},
 		{Name: "MODEL", Width: 20},
@@ -807,7 +808,7 @@ func printAgentTable(printer *output.Printer, agents []sdktypes.Agent) error {
 		if a.UpdatedAt != nil {
 			updated = a.UpdatedAt.Format(time.RFC3339)
 		}
-		table.WriteRow(a.Name, a.DisplayName, a.LlmModel, a.OwnerUserID, a.CurrentSessionID, updated)
+		table.WriteRow(a.ID, a.Name, a.DisplayName, a.LlmModel, a.OwnerUserID, a.CurrentSessionID, updated)
 	}
 	return nil
 }
