@@ -311,8 +311,8 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	existing, err := r.gateway.GetSandbox(ctx, namespace, sbxName)
 	if err == nil && existing != nil && existing.Sandbox != nil {
 		r.logger.Debug().Str("sandbox", sbxName).Msg("sandbox already exists")
-		go r.execAfterReady(namespace, sbxName, session.ID, entrypoint)
-		r.updateSessionPhaseWithNamespace(ctx, session, PhaseRunning, namespace)
+		go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk)
+		r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 		return nil
 	}
 
@@ -378,9 +378,9 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		Int("providers", len(providerNames)).
 		Msg("sandbox created via gateway")
 
-	go r.execAfterReady(namespace, sbxName, session.ID, entrypoint)
+	go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk)
 
-	r.updateSessionPhaseWithNamespace(ctx, session, PhaseRunning, namespace)
+	r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 	return nil
 }
 
@@ -422,9 +422,21 @@ func (r *SimpleKubeReconciler) mergeAgentEnvironment(env map[string]string, agen
 	}
 }
 
-func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string) {
+func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string, sdk *sdkclient.Client) {
 	pollCtx, pollCancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer pollCancel()
+
+	failSession := func(reason string) {
+		now := time.Now()
+		condJSON, _ := json.Marshal([]map[string]string{{"type": "SandboxFailure", "reason": reason}})
+		if _, err := sdk.Sessions().UpdateStatus(pollCtx, sessionID, map[string]interface{}{
+			"phase":           PhaseFailed,
+			"completion_time": &now,
+			"conditions":      string(condJSON),
+		}); err != nil {
+			r.logger.Warn().Err(err).Str("session_id", sessionID).Msg("failed to mark session failed")
+		}
+	}
 
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -436,6 +448,7 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				Str("sandbox", sbxName).
 				Str("session_id", sessionID).
 				Msg("timed out waiting for sandbox to become ready")
+			failSession("sandbox did not become ready within 120s")
 			return
 		case <-ticker.C:
 			resp, err := r.gateway.GetSandbox(pollCtx, namespace, sbxName)
@@ -452,6 +465,7 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 					Str("sandbox", sbxName).
 					Str("session_id", sessionID).
 					Msg("sandbox entered error phase")
+				failSession("sandbox entered error phase")
 				return
 			}
 			if phase != openshellpb.SandboxPhase_SANDBOX_PHASE_READY {
@@ -488,12 +502,21 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			})
 			if err != nil {
 				r.logger.Error().Err(err).Str("sandbox", sbxName).Str("session_id", sessionID).Msg("failed to start runner exec")
+				failSession(fmt.Sprintf("failed to start runner exec: %v", err))
 				return
+			}
+
+			now := time.Now()
+			if _, err := sdk.Sessions().UpdateStatus(execCtx, sessionID, map[string]interface{}{
+				"phase":           PhaseCompleted,
+				"completion_time": &now,
+			}); err != nil {
+				r.logger.Warn().Err(err).Str("session_id", sessionID).Msg("failed to mark session completed")
 			}
 			r.logger.Info().
 				Str("sandbox", sbxName).
 				Str("session_id", sessionID).
-				Msg("runner exec stream started")
+				Msg("runner exec stream finished, session completed")
 			return
 		}
 	}

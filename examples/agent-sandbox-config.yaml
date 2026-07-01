@@ -28,10 +28,6 @@ data:
     name: github
     type: github
     secret: github-pat
-  anthropic: |
-    name: anthropic
-    type: anthropic
-    secret: anthropic-key
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -97,10 +93,13 @@ metadata:
     ambient.ai/kind: agent
 data:
   default: |
-    name: default
+    name: hello-world
+    display_name: Hello World
+    description: Tells claude to say "hello world", great for testing.
     entrypoint: claude
     providers:
       - vertex
+    prompt: "Say hello world"
   security-reviewer: |
     name: security-reviewer
     display_name: Security Reviewer
@@ -120,7 +119,7 @@ data:
           Focus on OWASP top-10 vulnerabilities.
           Always check for hardcoded secrets.
       - sandbox_path: /sandbox/workspace
-        repo_url: https://github.com/example-org/target-repo
+        repo_url: https://github.com/openshift-online/agent-control-plane
         ref: main
     environment:
       LOG_LEVEL: info
