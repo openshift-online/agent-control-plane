@@ -6,10 +6,10 @@
 # from ACP credential bindings.
 #
 # USAGE:
-#   ./scripts/setup-vertex-provider.sh [NAMESPACE] [VERTEX_KEY_FILE]
+#   ./scripts/setup-vertex-provider.sh [NAMESPACE] [VERTEX_CRED]
 #
 #   NAMESPACE       Target tenant namespace (default: tenant-a)
-#   VERTEX_KEY_FILE Path to GCP service account JSON key (default: ./vertex.json)
+#   VERTEX_CRED     Path to GCP service account JSON key (default: ./vertex.json)
 #
 # WHAT THIS DOES:
 #   1. Creates a K8s Secret (vertex-sa-key) with the SA JSON under a "token" key
@@ -38,16 +38,16 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 EXAMPLE_FILE="$REPO_ROOT/examples/agent-sandbox-config.yaml"
 
 NAMESPACE="${1:-tenant-a}"
-VERTEX_KEY_FILE="${2:-./vertex.json}"
+VERTEX_CRED="${2:-./vertex.json}"
 
 echo "=== Vertex Provider Setup ==="
 echo "  Namespace:  $NAMESPACE"
-echo "  Key file:   $VERTEX_KEY_FILE"
+echo "  Key file:   $VERTEX_CRED"
 echo "  Example:    $EXAMPLE_FILE"
 echo ""
 
-if [ ! -f "$VERTEX_KEY_FILE" ]; then
-    echo "Error: Vertex key file not found: $VERTEX_KEY_FILE"
+if [ ! -f "$VERTEX_CRED" ]; then
+    echo "Error: Vertex key file not found: $VERTEX_CRED"
     exit 1
 fi
 
@@ -70,7 +70,7 @@ fi
 # JWT → OAuth2 token exchange (Google SA keys don't work as raw bearer tokens).
 echo "Step 1/2: Creating vertex-sa-key Secret..."
 kubectl create secret generic vertex-sa-key \
-  --from-literal=token="$(cat "$VERTEX_KEY_FILE")" \
+  --from-literal=token="$(cat "$VERTEX_CRED")" \
   -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 echo "  Done"
 echo ""
