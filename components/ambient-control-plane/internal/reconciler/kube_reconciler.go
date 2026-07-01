@@ -335,7 +335,10 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	}
 
 	if err := r.configureInference(ctx, namespace, project.Name, session.LlmModel, credentialIDs); err != nil {
-		return fmt.Errorf("configuring inference: %w", err)
+		r.logger.Warn().Err(err).
+			Str("namespace", namespace).
+			Str("session_id", session.ID).
+			Msg("inference configuration failed; sandbox will be created without inference routing")
 	}
 
 	env := r.buildSandboxEnv(ctx, session, project.Name, sdk, providerNames)
@@ -540,7 +543,7 @@ func (r *SimpleKubeReconciler) ensureGatewayProviders(ctx context.Context, names
 			},
 			Type:        osType,
 			Credentials: openshell.ProviderCredentials(ambientProvider, tokenResp.Token),
-			Config:      openshell.ProviderConfig(ambientProvider),
+			Config:      openshell.ProviderConfig(ambientProvider, r.cfg.VertexProjectID, r.cfg.VertexRegion),
 		}
 
 		_, err = r.gateway.GetProvider(ctx, namespace, provName)
@@ -568,7 +571,10 @@ func (r *SimpleKubeReconciler) ensureGatewayProviders(ctx context.Context, names
 
 		if ambientProvider == "vertex" {
 			if err := r.ensureVertexCredentialRefresh(ctx, namespace, provName, tokenResp.Token); err != nil {
-				return nil, fmt.Errorf("configuring credential refresh for provider %s: %w", provName, err)
+				r.logger.Warn().Err(err).
+					Str("provider", provName).
+					Str("namespace", namespace).
+					Msg("vertex credential refresh setup failed; provider created without auto-refresh")
 			}
 		}
 

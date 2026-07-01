@@ -56,6 +56,7 @@ type ControlPlaneConfig struct {
 	OpenShellGatewayTLSEnabled      bool
 	OpenShellGatewayClientTLSSecret string
 	OpenShellGatewayTLSServerName   string
+	OpenShellGatewaySATokenPath     string
 	ServiceIdentity                 string
 	CACertFile                      string
 	AllowedSandboxRegistries        []string
@@ -111,6 +112,7 @@ func Load() (*ControlPlaneConfig, error) {
 		OpenShellGatewayTLSEnabled:      os.Getenv("OPENSHELL_GATEWAY_TLS") != "false",
 		OpenShellGatewayClientTLSSecret: envOrDefault("OPENSHELL_GATEWAY_CLIENT_TLS_SECRET", "openshell-client-tls"),
 		OpenShellGatewayTLSServerName:   os.Getenv("OPENSHELL_GATEWAY_TLS_SERVER_NAME"),
+		OpenShellGatewaySATokenPath:     envOrDefault("OPENSHELL_GATEWAY_SA_TOKEN_PATH", "/var/run/secrets/kubernetes.io/serviceaccount/token"),
 		ServiceIdentity:                 strings.TrimSpace(os.Getenv("GRPC_SERVICE_ACCOUNT")),
 		CACertFile:                      envOrDefault("CA_CERT_FILE", "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"),
 		AllowedSandboxRegistries:        parseAllowedRegistries(os.Getenv("ALLOWED_SANDBOX_REGISTRIES")),

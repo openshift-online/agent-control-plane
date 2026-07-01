@@ -229,7 +229,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 			resolveCred = openshell.InsecureResolver()
 			log.Info().Msg("OpenShell gateway TLS disabled (plaintext)")
 		}
-		gateway = openshell.NewGatewayClient(cfg.OpenShellGatewayServiceName, cfg.OpenShellGatewayGRPCPort, resolveCred, log.Logger)
+		gateway = openshell.NewGatewayClient(cfg.OpenShellGatewayServiceName, cfg.OpenShellGatewayGRPCPort, resolveCred, cfg.OpenShellGatewaySATokenPath, log.Logger)
 		defer func() {
 			if err := gateway.Close(); err != nil {
 				log.Warn().Err(err).Msg("failed to close gateway client")

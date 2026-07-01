@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 	"sync"
 
 	inferencepb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/inference/v1"
@@ -12,6 +14,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -23,17 +26,35 @@ type GatewayClient struct {
 	serviceName string
 	grpcPort    int
 	resolveCred CredentialResolver
+	saTokenPath string
 	logger      zerolog.Logger
 }
 
-func NewGatewayClient(serviceName string, grpcPort int, resolveCred CredentialResolver, logger zerolog.Logger) *GatewayClient {
+func NewGatewayClient(serviceName string, grpcPort int, resolveCred CredentialResolver, saTokenPath string, logger zerolog.Logger) *GatewayClient {
 	return &GatewayClient{
 		conns:       make(map[string]*grpc.ClientConn),
 		serviceName: serviceName,
 		grpcPort:    grpcPort,
 		resolveCred: resolveCred,
+		saTokenPath: saTokenPath,
 		logger:      logger.With().Str("component", "openshell-gateway").Logger(),
 	}
+}
+
+func (g *GatewayClient) authContext(ctx context.Context) context.Context {
+	if g.saTokenPath == "" {
+		return ctx
+	}
+	raw, err := os.ReadFile(g.saTokenPath)
+	if err != nil {
+		g.logger.Warn().Err(err).Str("path", g.saTokenPath).Msg("failed to read SA token file")
+		return ctx
+	}
+	token := strings.TrimSpace(string(raw))
+	if token == "" {
+		return ctx
+	}
+	return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token))
 }
 
 func (g *GatewayClient) clientForNamespace(ctx context.Context, namespace string) (pb.OpenShellClient, error) {
@@ -99,6 +120,7 @@ func (g *GatewayClient) shouldEvict(err error) bool {
 }
 
 func (g *GatewayClient) CreateSandbox(ctx context.Context, namespace string, req *pb.CreateSandboxRequest) (*pb.SandboxResponse, error) {
+	ctx = g.authContext(ctx)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -111,6 +133,7 @@ func (g *GatewayClient) CreateSandbox(ctx context.Context, namespace string, req
 }
 
 func (g *GatewayClient) GetSandbox(ctx context.Context, namespace string, name string) (*pb.SandboxResponse, error) {
+	ctx = g.authContext(ctx)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -123,6 +146,7 @@ func (g *GatewayClient) GetSandbox(ctx context.Context, namespace string, name s
 }
 
 func (g *GatewayClient) DeleteSandbox(ctx context.Context, namespace string, name string) error {
+	ctx = g.authContext(ctx)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return err
@@ -135,6 +159,7 @@ func (g *GatewayClient) DeleteSandbox(ctx context.Context, namespace string, nam
 }
 
 func (g *GatewayClient) CreateProvider(ctx context.Context, namespace string, req *pb.CreateProviderRequest) (*pb.ProviderResponse, error) {
+	ctx = g.authContext(ctx)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -147,6 +172,7 @@ func (g *GatewayClient) CreateProvider(ctx context.Context, namespace string, re
 }
 
 func (g *GatewayClient) UpdateProvider(ctx context.Context, namespace string, req *pb.UpdateProviderRequest) (*pb.ProviderResponse, error) {
+	ctx = g.authContext(ctx)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -159,6 +185,7 @@ func (g *GatewayClient) UpdateProvider(ctx context.Context, namespace string, re
 }
 
 func (g *GatewayClient) GetProvider(ctx context.Context, namespace string, name string) (*pb.ProviderResponse, error) {
+	ctx = g.authContext(ctx)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -177,6 +204,7 @@ type ExecResult struct {
 }
 
 func (g *GatewayClient) ExecSandbox(ctx context.Context, namespace string, req *pb.ExecSandboxRequest) (*ExecResult, error) {
+	ctx = g.authContext(ctx)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -219,6 +247,7 @@ func (g *GatewayClient) inferenceClientForNamespace(ctx context.Context, namespa
 }
 
 func (g *GatewayClient) SetClusterInference(ctx context.Context, namespace string, req *inferencepb.SetClusterInferenceRequest) (*inferencepb.SetClusterInferenceResponse, error) {
+	ctx = g.authContext(ctx)
 	client, err := g.inferenceClientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -231,6 +260,7 @@ func (g *GatewayClient) SetClusterInference(ctx context.Context, namespace strin
 }
 
 func (g *GatewayClient) ConfigureProviderRefresh(ctx context.Context, namespace string, req *pb.ConfigureProviderRefreshRequest) (*pb.ConfigureProviderRefreshResponse, error) {
+	ctx = g.authContext(ctx)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -243,6 +273,7 @@ func (g *GatewayClient) ConfigureProviderRefresh(ctx context.Context, namespace 
 }
 
 func (g *GatewayClient) RotateProviderCredential(ctx context.Context, namespace string, req *pb.RotateProviderCredentialRequest) (*pb.RotateProviderCredentialResponse, error) {
+	ctx = g.authContext(ctx)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -257,6 +288,7 @@ func (g *GatewayClient) RotateProviderCredential(ctx context.Context, namespace 
 const maxLogChunkSize = 512
 
 func (g *GatewayClient) ExecSandboxStreaming(ctx context.Context, namespace string, req *pb.ExecSandboxRequest) error {
+	ctx = g.authContext(ctx)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return err
@@ -304,6 +336,7 @@ func (g *GatewayClient) ExecSandboxStreaming(ctx context.Context, namespace stri
 }
 
 func (g *GatewayClient) UpdateConfig(ctx context.Context, namespace string, req *pb.UpdateConfigRequest) (*pb.UpdateConfigResponse, error) {
+	ctx = g.authContext(ctx)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err

@@ -295,6 +295,7 @@ func TestResolveSandboxImage_AllowedRegistry(t *testing.T) {
 	r := &SimpleKubeReconciler{
 		cfg: KubeReconcilerConfig{
 			RunnerImage:              "quay.io/ambient_code/ambient_runner_openshell:latest",
+			OpenShellRunnerImage:     "quay.io/ambient_code/ambient_runner_openshell:latest",
 			AllowedSandboxRegistries: []string{"quay.io/ambient_code/", "ghcr.io/nvidia/"},
 		},
 	}

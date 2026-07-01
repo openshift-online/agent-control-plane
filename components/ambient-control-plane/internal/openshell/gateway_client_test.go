@@ -3,6 +3,8 @@ package openshell
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 
@@ -10,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -28,7 +31,7 @@ func TestGatewayEndpoint(t *testing.T) {
 		{"gw", 9090, "prod-ns", "dns:///gw.prod-ns.svc.cluster.local:9090"},
 	}
 	for _, tt := range tests {
-		g := NewGatewayClient(tt.service, tt.port, nil, zerolog.Nop())
+		g := NewGatewayClient(tt.service, tt.port, nil, "", zerolog.Nop())
 		got := g.gatewayEndpoint(tt.namespace)
 		if got != tt.want {
 			t.Errorf("gatewayEndpoint(%q) = %q, want %q", tt.namespace, got, tt.want)
@@ -37,7 +40,7 @@ func TestGatewayEndpoint(t *testing.T) {
 }
 
 func TestShouldEvict(t *testing.T) {
-	g := NewGatewayClient("gw", 8443, nil, zerolog.Nop())
+	g := NewGatewayClient("gw", 8443, nil, "", zerolog.Nop())
 
 	tests := []struct {
 		name string
@@ -62,7 +65,7 @@ func TestShouldEvict(t *testing.T) {
 }
 
 func TestGetOrCreateConn_CacheHit(t *testing.T) {
-	g := NewGatewayClient("gw", 8443, insecureResolver, zerolog.Nop())
+	g := NewGatewayClient("gw", 8443, insecureResolver, "", zerolog.Nop())
 	t.Cleanup(func() { g.Close() })
 
 	ctx := context.Background()
@@ -91,7 +94,7 @@ func TestGetOrCreateConn_CredResolverError(t *testing.T) {
 	resolveErr := fmt.Errorf("vault is sealed")
 	g := NewGatewayClient("gw", 8443, func(_ context.Context, _ string) (credentials.TransportCredentials, error) {
 		return nil, resolveErr
-	}, zerolog.Nop())
+	}, "", zerolog.Nop())
 
 	_, err := g.getOrCreateConn(context.Background(), "ns-a")
 	if err == nil {
@@ -100,7 +103,7 @@ func TestGetOrCreateConn_CredResolverError(t *testing.T) {
 }
 
 func TestEvictConn(t *testing.T) {
-	g := NewGatewayClient("gw", 8443, insecureResolver, zerolog.Nop())
+	g := NewGatewayClient("gw", 8443, insecureResolver, "", zerolog.Nop())
 	t.Cleanup(func() { g.Close() })
 
 	ctx := context.Background()
@@ -127,7 +130,7 @@ func TestEvictConn(t *testing.T) {
 }
 
 func TestEvictConn_Noop(t *testing.T) {
-	g := NewGatewayClient("gw", 8443, nil, zerolog.Nop())
+	g := NewGatewayClient("gw", 8443, nil, "", zerolog.Nop())
 	g.evictConn("nonexistent")
 }
 
@@ -139,7 +142,7 @@ func TestGetOrCreateConn_ConcurrentSameNamespace(t *testing.T) {
 		calls++
 		mu.Unlock()
 		return insecure.NewCredentials(), nil
-	}, zerolog.Nop())
+	}, "", zerolog.Nop())
 	t.Cleanup(func() { g.Close() })
 
 	ctx := context.Background()
@@ -197,7 +200,7 @@ func TestSandboxName(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	g := NewGatewayClient("gw", 8443, insecureResolver, zerolog.Nop())
+	g := NewGatewayClient("gw", 8443, insecureResolver, "", zerolog.Nop())
 
 	ctx := context.Background()
 	for _, ns := range []string{"a", "b", "c"} {
@@ -215,5 +218,41 @@ func TestClose(t *testing.T) {
 	g.mu.RUnlock()
 	if remaining != 0 {
 		t.Errorf("after Close(), %d connections remain, want 0", remaining)
+	}
+}
+
+func TestAuthContext_NoPath(t *testing.T) {
+	g := NewGatewayClient("gw", 8443, nil, "", zerolog.Nop())
+	ctx := g.authContext(context.Background())
+	md, ok := metadata.FromOutgoingContext(ctx)
+	if ok && len(md.Get("authorization")) > 0 {
+		t.Error("expected no authorization metadata when saTokenPath is empty")
+	}
+}
+
+func TestAuthContext_ValidToken(t *testing.T) {
+	dir := t.TempDir()
+	tokenFile := filepath.Join(dir, "token")
+	if err := os.WriteFile(tokenFile, []byte("test-sa-token\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	g := NewGatewayClient("gw", 8443, nil, tokenFile, zerolog.Nop())
+	ctx := g.authContext(context.Background())
+	md, ok := metadata.FromOutgoingContext(ctx)
+	if !ok {
+		t.Fatal("expected outgoing metadata")
+	}
+	vals := md.Get("authorization")
+	if len(vals) != 1 || vals[0] != "Bearer test-sa-token" {
+		t.Errorf("authorization = %v, want [Bearer test-sa-token]", vals)
+	}
+}
+
+func TestAuthContext_MissingFile(t *testing.T) {
+	g := NewGatewayClient("gw", 8443, nil, "/nonexistent/path/token", zerolog.Nop())
+	ctx := g.authContext(context.Background())
+	md, ok := metadata.FromOutgoingContext(ctx)
+	if ok && len(md.Get("authorization")) > 0 {
+		t.Error("expected no authorization metadata when token file is missing")
 	}
 }

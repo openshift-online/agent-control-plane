@@ -3,7 +3,6 @@ package openshell
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 )
 
 var providerTypeMapping = map[string]string{
@@ -89,15 +88,15 @@ func ExtractServiceAccountJWTMaterial(saKeyJSON string) (*ServiceAccountJWTMater
 	}, nil
 }
 
-func ProviderConfig(ambientProvider string) map[string]string {
+func ProviderConfig(ambientProvider, vertexProjectID, vertexRegion string) map[string]string {
 	switch ambientProvider {
 	case "vertex":
 		cfg := map[string]string{}
-		if v := os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID"); v != "" {
-			cfg["VERTEX_AI_PROJECT_ID"] = v
+		if vertexProjectID != "" {
+			cfg["VERTEX_AI_PROJECT_ID"] = vertexProjectID
 		}
-		if v := os.Getenv("CLOUD_ML_REGION"); v != "" {
-			cfg["VERTEX_AI_REGION"] = v
+		if vertexRegion != "" {
+			cfg["VERTEX_AI_REGION"] = vertexRegion
 		}
 		return cfg
 	default:
