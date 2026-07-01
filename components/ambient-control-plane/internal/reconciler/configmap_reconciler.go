@@ -2,6 +2,8 @@ package reconciler
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,6 +35,7 @@ const (
 	annotationSource         = "ambient.ai/source"
 	annotationSourceCM       = "configmap"
 	annotationSourceNS       = "ambient.ai/source-namespace"
+	annotationContentHash    = "ambient.ai/content-hash"
 )
 
 var dnsLabelRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9\-]*[a-z0-9])?$`)
@@ -361,6 +364,44 @@ func (s *ConfigMapSyncer) buildOriginAnnotations(namespace string, userAnnotatio
 	return string(raw), nil
 }
 
+func computePatchHash(patch map[string]interface{}) string {
+	data, err := json.Marshal(patch)
+	if err != nil {
+		return ""
+	}
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:])
+}
+
+func extractContentHash(annotationsJSON string) string {
+	if annotationsJSON == "" {
+		return ""
+	}
+	var ann map[string]string
+	if err := json.Unmarshal([]byte(annotationsJSON), &ann); err != nil {
+		return ""
+	}
+	return ann[annotationContentHash]
+}
+
+func setPatchContentHash(patch map[string]interface{}, hash string) error {
+	annStr, ok := patch["annotations"].(string)
+	if !ok {
+		return fmt.Errorf("annotations field is not a string")
+	}
+	var ann map[string]string
+	if err := json.Unmarshal([]byte(annStr), &ann); err != nil {
+		return fmt.Errorf("parsing annotations: %w", err)
+	}
+	ann[annotationContentHash] = hash
+	data, err := json.Marshal(ann)
+	if err != nil {
+		return fmt.Errorf("marshalling annotations: %w", err)
+	}
+	patch["annotations"] = string(data)
+	return nil
+}
+
 func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client, projectID, namespace string, decl *AgentDeclaration, storedUID string) (string, error) {
 	var existing *resourceRef
 	if storedUID != "" {
@@ -422,7 +463,16 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 		patch["labels"] = string(labelsJSON)
 	}
 
+	hash := computePatchHash(patch)
+
 	if existing != nil {
+		if extractContentHash(existing.Annotations) == hash {
+			s.logger.Debug().Str("agent", decl.Name).Str("id", existing.ID).Msg("agent unchanged, skipping update")
+			return existing.ID, nil
+		}
+		if err := setPatchContentHash(patch, hash); err != nil {
+			return "", fmt.Errorf("setting content hash for agent %s: %w", decl.Name, err)
+		}
 		if err := s.patchAPI(ctx, projectID, "agents", existing.ID, patch); err != nil {
 			return "", fmt.Errorf("updating agent %s: %w", decl.Name, err)
 		}
@@ -441,6 +491,9 @@ func (s *ConfigMapSyncer) upsertAgent(ctx context.Context, sdk *sdkclient.Client
 	created, err := sdk.Agents().Create(ctx, agent)
 	if err != nil {
 		return "", fmt.Errorf("creating agent %s: %w", decl.Name, err)
+	}
+	if err := setPatchContentHash(patch, hash); err != nil {
+		return "", fmt.Errorf("setting content hash for agent %s: %w", decl.Name, err)
 	}
 	if err := s.patchAPI(ctx, projectID, "agents", created.ID, patch); err != nil {
 		return "", fmt.Errorf("updating newly created agent %s: %w", decl.Name, err)
@@ -604,7 +657,16 @@ func (s *ConfigMapSyncer) upsertProvider(ctx context.Context, sdk *sdkclient.Cli
 		patch["secret"] = decl.Secret
 	}
 
+	hash := computePatchHash(patch)
+
 	if existing != nil {
+		if extractContentHash(existing.Annotations) == hash {
+			s.logger.Debug().Str("provider", decl.Name).Str("id", existing.ID).Msg("provider unchanged, skipping update")
+			return existing.ID, nil
+		}
+		if err := setPatchContentHash(patch, hash); err != nil {
+			return "", fmt.Errorf("setting content hash for provider %s: %w", decl.Name, err)
+		}
 		if err := s.patchAPI(ctx, projectID, "providers", existing.ID, patch); err != nil {
 			return "", fmt.Errorf("updating provider %s: %w", decl.Name, err)
 		}
@@ -624,6 +686,9 @@ func (s *ConfigMapSyncer) upsertProvider(ctx context.Context, sdk *sdkclient.Cli
 	created, createErr := sdk.Providers().Create(ctx, provider)
 	if createErr != nil {
 		return "", fmt.Errorf("creating provider %s: %w", decl.Name, createErr)
+	}
+	if err := setPatchContentHash(patch, hash); err != nil {
+		return "", fmt.Errorf("setting content hash for provider %s: %w", decl.Name, err)
 	}
 	if err := s.patchAPI(ctx, projectID, "providers", created.ID, patch); err != nil {
 		return "", fmt.Errorf("updating newly created provider %s: %w", decl.Name, err)
@@ -787,7 +852,16 @@ func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Clien
 		"spec":        spec,
 	}
 
+	hash := computePatchHash(patch)
+
 	if existing != nil {
+		if extractContentHash(existing.Annotations) == hash {
+			s.logger.Debug().Str("policy", name).Str("id", existing.ID).Msg("policy unchanged, skipping update")
+			return existing.ID, nil
+		}
+		if err := setPatchContentHash(patch, hash); err != nil {
+			return "", fmt.Errorf("setting content hash for policy %s: %w", name, err)
+		}
 		if err := s.patchAPI(ctx, projectID, "policies", existing.ID, patch); err != nil {
 			return "", fmt.Errorf("updating policy %s: %w", name, err)
 		}
@@ -807,6 +881,9 @@ func (s *ConfigMapSyncer) upsertPolicy(ctx context.Context, sdk *sdkclient.Clien
 	created, createErr := sdk.Policys().Create(ctx, policy)
 	if createErr != nil {
 		return "", fmt.Errorf("creating policy %s: %w", name, createErr)
+	}
+	if err := setPatchContentHash(patch, hash); err != nil {
+		return "", fmt.Errorf("setting content hash for policy %s: %w", name, err)
 	}
 	if err := s.patchAPI(ctx, projectID, "policies", created.ID, patch); err != nil {
 		return "", fmt.Errorf("updating newly created policy %s: %w", name, err)
