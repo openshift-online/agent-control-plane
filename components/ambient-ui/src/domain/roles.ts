@@ -35,3 +35,46 @@ export function getDisplayRole(roleName: string): string {
   const label = parts[parts.length - 1] ?? roleName
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
+
+// Gateway mode tier classification (per gateway-rbac-policy.spec.md)
+export function isViewerTier(roleName: string | null): boolean {
+  if (!roleName) return true
+
+  const viewerRoles: RoleNameValue[] = [
+    RoleName.ProjectViewer,
+    RoleName.AgentObserver,
+    RoleName.PlatformViewer,
+    RoleName.CredentialViewer,
+  ]
+
+  return viewerRoles.includes(roleName as RoleNameValue)
+}
+
+export function isEditorTier(roleName: string | null): boolean {
+  if (!roleName) return false
+
+  const editorRoles: RoleNameValue[] = [RoleName.ProjectEditor, RoleName.AgentOperator]
+
+  return editorRoles.includes(roleName as RoleNameValue)
+}
+
+export function isAdminTier(roleName: string | null): boolean {
+  if (!roleName) return false
+
+  const adminRoles: RoleNameValue[] = [RoleName.PlatformAdmin, RoleName.ProjectOwner]
+
+  return adminRoles.includes(roleName as RoleNameValue)
+}
+
+// Capability checks
+export function canStartSession(roleName: string | null): boolean {
+  return isAdminTier(roleName) || isEditorTier(roleName)
+}
+
+export function canManageSchedules(roleName: string | null): boolean {
+  return isAdminTier(roleName) || isEditorTier(roleName)
+}
+
+export function canManageAgents(gatewayMode: boolean): boolean {
+  return !gatewayMode // Nobody can manage agents via UI when gateway mode active
+}

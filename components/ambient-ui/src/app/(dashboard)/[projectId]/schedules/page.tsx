@@ -18,6 +18,9 @@ import type { DomainScheduledSession } from '@/domain/types'
 import { SchedulesTable } from './_components/schedules-table'
 import { CreateScheduleSheet } from './_components/create-schedule-sheet'
 import { RunsDialog } from './_components/runs-dialog'
+import { useGatewayMode } from '@/lib/use-gateway-mode'
+import { useCurrentUserRole } from '@/hooks/use-current-user-role'
+import { canManageSchedules } from '@/domain/roles'
 
 export default function SchedulesPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -32,7 +35,11 @@ export default function SchedulesPage() {
   const [editTarget, setEditTarget] = useState<DomainScheduledSession | null>(null)
   const [runsTarget, setRunsTarget] = useState<DomainScheduledSession | null>(null)
 
+  const { enabled: gatewayMode } = useGatewayMode()
+  const { roleName } = useCurrentUserRole(projectId)
+
   const schedules = data?.items ?? []
+  const showScheduleControls = !gatewayMode || canManageSchedules(roleName)
 
   function handleDelete(id: string) {
     deleteMutation.mutate(
@@ -99,10 +106,12 @@ export default function SchedulesPage() {
         <p className="text-sm text-muted-foreground max-w-sm text-center">
           Schedules automatically trigger agent sessions on a recurring cron schedule.
         </p>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Schedule
-        </Button>
+        {showScheduleControls && (
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Schedule
+          </Button>
+        )}
         <CreateScheduleSheet open={createOpen} onOpenChange={setCreateOpen} />
       </div>
     )
@@ -119,21 +128,23 @@ export default function SchedulesPage() {
             onChange={e => setSearch(e.target.value)}
             className="w-64"
           />
-          <Button onClick={() => { setEditTarget(null); setCreateOpen(true) }}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Schedule
-          </Button>
+          {showScheduleControls && (
+            <Button onClick={() => { setEditTarget(null); setCreateOpen(true) }}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Schedule
+            </Button>
+          )}
         </div>
       </div>
 
       <SchedulesTable
         schedules={schedules}
         searchFilter={search}
-        onEdit={schedule => { setEditTarget(schedule); setCreateOpen(true) }}
-        onDelete={handleDelete}
-        onSuspend={handleSuspend}
-        onResume={handleResume}
-        onTrigger={handleTrigger}
+        onEdit={showScheduleControls ? (schedule => { setEditTarget(schedule); setCreateOpen(true) }) : () => {}}
+        onDelete={showScheduleControls ? handleDelete : () => {}}
+        onSuspend={showScheduleControls ? handleSuspend : () => {}}
+        onResume={showScheduleControls ? handleResume : () => {}}
+        onTrigger={showScheduleControls ? handleTrigger : () => {}}
         onViewRuns={schedule => setRunsTarget(schedule)}
       />
 

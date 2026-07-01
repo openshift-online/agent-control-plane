@@ -28,6 +28,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { useGatewayMode } from '@/lib/use-gateway-mode'
+import { useCurrentUserRole } from '@/hooks/use-current-user-role'
+import { canStartSession } from '@/domain/roles'
 
 const STOPPABLE_PHASES = new Set(['Running', 'Pending', 'Creating'])
 const RESTARTABLE_PHASES = new Set(['Completed', 'Failed', 'Stopped'])
@@ -45,9 +48,14 @@ export function SessionHeader({ session }: { session: DomainSession }) {
   const deleteSession = useDeleteSession()
   const sendFeedback = useSendFeedback()
 
+  const { enabled: gatewayMode } = useGatewayMode()
+  const { roleName } = useCurrentUserRole(projectId)
+
   const preview = getPreviewAnnotations(session.annotations)
   const canStop = STOPPABLE_PHASES.has(session.phase)
   const canRestart = RESTARTABLE_PHASES.has(session.phase)
+
+  const showStartButton = !gatewayMode || canStartSession(roleName)
 
   const handleConfirmStop = useCallback(() => {
     stopSession.mutate(session.id, {
@@ -134,7 +142,7 @@ export function SessionHeader({ session }: { session: DomainSession }) {
                 </Button>
               )}
 
-              {canRestart && (
+              {canRestart && showStartButton && (
                 <Button
                   variant="outline"
                   size="sm"

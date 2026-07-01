@@ -1,9 +1,12 @@
 package scheduledSessions
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/gateway"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 	"github.com/gorilla/mux"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
@@ -18,6 +21,30 @@ type scheduledSessionHandler struct {
 
 func NewScheduledSessionHandler(svc ScheduledSessionService, sessionSvc sessions.SessionService) *scheduledSessionHandler {
 	return &scheduledSessionHandler{svc: svc, sessionSvc: sessionSvc}
+}
+
+// checkTierForMutation returns ServiceError if caller's tier is insufficient
+// for schedule mutations in gateway mode. Returns nil otherwise.
+func checkTierForMutation(ctx context.Context, projectID string) *errors.ServiceError {
+	if !gateway.IsGatewayModeActive() {
+		return nil
+	}
+
+	username := auth.GetUsernameFromContext(ctx)
+	tier := gateway.GetTierResolver().ResolveTier(ctx, username, projectID)
+
+	// ACP internal role fallback
+	if tier == gateway.TierNone {
+		authResult := rbac.GetAuthResult(ctx)
+		if authResult != nil && authResult.IsGlobalAdmin {
+			return nil
+		}
+	}
+
+	if tier == gateway.TierViewer || tier == gateway.TierNone {
+		return errors.Forbidden("Schedule management requires Editor or Admin tier access")
+	}
+	return nil
 }
 
 // List — GET /api/ambient/v1/projects/{project_id}/scheduled-sessions
@@ -84,6 +111,13 @@ type scheduledSessionCreateRequest struct {
 // Create — POST /api/ambient/v1/projects/{project_id}/scheduled-sessions
 func (h *scheduledSessionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	projectId := mux.Vars(r)["project_id"]
+
+	// Gateway mode tier check
+	if err := checkTierForMutation(r.Context(), projectId); err != nil {
+		handlers.HandleError(r.Context(), w, err)
+		return
+	}
+
 	var body scheduledSessionCreateRequest
 	cfg := &handlers.HandlerConfig{
 		Body: &body,
@@ -138,6 +172,14 @@ func (h *scheduledSessionHandler) Create(w http.ResponseWriter, r *http.Request)
 
 // Patch — PATCH /api/ambient/v1/projects/{project_id}/scheduled-sessions/{id}
 func (h *scheduledSessionHandler) Patch(w http.ResponseWriter, r *http.Request) {
+	projectId := mux.Vars(r)["project_id"]
+
+	// Gateway mode tier check
+	if err := checkTierForMutation(r.Context(), projectId); err != nil {
+		handlers.HandleError(r.Context(), w, err)
+		return
+	}
+
 	var body openapi.ScheduledSessionPatchRequest
 	cfg := &handlers.HandlerConfig{
 		Body:       &body,
@@ -171,6 +213,14 @@ func (h *scheduledSessionHandler) Patch(w http.ResponseWriter, r *http.Request) 
 
 // Delete — DELETE /api/ambient/v1/projects/{project_id}/scheduled-sessions/{id}
 func (h *scheduledSessionHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	projectId := mux.Vars(r)["project_id"]
+
+	// Gateway mode tier check
+	if err := checkTierForMutation(r.Context(), projectId); err != nil {
+		handlers.HandleError(r.Context(), w, err)
+		return
+	}
+
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
 			id := mux.Vars(r)["id"]
@@ -185,6 +235,14 @@ func (h *scheduledSessionHandler) Delete(w http.ResponseWriter, r *http.Request)
 
 // Suspend — POST /api/ambient/v1/projects/{project_id}/scheduled-sessions/{id}/suspend
 func (h *scheduledSessionHandler) Suspend(w http.ResponseWriter, r *http.Request) {
+	projectId := mux.Vars(r)["project_id"]
+
+	// Gateway mode tier check
+	if err := checkTierForMutation(r.Context(), projectId); err != nil {
+		handlers.HandleError(r.Context(), w, err)
+		return
+	}
+
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
 			id := mux.Vars(r)["id"]
@@ -200,6 +258,14 @@ func (h *scheduledSessionHandler) Suspend(w http.ResponseWriter, r *http.Request
 
 // Resume — POST /api/ambient/v1/projects/{project_id}/scheduled-sessions/{id}/resume
 func (h *scheduledSessionHandler) Resume(w http.ResponseWriter, r *http.Request) {
+	projectId := mux.Vars(r)["project_id"]
+
+	// Gateway mode tier check
+	if err := checkTierForMutation(r.Context(), projectId); err != nil {
+		handlers.HandleError(r.Context(), w, err)
+		return
+	}
+
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
 			id := mux.Vars(r)["id"]
@@ -215,6 +281,14 @@ func (h *scheduledSessionHandler) Resume(w http.ResponseWriter, r *http.Request)
 
 // Trigger — POST /api/ambient/v1/projects/{project_id}/scheduled-sessions/{id}/trigger
 func (h *scheduledSessionHandler) Trigger(w http.ResponseWriter, r *http.Request) {
+	projectId := mux.Vars(r)["project_id"]
+
+	// Gateway mode tier check
+	if err := checkTierForMutation(r.Context(), projectId); err != nil {
+		handlers.HandleError(r.Context(), w, err)
+		return
+	}
+
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
 			id := mux.Vars(r)["id"]

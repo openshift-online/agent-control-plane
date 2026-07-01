@@ -40,7 +40,7 @@ export function CreateAgentSheet({
   const router = useRouter()
   const { projectId } = useParams<{ projectId: string }>()
   const createAgent = useCreateAgent()
-  const gatewayMode = useGatewayMode()
+  const { enabled: gatewayMode } = useGatewayMode()
 
   const [name, setName] = useState('')
   const [displayName, setDisplayName] = useState('')

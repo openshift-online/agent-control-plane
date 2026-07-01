@@ -12,13 +12,16 @@ import { AgentsTable } from './_components/agents-table'
 import { CreateAgentSheet } from './_components/create-agent-sheet'
 import { ConfigMapSummaryBar } from './_components/configmap-summary-bar'
 import { useGatewayMode } from '@/lib/use-gateway-mode'
+import { canManageAgents } from '@/domain/roles'
 
 export default function AgentsPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const [search, setSearch] = useState('')
   const [createSheetOpen, setCreateSheetOpen] = useState(false)
   const { data, isLoading, error } = useAgents(projectId)
-  const gatewayMode = useGatewayMode()
+  const { enabled: gatewayMode, isLoading: gatewayLoading } = useGatewayMode()
+
+  const showAgentControls = !gatewayLoading && canManageAgents(gatewayMode)
 
   if (error) {
     return (
@@ -50,10 +53,12 @@ export default function AgentsPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
-          <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
-            <Plus className="size-4" />
-            {gatewayMode ? 'Generate Agent YAML' : 'New Agent'}
-          </Button>
+          {showAgentControls && (
+            <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
+              <Plus className="size-4" />
+              {gatewayMode ? 'Generate Agent YAML' : 'New Agent'}
+            </Button>
+          )}
         </div>
         <EmptyState
           icon={Bot}
@@ -62,10 +67,12 @@ export default function AgentsPage() {
             ? 'No agents have been declared via GitOps yet.'
             : 'This project has no agents yet.'}
           action={
-            <Button onClick={() => setCreateSheetOpen(true)}>
-              <Plus className="size-4 mr-1.5" />
-              {gatewayMode ? 'Generate Agent YAML' : 'Create Agent'}
-            </Button>
+            showAgentControls ? (
+              <Button onClick={() => setCreateSheetOpen(true)}>
+                <Plus className="size-4 mr-1.5" />
+                {gatewayMode ? 'Generate Agent YAML' : 'Create Agent'}
+              </Button>
+            ) : undefined
           }
         />
         <CreateAgentSheet open={createSheetOpen} onOpenChange={setCreateSheetOpen} />
@@ -85,10 +92,12 @@ export default function AgentsPage() {
             className="w-80"
           />
         </div>
-        <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
-          <Plus className="size-4" />
-          {gatewayMode ? 'Generate Agent YAML' : 'New Agent'}
-        </Button>
+        {showAgentControls && (
+          <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
+            <Plus className="size-4" />
+            {gatewayMode ? 'Generate Agent YAML' : 'New Agent'}
+          </Button>
+        )}
       </div>
       {gatewayMode && <ConfigMapSummaryBar projectId={projectId} />}
       <AgentsTable

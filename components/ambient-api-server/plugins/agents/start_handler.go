@@ -13,6 +13,8 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/gateway"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/ambient-code/platform/components/ambient-api-server/plugins/inbox"
 	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
@@ -52,6 +54,26 @@ func (h *startHandler) Start(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	projectID := mux.Vars(r)["id"]
 	agentID := mux.Vars(r)["agent_id"]
+
+	// Gateway mode tier check
+	if gateway.IsGatewayModeActive() {
+		username := auth.GetUsernameFromContext(ctx)
+		tier := gateway.GetTierResolver().ResolveTier(ctx, username, projectID)
+
+		// Fallback to ACP internal roles if K8s tier is None
+		if tier == gateway.TierNone {
+			authResult := rbac.GetAuthResult(ctx)
+			if authResult != nil && authResult.IsGlobalAdmin {
+				tier = gateway.TierAdmin // platform:admin bypasses
+			}
+		}
+
+		if tier == gateway.TierViewer || tier == gateway.TierNone {
+			handlers.HandleError(ctx, w, pkgerrors.Forbidden(
+				"Session creation requires Editor or Admin tier access"))
+			return
+		}
+	}
 
 	mu := &sync.Mutex{}
 	if existing, loaded := h.locks.LoadOrStore(agentID, mu); loaded {

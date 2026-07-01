@@ -307,7 +307,7 @@ export function AgentManifestTab({
   agent: DomainAgent;
   lifecycle: AgentLifecycle;
 }) {
-  const gatewayMode = useGatewayMode();
+  const { enabled: gatewayMode } = useGatewayMode();
 
   if (gatewayMode) {
     return <GatewayManifestTab agent={agent} />;

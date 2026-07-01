@@ -124,7 +124,7 @@ export function AppSidebar({ projectId, effectiveProjectId }: AppSidebarProps) {
   const pathname = usePathname()
   const { theme, setTheme } = useTheme()
   const { data: sessionsData } = useSessions(effectiveProjectId ?? '', undefined)
-  const gatewayMode = useGatewayMode()
+  const { enabled: gatewayMode } = useGatewayMode()
 
   const operateBadges = (() => {
     if (!sessionsData?.items) return undefined
