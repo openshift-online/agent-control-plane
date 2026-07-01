@@ -49,19 +49,38 @@ func IsInferenceCapable(ambientProvider string) bool {
 	return inferenceCapableTypes[osType]
 }
 
-// ProviderCredentials maps an ACP credential token to the OpenShell credential
-// key names expected by each provider type's profile.
+// knownProviderCredentialKey maps known provider types to the single credential
+// key name expected by the OpenShell provider profile. For these types, the
+// secret must have a "token" key whose value is mapped to the standard name.
+var knownProviderCredentialKey = map[string]string{
+	"vertex":    "GOOGLE_SERVICE_ACCOUNT_KEY",
+	"anthropic": "ANTHROPIC_API_KEY",
+	"claude":    "ANTHROPIC_API_KEY",
+	"github":    "GITHUB_TOKEN",
+}
+
+// ProviderCredentials maps a single token to the credential key expected by
+// the OpenShell provider profile for known types. Used by the credential-based
+// (non-gateway) provider path.
 func ProviderCredentials(ambientProvider, token string) map[string]string {
-	switch ambientProvider {
-	case "vertex":
-		return map[string]string{"GOOGLE_SERVICE_ACCOUNT_KEY": token}
-	case "anthropic", "claude":
-		return map[string]string{"ANTHROPIC_API_KEY": token}
-	case "github":
-		return map[string]string{"GITHUB_TOKEN": token}
-	default:
-		return map[string]string{"token": token}
+	if credKey, ok := knownProviderCredentialKey[ambientProvider]; ok {
+		return map[string]string{credKey: token}
 	}
+	return map[string]string{"token": token}
+}
+
+// ProviderCredentialsFromSecret builds the credential map for an OpenShell
+// provider. For known types (vertex, github, anthropic), it reads the "token"
+// key from the secret and maps it to the standard credential name. For unknown
+// types, all secret keys are passed through as-is — the secret key names become
+// the env var names in the sandbox.
+func ProviderCredentialsFromSecret(ambientProvider string, secretData map[string]string) map[string]string {
+	if credKey, ok := knownProviderCredentialKey[ambientProvider]; ok {
+		if token, has := secretData["token"]; has {
+			return map[string]string{credKey: token}
+		}
+	}
+	return secretData
 }
 
 const VertexAIRefreshCredentialKey = "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_TOKEN"

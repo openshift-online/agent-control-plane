@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { DomainSession, SessionPhase } from '@/domain/types'
 import { cn } from '@/lib/utils'
 import { formatAbsoluteTime } from '@/lib/format-timestamp'
+import { CopyableValue } from './copyable-value'
 import { MetaRow, NoValue } from './meta-row'
 
 const LIFECYCLE: SessionPhase[] = ['Pending', 'Creating', 'Running']
@@ -90,7 +91,7 @@ export function OverviewTab({ session }: { session: DomainSession }) {
         </CardHeader>
         <CardContent>
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">
-            <MetaRow label="Session ID" value={session.id} mono />
+            <MetaRow label="Session ID" value={<CopyableValue value={session.id.toLowerCase()} />} />
             <MetaRow label="Project" value={session.projectId ?? <NoValue />} />
             <MetaRow label="Agent" value={session.agentName ?? session.agentId ?? <NoValue />} />
             <MetaRow label="Created" value={formatAbsoluteTime(session.createdAt)} />

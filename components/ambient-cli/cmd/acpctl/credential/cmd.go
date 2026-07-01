@@ -469,10 +469,7 @@ func resolveCredential(ctx context.Context, client *sdkclient.Client, nameOrID s
 	opts := sdktypes.NewListOptions().Size(10).Build()
 	opts.Search = fmt.Sprintf("name = '%s'", nameOrID)
 	list, err := client.Credentials().List(ctx, opts)
-	if err != nil {
-		return "", "", fmt.Errorf("look up credential %q: %w", nameOrID, err)
-	}
-	if list.Total > 0 {
+	if err == nil && list.Total > 0 {
 		return list.Items[0].ID, list.Items[0].Name, nil
 	}
 

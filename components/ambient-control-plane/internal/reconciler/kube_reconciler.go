@@ -730,7 +730,7 @@ func (r *SimpleKubeReconciler) resolveAgentProviders(
 			provType = declName
 		}
 
-		token, readErr := r.readProviderSecretToken(ctx, namespace, provDecl.Secret)
+		secretCreds, readErr := r.readProviderSecretCredentials(ctx, namespace, provDecl.Secret)
 		if readErr != nil {
 			return nil, nil, fmt.Errorf("reading secret %s for provider %s: %w", provDecl.Secret, declName, readErr)
 		}
@@ -738,32 +738,35 @@ func (r *SimpleKubeReconciler) resolveAgentProviders(
 		osType := openshell.OpenShellProviderType(provType)
 		osName := openshell.ProviderName(projectName, declName)
 
+		credentials := openshell.ProviderCredentialsFromSecret(provType, secretCreds)
+
 		providerData := &datapb.Provider{
 			Metadata:    &datapb.ObjectMeta{Name: osName},
 			Type:        osType,
-			Credentials: openshell.ProviderCredentials(provType, token),
-			Config:      openshell.ProviderConfig(provType, "", ""),
+			Credentials: credentials,
+			Config:      openshell.ProviderConfig(provType, r.cfg.VertexProjectID, r.cfg.VertexRegion),
 		}
 
-		_, getErr := r.gateway.GetProvider(ctx, namespace, osName)
-		if getErr == nil {
-			if _, updErr := r.gateway.UpdateProvider(ctx, namespace, &openshellpb.UpdateProviderRequest{Provider: providerData}); updErr != nil {
-				return nil, nil, fmt.Errorf("updating provider %s: %w", osName, updErr)
-			}
+		_, updErr := r.gateway.UpdateProvider(ctx, namespace, &openshellpb.UpdateProviderRequest{Provider: providerData})
+		if updErr == nil {
 			r.logger.Info().Str("provider", osName).Str("type", osType).Msg("gateway provider updated from declaration")
-		} else if st, ok := status.FromError(getErr); ok && st.Code() == codes.NotFound {
+		} else if st, ok := status.FromError(updErr); ok && st.Code() == codes.NotFound {
 			if _, crErr := r.gateway.CreateProvider(ctx, namespace, &openshellpb.CreateProviderRequest{Provider: providerData}); crErr != nil {
 				return nil, nil, fmt.Errorf("creating provider %s: %w", osName, crErr)
 			}
 			r.logger.Info().Str("provider", osName).Str("type", osType).Msg("gateway provider created from declaration")
 		} else {
-			return nil, nil, fmt.Errorf("checking provider %s: %w", osName, getErr)
+			return nil, nil, fmt.Errorf("updating provider %s: %w", osName, updErr)
 		}
 
 		// Vertex uses short-lived access tokens; configure the gateway to auto-rotate
 		// them using the SA private key (JWT → OAuth2 token exchange).
 		if provType == "vertex" {
-			if refreshErr := r.ensureVertexCredentialRefresh(ctx, namespace, osName, token); refreshErr != nil {
+			saKey := secretCreds["token"]
+			if saKey == "" {
+				return nil, nil, fmt.Errorf("vertex provider %s: secret %s must have a 'token' key with the SA JSON", declName, provDecl.Secret)
+			}
+			if refreshErr := r.ensureVertexCredentialRefresh(ctx, namespace, osName, saKey); refreshErr != nil {
 				return nil, nil, fmt.Errorf("configuring credential refresh for provider %s: %w", osName, refreshErr)
 			}
 		}
@@ -782,26 +785,38 @@ func (r *SimpleKubeReconciler) resolveAgentProviders(
 	return providerNames, inferenceProviders, nil
 }
 
-func (r *SimpleKubeReconciler) readProviderSecretToken(ctx context.Context, namespace, secretName string) (string, error) {
+func (r *SimpleKubeReconciler) readProviderSecretCredentials(ctx context.Context, namespace, secretName string) (map[string]string, error) {
 	secret, err := r.kube.GetSecret(ctx, namespace, secretName)
 	if err != nil {
-		return "", fmt.Errorf("getting secret %s/%s: %w", namespace, secretName, err)
+		return nil, fmt.Errorf("getting secret %s/%s: %w", namespace, secretName, err)
 	}
 
-	encodedStr, found, err := unstructured.NestedString(secret.Object, "data", "token")
+	dataField, found, err := unstructured.NestedMap(secret.Object, "data")
 	if err != nil {
-		return "", fmt.Errorf("reading token from %s/%s: %w", namespace, secretName, err)
+		return nil, fmt.Errorf("reading data from %s/%s: %w", namespace, secretName, err)
 	}
-	if !found || encodedStr == "" {
-		return "", fmt.Errorf("secret %s/%s has no 'token' key", namespace, secretName)
-	}
-
-	decoded, err := base64.StdEncoding.DecodeString(encodedStr)
-	if err != nil {
-		return "", fmt.Errorf("base64-decoding token from %s/%s: %w", namespace, secretName, err)
+	if !found || len(dataField) == 0 {
+		return nil, fmt.Errorf("secret %s/%s has no data", namespace, secretName)
 	}
 
-	return string(decoded), nil
+	creds := make(map[string]string, len(dataField))
+	for key, val := range dataField {
+		encodedStr, ok := val.(string)
+		if !ok {
+			continue
+		}
+		decoded, decErr := base64.StdEncoding.DecodeString(encodedStr)
+		if decErr != nil {
+			return nil, fmt.Errorf("base64-decoding key %q from %s/%s: %w", key, namespace, secretName, decErr)
+		}
+		creds[key] = string(decoded)
+	}
+
+	if len(creds) == 0 {
+		return nil, fmt.Errorf("secret %s/%s has no decodable keys", namespace, secretName)
+	}
+
+	return creds, nil
 }
 
 func (r *SimpleKubeReconciler) configureInferenceFromProviders(ctx context.Context, namespace, sessionModel string, inferenceProviders map[string]string) error {
