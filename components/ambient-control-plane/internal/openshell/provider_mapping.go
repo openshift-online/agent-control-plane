@@ -101,7 +101,20 @@ func ProviderCredentials(ambientProvider, token string) map[string]string {
 // key from the secret and maps it to the standard credential name. For unknown
 // types, all secret keys are passed through as-is — the secret key names become
 // the env var names in the sandbox.
+//
+// Vertex is special: SA keys are set as GOOGLE_SERVICE_ACCOUNT_KEY (the gateway
+// strips the raw key after configuring refresh). ADC credentials are NOT set as
+// initial credentials — the refresh flow mints the first access token.
 func ProviderCredentialsFromSecret(ambientProvider string, secretData map[string]string) map[string]string {
+	if ambientProvider == "vertex" {
+		if token, has := secretData["token"]; has {
+			credType, err := DetectGoogleCredentialType(token)
+			if err == nil && credType == GoogleCredentialAuthorizedUser {
+				return map[string]string{}
+			}
+			return map[string]string{"GOOGLE_SERVICE_ACCOUNT_KEY": token}
+		}
+	}
 	if credKey, ok := knownProviderCredentialKey[ambientProvider]; ok {
 		if token, has := secretData["token"]; has {
 			return map[string]string{credKey: token}
@@ -110,7 +123,16 @@ func ProviderCredentialsFromSecret(ambientProvider string, secretData map[string
 	return secretData
 }
 
-const VertexAIRefreshCredentialKey = "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_TOKEN"
+// VertexRefreshCredentialKey returns the credential key where rotated access
+// tokens are stored, based on the Google credential type.
+// SA keys → GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_TOKEN
+// ADC      → GOOGLE_VERTEX_AI_TOKEN
+func VertexRefreshCredentialKey(credType GoogleCredentialType) string {
+	if credType == GoogleCredentialAuthorizedUser {
+		return "GOOGLE_VERTEX_AI_TOKEN"
+	}
+	return "GOOGLE_VERTEX_AI_SERVICE_ACCOUNT_TOKEN"
+}
 
 type GoogleCredentialType int
 

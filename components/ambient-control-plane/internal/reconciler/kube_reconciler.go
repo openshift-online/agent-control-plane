@@ -547,7 +547,7 @@ func (r *SimpleKubeReconciler) ensureVertexCredentialRefresh(ctx context.Context
 		return fmt.Errorf("detecting credential type: %w", err)
 	}
 
-	credKey := openshell.VertexAIRefreshCredentialKey
+	credKey := openshell.VertexRefreshCredentialKey(credType)
 	var refreshReq *openshellpb.ConfigureProviderRefreshRequest
 
 	switch credType {
@@ -696,13 +696,13 @@ func (r *SimpleKubeReconciler) resolveAgentProviders(
 		}
 
 		// Vertex uses short-lived access tokens; configure the gateway to auto-rotate
-		// them using the SA private key (JWT → OAuth2 token exchange).
+		// them. SA keys use JWT → OAuth2 token exchange, ADC uses OAuth2 refresh tokens.
 		if provType == "vertex" {
-			saKey := secretCreds["token"]
-			if saKey == "" {
-				return nil, nil, fmt.Errorf("vertex provider %s: secret %s must have a 'token' key with the SA JSON", declName, provDecl.Secret)
+			credJSON := secretCreds["token"]
+			if credJSON == "" {
+				return nil, nil, fmt.Errorf("vertex provider %s: secret %s must have a 'token' key with the credential JSON", declName, provDecl.Secret)
 			}
-			if refreshErr := r.ensureVertexCredentialRefresh(ctx, namespace, osName, saKey); refreshErr != nil {
+			if refreshErr := r.ensureVertexCredentialRefresh(ctx, namespace, osName, credJSON); refreshErr != nil {
 				return nil, nil, fmt.Errorf("configuring credential refresh for provider %s: %w", osName, refreshErr)
 			}
 		}
