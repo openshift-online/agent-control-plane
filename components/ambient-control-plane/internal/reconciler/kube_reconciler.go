@@ -588,8 +588,9 @@ func (r *SimpleKubeReconciler) ensureVertexCredentialRefresh(ctx context.Context
 				"client_secret": material.ClientSecret,
 				"refresh_token": material.RefreshToken,
 				"client_email":  clientEmail,
+				"private_key":   "not-used-for-oauth2",
 			},
-			SecretMaterialKeys: []string{"client_secret", "refresh_token"},
+			SecretMaterialKeys: []string{"client_secret", "refresh_token", "private_key"},
 		}
 		r.logger.Info().
 			Str("provider", provName).
