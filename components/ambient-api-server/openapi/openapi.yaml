@@ -96,6 +96,14 @@ paths:
     $ref: 'openapi.policies.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1policies'
   /api/ambient/v1/projects/{id}/policies/{policy_id}:
     $ref: 'openapi.policies.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1policies~1{policy_id}'
+  /api/ambient/v1/applications:
+    $ref: 'openapi.applications.yaml#/paths/~1api~1ambient~1v1~1applications'
+  /api/ambient/v1/applications/{app_id}:
+    $ref: 'openapi.applications.yaml#/paths/~1api~1ambient~1v1~1applications~1{app_id}'
+  /api/ambient/v1/applications/{app_id}/sync:
+    $ref: 'openapi.applications.yaml#/paths/~1api~1ambient~1v1~1applications~1{app_id}~1sync'
+  /api/ambient/v1/applications/{app_id}/refresh:
+    $ref: 'openapi.applications.yaml#/paths/~1api~1ambient~1v1~1applications~1{app_id}~1refresh'
   # AUTO-ADD NEW PATHS
 components:
   securitySchemes:
@@ -267,6 +275,14 @@ components:
       $ref: 'openapi.policies.yaml#/components/schemas/PolicyList'
     PolicyPatchRequest:
       $ref: 'openapi.policies.yaml#/components/schemas/PolicyPatchRequest'
+    Application:
+      $ref: 'openapi.applications.yaml#/components/schemas/Application'
+    ApplicationList:
+      $ref: 'openapi.applications.yaml#/components/schemas/ApplicationList'
+    ApplicationPatchRequest:
+      $ref: 'openapi.applications.yaml#/components/schemas/ApplicationPatchRequest'
+    ApplicationSyncRequest:
+      $ref: 'openapi.applications.yaml#/components/schemas/ApplicationSyncRequest'
     # AUTO-ADD NEW SCHEMAS
   parameters:
     id:

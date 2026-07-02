@@ -78,6 +78,13 @@ All URIs are relative to *http://localhost:8000*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
+*DefaultAPI* | [**ApiAmbientV1ApplicationsAppIdDelete**](docs/DefaultAPI.md#apiambientv1applicationsappiddelete) | **Delete** /api/ambient/v1/applications/{app_id} | Delete an application
+*DefaultAPI* | [**ApiAmbientV1ApplicationsAppIdGet**](docs/DefaultAPI.md#apiambientv1applicationsappidget) | **Get** /api/ambient/v1/applications/{app_id} | Get an application by id
+*DefaultAPI* | [**ApiAmbientV1ApplicationsAppIdPatch**](docs/DefaultAPI.md#apiambientv1applicationsappidpatch) | **Patch** /api/ambient/v1/applications/{app_id} | Update an application
+*DefaultAPI* | [**ApiAmbientV1ApplicationsAppIdRefreshPost**](docs/DefaultAPI.md#apiambientv1applicationsappidrefreshpost) | **Post** /api/ambient/v1/applications/{app_id}/refresh | Refresh application status
+*DefaultAPI* | [**ApiAmbientV1ApplicationsAppIdSyncPost**](docs/DefaultAPI.md#apiambientv1applicationsappidsyncpost) | **Post** /api/ambient/v1/applications/{app_id}/sync | Trigger a sync operation
+*DefaultAPI* | [**ApiAmbientV1ApplicationsGet**](docs/DefaultAPI.md#apiambientv1applicationsget) | **Get** /api/ambient/v1/applications | Returns a list of applications
+*DefaultAPI* | [**ApiAmbientV1ApplicationsPost**](docs/DefaultAPI.md#apiambientv1applicationspost) | **Post** /api/ambient/v1/applications | Create a new application
 *DefaultAPI* | [**ApiAmbientV1CredentialsCredIdDelete**](docs/DefaultAPI.md#apiambientv1credentialscrediddelete) | **Delete** /api/ambient/v1/credentials/{cred_id} | Delete a credential
 *DefaultAPI* | [**ApiAmbientV1CredentialsCredIdGet**](docs/DefaultAPI.md#apiambientv1credentialscredidget) | **Get** /api/ambient/v1/credentials/{cred_id} | Get a credential by id
 *DefaultAPI* | [**ApiAmbientV1CredentialsCredIdPatch**](docs/DefaultAPI.md#apiambientv1credentialscredidpatch) | **Patch** /api/ambient/v1/credentials/{cred_id} | Update a credential
@@ -164,6 +171,10 @@ Class | Method | HTTP request | Description
  - [AgentList](docs/AgentList.md)
  - [AgentPatchRequest](docs/AgentPatchRequest.md)
  - [AgentSessionList](docs/AgentSessionList.md)
+ - [Application](docs/Application.md)
+ - [ApplicationList](docs/ApplicationList.md)
+ - [ApplicationPatchRequest](docs/ApplicationPatchRequest.md)
+ - [ApplicationSyncRequest](docs/ApplicationSyncRequest.md)
  - [Credential](docs/Credential.md)
  - [CredentialList](docs/CredentialList.md)
  - [CredentialPatchRequest](docs/CredentialPatchRequest.md)

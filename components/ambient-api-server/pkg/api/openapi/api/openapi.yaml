@@ -4551,6 +4551,362 @@ paths:
       security:
       - Bearer: []
       summary: Update a policy (internal — used by control plane reconciler)
+  /api/ambient/v1/applications:
+    get:
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplicationList"
+          description: A JSON array of application objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of applications
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Application"
+        description: Application data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Application already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the application
+      security:
+      - Bearer: []
+      summary: Create a new application
+  /api/ambient/v1/applications/{app_id}:
+    delete:
+      parameters:
+      - description: The id of the application
+        in: path
+        name: app_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Application deleted successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No application with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error deleting application
+      security:
+      - Bearer: []
+      summary: Delete an application
+    get:
+      parameters:
+      - description: The id of the application
+        in: path
+        name: app_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+          description: Application found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No application with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get an application by id
+    patch:
+      parameters:
+      - description: The id of the application
+        in: path
+        name: app_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplicationPatchRequest"
+        description: Updated application data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+          description: Application updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No application with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating application
+      security:
+      - Bearer: []
+      summary: Update an application
+  /api/ambient/v1/applications/{app_id}/sync:
+    post:
+      description: Apply target state from git to live state in the destination project
+      parameters:
+      - description: The id of the application
+        in: path
+        name: app_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplicationSyncRequest"
+        description: Optional sync parameters
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+          description: Sync triggered successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No application with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error during sync
+      security:
+      - Bearer: []
+      summary: Trigger a sync operation
+  /api/ambient/v1/applications/{app_id}/refresh:
+    post:
+      description: "Fetch latest from git, render kustomize, diff against live state,\
+        \ update sync_status"
+      parameters:
+      - description: The id of the application
+        in: path
+        name: app_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+          description: Refresh completed
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No application with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error during refresh
+      security:
+      - Bearer: []
+      summary: Refresh application status
 components:
   parameters:
     id:
@@ -4616,6 +4972,13 @@ components:
       description: The id of the credential
       in: path
       name: cred_id
+      required: true
+      schema:
+        type: string
+    app_id:
+      description: The id of the application
+      in: path
+      name: app_id
       required: true
       schema:
         type: string
@@ -6653,6 +7016,249 @@ components:
           type: string
         annotations:
           type: string
+      type: object
+    Application:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          name:
+            description: Unique human-readable name for this application
+            type: string
+          source_repo_url:
+            description: Git repository URL (HTTPS or SSH)
+            type: string
+          source_target_revision:
+            description: "Branch name, tag, or commit SHA (default main)"
+            type: string
+          source_path:
+            description: Path within repo to kustomize directory
+            type: string
+          destination_ambient_url:
+            description: Target Ambient API URL; null means local
+            type: string
+          destination_project:
+            description: Target project name
+            type: string
+          credential_id:
+            description: FK to Credential for remote Ambient auth
+            type: string
+          auto_sync:
+            description: Enable automated sync on git change
+            type: boolean
+          auto_prune:
+            description: Delete resources removed from git
+            type: boolean
+          self_heal:
+            description: Re-sync when live state drifts
+            type: boolean
+          sync_options:
+            description: "Comma-separated options: CreateProject=true"
+            type: string
+          retry_limit:
+            description: Max sync retries on failure (default 3)
+            format: int32
+            type: integer
+          sync_status:
+            description: Synced | OutOfSync | Unknown
+            readOnly: true
+            type: string
+          health_status:
+            description: Healthy | Degraded | Progressing | Unknown
+            readOnly: true
+            type: string
+          sync_revision:
+            description: Last successfully synced git commit SHA
+            readOnly: true
+            type: string
+          operation_phase:
+            description: Succeeded | Failed | Running
+            readOnly: true
+            type: string
+          operation_message:
+            description: Human-readable sync result summary
+            readOnly: true
+            type: string
+          resource_status:
+            description: JSON array of per-resource sync results
+            readOnly: true
+            type: string
+          conditions:
+            description: JSON array of error conditions
+            readOnly: true
+            type: string
+          labels:
+            type: string
+          annotations:
+            type: string
+          last_synced_at:
+            format: date-time
+            readOnly: true
+            type: string
+        required:
+        - destination_project
+        - name
+        - source_path
+        - source_repo_url
+        type: object
+      example:
+        last_synced_at: 2000-01-23T04:56:07.000+00:00
+        destination_project: destination_project
+        created_at: 2000-01-23T04:56:07.000+00:00
+        annotations: annotations
+        source_target_revision: source_target_revision
+        source_repo_url: source_repo_url
+        retry_limit: 5
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        self_heal: true
+        operation_message: operation_message
+        id: id
+        href: href
+        health_status: health_status
+        resource_status: resource_status
+        operation_phase: operation_phase
+        kind: kind
+        sync_revision: sync_revision
+        auto_prune: true
+        auto_sync: true
+        labels: labels
+        name: name
+        sync_status: sync_status
+        source_path: source_path
+        sync_options: sync_options
+        destination_ambient_url: destination_ambient_url
+        conditions: conditions
+        credential_id: credential_id
+    ApplicationList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/Application"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - last_synced_at: 2000-01-23T04:56:07.000+00:00
+          destination_project: destination_project
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          source_target_revision: source_target_revision
+          source_repo_url: source_repo_url
+          retry_limit: 5
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          self_heal: true
+          operation_message: operation_message
+          id: id
+          href: href
+          health_status: health_status
+          resource_status: resource_status
+          operation_phase: operation_phase
+          kind: kind
+          sync_revision: sync_revision
+          auto_prune: true
+          auto_sync: true
+          labels: labels
+          name: name
+          sync_status: sync_status
+          source_path: source_path
+          sync_options: sync_options
+          destination_ambient_url: destination_ambient_url
+          conditions: conditions
+          credential_id: credential_id
+        - last_synced_at: 2000-01-23T04:56:07.000+00:00
+          destination_project: destination_project
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          source_target_revision: source_target_revision
+          source_repo_url: source_repo_url
+          retry_limit: 5
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          self_heal: true
+          operation_message: operation_message
+          id: id
+          href: href
+          health_status: health_status
+          resource_status: resource_status
+          operation_phase: operation_phase
+          kind: kind
+          sync_revision: sync_revision
+          auto_prune: true
+          auto_sync: true
+          labels: labels
+          name: name
+          sync_status: sync_status
+          source_path: source_path
+          sync_options: sync_options
+          destination_ambient_url: destination_ambient_url
+          conditions: conditions
+          credential_id: credential_id
+    ApplicationPatchRequest:
+      example:
+        destination_project: destination_project
+        auto_prune: true
+        annotations: annotations
+        source_target_revision: source_target_revision
+        source_repo_url: source_repo_url
+        auto_sync: true
+        retry_limit: 0
+        labels: labels
+        self_heal: true
+        name: name
+        source_path: source_path
+        sync_options: sync_options
+        destination_ambient_url: destination_ambient_url
+        credential_id: credential_id
+      properties:
+        name:
+          type: string
+        source_repo_url:
+          type: string
+        source_target_revision:
+          type: string
+        source_path:
+          type: string
+        destination_ambient_url:
+          type: string
+        destination_project:
+          type: string
+        credential_id:
+          type: string
+        auto_sync:
+          type: boolean
+        auto_prune:
+          type: boolean
+        self_heal:
+          type: boolean
+        sync_options:
+          type: string
+        retry_limit:
+          format: int32
+          type: integer
+        labels:
+          type: string
+        annotations:
+          type: string
+      type: object
+    ApplicationSyncRequest:
+      example:
+        prune: true
+        prune_project: true
+        revision: revision
+      properties:
+        prune:
+          description: Override auto_prune for this sync only
+          type: boolean
+        revision:
+          description: Override source_target_revision for this sync only
+          type: string
+        prune_project:
+          description: Required alongside prune to allow project deletion
+          type: boolean
       type: object
     Payload:
       example:

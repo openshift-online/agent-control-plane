@@ -260,6 +260,13 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		podSyncErrCh <- podSyncer.Run(ctx)
 	}()
 
+	appReconciler := reconciler.NewApplicationReconciler(factory, log.Logger)
+	appReconcilerErrCh := make(chan error, 1)
+	go func() {
+		appReconcilerErrCh <- appReconciler.Run(ctx)
+	}()
+	log.Info().Msg("application reconciler enabled")
+
 	var cmSyncErrCh <-chan error
 	if cfg.OpenShellUseGateway {
 		cmSyncer := reconciler.NewConfigMapSyncer(factory, provisionerKube, provisioner, cfg.PlatformMode, cfg.MPPConfigNamespace, log.Logger)
@@ -283,6 +290,8 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		return fmt.Errorf("pod status syncer: %w", podSyncErr)
 	case cmSyncErr := <-cmSyncErrCh:
 		return fmt.Errorf("configmap syncer: %w", cmSyncErr)
+	case appRecErr := <-appReconcilerErrCh:
+		return fmt.Errorf("application reconciler: %w", appRecErr)
 	case gwErr := <-gatewayErrCh:
 		if gwErr != nil {
 			return fmt.Errorf("gateway provisioning: %w", gwErr)
