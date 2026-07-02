@@ -1307,6 +1307,9 @@ kind-setup-vertex: check-kubectl _kind-require-cluster ## Configure Vertex AI fo
 		done; \
 	else \
 		NAMESPACE=$(NAMESPACE) \
+			GOOGLE_APPLICATION_CREDENTIALS="$(GOOGLE_APPLICATION_CREDENTIALS)" \
+			ANTHROPIC_VERTEX_PROJECT_ID="$(ANTHROPIC_VERTEX_PROJECT_ID)" \
+			CLOUD_ML_REGION="$(CLOUD_ML_REGION)" \
 			AMBIENT_UI_URL="http://$$(if [ -n "$(KIND_HOST)" ]; then echo "$(KIND_HOST)"; else echo "localhost"; fi):$(KIND_FWD_AMBIENT_UI_PORT)" \
 			./scripts/setup-vertex-kind.sh; \
 	fi
