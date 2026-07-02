@@ -50,17 +50,7 @@ for NS in "${NAMESPACES[@]}"; do
     continue
   fi
 
-  # Extract mTLS certs
   CERT_DIR="$CERT_BASE/$GW_NAME/mtls"
-  mkdir -p "$CERT_DIR"
-
-  echo "  Extracting mTLS certs from openshell-server-tls..."
-  kubectl get secret openshell-server-tls -n "$NS" \
-    -o jsonpath='{.data.ca\.crt}' | base64 -d > "$CERT_DIR/ca.crt"
-  kubectl get secret openshell-server-tls -n "$NS" \
-    -o jsonpath='{.data.tls\.crt}' | base64 -d > "$CERT_DIR/tls.crt"
-  kubectl get secret openshell-server-tls -n "$NS" \
-    -o jsonpath='{.data.tls\.key}' | base64 -d > "$CERT_DIR/tls.key"
 
   # Start port-forward on :0 (kernel picks a free port), capture the assigned port
   kubectl port-forward -n "$NS" statefulset/openshell-gateway ":8080" \
@@ -89,7 +79,7 @@ for NS in "${NAMESPACES[@]}"; do
 
   GW_PORTS+=("$PORT")
 
-  # Register gateway (remove first if it already exists)
+  # Register the gateway. Remove first if it already exists.
   if openshell gateway list 2>/dev/null | grep -q "$GW_NAME"; then
     echo "  Removing existing gateway registration..."
     openshell gateway remove "$GW_NAME" 2>/dev/null || true
@@ -98,7 +88,26 @@ for NS in "${NAMESPACES[@]}"; do
   echo "  Registering gateway $GW_NAME -> https://localhost:$PORT..."
   openshell gateway add --name "$GW_NAME" --local "https://localhost:$PORT"
 
-  echo "  Done"
+  # `gateway add --local` generates self-signed certs into the mtls
+  # directory. Overwrite them with the real certs from the cluster secret
+  # so the CLI trusts the gateway's server certificate.
+  mkdir -p "$CERT_DIR"
+  echo "  Extracting mTLS certs from openshell-server-tls..."
+  kubectl get secret openshell-server-tls -n "$NS" \
+    -o jsonpath='{.data.ca\.crt}' | base64 -d > "$CERT_DIR/ca.crt"
+  kubectl get secret openshell-server-tls -n "$NS" \
+    -o jsonpath='{.data.tls\.crt}' | base64 -d > "$CERT_DIR/tls.crt"
+  kubectl get secret openshell-server-tls -n "$NS" \
+    -o jsonpath='{.data.tls\.key}' | base64 -d > "$CERT_DIR/tls.key"
+
+  # Verify mTLS connectivity
+  if openshell provider list --gateway "$GW_NAME" &>/dev/null; then
+    echo "  ✓ Gateway $GW_NAME connected successfully"
+  else
+    echo "  ✗ Gateway $GW_NAME connectivity check failed — check gateway pod logs:"
+    echo "    kubectl logs -l app.kubernetes.io/instance=openshell-gateway -n $NS"
+  fi
+
   echo ""
 done
 
