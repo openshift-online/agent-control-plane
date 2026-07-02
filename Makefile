@@ -111,16 +111,16 @@ KIND_HOST ?=
 # These inherit from environment if set, or can be overridden on command line
 LOCAL_IMAGES ?= false
 LOCAL_VERTEX ?= false
-OPENSHELL_USE_GATEWAY ?= false
+OPENSHELL_USE_GATEWAY ?= true
 ANTHROPIC_VERTEX_PROJECT_ID ?= $(shell echo $$ANTHROPIC_VERTEX_PROJECT_ID)
 CLOUD_ML_REGION ?= $(shell echo $$CLOUD_ML_REGION)
 # Default to ADC location if not set (created by: gcloud auth application-default login)
 GOOGLE_APPLICATION_CREDENTIALS ?= $(or $(shell echo $$GOOGLE_APPLICATION_CREDENTIALS),$(HOME)/.config/gcloud/application_default_credentials.json)
 
-# OpenShell Gateway Configuration (for OPENSHELL_USE_GATEWAY=true)
+# OpenShell Gateway Configuration (OPENSHELL_USE_GATEWAY=true by default)
 # Provisions two tenant namespaces (tenant-a, tenant-b) with an OpenShell gateway each.
 # Override with OPENSHELL_TENANTS="ns1 ns2" to change the set of tenant namespaces.
-OPENSHELL_USE_GATEWAY ?= false
+OPENSHELL_USE_GATEWAY ?= true
 OPENSHELL_TENANTS ?= tenant-a tenant-b
 AGENT_SANDBOX_VERSION ?= v0.4.6
 
@@ -917,9 +917,11 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 		ANTHROPIC_VERTEX_PROJECT_ID="$(ANTHROPIC_VERTEX_PROJECT_ID)" \
 		CLOUD_ML_REGION="$(CLOUD_ML_REGION)" \
 		./scripts/setup-kind-openshell.sh; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring Vertex AI for gateway..."; \
+		$(MAKE) --no-print-directory kind-setup-vertex; \
 	fi
-	@# Vertex AI setup if requested
-	@if [ "$(LOCAL_VERTEX)" = "true" ]; then \
+	@# Vertex AI setup if requested (non-gateway)
+	@if [ "$(OPENSHELL_USE_GATEWAY)" != "true" ]; then \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring Vertex AI..."; \
 		$(MAKE) --no-print-directory kind-setup-vertex; \
 	fi
@@ -1271,13 +1273,13 @@ kind-status: check-kind ## Show all kind clusters and their port assignments
 		done; \
 	fi
 
-kind-setup-vertex: check-kubectl _kind-require-cluster ## Configure Vertex AI for the kind cluster (VERTEX_CRED=./vertex.json)
+kind-setup-vertex: check-kubectl _kind-require-cluster ## Configure Vertex AI for the kind cluster (VERTEX_CRED=~/.config/gcloud/application_default_credentials.json)
 	@if kubectl get pods --all-namespaces -l app.kubernetes.io/instance=openshell-gateway -o name 2>/dev/null | grep -q .; then \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) OpenShell gateway detected — using provider declarations"; \
 		GW_NAMESPACES=$$(kubectl get pods --all-namespaces -l app.kubernetes.io/instance=openshell-gateway -o jsonpath='{range .items[*]}{.metadata.namespace}{"\n"}{end}' | sort -u); \
 		for ns in $$GW_NAMESPACES; do \
 			echo "$(COLOR_BLUE)▶$(COLOR_RESET) Setting up vertex provider in $$ns..."; \
-			./scripts/setup-vertex-provider.sh "$$ns" "$${VERTEX_CRED:-./vertex.json}"; \
+			./scripts/setup-vertex-provider.sh "$$ns" "$${VERTEX_CRED:-$$HOME/.config/gcloud/application_default_credentials.json}"; \
 		done; \
 	else \
 		NAMESPACE=$(NAMESPACE) \

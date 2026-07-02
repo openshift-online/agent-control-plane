@@ -6,9 +6,10 @@
 #   1. Agent Sandbox CRD + controller (once, cluster-scoped)
 #   2. Tenant namespaces
 #   3. ACP project via the API
-#   3b. Vertex AI credentials bound to each project (if GOOGLE_APPLICATION_CREDENTIALS is set)
 #   4. Patches the control plane deployment with OPENSHELL_USE_GATEWAY=true
 #      and Vertex AI env vars (ANTHROPIC_VERTEX_PROJECT_ID, CLOUD_ML_REGION) if set
+#
+# Vertex AI credentials are configured separately by `make kind-setup-vertex`.
 #
 # The control plane reconciler handles gateway resource deployment via
 # the platform-config ConfigMap — no Helm chart needed.
@@ -124,96 +125,8 @@ else
     done
   fi
 
-  # 3b. Provision Vertex AI credentials for each tenant project.
-  #     Resolve credentials: ADC default → VERTEX_CRED override → error.
-  ADC_FILE="$HOME/.config/gcloud/application_default_credentials.json"
-  VERTEX_CRED_FILE="${VERTEX_CRED:-}"
-  RESOLVED_CRED=""
-
-  if [ -n "$VERTEX_CRED_FILE" ] && [ -f "$VERTEX_CRED_FILE" ]; then
-    RESOLVED_CRED="$VERTEX_CRED_FILE"
-    echo "  Using Vertex credentials from VERTEX_CRED=$VERTEX_CRED_FILE"
-  elif [ -f "$ADC_FILE" ]; then
-    RESOLVED_CRED="$ADC_FILE"
-    echo "  Using Vertex credentials from gcloud ADC ($ADC_FILE)"
-  else
-    echo "  Error: No Vertex AI credentials found."
-    echo "    Either run:  gcloud auth application-default login"
-    echo "    Or set:      VERTEX_CRED=/path/to/service-account.json"
-    exit 1
-  fi
-
-  echo "  Provisioning Vertex AI credentials for tenant projects..."
-  SA_KEY_JSON=$(cat "$RESOLVED_CRED")
-
-  CREDENTIAL_VIEWER_ROLE_ID=$(curl -sf \
-    -H "Authorization: Bearer ${TOKEN}" \
-    "http://localhost:${PF_PORT}/api/ambient/v1/roles?page=1&size=100" 2>/dev/null \
-    | jq -r '.items[] | select(.name == "credential:viewer") | .id' 2>/dev/null || echo "")
-
-  if [ -z "$CREDENTIAL_VIEWER_ROLE_ID" ]; then
-    echo "  Warning: could not resolve credential:viewer role ID; skipping vertex credential binding"
-  else
-    for TENANT in "${TENANTS[@]}"; do
-      SEARCH_QUERY=$(printf "name = '%s'" "${TENANT}")
-      PROJECT_ID=$(curl -sf \
-        -H "Authorization: Bearer ${TOKEN}" \
-        --data-urlencode "search=${SEARCH_QUERY}" \
-        -G "http://localhost:${PF_PORT}/api/ambient/v1/projects" 2>/dev/null \
-        | jq -r '[(.items // [])[] | select(.name == "'"${TENANT}"'")] | .[0].id // empty' 2>/dev/null || echo "")
-
-      if [ -z "$PROJECT_ID" ]; then
-        echo "    Warning: project '${TENANT}' not found; skipping vertex credential"
-        continue
-      fi
-
-      VERTEX_CRED_NAME="vertex-${TENANT}"
-      EXISTING_CRED_ID=$(curl -sf \
-        -H "Authorization: Bearer ${TOKEN}" \
-        "http://localhost:${PF_PORT}/api/ambient/v1/credentials?search=name%3D'${VERTEX_CRED_NAME}'" 2>/dev/null \
-        | jq -r '[(.items // [])[] | select(.name == "'"${VERTEX_CRED_NAME}"'")] | .[0].id // empty' 2>/dev/null || echo "")
-
-      if [ -n "$EXISTING_CRED_ID" ]; then
-        echo "    Vertex credential '${VERTEX_CRED_NAME}' already exists (${EXISTING_CRED_ID})"
-      else
-        CRED_RESPONSE=$(curl -sf -X POST \
-          -H "Authorization: Bearer ${TOKEN}" \
-          -H "Content-Type: application/json" \
-          -d "$(jq -n \
-            --arg name "$VERTEX_CRED_NAME" \
-            --arg token "$SA_KEY_JSON" \
-            '{name: $name, provider: "vertex", token: $token}')" \
-          "http://localhost:${PF_PORT}/api/ambient/v1/credentials" 2>/dev/null || echo "{}")
-        EXISTING_CRED_ID=$(echo "$CRED_RESPONSE" | jq -r '.id // empty' 2>/dev/null || echo "")
-
-        if [ -z "$EXISTING_CRED_ID" ]; then
-          echo "    Warning: failed to create vertex credential for '${TENANT}'"
-          continue
-        fi
-        echo "    Created vertex credential '${VERTEX_CRED_NAME}' (${EXISTING_CRED_ID})"
-      fi
-
-      EXISTING_BINDING=$(curl -sf \
-        -H "Authorization: Bearer ${TOKEN}" \
-        "http://localhost:${PF_PORT}/api/ambient/v1/role_bindings?search=scope%3D'credential'" 2>/dev/null \
-        | jq -r '[(.items // [])[] | select(.credential_id == "'"${EXISTING_CRED_ID}"'" and .project_id == "'"${PROJECT_ID}"'")] | length' 2>/dev/null || echo "0")
-
-      if [ "${EXISTING_BINDING}" -gt 0 ] 2>/dev/null; then
-        echo "    Vertex credential already bound to project '${TENANT}'"
-      else
-        curl -sf -X POST \
-          -H "Authorization: Bearer ${TOKEN}" \
-          -H "Content-Type: application/json" \
-          -d "$(jq -n \
-            --arg role_id "$CREDENTIAL_VIEWER_ROLE_ID" \
-            --arg credential_id "$EXISTING_CRED_ID" \
-            --arg project_id "$PROJECT_ID" \
-            '{role_id: $role_id, scope: "credential", credential_id: $credential_id, project_id: $project_id}')" \
-          "http://localhost:${PF_PORT}/api/ambient/v1/role_bindings" >/dev/null 2>&1
-        echo "    Bound vertex credential to project '${TENANT}'"
-      fi
-    done
-  fi
+  # Vertex AI credentials are configured separately by `make kind-setup-vertex`,
+  # which runs after this script in the kind-up target.
 
   kill "${PF_PID}" 2>/dev/null || true
 fi
