@@ -62,9 +62,9 @@ func TestIsServiceAccount(t *testing.T) {
 }
 
 func TestStaticTokenHTTPMiddleware(t *testing.T) {
-	const token = "my-service-token"
+	const staticTok = "test-static-value"
 
-	handler := staticTokenHTTPMiddleware(token)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := staticTokenHTTPMiddleware(staticTok)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if IsServiceCaller(r.Context()) {
 			w.WriteHeader(http.StatusAccepted)
 		} else {
@@ -77,10 +77,10 @@ func TestStaticTokenHTTPMiddleware(t *testing.T) {
 		auth     string
 		wantCode int
 	}{
-		{"matching token tags service caller", "Bearer " + token, http.StatusAccepted},
+		{"matching token tags service caller", "Bearer " + staticTok, http.StatusAccepted},
 		{"wrong token does not tag", "Bearer wrong", http.StatusOK},
 		{"no header does not tag", "", http.StatusOK},
-		{"malformed header does not tag", "NotBearer " + token, http.StatusOK},
+		{"malformed header does not tag", "NotBearer " + staticTok, http.StatusOK},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
