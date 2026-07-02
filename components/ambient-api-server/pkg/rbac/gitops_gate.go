@@ -24,6 +24,17 @@ func IsRBACEnabled() bool {
 	return rbacEnabled
 }
 
+// OverrideForTesting overrides the RBAC-enabled state and returns a cleanup
+// function that resets it so the next call re-reads the environment variable.
+func OverrideForTesting(enabled bool) func() {
+	rbacEnabledOnce = sync.Once{}
+	rbacEnabled = enabled
+	rbacEnabledOnce.Do(func() {})
+	return func() {
+		rbacEnabledOnce = sync.Once{}
+	}
+}
+
 // RequireGitOpsManaged enforces that GitOps-managed resources (projects,
 // agents, providers, policies) can only be mutated by service accounts
 // (the configmap-syncer) when RBAC is enabled. User-initiated API

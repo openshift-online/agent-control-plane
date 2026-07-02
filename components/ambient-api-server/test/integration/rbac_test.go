@@ -11,6 +11,7 @@ import (
 	"gopkg.in/resty.v1"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/ambient-code/platform/components/ambient-api-server/test"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/environments"
@@ -50,6 +51,8 @@ func ensureBuiltInRoles(t *testing.T) {
 
 func TestRBAC_ProjectCreationCreatesOwnerBinding(t *testing.T) {
 	RegisterTestingT(t)
+	cleanup := pkgrbac.OverrideForTesting(false)
+	defer cleanup()
 	h := test.NewHelper(t)
 	h.DBFactory.ResetDB()
 	ensureBuiltInRoles(t)
@@ -128,6 +131,8 @@ func TestRBAC_CredentialCreationCreatesOwnerBinding(t *testing.T) {
 
 func TestRBAC_UserAutoProvisioned(t *testing.T) {
 	RegisterTestingT(t)
+	cleanup := pkgrbac.OverrideForTesting(false)
+	defer cleanup()
 	h := test.NewHelper(t)
 	h.DBFactory.ResetDB()
 	ensureBuiltInRoles(t)
@@ -137,7 +142,6 @@ func TestRBAC_UserAutoProvisioned(t *testing.T) {
 	ctx := h.NewAuthenticatedContext(account)
 
 	// Any authenticated request triggers auto-provisioning
-	// POST /projects is auth-exempt so it should work
 	projectInput := openapi.Project{Name: "auto-prov-test"}
 	_, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsPost(ctx).Project(projectInput).Execute()
 	Expect(err).NotTo(HaveOccurred())
