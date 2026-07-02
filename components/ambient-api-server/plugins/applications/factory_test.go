@@ -26,24 +26,6 @@ func newApplication(name string) (*applications.Application, error) {
 	return created, nil
 }
 
-func newApplicationWithFields(name, repoURL, path, project string) (*applications.Application, error) {
-	applicationService := applications.Service(&environments.Environment().Services)
-
-	application := &applications.Application{
-		Name:               name,
-		SourceRepoUrl:      repoURL,
-		SourcePath:         path,
-		DestinationProject: project,
-	}
-
-	created, err := applicationService.Create(context.Background(), application)
-	if err != nil {
-		return nil, err
-	}
-
-	return created, nil
-}
-
 func newApplicationList(namePrefix string, count int) ([]*applications.Application, error) {
 	var items []*applications.Application
 	for i := 1; i <= count; i++ {
@@ -56,7 +38,3 @@ func newApplicationList(namePrefix string, count int) ([]*applications.Applicati
 	}
 	return items, nil
 }
-
-func stringPtr(s string) *string { return &s }
-func boolPtr(b bool) *bool       { return &b }
-func int32Ptr(i int32) *int32    { return &i }
