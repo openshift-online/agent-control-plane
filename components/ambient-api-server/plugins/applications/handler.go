@@ -223,7 +223,7 @@ func (h applicationHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 			}
 			return PresentApplication(app), nil
 		},
-		ErrorHandler: handlers.HandleError,
 	}
-	handlers.Handle(w, r, cfg, http.StatusOK)
+
+	handlers.HandleGet(w, r, cfg)
 }
