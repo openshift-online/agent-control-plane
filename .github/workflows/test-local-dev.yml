@@ -133,10 +133,14 @@ jobs:
           fi
         done
 
+    - name: Create dummy Vertex credentials
+      run: |
+        echo '{"type":"service_account","project_id":"test","private_key_id":"dummy","private_key":"-----BEGIN RSA PRIVATE KEY-----\nMIIBogIBAAJBALRiMLAH\n-----END RSA PRIVATE KEY-----\n","client_email":"test@test.iam.gserviceaccount.com","client_id":"0","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token"}' > /tmp/vertex.json
+
     - name: Deploy using Makefile
       run: |
         echo "Using Makefile to deploy complete stack..."
-        make kind-up CONTAINER_ENGINE=docker CI_MODE=true
+        make kind-up CONTAINER_ENGINE=docker CI_MODE=true VERTEX_CRED=/tmp/vertex.json
 
     - name: Wait for deployments
       run: |
