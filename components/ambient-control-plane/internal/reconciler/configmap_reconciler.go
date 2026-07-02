@@ -207,9 +207,9 @@ func (s *ConfigMapSyncer) syncOnce(ctx context.Context) {
 	}
 
 	for _, ns := range namespaces {
-		s.syncNamespaceAgents(ctx, ns.name)
-		s.syncNamespaceProviders(ctx, ns.name)
-		s.syncNamespacePolicies(ctx, ns.name)
+		s.syncNamespaceAgents(ctx, ns)
+		s.syncNamespaceProviders(ctx, ns)
+		s.syncNamespacePolicies(ctx, ns)
 	}
 }
 
@@ -229,20 +229,15 @@ func (s *ConfigMapSyncer) syncNamespace(ctx context.Context, namespace string) {
 	s.syncNamespacePolicies(ctx, namespace)
 }
 
-type nsInfo struct {
-	name      string
-	projectID string
-}
-
-func (s *ConfigMapSyncer) listManagedNamespaces(ctx context.Context) ([]nsInfo, error) {
+func (s *ConfigMapSyncer) listManagedNamespaces(ctx context.Context) ([]string, error) {
 	nsList, err := s.kube.ListNamespacesByLabel(ctx, managedLabelFilter)
 	if err != nil {
 		return nil, fmt.Errorf("listing managed namespaces: %w", err)
 	}
 
-	var result []nsInfo
+	var result []string
 	for _, ns := range nsList.Items {
-		result = append(result, nsInfo{name: ns.GetName(), projectID: ns.GetNamespace()})
+		result = append(result, ns.GetName())
 	}
 	return result, nil
 }
