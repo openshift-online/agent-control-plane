@@ -1,3 +1,4 @@
+// Package application implements the application subcommand for managing GitOps applications.
 package application
 
 import (
