@@ -945,6 +945,7 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 	@echo "  Get test token: kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d"
 	@echo ""
 	@echo "  Configure CLI:      $(COLOR_BOLD)make kind-acpctl-login$(COLOR_RESET)"
+	@echo "  Setup OpenShell:    $(COLOR_BOLD)make kind-setup-openshell-cli$(COLOR_RESET)"
 	@echo "  Stop port-forwards: $(COLOR_BOLD)make kind-port-forward-stop$(COLOR_RESET)"
 	@echo "  Run tests:          $(COLOR_BOLD)make test-e2e$(COLOR_RESET)"
 
