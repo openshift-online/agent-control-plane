@@ -400,8 +400,7 @@ func ensureProject(ctx context.Context, factory *reconciler.SDKClientFactory, na
 		return fmt.Errorf("get SDK client: %w", err)
 	}
 
-	opts := sdktypes.NewListOptions().Search("name = '" + name + "'").Build()
-	list, err := sdk.Projects().List(ctx, opts)
+	list, err := sdk.Projects().List(ctx, sdktypes.NewListOptions().Build())
 	if err != nil {
 		return fmt.Errorf("list projects: %w", err)
 	}

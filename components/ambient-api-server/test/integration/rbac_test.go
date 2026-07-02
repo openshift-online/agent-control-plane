@@ -11,11 +11,26 @@ import (
 	"gopkg.in/resty.v1"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
 	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/ambient-code/platform/components/ambient-api-server/test"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/environments"
+	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
 )
+
+const staticTok = "test-static-value"
+
+func init() {
+	pkgserver.RegisterPreAuthMiddleware(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") == "Bearer "+staticTok {
+				r = r.WithContext(middleware.WithCallerType(r.Context(), middleware.CallerTypeService))
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
+}
 
 func ensureBuiltInRoles(t *testing.T) {
 	t.Helper()
@@ -153,6 +168,32 @@ func TestRBAC_UserAutoProvisioned(t *testing.T) {
 	dbErr := g.Raw(`SELECT username FROM users WHERE username = ? AND deleted_at IS NULL`, "rbac-auto-user").Scan(&username).Error
 	Expect(dbErr).NotTo(HaveOccurred())
 	Expect(username).To(Equal("rbac-auto-user"))
+}
+
+func TestRBAC_GitOpsGating_BlocksUserAndAllowsServiceAccount(t *testing.T) {
+	RegisterTestingT(t)
+	cleanup := pkgrbac.OverrideForTesting(true)
+	defer cleanup()
+	h := test.NewHelper(t)
+	h.DBFactory.ResetDB()
+	ensureBuiltInRoles(t)
+
+	// User attempt — should get 403
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+	client := h.NewApiClient()
+	_, resp, _ := client.DefaultAPI.ApiAmbientV1ProjectsPost(ctx).
+		Project(openapi.Project{Name: "should-fail"}).Execute()
+	Expect(resp.StatusCode).To(Equal(http.StatusForbidden))
+
+	// Service account attempt — should succeed
+	saResp, err := resty.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("Authorization", "Bearer "+staticTok).
+		SetBody(openapi.Project{Name: "gitops-project"}).
+		Post(h.RestURL("/projects"))
+	Expect(err).NotTo(HaveOccurred())
+	Expect(saResp.StatusCode()).To(Equal(http.StatusCreated))
 }
 
 func TestRBAC_MissingRolesSeeded(t *testing.T) {
