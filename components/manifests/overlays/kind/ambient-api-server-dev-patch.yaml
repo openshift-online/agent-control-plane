@@ -32,6 +32,10 @@ spec:
                   name: ambient-control-plane-token
             - name: CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT
               value: "true"
+            - name: OPENSHELL_USE_GATEWAY
+              value: "true"
+            - name: OPENSHELL_ENABLED
+              value: "true"
           command:
             - /usr/local/bin/ambient-api-server
             - serve

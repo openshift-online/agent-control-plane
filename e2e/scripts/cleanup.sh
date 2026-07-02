@@ -51,6 +51,15 @@ else
   echo "   Cluster '${KIND_CLUSTER_NAME}' not found (already deleted?)"
 fi
 
+# kind delete sometimes leaves the kindest container behind in podman.
+# Force-remove any leftover container whose name matches the kind node pattern.
+KIND_CONTAINER="${KIND_CLUSTER_NAME}-control-plane"
+if command -v podman &> /dev/null && podman container exists "$KIND_CONTAINER" 2>/dev/null; then
+  echo "   Removing leftover podman container '${KIND_CONTAINER}'..."
+  podman rm -f "$KIND_CONTAINER" >/dev/null 2>&1 || true
+  echo "   Removed"
+fi
+
 echo ""
 echo "Cleaning up test artifacts..."
 cd "$(dirname "$0")/.."
