@@ -30,4 +30,12 @@ if [ ! -f /sandbox/.claude/settings.json ]; then
     printf '{"theme":"dark"}\n' > /sandbox/.claude/settings.json
 fi
 
+OPENSHELL_CA="/etc/openshell-tls/openshell-ca.pem"
+if [ -f "$OPENSHELL_CA" ] && [ -z "$ANTHROPIC_BASE_URL" ]; then
+    export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-inference-routing}"
+    export ANTHROPIC_BASE_URL="https://inference.local"
+    export HTTPS_PROXY="http://10.200.0.1:3128"
+    export NODE_EXTRA_CA_CERTS="$OPENSHELL_CA"
+fi
+
 exec /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe --bare "$@"
