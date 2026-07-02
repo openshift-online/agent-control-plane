@@ -140,7 +140,7 @@ jobs:
     - name: Deploy using Makefile
       run: |
         echo "Using Makefile to deploy complete stack..."
-        make kind-up CONTAINER_ENGINE=docker CI_MODE=true VERTEX_CRED=/tmp/vertex.json
+        make kind-up CONTAINER_ENGINE=docker CI_MODE=true VERTEX_CRED=/tmp/vertex.json OPENSHELL_USE_GATEWAY=false
 
     - name: Wait for deployments
       run: |
