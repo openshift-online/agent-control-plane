@@ -81,10 +81,14 @@ KIND_IMAGE_PREFIX := localhost/
 
 # Kind cluster configuration — derived from git branch for multi-worktree support
 # Each worktree/branch gets a unique cluster name and ports automatically.
+# If the branch-derived cluster doesn't exist, falls back to any running ambient-* cluster.
 # Override any variable: make kind-up KIND_CLUSTER_NAME=ambient-custom KIND_FWD_FRONTEND_PORT=8080
 CLUSTER_SLUG ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$$//' | cut -c1-20)
 CLUSTER_SLUG := $(CLUSTER_SLUG)
-KIND_CLUSTER_NAME ?= ambient-$(CLUSTER_SLUG)
+KIND_CLUSTER_NAME ?= $(or \
+  $(shell $(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^ambient-$(CLUSTER_SLUG)$$' && echo 'ambient-$(CLUSTER_SLUG)'),\
+  $(shell $(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep '^ambient-' | head -1),\
+  ambient-$(CLUSTER_SLUG))
 KIND_CLUSTER_NAME := $(KIND_CLUSTER_NAME)
 # Deterministic port offset from slug hash (0-999) — all ports derive from this
 KIND_PORT_OFFSET ?= $(shell printf '%s' '$(CLUSTER_SLUG)' | cksum | awk '{print $$1 % 1000}')
@@ -917,6 +921,15 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 		ANTHROPIC_VERTEX_PROJECT_ID="$(ANTHROPIC_VERTEX_PROJECT_ID)" \
 		CLOUD_ML_REGION="$(CLOUD_ML_REGION)" \
 		./scripts/setup-kind-openshell.sh; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Applying example declarations to tenant namespaces..."; \
+		for ns in $(OPENSHELL_TENANTS); do \
+			if [ -f examples/agent-sandbox-config.yaml ]; then \
+				kubectl apply -n "$$ns" -f examples/agent-sandbox-config.yaml; \
+			fi; \
+			if [ -f examples/tenant-rbac.yaml ]; then \
+				kubectl apply -n "$$ns" -f examples/tenant-rbac.yaml; \
+			fi; \
+		done; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring Vertex AI for gateway..."; \
 		$(MAKE) --no-print-directory kind-setup-vertex; \
 	fi
@@ -1424,7 +1437,7 @@ check-architecture: ## Validate build architecture matches host
 
 _kind-require-cluster: ## Internal: Fail fast if kind cluster is not running
 	@$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$' || \
-		(echo "$(COLOR_RED)✗$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' not found. Run 'make kind-up LOCAL_IMAGES=true' first, or set KIND_CLUSTER_NAME to an existing cluster." && exit 1)
+		(echo "$(COLOR_RED)✗$(COLOR_RESET) No ambient Kind cluster found. Run 'make kind-up' first, or set KIND_CLUSTER_NAME to an existing cluster." && exit 1)
 
 KIND_CORE_IMAGES := $(RUNNER_IMAGE) $(RUNNER_OPENSHELL_IMAGE) $(API_SERVER_IMAGE) $(CONTROL_PLANE_IMAGE) $(AMBIENT_UI_IMAGE)
 KIND_MCP_IMAGES := $(MCP_IMAGE) $(GITHUB_MCP_IMAGE) $(JIRA_MCP_IMAGE) $(K8S_MCP_IMAGE) $(GOOGLE_MCP_IMAGE)

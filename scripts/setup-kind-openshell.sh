@@ -171,32 +171,8 @@ else
 fi
 echo "  Note: ambient-ui gateway mode is baked in at build time via --build-arg OPENSHELL_USE_GATEWAY=true"
 
-# 5. Apply agent/provider/policy declarations after gateway pods are ready.
-#    The control plane reconciler deploys gateway resources from the
-#    platform-config ConfigMap; wait for them before applying declarations.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EXAMPLES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)/examples"
-
-if [ -f "$EXAMPLES_DIR/agent-sandbox-config.yaml" ]; then
-  echo "  Waiting for gateway pods to be ready..."
-  ALL_READY=true
-  for TENANT in "${TENANTS[@]}"; do
-    if ! kubectl wait --for=condition=Ready pod \
-        -l app.kubernetes.io/instance=openshell-gateway \
-        -n "$TENANT" --timeout=120s >/dev/null 2>&1; then
-      echo "    Warning: gateway pod in '$TENANT' not ready after 120s; skipping declarations"
-      ALL_READY=false
-    fi
-  done
-
-  if [ "$ALL_READY" = "true" ]; then
-    for TENANT in "${TENANTS[@]}"; do
-      kubectl apply -f "$EXAMPLES_DIR/agent-sandbox-config.yaml" -n "$TENANT" >/dev/null
-      echo "    Applied agent-sandbox-config to '$TENANT'"
-    done
-  fi
-else
-  echo "  Warning: examples/agent-sandbox-config.yaml not found; skipping declarations"
-fi
+# Vertex credentials and example declarations (agent-sandbox-config.yaml) are
+# applied by `make kind-up` after this script finishes — see the
+# setup-vertex-provider.sh calls in the Makefile.
 
 echo "OpenShell gateway setup complete (${TENANTS[*]})."
