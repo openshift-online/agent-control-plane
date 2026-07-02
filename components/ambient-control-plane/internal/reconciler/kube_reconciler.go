@@ -333,7 +333,9 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	existing, err := r.gateway.GetSandbox(ctx, namespace, sbxName)
 	if err == nil && existing != nil && existing.Sandbox != nil {
 		r.logger.Debug().Str("sandbox", sbxName).Msg("sandbox already exists")
-		go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk)
+		execEnv := r.inferenceExecEnv()
+		execEntrypoint := r.appendPromptToEntrypoint(ctx, entrypoint, session, sdk)
+		go r.execAfterReady(namespace, sbxName, session.ID, execEntrypoint, sdk, execEnv)
 		r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 		return nil
 	}
@@ -384,10 +386,40 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		Int("providers", len(providerNames)).
 		Msg("sandbox created via gateway")
 
-	go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk)
+	execEnv := r.inferenceExecEnv()
+	execEntrypoint := r.appendPromptToEntrypoint(ctx, entrypoint, session, sdk)
+	go r.execAfterReady(namespace, sbxName, session.ID, execEntrypoint, sdk, execEnv)
 
 	r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 	return nil
+}
+
+func (r *SimpleKubeReconciler) appendPromptToEntrypoint(ctx context.Context, entrypoint []string, session types.Session, sdk *sdkclient.Client) []string {
+	prompt := r.assembleInitialPrompt(ctx, session, sdk)
+	if prompt == "" {
+		return entrypoint
+	}
+	encoded := base64.StdEncoding.EncodeToString([]byte(prompt))
+	shellCmd := fmt.Sprintf("echo %s | base64 -d | %s --print -", encoded, strings.Join(entrypoint, " "))
+	return []string{"/bin/sh", "-c", shellCmd}
+}
+
+func (r *SimpleKubeReconciler) inferenceExecEnv() map[string]string {
+	if !r.cfg.OpenShellUseGateway {
+		return nil
+	}
+	return map[string]string{
+		"ANTHROPIC_BASE_URL":                     "https://inference.local",
+		"ANTHROPIC_API_KEY":                      "notused",
+		"HTTPS_PROXY":                            "http://10.200.0.1:3128",
+		"NO_PROXY":                               "127.0.0.1,localhost",
+		"NODE_EXTRA_CA_CERTS":                    "/etc/openshell-tls/openshell-ca.pem",
+		"SSL_CERT_FILE":                          "/etc/openshell-tls/openshell-ca.pem",
+		"REQUESTS_CA_BUNDLE":                     "/etc/openshell-tls/openshell-ca.pem",
+		"CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
+		"ACP_OPENSHELL_INFERENCE":                "true",
+		"HOME":                                   "/sandbox",
+	}
 }
 
 func (r *SimpleKubeReconciler) resolveEntrypoint(agent *types.Agent) []string {
@@ -428,7 +460,7 @@ func (r *SimpleKubeReconciler) mergeAgentEnvironment(env map[string]string, agen
 	}
 }
 
-func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string, sdk *sdkclient.Client) {
+func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string, sdk *sdkclient.Client, execEnv map[string]string) {
 	pollCtx, pollCancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer pollCancel()
 
@@ -523,8 +555,9 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			}
 
 			err = r.gateway.ExecSandboxStreaming(execCtx, namespace, &openshellpb.ExecSandboxRequest{
-				SandboxId: sandboxID,
-				Command:   entrypoint,
+				SandboxId:   sandboxID,
+				Command:     entrypoint,
+				Environment: execEnv,
 			})
 			if err != nil {
 				r.logger.Error().Err(err).Str("sandbox", sbxName).Str("session_id", sessionID).Msg("failed to start runner exec")
