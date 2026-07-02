@@ -968,6 +968,11 @@ func (s *ConfigMapSyncer) createAPI(ctx context.Context, namespace, resource str
 		return "", fmt.Errorf("getting token: %w", err)
 	}
 
+	// Ensure project_id is in the body
+	if _, exists := body["project_id"]; !exists {
+		body["project_id"] = namespace
+	}
+
 	data, err := json.Marshal(body)
 	if err != nil {
 		return "", fmt.Errorf("marshalling body: %w", err)

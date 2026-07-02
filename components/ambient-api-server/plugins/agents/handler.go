@@ -32,8 +32,7 @@ func NewAgentHandler(agent AgentService, generic services.GenericService) *agent
 }
 
 func (h agentHandler) Create(w http.ResponseWriter, r *http.Request) {
-	// Gateway mode gating — BEFORE HandlerConfig
-	if gateway.IsGatewayModeActive() {
+	if gateway.IsGatewayModeActive() && !gateway.IsControlPlaneServiceAccount(r.Context()) {
 		handlers.HandleError(r.Context(), w, errors.Forbidden(
 			"Agent creation is not permitted in gateway mode. Agents are managed via GitOps ConfigMaps."))
 		return
@@ -63,8 +62,7 @@ func (h agentHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h agentHandler) Patch(w http.ResponseWriter, r *http.Request) {
-	// Gateway mode gating — BEFORE HandlerConfig
-	if gateway.IsGatewayModeActive() {
+	if gateway.IsGatewayModeActive() && !gateway.IsControlPlaneServiceAccount(r.Context()) {
 		handlers.HandleError(r.Context(), w, errors.Forbidden(
 			"Agent updates are not permitted in gateway mode. Agents are managed via GitOps ConfigMaps."))
 		return
@@ -239,8 +237,7 @@ func (h agentHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h agentHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	// Gateway mode gating — BEFORE HandlerConfig
-	if gateway.IsGatewayModeActive() {
+	if gateway.IsGatewayModeActive() && !gateway.IsControlPlaneServiceAccount(r.Context()) {
 		handlers.HandleError(r.Context(), w, errors.Forbidden(
 			"Agent deletion is not permitted in gateway mode. Agents are managed via GitOps ConfigMaps."))
 		return

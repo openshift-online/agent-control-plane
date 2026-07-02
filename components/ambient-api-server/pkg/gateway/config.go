@@ -1,8 +1,11 @@
 package gateway
 
 import (
+	"context"
 	"os"
 	"sync"
+
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 )
 
 // GatewayConfig holds the gateway mode configuration loaded from environment variables.
@@ -32,4 +35,12 @@ func IsGatewayModeActive() bool {
 		gatewayConfig = LoadGatewayConfig()
 	})
 	return gatewayConfig.UseGateway && gatewayConfig.Enabled
+}
+
+const controlPlaneSAUsername = "system:serviceaccount:ambient-code:ambient-control-plane"
+
+// IsControlPlaneServiceAccount returns true when the request context
+// carries the control-plane service account identity.
+func IsControlPlaneServiceAccount(ctx context.Context) bool {
+	return auth.GetUsernameFromContext(ctx) == controlPlaneSAUsername
 }
