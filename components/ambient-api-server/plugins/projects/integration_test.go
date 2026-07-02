@@ -10,6 +10,7 @@ import (
 	"gopkg.in/resty.v1"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/ambient-code/platform/components/ambient-api-server/plugins/projects"
 	"github.com/ambient-code/platform/components/ambient-api-server/test"
 	"github.com/openshift-online/rh-trex-ai/pkg/environments"
@@ -43,6 +44,7 @@ func TestProjectGet(t *testing.T) {
 }
 
 func TestProjectPost(t *testing.T) {
+	defer rbac.OverrideForTesting(false)()
 	h, client := test.RegisterIntegration(t)
 
 	account := h.NewRandAccount()
@@ -72,6 +74,7 @@ func TestProjectPost(t *testing.T) {
 }
 
 func TestProjectPatch(t *testing.T) {
+	defer rbac.OverrideForTesting(false)()
 	h, client := test.RegisterIntegration(t)
 
 	account := h.NewRandAccount()
