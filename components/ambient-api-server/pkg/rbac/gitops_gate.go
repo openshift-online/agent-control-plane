@@ -12,11 +12,15 @@ import (
 var (
 	rbacEnabled     bool
 	rbacEnabledOnce sync.Once
+	rbacOverride    *bool
 )
 
 // IsRBACEnabled returns true when RBAC gating is active. Defaults to true
 // when the RBAC_ENABLED env var is unset or empty.
 func IsRBACEnabled() bool {
+	if v := rbacOverride; v != nil {
+		return *v
+	}
 	rbacEnabledOnce.Do(func() {
 		v := os.Getenv("RBAC_ENABLED")
 		rbacEnabled = v != "false"
@@ -24,14 +28,12 @@ func IsRBACEnabled() bool {
 	return rbacEnabled
 }
 
-// OverrideForTesting overrides the RBAC-enabled state and returns a cleanup
-// function that resets it so the next call re-reads the environment variable.
+// OverrideForTesting overrides the RBAC-enabled state, bypassing the
+// cached env-var value. Returns a cleanup function that removes the override.
 func OverrideForTesting(enabled bool) func() {
-	rbacEnabledOnce = sync.Once{}
-	rbacEnabled = enabled
-	rbacEnabledOnce.Do(func() {})
+	rbacOverride = &enabled
 	return func() {
-		rbacEnabledOnce = sync.Once{}
+		rbacOverride = nil
 	}
 }
 
