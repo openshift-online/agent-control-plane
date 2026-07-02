@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"context"
+	"crypto/subtle"
+	"net/http"
 	"os"
 	"strings"
 
@@ -38,7 +40,8 @@ func init() {
 		return
 	}
 	if token != "" {
-		glog.Infof("Service token auth enabled via AMBIENT_API_TOKEN (gRPC only)")
+		glog.Infof("Service token auth enabled via AMBIENT_API_TOKEN")
+		pkgserver.RegisterPreAuthMiddleware(staticTokenHTTPMiddleware(token))
 	}
 	if configuredServiceAccount != "" {
 		glog.Infof("OIDC service account username: %s", configuredServiceAccount)
@@ -76,4 +79,22 @@ func isServiceAccount(jwtUsername, configured string) bool {
 	}
 	return jwtUsername == configured ||
 		jwtUsername == keycloakServiceAccountPrefix+configured
+}
+
+// staticTokenHTTPMiddleware tags HTTP callers as service callers when
+// their bearer token matches the configured AMBIENT_API_TOKEN. This is
+// the HTTP counterpart of the gRPC pre-auth interceptor.
+func staticTokenHTTPMiddleware(expectedToken string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if authHeader := r.Header.Get("Authorization"); authHeader != "" {
+				if token, err := extractBearerToken(authHeader); err == nil {
+					if subtle.ConstantTimeCompare([]byte(token), []byte(expectedToken)) == 1 {
+						r = r.WithContext(WithCallerType(r.Context(), CallerTypeService))
+					}
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }

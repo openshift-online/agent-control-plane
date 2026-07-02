@@ -61,6 +61,42 @@ func TestIsServiceAccount(t *testing.T) {
 	}
 }
 
+func TestStaticTokenHTTPMiddleware(t *testing.T) {
+	const token = "my-service-token"
+
+	handler := staticTokenHTTPMiddleware(token)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if IsServiceCaller(r.Context()) {
+			w.WriteHeader(http.StatusAccepted)
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+
+	tests := []struct {
+		name     string
+		auth     string
+		wantCode int
+	}{
+		{"matching token tags service caller", "Bearer " + token, http.StatusAccepted},
+		{"wrong token does not tag", "Bearer wrong", http.StatusOK},
+		{"no header does not tag", "", http.StatusOK},
+		{"malformed header does not tag", "NotBearer " + token, http.StatusOK},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
+			if tt.auth != "" {
+				req.Header.Set("Authorization", tt.auth)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tt.wantCode {
+				t.Errorf("auth=%q: got %d, want %d", tt.auth, rec.Code, tt.wantCode)
+			}
+		})
+	}
+}
+
 func TestBearerTokenAuth(t *testing.T) {
 	const validToken = "test-secret-token"
 	handler := BearerTokenAuth(validToken)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

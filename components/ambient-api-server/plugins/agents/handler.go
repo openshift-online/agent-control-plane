@@ -8,7 +8,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/gateway"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
@@ -32,10 +32,8 @@ func NewAgentHandler(agent AgentService, generic services.GenericService) *agent
 }
 
 func (h agentHandler) Create(w http.ResponseWriter, r *http.Request) {
-	// Gateway mode gating — BEFORE HandlerConfig
-	if gateway.IsGatewayModeActive() {
-		handlers.HandleError(r.Context(), w, errors.Forbidden(
-			"Agent creation is not permitted in gateway mode. Agents are managed via GitOps ConfigMaps."))
+	if err := rbac.RequireGitOpsManaged(r.Context(), "Agent"); err != nil {
+		handlers.HandleError(r.Context(), w, err)
 		return
 	}
 
@@ -63,10 +61,8 @@ func (h agentHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h agentHandler) Patch(w http.ResponseWriter, r *http.Request) {
-	// Gateway mode gating — BEFORE HandlerConfig
-	if gateway.IsGatewayModeActive() {
-		handlers.HandleError(r.Context(), w, errors.Forbidden(
-			"Agent updates are not permitted in gateway mode. Agents are managed via GitOps ConfigMaps."))
+	if err := rbac.RequireGitOpsManaged(r.Context(), "Agent"); err != nil {
+		handlers.HandleError(r.Context(), w, err)
 		return
 	}
 
@@ -239,10 +235,8 @@ func (h agentHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h agentHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	// Gateway mode gating — BEFORE HandlerConfig
-	if gateway.IsGatewayModeActive() {
-		handlers.HandleError(r.Context(), w, errors.Forbidden(
-			"Agent deletion is not permitted in gateway mode. Agents are managed via GitOps ConfigMaps."))
+	if err := rbac.RequireGitOpsManaged(r.Context(), "Agent"); err != nil {
+		handlers.HandleError(r.Context(), w, err)
 		return
 	}
 

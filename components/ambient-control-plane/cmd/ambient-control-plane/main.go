@@ -23,6 +23,7 @@ import (
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/tokenserver"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/watcher"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
+	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/rs/zerolog"
 
 	"github.com/rs/zerolog/log"
@@ -211,7 +212,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	gatewayErrCh := make(chan error, 1)
 	if cfg.OpenShellUseGateway {
 		go func() {
-			gatewayErrCh <- initGatewayProvisioning(ctx, cfg.Kubeconfig, cfg.CPRuntimeNamespace)
+			gatewayErrCh <- initGatewayProvisioning(ctx, cfg.Kubeconfig, cfg.CPRuntimeNamespace, factory)
 		}()
 	} else {
 		// Close channel immediately so it's never selected
@@ -332,7 +333,7 @@ func createSessionReconcilers(reconcilerTypes []string, factory *reconciler.SDKC
 	return reconcilers
 }
 
-func initGatewayProvisioning(ctx context.Context, kubeconfig string, namespace string) error {
+func initGatewayProvisioning(ctx context.Context, kubeconfig string, namespace string, factory *reconciler.SDKClientFactory) error {
 	log.Info().Msg("initializing gateway provisioning")
 
 	// Build REST config
@@ -367,6 +368,9 @@ func initGatewayProvisioning(ctx context.Context, kubeconfig string, namespace s
 		return fmt.Errorf("load gateway manifests: %w", err)
 	}
 
+	// Ensure ACP projects exist for each namespace in platform-config
+	ensureProjectsForNamespaces(ctx, factory, nsConfigs)
+
 	// Initial reconciliation
 	if err := gateway.ReconcileGateways(ctx, dynamicClient, clientset, nsConfigs, manifests, platformConfigCM); err != nil {
 		log.Error().Err(err).Msg("initial gateway reconciliation failed")
@@ -375,10 +379,45 @@ func initGatewayProvisioning(ctx context.Context, kubeconfig string, namespace s
 	// Start ConfigMap watcher (blocks until context cancelled)
 	return gateway.WatchPlatformConfig(ctx, clientset, namespace, func(newConfigs []gateway.NamespaceConfig, cm *v1.ConfigMap) {
 		log.Info().Int("namespaces", len(newConfigs)).Msg("platform-config updated, reconciling gateways")
+		ensureProjectsForNamespaces(ctx, factory, newConfigs)
 		if err := gateway.ReconcileGateways(ctx, dynamicClient, clientset, newConfigs, manifests, cm); err != nil {
 			log.Error().Err(err).Msg("gateway reconciliation after config update failed")
 		}
 	})
+}
+
+func ensureProjectsForNamespaces(ctx context.Context, factory *reconciler.SDKClientFactory, nsConfigs []gateway.NamespaceConfig) {
+	for _, ns := range nsConfigs {
+		if err := ensureProject(ctx, factory, ns.Name); err != nil {
+			log.Error().Err(err).Str("namespace", ns.Name).Msg("failed to ensure ACP project")
+		}
+	}
+}
+
+func ensureProject(ctx context.Context, factory *reconciler.SDKClientFactory, name string) error {
+	sdk, err := factory.ForProject(ctx, name)
+	if err != nil {
+		return fmt.Errorf("get SDK client: %w", err)
+	}
+
+	opts := sdktypes.NewListOptions().Search("name = '" + name + "'").Build()
+	list, err := sdk.Projects().List(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("list projects: %w", err)
+	}
+
+	for _, p := range list.Items {
+		if p.Name == name {
+			log.Info().Str("project", name).Msg("ACP project already exists")
+			return nil
+		}
+	}
+
+	if _, err := sdk.Projects().Create(ctx, &sdktypes.Project{Name: name}); err != nil {
+		return fmt.Errorf("create project: %w", err)
+	}
+	log.Info().Str("project", name).Msg("created ACP project for gateway namespace")
+	return nil
 }
 
 func buildKubeConfig(kubeconfig string) (*rest.Config, error) {

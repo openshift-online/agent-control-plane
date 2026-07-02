@@ -111,7 +111,7 @@ KIND_HOST ?=
 # These inherit from environment if set, or can be overridden on command line
 LOCAL_IMAGES ?= false
 LOCAL_VERTEX ?= false
-OPENSHELL_USE_GATEWAY ?= false
+OPENSHELL_USE_GATEWAY ?= true
 ANTHROPIC_VERTEX_PROJECT_ID ?= $(shell echo $$ANTHROPIC_VERTEX_PROJECT_ID)
 CLOUD_ML_REGION ?= $(shell echo $$CLOUD_ML_REGION)
 # Default to ADC location if not set (created by: gcloud auth application-default login)
@@ -120,7 +120,7 @@ GOOGLE_APPLICATION_CREDENTIALS ?= $(or $(shell echo $$GOOGLE_APPLICATION_CREDENT
 # OpenShell Gateway Configuration (for OPENSHELL_USE_GATEWAY=true)
 # Provisions two tenant namespaces (tenant-a, tenant-b) with an OpenShell gateway each.
 # Override with OPENSHELL_TENANTS="ns1 ns2" to change the set of tenant namespaces.
-OPENSHELL_USE_GATEWAY ?= false
+OPENSHELL_USE_GATEWAY ?= true
 OPENSHELL_TENANTS ?= tenant-a tenant-b
 AGENT_SANDBOX_VERSION ?= v0.4.6
 

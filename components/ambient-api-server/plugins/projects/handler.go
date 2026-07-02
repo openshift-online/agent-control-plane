@@ -33,6 +33,11 @@ func NewProjectHandler(project ProjectService, generic services.GenericService, 
 }
 
 func (h projectHandler) Create(w http.ResponseWriter, r *http.Request) {
+	if err := pkgrbac.RequireGitOpsManaged(r.Context(), "Project"); err != nil {
+		handlers.HandleError(r.Context(), w, err)
+		return
+	}
+
 	var project openapi.Project
 	cfg := &handlers.HandlerConfig{
 		Body: &project,
@@ -55,6 +60,11 @@ func (h projectHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h projectHandler) Patch(w http.ResponseWriter, r *http.Request) {
+	if err := pkgrbac.RequireGitOpsManaged(r.Context(), "Project"); err != nil {
+		handlers.HandleError(r.Context(), w, err)
+		return
+	}
+
 	var patch openapi.ProjectPatchRequest
 
 	cfg := &handlers.HandlerConfig{
@@ -157,6 +167,11 @@ func (h projectHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h projectHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	if err := pkgrbac.RequireGitOpsManaged(r.Context(), "Project"); err != nil {
+		handlers.HandleError(r.Context(), w, err)
+		return
+	}
+
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
 			id := mux.Vars(r)["id"]
