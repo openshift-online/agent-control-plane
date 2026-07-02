@@ -18,7 +18,7 @@ spec:
             - --db-name-file=/secrets/db/db.name
             - --db-sslmode=disable
             - --alsologtostderr
-            - -v=10
+            - -v=5
       containers:
         - name: api-server
           imagePullPolicy: IfNotPresent
@@ -65,7 +65,7 @@ spec:
             - --cors-allowed-headers=X-Ambient-Project
             - --grpc-server-bindaddress=:9000
             - --alsologtostderr
-            - -v=10
+            - -v=5
           volumeMounts:
             - name: db-secrets
               mountPath: /secrets/db
