@@ -943,12 +943,14 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 			fi; \
 		done; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring Vertex AI for gateway..."; \
-		$(MAKE) --no-print-directory kind-setup-vertex; \
+		$(MAKE) --no-print-directory kind-setup-vertex || \
+		echo "$(COLOR_YELLOW)⚠$(COLOR_RESET)  Vertex AI setup failed (non-fatal). Run 'make kind-setup-vertex' manually with VERTEX_CRED set."; \
 	fi
 	@# Vertex AI setup if requested (non-gateway)
 	@if [ "$(OPENSHELL_USE_GATEWAY)" != "true" ]; then \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring Vertex AI..."; \
-		$(MAKE) --no-print-directory kind-setup-vertex; \
+		$(MAKE) --no-print-directory kind-setup-vertex || \
+		echo "$(COLOR_YELLOW)⚠$(COLOR_RESET)  Vertex AI setup failed (non-fatal). Run 'make kind-setup-vertex' manually with VERTEX_CRED set."; \
 	fi
 	@if [ -f .dev-bootstrap.env ] && [ -f ./scripts/bootstrap-workspace.sh ]; then \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Bootstrapping developer workspace..."; \
