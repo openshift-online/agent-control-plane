@@ -28,3 +28,15 @@ spec:
               value: "true"
             - name: LOCAL_IMAGES
               value: "true"
+            - name: USE_VERTEX
+              value: ""
+              valueFrom: null
+            - name: CLOUD_ML_REGION
+              value: ""
+              valueFrom: null
+            - name: ANTHROPIC_VERTEX_PROJECT_ID
+              value: ""
+              valueFrom: null
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: ""
+              valueFrom: null

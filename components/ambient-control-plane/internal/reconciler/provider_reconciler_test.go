@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell"
 	inferencepb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/inference/v1"
 	pb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
@@ -80,6 +81,10 @@ func (m *mockGateway) RotateProviderCredential(ctx context.Context, namespace st
 		return m.rotateProviderCredentialFn(ctx, namespace, req)
 	}
 	return &pb.RotateProviderCredentialResponse{}, nil
+}
+
+func (m *mockGateway) ExecSandbox(_ context.Context, _ string, _ *pb.ExecSandboxRequest) (*openshell.ExecResult, error) {
+	return &openshell.ExecResult{}, nil
 }
 
 func (m *mockGateway) ExecSandboxStreaming(_ context.Context, _ string, _ *pb.ExecSandboxRequest) error {
