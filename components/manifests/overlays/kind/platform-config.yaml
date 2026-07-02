@@ -7,11 +7,11 @@ data:
   namespaces: |
     - name: tenant-a
       gateway:
-        image: ghcr.io/nvidia/openshell/gateway:0.0.71
+        image: ghcr.io/nvidia/openshell/gateway:0.0.74
         serverDnsNames:
           - openshell-gateway.tenant-a.svc.cluster.local
     - name: tenant-b
       gateway:
-        image: ghcr.io/nvidia/openshell/gateway:0.0.71
+        image: ghcr.io/nvidia/openshell/gateway:0.0.74
         serverDnsNames:
           - openshell-gateway.tenant-b.svc.cluster.local

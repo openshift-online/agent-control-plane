@@ -23,7 +23,7 @@ func TestParseConfigMap(t *testing.T) {
 				Data: map[string]string{
 					"namespaces": `- name: tenant-a
   gateway:
-    image: ghcr.io/nvidia/openshell/gateway:0.0.71
+    image: ghcr.io/nvidia/openshell/gateway:0.0.74
     serverDnsNames:
       - openshell-gateway.tenant-a.svc.cluster.local
 - name: tenant-b
@@ -94,7 +94,7 @@ func TestParseConfigMap_ValidConfig(t *testing.T) {
 		Data: map[string]string{
 			"namespaces": `- name: tenant-a
   gateway:
-    image: ghcr.io/nvidia/openshell/gateway:0.0.71
+    image: ghcr.io/nvidia/openshell/gateway:0.0.74
     serverDnsNames:
       - openshell-gateway.tenant-a.svc.cluster.local
     config: |
@@ -112,8 +112,8 @@ func TestParseConfigMap_ValidConfig(t *testing.T) {
 	if config.Name != "tenant-a" {
 		t.Errorf("config.Name = %s, want tenant-a", config.Name)
 	}
-	if config.Gateway.Image != "ghcr.io/nvidia/openshell/gateway:0.0.71" {
-		t.Errorf("config.Gateway.Image = %s, want ghcr.io/nvidia/openshell/gateway:0.0.71", config.Gateway.Image)
+	if config.Gateway.Image != "ghcr.io/nvidia/openshell/gateway:0.0.74" {
+		t.Errorf("config.Gateway.Image = %s, want ghcr.io/nvidia/openshell/gateway:0.0.74", config.Gateway.Image)
 	}
 	if len(config.Gateway.ServerDnsNames) != 1 {
 		t.Fatalf("expected 1 ServerDnsName, got %d", len(config.Gateway.ServerDnsNames))
