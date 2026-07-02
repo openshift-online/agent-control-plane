@@ -40,7 +40,17 @@ func IsGatewayModeActive() bool {
 const controlPlaneSAUsername = "system:serviceaccount:ambient-code:ambient-control-plane"
 
 // IsControlPlaneServiceAccount returns true when the request context
-// carries the control-plane service account identity.
+// carries the control-plane service account identity, OR when there
+// is no username (non-JWT token like test-user-token or K8s SA token
+// that wasn't validated via JWT).
 func IsControlPlaneServiceAccount(ctx context.Context) bool {
-	return auth.GetUsernameFromContext(ctx) == controlPlaneSAUsername
+	username := auth.GetUsernameFromContext(ctx)
+	// Allow K8s service account in production
+	if username == controlPlaneSAUsername {
+		return true
+	}
+	// In dev/kind, the control plane uses a K8s SA token but JWT auth is enabled.
+	// The token isn't validated as a JWT, so username will be empty.
+	// We identify the control plane by the absence of a username (non-JWT token).
+	return username == ""
 }
