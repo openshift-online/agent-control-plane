@@ -73,6 +73,15 @@ func ConfiguredServiceAccountUsername() string {
 	return configuredServiceAccount
 }
 
+// OverrideServiceAccountForTesting temporarily sets the configured service
+// account username, bypassing the init-time cache. Returns a cleanup function
+// that restores the original value. Must only be used in tests.
+func OverrideServiceAccountForTesting(username string) func() {
+	original := configuredServiceAccount
+	configuredServiceAccount = username
+	return func() { configuredServiceAccount = original }
+}
+
 func isServiceAccount(jwtUsername, configured string) bool {
 	if configured == "" {
 		return false
