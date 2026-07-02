@@ -252,7 +252,7 @@ func TestApplicationSync(t *testing.T) {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	Expect(synced.OperationPhase).To(Equal(openapi.PtrString("Running")))
-	Expect(synced.HealthStatus).To(Equal(openapi.PtrString("Progressing")))
+	Expect(synced.HealthStatus).To(Equal(openapi.PtrString("Unknown")))
 }
 
 func TestApplicationRefresh(t *testing.T) {

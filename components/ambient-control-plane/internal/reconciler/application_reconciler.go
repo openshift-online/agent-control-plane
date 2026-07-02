@@ -17,6 +17,8 @@ import (
 const (
 	applicationSyncInterval = 30 * time.Second
 
+	platformProject = "_platform"
+
 	syncStatusSynced     = "Synced"
 	syncStatusOutOfSync  = "OutOfSync"
 	healthStatusHealthy  = "Healthy"
@@ -24,6 +26,8 @@ const (
 	opPhaseSucceeded     = "Succeeded"
 	opPhaseFailed        = "Failed"
 	opPhaseRunning       = "Running"
+
+	hashErrorSentinel = "<hash-error>"
 )
 
 type ApplicationReconciler struct {
@@ -57,13 +61,13 @@ func (r *ApplicationReconciler) Run(ctx context.Context) error {
 }
 
 func (r *ApplicationReconciler) reconcileOnce(ctx context.Context) {
-	client, err := r.factory.ForProject(ctx, "default")
+	platformClient, err := r.factory.ForProject(ctx, platformProject)
 	if err != nil {
-		r.logger.Error().Err(err).Msg("failed to create SDK client")
+		r.logger.Error().Err(err).Msg("failed to create platform-scoped SDK client")
 		return
 	}
 
-	apps, err := r.listAllApplications(ctx, client)
+	apps, err := r.listAllApplications(ctx, platformClient)
 	if err != nil {
 		r.logger.Error().Err(err).Msg("failed to list applications")
 		return
@@ -73,7 +77,7 @@ func (r *ApplicationReconciler) reconcileOnce(ctx context.Context) {
 
 	for i := range apps {
 		app := &apps[i]
-		if err := r.reconcileApplication(ctx, client, app); err != nil {
+		if err := r.reconcileApplication(ctx, platformClient, app); err != nil {
 			r.logger.Error().Err(err).Str("application_id", app.ID).Str("name", app.Name).Msg("failed to reconcile application")
 		}
 	}
@@ -116,20 +120,35 @@ func (r *ApplicationReconciler) reconcileApplication(ctx context.Context, client
 	return r.updateApplicationStatus(ctx, client, app, syncStatusSynced, healthStatusHealthy, opPhaseSucceeded, "sync completed", revision)
 }
 
+type applicationStatusPatch struct {
+	SyncStatus       string `json:"sync_status"`
+	HealthStatus     string `json:"health_status"`
+	OperationPhase   string `json:"operation_phase"`
+	OperationMessage string `json:"operation_message"`
+	LastSyncedAt     string `json:"last_synced_at"`
+	SyncRevision     string `json:"sync_revision,omitempty"`
+}
+
 func (r *ApplicationReconciler) updateApplicationStatus(ctx context.Context, client *sdkclient.Client, app *types.Application, syncStatus, healthStatus, opPhase, opMessage, revision string) error {
-	now := time.Now().UTC().Format(time.RFC3339)
-	patch := map[string]any{
-		"sync_status":       syncStatus,
-		"health_status":     healthStatus,
-		"operation_phase":   opPhase,
-		"operation_message": opMessage,
-		"last_synced_at":    now,
-	}
-	if revision != "" {
-		patch["sync_revision"] = revision
+	statusUpdate := applicationStatusPatch{
+		SyncStatus:       syncStatus,
+		HealthStatus:     healthStatus,
+		OperationPhase:   opPhase,
+		OperationMessage: opMessage,
+		LastSyncedAt:     time.Now().UTC().Format(time.RFC3339),
+		SyncRevision:     revision,
 	}
 
-	_, err := client.Applications().Update(ctx, app.ID, patch)
+	raw, err := json.Marshal(statusUpdate)
+	if err != nil {
+		return fmt.Errorf("marshal status patch: %w", err)
+	}
+	var patch map[string]interface{}
+	if err := json.Unmarshal(raw, &patch); err != nil {
+		return fmt.Errorf("unmarshal status patch: %w", err)
+	}
+
+	_, err = client.Applications().Update(ctx, app.ID, patch)
 	if err != nil {
 		r.logger.Error().Err(err).Str("application_id", app.ID).Msg("failed to update application status")
 	}
@@ -195,7 +214,7 @@ func (r *ApplicationReconciler) applyDeclarations(ctx context.Context, app *type
 func appContentHash(v interface{}) string {
 	data, err := yaml.Marshal(v)
 	if err != nil {
-		return ""
+		return hashErrorSentinel
 	}
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])

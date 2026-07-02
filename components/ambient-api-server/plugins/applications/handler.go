@@ -197,8 +197,6 @@ func (h applicationHandler) Sync(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return nil, err
 			}
-			progressing := "Progressing"
-			app.HealthStatus = &progressing
 			running := "Running"
 			app.OperationPhase = &running
 			app, err = h.application.Replace(ctx, app)
@@ -207,9 +205,8 @@ func (h applicationHandler) Sync(w http.ResponseWriter, r *http.Request) {
 			}
 			return PresentApplication(app), nil
 		},
-		ErrorHandler: handlers.HandleError,
 	}
-	handlers.Handle(w, r, cfg, http.StatusOK)
+	handlers.HandleGet(w, r, cfg)
 }
 
 func (h applicationHandler) Refresh(w http.ResponseWriter, r *http.Request) {
