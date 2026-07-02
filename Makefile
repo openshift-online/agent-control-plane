@@ -903,6 +903,18 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods..."
 	@cd e2e && ./scripts/wait-for-ready.sh
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring OpenShell mode (gateway=$(OPENSHELL_USE_GATEWAY))..."
+	@kubectl set env deployment/ambient-api-server -n $(NAMESPACE) \
+		OPENSHELL_USE_GATEWAY=$(OPENSHELL_USE_GATEWAY) $(QUIET_REDIRECT)
+	@kubectl set env deployment/ambient-control-plane -n $(NAMESPACE) \
+		OPENSHELL_USE_GATEWAY=$(OPENSHELL_USE_GATEWAY) $(QUIET_REDIRECT)
+	@kubectl rollout status deployment/ambient-api-server -n $(NAMESPACE) --timeout=60s $(QUIET_REDIRECT)
+	@kubectl rollout status deployment/ambient-control-plane -n $(NAMESPACE) --timeout=60s $(QUIET_REDIRECT)
+	@if [ "$(OPENSHELL_USE_GATEWAY)" = "true" ]; then \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell: gateway mode (default)"; \
+	else \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell: pod mode"; \
+	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring SSO..."
 	@NAMESPACE=$(NAMESPACE) KIND_FWD_AMBIENT_UI_PORT=$(KIND_FWD_AMBIENT_UI_PORT) KIND_FWD_KEYCLOAK_PORT=$(KIND_FWD_KEYCLOAK_PORT) \
 		./scripts/setup-kind-sso.sh
