@@ -8,7 +8,6 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/gateway"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
@@ -32,13 +31,6 @@ func NewAgentHandler(agent AgentService, generic services.GenericService) *agent
 }
 
 func (h agentHandler) Create(w http.ResponseWriter, r *http.Request) {
-	// Gateway mode gating — BEFORE HandlerConfig
-	if gateway.IsGatewayModeActive() {
-		handlers.HandleError(r.Context(), w, errors.Forbidden(
-			"Agent creation is not permitted in gateway mode. Agents are managed via GitOps ConfigMaps."))
-		return
-	}
-
 	var agent openapi.Agent
 	cfg := &handlers.HandlerConfig{
 		Body: &agent,
@@ -63,13 +55,6 @@ func (h agentHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h agentHandler) Patch(w http.ResponseWriter, r *http.Request) {
-	// Gateway mode gating — BEFORE HandlerConfig
-	if gateway.IsGatewayModeActive() {
-		handlers.HandleError(r.Context(), w, errors.Forbidden(
-			"Agent updates are not permitted in gateway mode. Agents are managed via GitOps ConfigMaps."))
-		return
-	}
-
 	var patch openapi.AgentPatchRequest
 
 	cfg := &handlers.HandlerConfig{
@@ -239,13 +224,6 @@ func (h agentHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h agentHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	// Gateway mode gating — BEFORE HandlerConfig
-	if gateway.IsGatewayModeActive() {
-		handlers.HandleError(r.Context(), w, errors.Forbidden(
-			"Agent deletion is not permitted in gateway mode. Agents are managed via GitOps ConfigMaps."))
-		return
-	}
-
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
 			projectID := mux.Vars(r)["id"]
