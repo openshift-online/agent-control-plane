@@ -4,16 +4,6 @@ set -euo pipefail
 echo "Waiting for all deployments to be ready..."
 echo ""
 
-# Wait for PostgreSQL first so the API server can connect on startup
-echo "⏳ Waiting for postgresql..."
-kubectl wait --for=condition=available --timeout=300s \
-  deployment/postgresql \
-  -n ambient-code
-
-# Restart the API server pod to break out of CrashLoopBackOff
-echo "⏳ Restarting ambient-api-server (DB is now ready)..."
-kubectl delete pod -l app=ambient-api-server -n ambient-code --wait=false 2>/dev/null || true
-
 # Wait for ambient-api-server
 echo "⏳ Waiting for ambient-api-server..."
 kubectl wait --for=condition=available --timeout=300s \
