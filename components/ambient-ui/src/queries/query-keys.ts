@@ -94,4 +94,7 @@ export const queryKeys = {
     detail: (projectId: string, id: string) =>
       [...queryKeys.policies.details(), projectId, id] as const,
   },
+  platformInfo: {
+    all: ['platform-info'] as const,
+  },
 } as const

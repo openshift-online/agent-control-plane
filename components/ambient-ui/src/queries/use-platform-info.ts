@@ -1,8 +1,9 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { queryKeys } from './query-keys'
 
-type PlatformInfo = {
+export type PlatformInfo = {
   gateway_mode: boolean
 }
 
@@ -16,7 +17,7 @@ async function fetchPlatformInfo(): Promise<PlatformInfo> {
 
 export function usePlatformInfo() {
   return useQuery({
-    queryKey: ['platform-info'],
+    queryKey: queryKeys.platformInfo.all,
     queryFn: fetchPlatformInfo,
     staleTime: 5 * 60 * 1000, // 5 min — config rarely changes
     retry: 1,
