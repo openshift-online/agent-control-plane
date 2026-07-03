@@ -6,6 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
@@ -28,17 +33,25 @@ const (
 	opPhaseRunning       = "Running"
 
 	hashErrorSentinel = "<hash-error>"
+
+	annotationSourceApplication = "application"
 )
 
+type GitFetcher interface {
+	FetchDeclarations(repoURL, path, targetRevision string) ([]gitAgentDeclaration, string, error)
+}
+
 type ApplicationReconciler struct {
-	factory *SDKClientFactory
-	logger  zerolog.Logger
+	factory    *SDKClientFactory
+	logger     zerolog.Logger
+	gitFetcher GitFetcher
 }
 
 func NewApplicationReconciler(factory *SDKClientFactory, logger zerolog.Logger) *ApplicationReconciler {
 	return &ApplicationReconciler{
-		factory: factory,
-		logger:  logger.With().Str("component", "application-reconciler").Logger(),
+		factory:    factory,
+		logger:     logger.With().Str("component", "application-reconciler").Logger(),
+		gitFetcher: &execGitFetcher{},
 	}
 }
 
@@ -174,9 +187,9 @@ func (r *ApplicationReconciler) fetchDeclarations(app *types.Application) ([]git
 		Str("repo", app.SourceRepoURL).
 		Str("path", app.SourcePath).
 		Str("revision", app.SourceTargetRevision).
-		Msg("fetching declarations from git (stub — git clone not yet implemented)")
+		Msg("fetching declarations from git")
 
-	return nil, app.SourceTargetRevision, nil
+	return r.gitFetcher.FetchDeclarations(app.SourceRepoURL, app.SourcePath, app.SourceTargetRevision)
 }
 
 func (r *ApplicationReconciler) applyDeclarations(ctx context.Context, app *types.Application, declarations []gitAgentDeclaration) error {
@@ -190,17 +203,77 @@ func (r *ApplicationReconciler) applyDeclarations(ctx context.Context, app *type
 		return fmt.Errorf("create SDK client for project %s: %w", app.DestinationProject, err)
 	}
 
+	existingAgents, err := r.listAllAgents(ctx, client)
+	if err != nil {
+		return fmt.Errorf("list existing agents in project %s: %w", app.DestinationProject, err)
+	}
+
+	agentsByName := make(map[string]types.Agent, len(existingAgents))
+	for _, a := range existingAgents {
+		agentsByName[a.Name] = a
+	}
+
+	declaredNames := make(map[string]bool, len(declarations))
+
 	var resourceStatus []map[string]string
 	for _, decl := range declarations {
+		declaredNames[decl.Name] = true
 		hash := appContentHash(decl)
-		r.logger.Info().Str("agent", decl.Name).Str("hash", hash).Msg("upserting agent declaration")
 
-		_ = client
+		existing, found := agentsByName[decl.Name]
+		if found && r.isApplicationManaged(existing.Annotations) {
+			existingHash := extractContentHash(existing.Annotations)
+			if existingHash == hash {
+				r.logger.Debug().Str("agent", decl.Name).Msg("agent unchanged, skipping update")
+				resourceStatus = append(resourceStatus, map[string]string{
+					"name":   decl.Name,
+					"status": "Synced",
+				})
+				continue
+			}
 
+			patch := r.buildAgentPatch(decl, hash)
+			if _, updateErr := client.Agents().Update(ctx, existing.ID, patch); updateErr != nil {
+				return fmt.Errorf("update agent %s: %w", decl.Name, updateErr)
+			}
+			r.logger.Info().Str("agent", decl.Name).Str("id", existing.ID).Msg("agent updated from application")
+			resourceStatus = append(resourceStatus, map[string]string{
+				"name":   decl.Name,
+				"status": "Synced",
+			})
+			continue
+		}
+
+		if !found {
+			agent := r.buildAgentResource(decl, app.DestinationProject, hash)
+			if _, createErr := client.Agents().Create(ctx, agent); createErr != nil {
+				return fmt.Errorf("create agent %s: %w", decl.Name, createErr)
+			}
+			r.logger.Info().Str("agent", decl.Name).Msg("agent created from application")
+			resourceStatus = append(resourceStatus, map[string]string{
+				"name":   decl.Name,
+				"status": "Synced",
+			})
+			continue
+		}
+
+		r.logger.Debug().Str("agent", decl.Name).Msg("agent exists but not application-managed, skipping")
 		resourceStatus = append(resourceStatus, map[string]string{
 			"name":   decl.Name,
-			"status": "Synced",
+			"status": "Skipped",
 		})
+	}
+
+	if app.AutoPrune {
+		for _, existing := range existingAgents {
+			if !declaredNames[existing.Name] && r.isApplicationManaged(existing.Annotations) {
+				if deleteErr := client.Agents().Delete(ctx, existing.ID); deleteErr != nil {
+					r.logger.Warn().Err(deleteErr).Str("agent", existing.Name).Msg("failed to delete pruned agent")
+				} else {
+					r.logger.Info().Str("agent", existing.Name).Str("id", existing.ID).Msg("pruned agent no longer declared in application")
+				}
+			}
+		}
 	}
 
 	if len(resourceStatus) > 0 {
@@ -211,6 +284,111 @@ func (r *ApplicationReconciler) applyDeclarations(ctx context.Context, app *type
 	return nil
 }
 
+func (r *ApplicationReconciler) listAllAgents(ctx context.Context, client *sdkclient.Client) ([]types.Agent, error) {
+	var all []types.Agent
+	page := 1
+	for {
+		opts := types.NewListOptions().Page(page).Size(100).Build()
+		list, err := client.Agents().List(ctx, opts)
+		if err != nil {
+			return nil, fmt.Errorf("list agents page %d: %w", page, err)
+		}
+		all = append(all, list.Items...)
+		if len(all) >= list.Total || len(list.Items) == 0 {
+			break
+		}
+		page++
+	}
+	return all, nil
+}
+
+func (r *ApplicationReconciler) isApplicationManaged(annotationsJSON string) bool {
+	if annotationsJSON == "" {
+		return false
+	}
+	var ann map[string]string
+	if err := json.Unmarshal([]byte(annotationsJSON), &ann); err != nil {
+		return false
+	}
+	return ann[annotationSource] == annotationSourceApplication
+}
+
+func (r *ApplicationReconciler) buildAgentPatch(decl gitAgentDeclaration, contentHash string) map[string]interface{} {
+	annotations := make(map[string]string)
+	for k, v := range decl.Annotations {
+		annotations[k] = v
+	}
+	annotations[annotationSource] = annotationSourceApplication
+	annotations[annotationContentHash] = contentHash
+	annJSON, _ := json.Marshal(annotations)
+
+	patch := map[string]interface{}{
+		"annotations": string(annJSON),
+	}
+	if decl.DisplayName != "" {
+		patch["display_name"] = decl.DisplayName
+	}
+	if decl.Description != "" {
+		patch["description"] = decl.Description
+	}
+	if decl.Prompt != "" {
+		patch["prompt"] = decl.Prompt
+	}
+	if decl.Entrypoint != "" {
+		patch["entrypoint"] = decl.Entrypoint
+	}
+	if decl.RepoURL != "" {
+		patch["repo_url"] = decl.RepoURL
+	}
+	if decl.LlmModel != "" {
+		patch["llm_model"] = decl.LlmModel
+	}
+	if len(decl.Providers) > 0 {
+		patch["providers"] = decl.Providers
+	}
+	if len(decl.Environment) > 0 {
+		patch["environment"] = decl.Environment
+	}
+	if len(decl.Labels) > 0 {
+		labelsJSON, _ := json.Marshal(decl.Labels)
+		patch["labels"] = string(labelsJSON)
+	}
+	return patch
+}
+
+func (r *ApplicationReconciler) buildAgentResource(decl gitAgentDeclaration, projectID, contentHash string) *types.Agent {
+	annotations := make(map[string]string)
+	for k, v := range decl.Annotations {
+		annotations[k] = v
+	}
+	annotations[annotationSource] = annotationSourceApplication
+	annotations[annotationContentHash] = contentHash
+	annJSON, _ := json.Marshal(annotations)
+
+	return &types.Agent{
+		Name:        decl.Name,
+		ProjectID:   projectID,
+		DisplayName: decl.DisplayName,
+		Description: decl.Description,
+		Prompt:      decl.Prompt,
+		Entrypoint:  decl.Entrypoint,
+		Providers:   decl.Providers,
+		Environment: decl.Environment,
+		RepoURL:     decl.RepoURL,
+		LlmModel:    decl.LlmModel,
+		Annotations: string(annJSON),
+		Labels:      marshalStringMap(decl.Labels),
+	}
+}
+
+func marshalStringMap(m map[string]string) string {
+	if len(m) == 0 {
+		return ""
+	}
+	data, _ := json.Marshal(m)
+	return string(data)
+}
+
 func appContentHash(v interface{}) string {
 	data, err := yaml.Marshal(v)
 	if err != nil {
@@ -218,4 +396,88 @@ func appContentHash(v interface{}) string {
 	}
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])
+}
+
+type execGitFetcher struct{}
+
+func (f *execGitFetcher) FetchDeclarations(repoURL, path, targetRevision string) ([]gitAgentDeclaration, string, error) {
+	tmpDir, err := os.MkdirTemp("", "app-reconciler-*")
+	if err != nil {
+		return nil, "", fmt.Errorf("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cloneArgs := []string{"clone", "--depth=1"}
+	if targetRevision != "" {
+		cloneArgs = append(cloneArgs, "--branch", targetRevision)
+	}
+	cloneArgs = append(cloneArgs, repoURL, tmpDir)
+
+	cmd := exec.Command("git", cloneArgs...)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return nil, "", fmt.Errorf("git clone %s: %s: %w", repoURL, strings.TrimSpace(string(out)), err)
+	}
+
+	revision, err := resolveGitRevision(tmpDir)
+	if err != nil {
+		return nil, "", fmt.Errorf("resolve revision: %w", err)
+	}
+
+	declPath := filepath.Join(tmpDir, path)
+	declarations, err := parseDeclarationsFromDir(declPath)
+	if err != nil {
+		return nil, "", fmt.Errorf("parse declarations from %s: %w", path, err)
+	}
+
+	return declarations, revision, nil
+}
+
+func resolveGitRevision(repoDir string) (string, error) {
+	cmd := exec.Command("git", "-C", repoDir, "rev-parse", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func parseDeclarationsFromDir(dir string) ([]gitAgentDeclaration, error) {
+	var declarations []gitAgentDeclaration
+
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		ext := strings.ToLower(filepath.Ext(path))
+		if ext != ".yaml" && ext != ".yml" {
+			return nil
+		}
+
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return fmt.Errorf("read %s: %w", path, readErr)
+		}
+
+		var decl gitAgentDeclaration
+		if yamlErr := yaml.Unmarshal(data, &decl); yamlErr != nil {
+			return fmt.Errorf("parse %s: %w", filepath.Base(path), yamlErr)
+		}
+
+		if decl.Name == "" {
+			return nil
+		}
+
+		declarations = append(declarations, decl)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return declarations, nil
 }
