@@ -60,30 +60,25 @@ data:
                   method: POST
                   path: "/v1/**"
     filesystem:
+      include_workdir: true
+      read_only:
+        - /usr
+        - /lib
+        - /proc
+        - /dev/urandom
+        - /app
+        - /etc
+        - /var/log
+        - /runner
       read_write:
         - /sandbox
         - /tmp
-      read_only:
-        - /usr
-        - /etc
-        - /lib
+        - /dev/null
     process:
       run_as_user: sandbox
       run_as_group: sandbox
     landlock:
       compatibility: best_effort
-  permissive-dev: |
-    name: permissive-dev
-    filesystem:
-      read_write:
-        - /sandbox
-        - /tmp
-      read_only:
-        - /usr
-        - /etc
-    process:
-      run_as_user: sandbox
-      run_as_group: sandbox
 ---
 apiVersion: v1
 kind: ConfigMap

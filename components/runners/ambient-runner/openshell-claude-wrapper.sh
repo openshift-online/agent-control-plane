@@ -23,7 +23,7 @@ touch "$GUARD"
 # The customApiKeyResponses pre-approves the dummy key suffix used for inference
 # routing so Claude Code does not prompt or reject it.
 if [ ! -f /sandbox/.claude.json ]; then
-    printf '{"trustedFolders":["/sandbox","/sandbox/runner"],"hasCompletedOnboarding":true,"projects":{"/sandbox":{"hasTrustDialogAccepted":true},"/sandbox/runner":{"hasTrustDialogAccepted":true}}}\n' > /sandbox/.claude.json
+    printf '{"trustedFolders":["/sandbox"],"hasCompletedOnboarding":true,"projects":{"/sandbox":{"hasTrustDialogAccepted":true}}}\n' > /sandbox/.claude.json
 fi
 if [ ! -f /sandbox/.claude/settings.json ]; then
     mkdir -p /sandbox/.claude

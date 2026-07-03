@@ -12,5 +12,5 @@ if [ -f /etc/resolv.conf ] && ! grep -q 'ndots:1' /etc/resolv.conf 2>/dev/null; 
     sed -i 's/ndots:[0-9]*/ndots:1/' /etc/resolv.conf 2>/dev/null || true
 fi
 
-cd /sandbox/runner/ambient-runner
+cd /runner/ambient-runner
 exec uvicorn main:app --host 0.0.0.0 --port 8001

@@ -122,20 +122,23 @@ RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     && chown -R sandbox:sandbox /sandbox/.local \
     && rm -f /usr/local/bin/claude
 
-COPY --chmod=755 openshell-claude-wrapper.sh /usr/local/bin/claude
-
-COPY policy.yaml /etc/openshell/policy.yaml
+# Atlassian mcp
+RUN uv tool install atlassian-mcp && uv cache clean
 
 # ------------------------------------------------------------
 # Ambient runner (Layer 3)
 # ------------------------------------------------------------
+COPY --chmod=755 openshell-claude-wrapper.sh /usr/local/bin/claude
+
+COPY policy.yaml /etc/openshell/policy.yaml
+
 RUN dnf install -y --allowerasing --nodocs jq unzip && dnf clean all
 
-WORKDIR /sandbox/runner
+WORKDIR /runner
 
-COPY . /sandbox/runner/ambient-runner
+COPY . /runner/ambient-runner
 
-RUN uv pip install --python /sandbox/.venv/bin/python '/sandbox/runner/ambient-runner[all]'
+RUN uv pip install --python /sandbox/.venv/bin/python '/runner/ambient-runner[all]'
 
 RUN mkdir -p /sandbox/workspace/artifacts /sandbox/workspace/file-uploads && \
     chown -R sandbox:sandbox /sandbox/workspace
@@ -151,6 +154,8 @@ LABEL org.opencontainers.image.revision=$GIT_COMMIT
 
 EXPOSE 8001
 
-COPY --chmod=755 entrypoint.sh /sandbox/runner/entrypoint.sh
+COPY --chmod=755 entrypoint.sh /runner/entrypoint.sh
 
-CMD ["/sandbox/runner/entrypoint.sh"]
+WORKDIR /sandbox
+
+CMD ["/runner/entrypoint.sh"]

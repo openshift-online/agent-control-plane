@@ -1,0 +1,120 @@
+# Agent Sandbox Configuration Example
+#
+# Complete example of ConfigMap-based agent, provider, and policy declarations.
+# Apply to a tenant namespace (e.g. "tenant-a") with:
+#   kubectl apply -n tenant-a -f agent-sandbox-config.yaml
+#
+# Prerequisites:
+#   - OPENSHELL_USE_GATEWAY=true on the control plane
+#   - Secrets referenced by providers must exist in the namespace before applying:
+#       kubectl create secret generic vertex-sa-key --from-literal=token=$(cat /path/to/vertex.json) -n tenant-a
+#       kubectl create secret generic jira \
+#         --from-literal=JIRA_USERNAME="your-email" \
+#         --from-literal=JIRA_API_TOKEN=$(cat path/to/jira-token.txt) \
+#         -n tenant-a
+#   - The namespace must correspond to an ACP project
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: provider-declarations
+  labels:
+    ambient.ai/kind: provider
+data:
+  vertex: |
+    name: vertex
+    type: vertex
+    secret: vertex-sa-key
+  jira: |
+    name: jira
+    type: generic
+    secret: jira
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: policy-declarations
+  labels:
+    ambient.ai/kind: policy
+data:
+  jira-and-inference: |
+    name: jira-and-inference
+    network_policies:
+      jira:
+        endpoints:
+          - host: "redhat.atlassian.net"
+            port: 443
+            protocol: rest
+            access: read-write
+            enforcement: enforce
+        binaries:
+          - path: /usr/bin/curl
+          - path: /usr/local/bin/claude
+          - path: /usr/bin/node
+      inference:
+        endpoints:
+          - host: inference.local
+            port: 443
+            protocol: rest
+            rules:
+              - allow:
+                  method: POST
+                  path: "/v1/**"
+    filesystem:
+      include_workdir: true
+      read_only:
+        - /usr
+        - /lib
+        - /proc
+        - /dev/urandom
+        - /app
+        - /etc
+        - /var/log
+        - /runner   
+      read_write:
+        - /sandbox
+        - /tmp
+        - /dev/null
+    process:
+      run_as_user: sandbox
+      run_as_group: sandbox
+    landlock:
+      compatibility: best_effort
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jira-agent-declarations
+  labels:
+    ambient.ai/kind: agent
+data:
+  jira-task-summarizer: |
+    name: jira-task-summarizer
+    display_name: JIRA Task Summarizer
+    description: Summarizes tasks done by a user in last 7 days
+    entrypoint: claude
+    providers:
+      - vertex
+      - jira
+    prompt: "Summarize the tasks my JIRA user has completed in the last 7 days"
+    sandbox_template:
+      resources:
+        cpu: "2"
+        memory: 4Gi
+    sandbox_policy: jira-and-inference
+    payloads:
+      - sandbox_path: /sandbox/.mcp.json
+        content: |
+          {
+            "mcp-atlassian": {
+              "type": "stdio",
+              "command": "mcp-atlassian",
+              "args": [],
+              "env": {
+                "JIRA_URL": "https://redhat.atlassian.net",
+                "JIRA_USERNAME": "${JIRA_USERNAME}",
+                "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
+              }
+            }
+          }
+
