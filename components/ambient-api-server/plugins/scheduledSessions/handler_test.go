@@ -12,8 +12,10 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	. "github.com/ambient-code/platform/components/ambient-api-server/plugins/scheduledSessions"
 	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 )
 
 // ---------------------------------------------------------------------------
@@ -26,6 +28,13 @@ func setupRouter(svc ScheduledSessionService) *mux.Router {
 	h := NewScheduledSessionHandler(svc, sessionSvc)
 
 	sub := r.PathPrefix("/api/ambient/v1/projects/{project_id}/scheduled-sessions").Subrouter()
+	sub.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := auth.SetUsernameContext(r.Context(), "test-user")
+			ctx = rbac.SetAuthResult(ctx, &rbac.AuthResult{Username: "test-user", IsGlobalAdmin: true})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	})
 	sub.HandleFunc("", h.List).Methods(http.MethodGet)
 	sub.HandleFunc("", h.Create).Methods(http.MethodPost)
 	sub.HandleFunc("/{id}", h.Get).Methods(http.MethodGet)
