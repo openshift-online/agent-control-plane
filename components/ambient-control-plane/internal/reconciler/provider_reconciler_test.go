@@ -95,6 +95,10 @@ func (m *mockGateway) UpdateConfig(_ context.Context, _ string, _ *pb.UpdateConf
 	return &pb.UpdateConfigResponse{}, nil
 }
 
+func (m *mockGateway) UploadPayloads(_ context.Context, _ string, _ string, _ []openshell.Payload) error {
+	return nil
+}
+
 func newFakeKubeClientWithSecrets(objects ...runtime.Object) *kubeclient.KubeClient {
 	scheme := runtime.NewScheme()
 	scheme.AddKnownTypeWithName(

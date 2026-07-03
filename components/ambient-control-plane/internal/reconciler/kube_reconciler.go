@@ -335,7 +335,11 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		r.logger.Debug().Str("sandbox", sbxName).Msg("sandbox already exists")
 		execEnv := r.inferenceExecEnv()
 		execEntrypoint := r.appendPromptToEntrypoint(ctx, entrypoint, session, sdk)
-		go r.execAfterReady(namespace, sbxName, session.ID, execEntrypoint, sdk, execEnv)
+		var payloads []types.Payload
+		if agent != nil {
+			payloads = agent.Payloads
+		}
+		go r.execAfterReady(namespace, sbxName, session.ID, execEntrypoint, sdk, execEnv, payloads)
 		r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 		return nil
 	}
@@ -388,7 +392,11 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 
 	execEnv := r.inferenceExecEnv()
 	execEntrypoint := r.appendPromptToEntrypoint(ctx, entrypoint, session, sdk)
-	go r.execAfterReady(namespace, sbxName, session.ID, execEntrypoint, sdk, execEnv)
+	var payloads []types.Payload
+	if agent != nil {
+		payloads = agent.Payloads
+	}
+	go r.execAfterReady(namespace, sbxName, session.ID, execEntrypoint, sdk, execEnv, payloads)
 
 	r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 	return nil
@@ -426,7 +434,7 @@ func (r *SimpleKubeReconciler) resolveEntrypoint(agent *types.Agent) []string {
 	if agent != nil && agent.Entrypoint != "" {
 		return []string{agent.Entrypoint}
 	}
-	return []string{"/sandbox/runner/entrypoint.sh"}
+	return []string{"/runner/entrypoint.sh"}
 }
 
 func (r *SimpleKubeReconciler) resolveSandboxImage(agent *types.Agent) string {
@@ -460,7 +468,7 @@ func (r *SimpleKubeReconciler) mergeAgentEnvironment(env map[string]string, agen
 	}
 }
 
-func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string, sdk *sdkclient.Client, execEnv map[string]string) {
+func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string, sdk *sdkclient.Client, execEnv map[string]string, payloads []types.Payload) {
 	pollCtx, pollCancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer pollCancel()
 
@@ -543,7 +551,7 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			// Piping through tee overwrites the file via its open fd instead.
 			ndotsResult, ndotsErr := r.gateway.ExecSandbox(execCtx, namespace, &openshellpb.ExecSandboxRequest{
 				SandboxId:      sandboxID,
-				Command:        []string{"/bin/sh", "-c", "cp /etc/resolv.conf /tmp/resolv.conf && sed 's/ndots:[0-9]*/ndots:1/' /tmp/resolv.conf | tee /etc/resolv.conf > /dev/null"},
+				Command:        []string{"/bin/sh", "-c", "cp /etc/resolv.conf /tmp/resolv.conf && sed 's/ndots:[0-9]*/ndots:1/' /tmp/resolv.conf | tee /etc/resolv.conf > /tmp/.ndots_out; rm -f /tmp/.ndots_out"},
 				TimeoutSeconds: 10,
 			})
 			if ndotsErr != nil {
@@ -552,6 +560,25 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				r.logger.Warn().Int32("exit_code", ndotsResult.ExitCode).Str("stderr", string(ndotsResult.Stderr)).Str("sandbox", sbxName).Msg("ndots patch exited non-zero")
 			} else {
 				r.logger.Info().Str("sandbox", sbxName).Msg("ndots patched to 1 for musl DNS compatibility")
+			}
+
+			if len(payloads) > 0 {
+				var sshPayloads []openshell.Payload
+				for _, p := range payloads {
+					if p.SandboxPath != "" && p.Content != "" {
+						sshPayloads = append(sshPayloads, openshell.Payload{Path: p.SandboxPath, Content: p.Content})
+					}
+				}
+				if len(sshPayloads) > 0 {
+					if uploadErr := r.gateway.UploadPayloads(execCtx, namespace, sandboxID, sshPayloads); uploadErr != nil {
+						r.logger.Error().Err(uploadErr).Str("sandbox", sbxName).Msg("failed to upload payloads via SSH")
+						failSession(fmt.Sprintf("payload upload failed: %v", uploadErr))
+						return
+					}
+					for _, p := range sshPayloads {
+						r.logger.Info().Str("sandbox", sbxName).Str("path", p.Path).Msg("payload written to sandbox")
+					}
+				}
 			}
 
 			err = r.gateway.ExecSandboxStreaming(execCtx, namespace, &openshellpb.ExecSandboxRequest{
@@ -2010,7 +2037,7 @@ func (r *SimpleKubeReconciler) assembleInitialPrompt(ctx context.Context, sessio
 			parts = append(parts, agent.Prompt)
 		}
 
-		msgs, err := sdk.InboxMessages().List(ctx, &types.ListOptions{Size: 100, Search: fmt.Sprintf("project_id = '%s' and agent_id = '%s'", session.ProjectID, session.AgentID)})
+		msgs, err := sdk.InboxMessages().ListByAgent(ctx, session.ProjectID, session.AgentID, &types.ListOptions{Size: 100})
 		if err != nil {
 			r.logger.Warn().Err(err).Str("agent_id", session.AgentID).Msg("assembleInitialPrompt: failed to fetch inbox messages")
 		} else {
