@@ -66,8 +66,8 @@ func (h *startHandler) Start(w http.ResponseWriter, r *http.Request) {
 
 	if tier == gateway.TierNone {
 		authResult := rbac.GetAuthResult(ctx)
-		if authResult != nil && authResult.IsGlobalAdmin {
-			tier = gateway.TierAdmin
+		if rbac.IsProjectAuthorized(authResult, projectID) {
+			tier = gateway.TierEditor
 		}
 	}
 

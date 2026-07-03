@@ -33,10 +33,9 @@ func checkTierForMutation(ctx context.Context, projectID string) *errors.Service
 
 	tier := gateway.GetTierResolver().ResolveTier(ctx, username, projectID)
 
-	// ACP internal role fallback
 	if tier == gateway.TierNone {
 		authResult := rbac.GetAuthResult(ctx)
-		if authResult != nil && authResult.IsGlobalAdmin {
+		if rbac.IsProjectAuthorized(authResult, projectID) {
 			return nil
 		}
 	}
