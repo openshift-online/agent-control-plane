@@ -655,7 +655,7 @@ Key differences from file mode:
 | Aspect | File Mode | Gateway Mode |
 |--------|-----------|--------------|
 | Image | `Dockerfile` (`RUNNER_IMAGE`) | `Dockerfile.openshell` (`OPENSHELL_RUNNER_IMAGE`) |
-| Runner path | `/app/ambient-runner` | `/sandbox/runner/ambient-runner` |
+| Runner path | `/app/ambient-runner` | `/runner/ambient-runner` |
 | Process start | Container `CMD` | `ExecSandbox` gRPC after sandbox reaches Ready |
 | Credentials | Sidecar containers | Gateway providers (egress proxy injection) |
 | Sandbox isolation | In-container Supervisor (file mode) | Gateway-managed Supervisor |

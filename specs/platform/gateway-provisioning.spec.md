@@ -102,6 +102,95 @@ For each namespace listed in the platform configuration, the control plane SHALL
 
 ---
 
+### Requirement: Managed Namespace Labels
+
+When the gateway startup path (`initGatewayProvisioning`) ensures an ACP project for a namespace listed in `platform-config`, it SHALL also apply the managed namespace labels via the `NamespaceProvisioner`. This ensures the `ConfigMapSyncer` can discover and reconcile agent, provider, and policy ConfigMaps in gateway-managed namespaces.
+
+The following labels SHALL be applied to every gateway-managed namespace:
+
+- `ambient-code.io/managed=true`
+- `ambient-code.io/project-id=<project-name>`
+- `ambient-code.io/managed-by=ambient-control-plane`
+
+These are the same labels applied by `ProjectReconciler.ensureNamespace` in the standard project lifecycle. The gateway path applies them directly because the `ProjectReconciler` may not observe the project creation event due to a startup race between `initGatewayProvisioning` and the gRPC informer watch stream.
+
+#### Scenario: Labels applied on initial provisioning
+
+- GIVEN `platform-config` lists namespace `tenant-alpha`
+- AND `tenant-alpha` exists in the cluster
+- WHEN ACP starts and runs `initGatewayProvisioning`
+- THEN ACP SHALL create an ACP project for `tenant-alpha` (if not already present)
+- AND ACP SHALL apply managed labels to the `tenant-alpha` namespace via `ProvisionNamespace`
+- AND the `ConfigMapSyncer` SHALL include `tenant-alpha` in its reconciliation scope
+
+#### Scenario: Labels applied on platform-config update
+
+- GIVEN ACP is running with gateway mode enabled
+- AND an admin adds namespace `tenant-beta` to `platform-config`
+- WHEN ACP detects the ConfigMap change
+- THEN ACP SHALL ensure an ACP project for `tenant-beta`
+- AND ACP SHALL apply managed labels to the `tenant-beta` namespace
+- AND the `ConfigMapSyncer` SHALL begin reconciling ConfigMaps in `tenant-beta`
+
+#### Scenario: Labels already present
+
+- GIVEN `tenant-alpha` namespace already has managed labels from a prior startup
+- WHEN ACP restarts and runs `initGatewayProvisioning`
+- THEN ACP SHALL update the namespace labels (update-or-create pattern via `ProvisionNamespace`)
+- AND the operation SHALL be idempotent
+
+---
+
+### Requirement: Payload Delivery via SSH-over-gRPC
+
+When the control plane needs to write payload files (`.mcp.json`, `CLAUDE.md`, credential configs) into a running sandbox, it SHALL use the OpenShell SSH-over-gRPC mechanism rather than `ExecSandbox`. Sandbox containers use a read-only root filesystem, so `ExecSandbox`-based writes (which run as the sandbox user) fail with "Permission denied". The SSH path routes through the supervisor's embedded SSH server (russh), which runs as root and can write to any path.
+
+**Data path:**
+```
+Control Plane
+  → gRPC: CreateSshSession(sandbox_id) → authorization token
+  → gRPC: ForwardTcp (bidirectional stream)
+      → TcpForwardInit: sandbox_id, service_id, SshRelayTarget, token
+      → SSH handshake over the gRPC stream (net.Conn adapter)
+      → SSH session: "mkdir -p <dir> && cat > <path>" with content piped to stdin
+  → Repeat for each payload file over the same SSH connection
+```
+
+This follows the same pattern used by the OpenShell CLI for file uploads (`ssh_tar_upload` in `openshell-cli`). A single SSH connection is established per upload batch — individual payloads each open an SSH session (channel) within that connection.
+
+**Implementation:** `internal/openshell/ssh_upload.go` — `GatewayClient.UploadPayloads()`
+
+#### Scenario: Upload payloads to a running sandbox
+
+- GIVEN a sandbox is in `SANDBOX_PHASE_READY` state
+- AND the session has one or more payload files to inject
+- WHEN the control plane delivers payloads
+- THEN it SHALL call `CreateSshSession` on the gateway to obtain an authorization token
+- AND it SHALL open a `ForwardTcp` bidirectional gRPC stream
+- AND it SHALL send a `TcpForwardInit` frame with `SshRelayTarget` and the authorization token
+- AND it SHALL perform an SSH handshake over the gRPC stream using `golang.org/x/crypto/ssh`
+- AND it SHALL write each payload by executing `mkdir -p <dir> && cat > <path>` via an SSH session with the file content piped to stdin
+- AND it SHALL reuse the same SSH connection for all payloads in the batch
+
+#### Scenario: SSH session creation fails
+
+- GIVEN the control plane calls `CreateSshSession` for a sandbox
+- AND the gateway returns an error (e.g., sandbox not found, gateway unavailable)
+- WHEN the control plane handles the error
+- THEN the control plane SHALL fail the session with a descriptive error message
+- AND the control plane SHALL evict the cached gRPC connection if the error indicates the gateway is unavailable
+
+#### Scenario: Payload write fails mid-batch
+
+- GIVEN the control plane is writing payloads via SSH
+- AND a write fails (SSH session error, command non-zero exit)
+- WHEN the control plane handles the error
+- THEN the control plane SHALL fail the session immediately
+- AND the control plane SHALL NOT continue writing remaining payloads
+- AND the error message SHALL include the file path that failed
+
+---
+
 ### Requirement: Gateway Manifest Loading
 
 The control plane SHALL load gateway resource manifests from its container filesystem. Gateway manifests SHALL be stored in the ACP codebase and packaged into the ACP container image.

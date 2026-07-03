@@ -333,7 +333,7 @@ The `ExecSandbox` RPC is a server-streaming call that returns stdout, stderr, an
 
 - GIVEN a sandbox has been created via `CreateSandbox`
 - WHEN the sandbox reaches `SANDBOX_PHASE_READY`
-- THEN the control plane SHALL call `ExecSandbox` with the command `["/bin/bash", "-c", "cd /sandbox/runner/ambient-runner && PATH=/sandbox/.venv/bin:$PATH uvicorn main:app --host 0.0.0.0 --port 8001"]`
+- THEN the control plane SHALL call `ExecSandbox` with the command `["/bin/bash", "-c", "cd /runner/ambient-runner && PATH=/sandbox/.venv/bin:$PATH uvicorn main:app --host 0.0.0.0 --port 8001"]`
 - AND the `SandboxId` SHALL be the gateway's internal UUID obtained from `GetSandbox` response metadata
 - AND the exec SHALL run asynchronously (fire-and-forget) — the control plane launches a goroutine that consumes the exec stream but does not block reconciliation
 - AND the exec goroutine SHALL use a separate context from the readiness-polling context — the polling context has a 120-second timeout suitable for provisioning, but the exec context must remain open for the lifetime of the uvicorn process (which runs until session completion)
@@ -343,9 +343,9 @@ The `ExecSandbox` RPC is a server-streaming call that returns stdout, stderr, an
 
 - GIVEN `OPENSHELL_USE_GATEWAY` is `true`
 - AND the sandbox uses the gateway-mode runner image (built from `Dockerfile.openshell`)
-- THEN the runner SHALL be located at `/sandbox/runner/ambient-runner` inside the container
+- THEN the runner SHALL be located at `/runner/ambient-runner` inside the container
 - AND the `ExecSandbox` command SHALL use this path to start the uvicorn server
-- AND this path differs from the standard runner image (`/app/ambient-runner`) because the gateway image uses `/sandbox` as its working directory root to align with OpenShell sandbox conventions
+- AND this path differs from the standard runner image (`/app/ambient-runner`) because the gateway image uses `/runner` as its runner directory root
 - AND the gateway image's `CMD` directive is irrelevant — the gateway overrides the container entrypoint to the supervisor binary, so the runner is always started via `ExecSandbox`
 
 #### Scenario: Polling for sandbox readiness
@@ -656,7 +656,7 @@ The control plane SHALL load client TLS credentials dynamically from a Kubernete
 Namespace lifecycle is mode-dependent:
 
 - **Pod mode** (`OPENSHELL_USE_GATEWAY=false`): The control plane manages namespace lifecycle directly. `StandardNamespaceProvisioner.ProvisionNamespace` creates the namespace if absent or updates its labels if it already exists. `DeprovisionNamespace` deletes the namespace on cleanup.
-- **Gateway mode** (`OPENSHELL_USE_GATEWAY=true`): Project namespaces are created and managed externally to ACP (e.g., by the OpenShell gateway Helm install or cluster provisioning tooling). The control plane verifies existence via a direct `GetNamespace` call and fails with a descriptive error if a required namespace is missing. It never creates or deletes namespaces.
+- **Gateway mode** (`OPENSHELL_USE_GATEWAY=true`): Project namespaces are created and managed externally to ACP (e.g., by the OpenShell gateway Helm install or cluster provisioning tooling). The control plane verifies existence via a direct `GetNamespace` call and fails with a descriptive error if a required namespace is missing. It never creates or deletes namespaces. However, during gateway initialization (`initGatewayProvisioning`), the control plane SHALL apply managed labels (`ambient-code.io/managed=true`, `ambient-code.io/project-id`, `ambient-code.io/managed-by=ambient-control-plane`) to each namespace listed in `platform-config` via `ProvisionNamespace`. This is required for the `ConfigMapSyncer` to discover and reconcile agent/provider/policy ConfigMaps in gateway-managed namespaces.
 
 #### Scenario: Pod mode — namespace provisioning
 
@@ -682,13 +682,15 @@ Namespace lifecycle is mode-dependent:
 - THEN it SHALL fail with an error: `namespace my-project does not exist; gateway-managed namespaces must be provisioned externally`
 - AND it SHALL NOT attempt to create the namespace
 
-#### Scenario: Gateway mode — direct namespace verification (no provisioner)
+#### Scenario: Gateway mode — direct namespace verification during session provisioning
 
 - GIVEN `OPENSHELL_USE_GATEWAY` is `true`
 - WHEN the control plane provisions a session
 - THEN it SHALL verify the target namespace exists via a direct `GetNamespace` API call
-- AND it SHALL NOT call the provisioner's `ProvisionNamespace` method — the provisioner is bypassed entirely in gateway mode to prevent any provisioner implementation (Standard, MPP) from attempting to create or manage the namespace
+- AND it SHALL NOT call the provisioner's `ProvisionNamespace` method during session provisioning — the provisioner is bypassed at session time to prevent any provisioner implementation (Standard, MPP) from attempting to create the namespace
 - AND if the namespace does not exist, the control plane SHALL fail with: `namespace <name> does not exist; gateway-managed namespaces must be provisioned externally`
+
+**Note:** The provisioner IS called during gateway initialization (`initGatewayProvisioning` / `ensureProject`) to apply managed labels to existing namespaces. This is distinct from session-time provisioning where the provisioner is bypassed.
 
 #### Scenario: Project deletion
 
@@ -769,11 +771,11 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | [pod_sync.go] | Extended with sandbox sync branch for gateway mode |
 | `main.go` | Extended to create and wire `GatewayClient` when `OPENSHELL_USE_GATEWAY=true` |
 | [config.go] | Extended with `OpenShellUseGateway` and `OpenShellRunnerImage` fields |
-| `StandardNamespaceProvisioner` | Used only in pod mode (`OPENSHELL_USE_GATEWAY=false`). `ProvisionNamespace` creates the namespace if absent, updates labels if it exists (update-or-create). `DeprovisionNamespace` deletes the namespace |
-| `provisionSessionGateway()` | Bypasses the provisioner entirely — uses a direct `GetNamespace` check so no provisioner implementation can inadvertently create or modify the namespace |
+| `StandardNamespaceProvisioner` | In pod mode (`OPENSHELL_USE_GATEWAY=false`): `ProvisionNamespace` creates the namespace if absent, updates labels if it exists (update-or-create). `DeprovisionNamespace` deletes the namespace. In gateway mode: `ProvisionNamespace` is called during `initGatewayProvisioning` to apply managed labels to externally-created namespaces (update-or-create); it never creates namespaces in this path since they must already exist |
+| `provisionSessionGateway()` | Bypasses the provisioner for session provisioning — uses a direct `GetNamespace` check so no provisioner implementation can inadvertently create the namespace. Namespace labeling is handled separately during gateway initialization via `ensureProject` |
 | `cleanupSessionGateway()` | Does not call `DeprovisionNamespace` — namespace lifecycle is fully external in gateway mode |
 | [openshell-sandbox.spec.md] | Unchanged — file-mode spec remains authoritative when `OPENSHELL_USE_GATEWAY=false` |
-| Runner pod | Same image and env vars, but the runner process is started via `ExecSandbox` with `["/bin/bash", "-c", "cd /sandbox/runner/ambient-runner && PATH=/sandbox/.venv/bin:$PATH uvicorn main:app --host 0.0.0.0 --port 8001"]` after the sandbox reaches Ready — the gateway overrides the container entrypoint to the supervisor binary with `sleep infinity`, so the image's CMD is never executed directly. The exec goroutine must use a long-lived context (not the 120s polling context) and must not accumulate stdout/stderr in memory |
+| Runner pod | Same image and env vars, but the runner process is started via `ExecSandbox` with `["/bin/bash", "-c", "cd /runner/ambient-runner && PATH=/sandbox/.venv/bin:$PATH uvicorn main:app --host 0.0.0.0 --port 8001"]` after the sandbox reaches Ready — the gateway overrides the container entrypoint to the supervisor binary with `sleep infinity`, so the image's CMD is never executed directly. The exec goroutine must use a long-lived context (not the 120s polling context) and must not accumulate stdout/stderr in memory |
 | `GatewayClient.ExecSandbox()` | Current implementation blocks on the full stream and accumulates output — must be updated to support fire-and-forget semantics for long-running processes (discard/stream output, use caller-provided context) |
 | `GatewayClient.UpdateConfig()` | New method — calls the `UpdateConfig` gRPC RPC; used by `enableProvidersV2` to set `providers_v2_enabled=true` globally on the gateway |
 | `GatewayClient.SetClusterInference()` | New method — calls the `SetClusterInference` gRPC RPC on the `openshell.inference.v1.Inference` service; used by `configureInference` to set provider and model for inference routing |
