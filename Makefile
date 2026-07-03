@@ -954,6 +954,7 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 		PF_PORT=18766; \
 		kubectl port-forward -n $(NAMESPACE) svc/ambient-api-server "$${PF_PORT}:8000" >/dev/null 2>&1 & \
 		PF_PID=$$!; \
+		trap "kill $$PF_PID 2>/dev/null || true" EXIT; \
 		sleep 2; \
 		TOKEN=$$(kubectl get secret test-user-token -n $(NAMESPACE) -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null); \
 		$$ACPCTL login --url "http://localhost:$${PF_PORT}" --token "$$TOKEN" >/dev/null 2>&1; \
