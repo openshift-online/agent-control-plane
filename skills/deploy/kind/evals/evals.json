@@ -2,61 +2,61 @@
   {
     "input": "Deploy a kind cluster with OPENSHELL_USE_GATEWAY=true, set up a credential in tenant-a using vertex.json, and spin up a sandbox",
     "expected_tool_call": "Skill",
-    "expected_args": { "skill": "openshell-gateway" },
+    "expected_args": { "skill": "kind" },
     "description": "Full end-to-end gateway workflow: cluster + credential + sandbox"
   },
   {
     "input": "test the openshell gateway in kind",
     "expected_tool_call": "Skill",
-    "expected_args": { "skill": "openshell-gateway" },
+    "expected_args": { "skill": "kind" },
     "description": "Natural language trigger for setting up gateway mode in kind"
   },
   {
     "input": "bring up kind with OPENSHELL_USE_GATEWAY=true",
     "expected_tool_call": "Skill",
-    "expected_args": { "skill": "openshell-gateway" },
+    "expected_args": { "skill": "kind" },
     "description": "Explicit gateway mode cluster setup"
   },
   {
     "input": "create a vertex credential in tenant-a and spin up a sandbox",
     "expected_tool_call": "Skill",
-    "expected_args": { "skill": "openshell-gateway" },
+    "expected_args": { "skill": "kind" },
     "description": "Credential creation and sandbox provisioning in a tenant"
   },
   {
     "input": "set up gateway connectivity for tenant-a so I can run openshell sandbox list",
     "expected_tool_call": "Skill",
-    "expected_args": { "skill": "openshell-gateway" },
+    "expected_args": { "skill": "kind" },
     "description": "Configure local mTLS and port-forward for openshell CLI gateway access"
   },
   {
     "input": "configure mtls certs and connect the openshell CLI to the tenant-a gateway",
     "expected_tool_call": "Skill",
-    "expected_args": { "skill": "openshell-gateway" },
+    "expected_args": { "skill": "kind" },
     "description": "mTLS cert extraction and openshell CLI registration"
   },
   {
     "input": "dual-tenant sandbox provisioning isn't working",
     "expected_tool_call": "Skill",
-    "expected_args": { "skill": "openshell-gateway" },
+    "expected_args": { "skill": "kind" },
     "description": "Troubleshooting dual-tenant gateway provisioning"
   },
   {
     "input": "run the openshell dual-tenant e2e test",
     "expected_tool_call": "Skill",
-    "expected_args": { "skill": "openshell-gateway" },
+    "expected_args": { "skill": "kind" },
     "description": "Running the gateway E2E test suite"
   },
   {
     "input": "openshell-client-tls not found when creating a session",
     "expected_tool_call": "Skill",
-    "expected_args": { "skill": "openshell-gateway" },
+    "expected_args": { "skill": "kind" },
     "description": "Troubleshooting missing TLS secrets in gateway mode"
   },
   {
     "input": "openshell sandbox list gives BadSignature error",
     "expected_tool_call": "Skill",
-    "expected_args": { "skill": "openshell-gateway" },
+    "expected_args": { "skill": "kind" },
     "description": "Troubleshooting mTLS cert mismatch with gateway"
   }
 ]

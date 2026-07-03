@@ -1,0 +1,10 @@
+kind: Project
+name: tenant-b
+description: Staging tenant for validation before production promotion.
+prompt: |
+  This is the staging tenant. Agents here run with restricted sandbox policies
+  matching production. Use this environment to validate agent behavior, security
+  policies, and provider configs before promoting to production.
+labels:
+  env: staging
+  team: platform

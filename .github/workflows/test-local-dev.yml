@@ -160,9 +160,9 @@ jobs:
     - name: Run comprehensive test suite
       run: |
         echo "Running local development test suite..."
-        chmod +x tests/local-dev-test.sh
+        chmod +x tests/e2e/local-dev-test.sh
 
-        ./tests/local-dev-test.sh --skip-setup --ci || {
+        ./tests/e2e/local-dev-test.sh --skip-setup --ci || {
           echo "Test suite failed - showing debugging information..."
           make local-troubleshoot
           exit 1
@@ -176,13 +176,13 @@ jobs:
 
         API_URL=http://localhost:13592/api/ambient/v1 \
         KC_URL=http://localhost:18592 \
-        bash components/ambient-api-server/test/e2e/rbac_e2e_test.sh
+        bash tests/e2e/rbac_e2e_test.sh
 
     - name: Run Scheduled Sessions E2E tests
       run: |
         API_URL=http://localhost:13592/api/ambient/v1 \
         KC_URL=http://localhost:18592 \
-        bash components/ambient-api-server/test/e2e/scheduled_sessions_e2e_test.sh
+        bash tests/e2e/scheduled_sessions_e2e_test.sh
 
     - name: Show deployment status
       if: always()

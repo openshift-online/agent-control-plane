@@ -25,12 +25,8 @@ type TierResolver struct {
 }
 
 // NewTierResolver creates a resolver that checks Kubernetes namespace RBAC.
-// If k8sClient is nil or gateway mode is inactive, all calls return TierNone.
+// If k8sClient is nil, all calls return TierNone.
 func NewTierResolver() (*TierResolver, error) {
-	if !IsGatewayModeActive() {
-		return &TierResolver{enabled: false}, nil
-	}
-
 	// In-cluster configuration
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -51,8 +47,7 @@ func NewTierResolver() (*TierResolver, error) {
 }
 
 // ResolveTier checks the user's Kubernetes namespace access and returns
-// their effective ACP tier. Returns TierNone if gateway mode is inactive
-// or the check fails.
+// their effective ACP tier. Returns TierNone if the check fails.
 //
 // Mapping (based on representative capabilities):
 //

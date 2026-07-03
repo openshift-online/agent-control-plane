@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")"
 
 echo "======================================"
 echo "Refreshing Kind Environment"
@@ -10,7 +10,7 @@ echo "======================================"
 # Load .env if it exists
 if [ ! -f ".env" ]; then
   echo "⚠️  No .env file found - nothing to refresh"
-  echo "   Create e2e/.env to override images or add API keys"
+  echo "   Create tests/infra/.env to override images or add API keys"
   exit 0
 fi
 

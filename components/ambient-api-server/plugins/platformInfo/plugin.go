@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/gateway"
 	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
 )
 
@@ -15,7 +14,7 @@ var responseBytes []byte
 
 func init() {
 	responseBytes, _ = json.Marshal(platformInfoResponse{
-		GatewayMode: gateway.IsGatewayModeActive(),
+		GatewayMode: true,
 	})
 
 	// Pre-auth middleware — bypasses JWT validation, runs before RBAC

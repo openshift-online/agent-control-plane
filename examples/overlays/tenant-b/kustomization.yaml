@@ -1,0 +1,7 @@
+kind: Kustomization
+bases:
+  - ../../base
+resources:
+  - project.yaml
+  - provider-vertex.yaml
+  - credential-vertex.yaml

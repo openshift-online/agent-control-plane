@@ -1,19 +1,20 @@
 ---
-name: openshell-gateway
+name: kind
 description: >
-  Deploy a kind cluster with OpenShell gateway mode, set up Vertex/Google
-  credentials in tenant namespaces, spin up sandbox sessions, and configure
-  local openshell CLI connectivity to gateways. Use this skill whenever the
-  user wants to test gateway-provisioned sandboxes, create credentials in
-  tenants, debug sandbox provisioning, connect the openshell CLI to a gateway,
-  or run dual-tenant tests. You SHOULD reach for this skill on: "openshell
-  gateway", "gateway mode", "OPENSHELL_USE_GATEWAY", "sandbox provisioning",
-  "dual-tenant", "tenant-a", "tenant-b", "vertex credential", "spin up a
-  sandbox", "credential in tenant", "openshell sandbox list", "gateway
-  connectivity", "connect to the gateway", "mtls", "port-forward gateway".
+  Deploy a Kind cluster with OpenShell gateway mode, apply tenant fleet
+  definitions via acpctl apply -k, set up Vertex/Google credentials, spin up
+  sandbox sessions, and configure local openshell CLI connectivity. Use this
+  skill whenever the user wants to test gateway-provisioned sandboxes, create
+  credentials in tenants, debug sandbox provisioning, connect the openshell CLI
+  to a gateway, or run dual-tenant tests. You SHOULD reach for this skill on:
+  "kind-up", "kind cluster", "openshell gateway", "gateway mode",
+  "OPENSHELL_USE_GATEWAY", "sandbox provisioning", "dual-tenant", "tenant-a",
+  "tenant-b", "vertex credential", "spin up a sandbox", "credential in tenant",
+  "openshell sandbox list", "gateway connectivity", "connect to the gateway",
+  "mtls", "port-forward gateway", "acpctl apply -k", "local development".
 ---
 
-# OpenShell Gateway Skill
+# Kind Local Development Skill
 
 Gateway mode (`OPENSHELL_USE_GATEWAY=true`) delegates sandbox lifecycle to an
 OpenShell gateway via gRPC. The gateway runs per-tenant and manages `Sandbox`
@@ -83,81 +84,29 @@ components/ambient-cli/acpctl login --url http://localhost:$API_PORT --token "$T
 Get `$API_PORT` from `make kind-status` (the "backend" port, typically 12856 on
 the main branch).
 
-### Step 3 — Create and Bind a Credential (REQUIRED)
+### Step 3 - Apply Tenant Fleet Definitions (REQUIRED)
 
-Without this step the gateway will have **zero providers** and sandboxes will
-fail with no inference routing. Do NOT skip this — `make kind-setup-vertex`
-only sets up the K8s-level operator-config; it does NOT register the credential
-in ACP. You must create the credential through `acpctl` and bind it to the
-tenant via the API.
-
-#### Create
-
-For Vertex AI / Google service account JSON:
+The declarative approach uses `acpctl apply -k` to provision projects, agents,
+providers, and credentials from kustomize overlays in `examples/`.
 
 ```bash
-components/ambient-cli/acpctl credential create \
-  --name vertex-sa --provider vertex \
-  --token "$(cat vertex.json)"
+make kind-setup-vertex   # configures Vertex AI env vars and K8s secrets
+acpctl apply -k examples/overlays/tenant-a/
+acpctl apply -k examples/overlays/tenant-b/
 ```
 
-> **Important:** The token must be the **raw JSON** contents of the service
-> account key file, not base64-encoded. The control plane parses it as JSON
-> to extract `client_email` and `private_key` for credential refresh. A
-> base64-encoded token causes `invalid character 'e' looking for beginning
-> of value` errors.
+This creates:
+- **Projects** (tenant-a, tenant-b)
+- **Agents** with provider declarations (e.g., `providers: ["vertex"]`)
+- **Providers** (type: `vertex`, referencing K8s secrets with OAuth2 refresh tokens)
+- **K8s Secrets** with Vertex AI credentials in each tenant namespace
 
-#### Bind to a tenant (workaround for CLI bug)
+> **Prerequisite:** `make kind-setup-vertex` must run first to set
+> `ANTHROPIC_VERTEX_PROJECT_ID`, `CLOUD_ML_REGION`, and create K8s secrets with
+> Vertex AI service account credentials in tenant namespaces.
 
-`acpctl credential bind` has a bug: it passes the role **name**
-(`credential:viewer`) where the API expects a KSUID, causing
-`403: target role not found`. Use the direct API call instead:
 
-```bash
-API_PORT=12856  # from make kind-status
-
-ROLE_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
-  http://localhost:$API_PORT/api/ambient/v1/roles \
-  | python3 -c "
-import json, sys
-[print(r['id']) for r in json.load(sys.stdin)['items']
- if r['name'] == 'credential:viewer']")
-
-CRED_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
-  http://localhost:$API_PORT/api/ambient/v1/credentials \
-  | python3 -c "
-import json, sys
-[print(r['id']) for r in json.load(sys.stdin)['items']
- if r['name'] == 'vertex-sa']")
-
-curl -s -X POST \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  http://localhost:$API_PORT/api/ambient/v1/role_bindings \
-  -d "{
-    \"role_id\": \"$ROLE_ID\",
-    \"scope\": \"credential\",
-    \"credential_id\": \"$CRED_ID\",
-    \"project_id\": \"tenant-a\"
-  }"
-```
-
-### Step 3b — Set Vertex AI Config on Control Plane (REQUIRED)
-
-The gateway requires `VERTEX_AI_PROJECT_ID` and `CLOUD_ML_REGION` for inference
-routing. Set these on the control plane deployment:
-
-```bash
-kubectl set env deployment/ambient-control-plane -n ambient-code \
-  ANTHROPIC_VERTEX_PROJECT_ID=<your-gcp-project-id> \
-  CLOUD_ML_REGION=global
-kubectl rollout status deployment/ambient-control-plane -n ambient-code --timeout=60s
-```
-
-The `project_id` value comes from your service account JSON file. The region
-must match where your Vertex AI API is enabled.
-
-### Step 4 — Create a Session (This Creates the Sandbox) (REQUIRED)
+### Step 4 — Start a Session (This Creates the Sandbox) (REQUIRED)
 
 Sandboxes are created **through the control plane** by creating a session. The
 control plane reconciler watches for new sessions and provisions sandboxes via
@@ -165,10 +114,8 @@ the gateway automatically. **Do NOT use `openshell sandbox create`** — that
 bypasses the platform and creates an unmanaged sandbox.
 
 ```bash
-components/ambient-cli/acpctl create session \
-  --project-id tenant-a \
-  --name "gateway-test" \
-  --prompt "Say hello and list your current working directory"
+AGENT_ID=$(acpctl get agents 2>/dev/null | awk '/hello-world/{print $1}')
+acpctl start $AGENT_ID --project-id tenant-a --prompt "Say hello world"
 ```
 
 The control plane will:
@@ -300,6 +247,23 @@ Re-extract all three files from `openshell-server-tls` (see the mTLS section).
 
 **`openshell sandbox list` hangs or connection refused** — Port forward
 dropped. Restart it: `kubectl port-forward -n tenant-a statefulset/openshell-gateway 8080:8080 &`
+
+**`inference.local:443 NET:FAIL` in sandbox logs** — The OpenShell supervisor uses
+musl libc which handles DNS differently from glibc. The control plane patches
+Sandbox CRs with `ndots:1` in dnsConfig and recreates the pod. If you see this
+error, check that the sandbox pod has `ndots:1` in `/etc/resolv.conf`:
+`kubectl exec <pod> -n tenant-a -- cat /etc/resolv.conf`
+
+**`Name does not resolve` for K8s service URLs** — With ndots:1, musl treats
+hostnames with >1 dot as absolute and does NOT fall back to search domains.
+All service URLs in `ambient-control-plane-service.yml` and Kind overlays must
+use FQDNs ending in `.cluster.local` (e.g.,
+`ambient-api-server.ambient-code.svc.cluster.local:8000`).
+
+**Runner image `localhost/...` not found in Kind** — The Kind overlay sets
+`OPENSHELL_RUNNER_IMAGE=localhost/acp_runner_openshell:latest` but this image
+may not exist on the Kind node. Fix:
+`kubectl set env deployment/ambient-control-plane -n ambient-code OPENSHELL_RUNNER_IMAGE=quay.io/ambient_code/acp_runner_openshell:latest`
 
 **Switching between gateway and pod mode:**
 

@@ -10,4 +10,4 @@ npx vitest run --coverage
 
 echo ""
 echo "✅ Unit test coverage report above"
-echo "   For E2E integration tests: cd e2e && npx cypress run --spec cypress/e2e/sessions.cy.ts"
+echo "   For E2E integration tests: cd tests/cypress && npx cypress run --spec cypress/e2e/sessions.cy.ts"

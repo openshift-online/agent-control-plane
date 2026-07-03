@@ -54,7 +54,7 @@ jobs:
 
       - name: Run benchmark harness self-tests
         run: |
-          bash tests/bench-test.sh
+          bash tests/integration/bench-test.sh
 
       - name: Run component benchmarks
         env:

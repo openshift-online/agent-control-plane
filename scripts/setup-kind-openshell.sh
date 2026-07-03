@@ -171,7 +171,7 @@ else
 fi
 echo "  Note: ambient-ui gateway mode is baked in at build time via --build-arg OPENSHELL_USE_GATEWAY=true"
 
-# Vertex credentials and example declarations (agent-sandbox-config.yaml) are
+# Vertex credentials and tenant overlays (examples/overlays/<tenant>/) are
 # applied by `make kind-up` after this script finishes — see the
 # setup-vertex-provider.sh calls in the Makefile.
 

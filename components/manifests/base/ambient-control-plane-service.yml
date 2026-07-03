@@ -46,9 +46,9 @@ spec:
               name: ambient-api-server
               key: clientSecret
         - name: AMBIENT_API_SERVER_URL
-          value: "https://ambient-api-server.ambient-code.svc:8000"
+          value: "https://ambient-api-server.ambient-code.svc.cluster.local:8000"
         - name: AMBIENT_GRPC_SERVER_ADDR
-          value: "ambient-api-server.ambient-code.svc:9000"
+          value: "ambient-api-server.ambient-code.svc.cluster.local:9000"
         - name: AMBIENT_GRPC_USE_TLS
           value: "true"
         - name: MODE
@@ -92,7 +92,7 @@ spec:
               key: GOOGLE_APPLICATION_CREDENTIALS
               optional: true
         - name: CP_TOKEN_URL
-          value: "http://ambient-control-plane.ambient-code.svc:8080/token"
+          value: "http://ambient-control-plane.ambient-code.svc.cluster.local:8080/token"
         - name: CP_RUNTIME_NAMESPACE
           valueFrom:
             fieldRef:

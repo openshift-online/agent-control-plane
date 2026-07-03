@@ -21,7 +21,7 @@ spec:
                   key: clientSecret
                   optional: true
             - name: AMBIENT_API_SERVER_URL
-              value: "http://ambient-api-server.ambient-code.svc:8000"
+              value: "http://ambient-api-server.ambient-code.svc.cluster.local:8000"
             - name: AMBIENT_GRPC_USE_TLS
               value: "false"
             - name: OPENSHELL_USE_GATEWAY

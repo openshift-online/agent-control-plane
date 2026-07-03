@@ -1,0 +1,4 @@
+kind: Kustomization
+resources:
+  - hello-world.yaml
+  - security-reviewer.yaml

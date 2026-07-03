@@ -23,7 +23,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
 var safeTSLPattern = regexp.MustCompile(`^[a-zA-Z0-9_.@:\-]+$`)
@@ -379,6 +382,10 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		return fmt.Errorf("creating sandbox %s: %w", sbxName, err)
 	}
 
+	if err := r.patchSandboxDNSConfig(ctx, namespace, sbxName); err != nil {
+		r.logger.Warn().Err(err).Str("sandbox", sbxName).Msg("failed to patch sandbox dnsConfig; DNS resolution for external FQDNs may fail")
+	}
+
 	r.logger.Info().
 		Str("sandbox", sbxName).
 		Str("namespace", namespace).
@@ -391,6 +398,47 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	go r.execAfterReady(namespace, sbxName, session.ID, execEntrypoint, sdk, execEnv)
 
 	r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
+	return nil
+}
+
+func (r *SimpleKubeReconciler) patchSandboxDNSConfig(ctx context.Context, namespace, sandboxName string) error {
+	sandboxGVR := schema.GroupVersionResource{
+		Group:    "agents.x-k8s.io",
+		Version:  "v1alpha1",
+		Resource: "sandboxes",
+	}
+
+	patch := map[string]interface{}{
+		"spec": map[string]interface{}{
+			"podTemplate": map[string]interface{}{
+				"spec": map[string]interface{}{
+					"dnsConfig": map[string]interface{}{
+						"options": []map[string]interface{}{
+							{"name": "ndots", "value": "1"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	patchBytes, err := json.Marshal(patch)
+	if err != nil {
+		return fmt.Errorf("marshalling dnsConfig patch: %w", err)
+	}
+
+	_, err = r.nsKube().DynamicClient().Resource(sandboxGVR).Namespace(namespace).Patch(
+		ctx, sandboxName, k8stypes.MergePatchType, patchBytes, metav1.PatchOptions{},
+	)
+	if err != nil {
+		return fmt.Errorf("patching sandbox %s dnsConfig: %w", sandboxName, err)
+	}
+
+	if err := r.nsKube().DeletePod(ctx, namespace, sandboxName, &metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
+		r.logger.Warn().Err(err).Str("sandbox", sandboxName).Msg("failed to delete sandbox pod for dnsConfig recreation")
+	}
+
+	r.logger.Info().Str("sandbox", sandboxName).Str("namespace", namespace).Msg("patched sandbox dnsConfig with ndots:1 and triggered pod recreation")
 	return nil
 }
 
@@ -530,29 +578,6 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				Msg("sandbox is ready, executing entrypoint")
 
 			execCtx := context.Background()
-			// Patch ndots before starting the runner. The OpenShell supervisor is
-			// statically linked with musl libc, whose getaddrinfo sends A+AAAA
-			// queries simultaneously. With Kubernetes' default ndots:5, external
-			// FQDNs get expanded through all search domains first, causing musl's
-			// DNS resolver to mishandle the many concurrent responses and return
-			// zero usable addresses (manifests as 503 "inference service unavailable").
-			// Setting ndots:1 makes musl resolve FQDNs directly.
-			//
-			// sed -i and shell redirects fail on bind-mounted /etc/resolv.conf
-			// in OpenShell sandboxes (read-only mount or "Device or resource busy").
-			// Piping through tee overwrites the file via its open fd instead.
-			ndotsResult, ndotsErr := r.gateway.ExecSandbox(execCtx, namespace, &openshellpb.ExecSandboxRequest{
-				SandboxId:      sandboxID,
-				Command:        []string{"/bin/sh", "-c", "cp /etc/resolv.conf /tmp/resolv.conf && sed 's/ndots:[0-9]*/ndots:1/' /tmp/resolv.conf | tee /etc/resolv.conf > /dev/null"},
-				TimeoutSeconds: 10,
-			})
-			if ndotsErr != nil {
-				r.logger.Warn().Err(ndotsErr).Str("sandbox", sbxName).Msg("failed to patch ndots; inference routing may fail for external FQDNs")
-			} else if ndotsResult.ExitCode != 0 {
-				r.logger.Warn().Int32("exit_code", ndotsResult.ExitCode).Str("stderr", string(ndotsResult.Stderr)).Str("sandbox", sbxName).Msg("ndots patch exited non-zero")
-			} else {
-				r.logger.Info().Str("sandbox", sbxName).Msg("ndots patched to 1 for musl DNS compatibility")
-			}
 
 			err = r.gateway.ExecSandboxStreaming(execCtx, namespace, &openshellpb.ExecSandboxRequest{
 				SandboxId:   sandboxID,

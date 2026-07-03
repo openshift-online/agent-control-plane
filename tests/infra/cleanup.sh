@@ -62,7 +62,9 @@ fi
 
 echo ""
 echo "Cleaning up test artifacts..."
-cd "$(dirname "$0")/.."
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+CYPRESS_DIR="${REPO_ROOT}/tests/cypress"
+cd "$CYPRESS_DIR" 2>/dev/null || true
 if [ -f .env.test ]; then
   rm .env.test
   echo "   Removed .env.test"
@@ -71,19 +73,19 @@ fi
 # Only clean screenshots/videos if CLEANUP_ARTIFACTS=true (for CI)
 # Keep them locally for debugging
 if [ "${CLEANUP_ARTIFACTS:-false}" = "true" ]; then
-  if [ -d cypress/screenshots ]; then
-    rm -rf cypress/screenshots
+  if [ -d "$CYPRESS_DIR/cypress/screenshots" ]; then
+    rm -rf "$CYPRESS_DIR/cypress/screenshots"
     echo "   Removed Cypress screenshots"
   fi
 
-  if [ -d cypress/videos ]; then
-    rm -rf cypress/videos
+  if [ -d "$CYPRESS_DIR/cypress/videos" ]; then
+    rm -rf "$CYPRESS_DIR/cypress/videos"
     echo "   Removed Cypress videos"
   fi
 else
-  if [ -d cypress/screenshots ] || [ -d cypress/videos ]; then
+  if [ -d "$CYPRESS_DIR/cypress/screenshots" ] || [ -d "$CYPRESS_DIR/cypress/videos" ]; then
     echo "   Keeping screenshots/videos for review"
-    echo "   To remove: rm -rf cypress/screenshots cypress/videos"
+    echo "   To remove: rm -rf tests/cypress/cypress/screenshots tests/cypress/cypress/videos"
   fi
 fi
 

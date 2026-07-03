@@ -8,7 +8,7 @@
 # Prerequisites:
 #   - kind-up with OPENSHELL_USE_GATEWAY=true
 #   - ACP projects tenant-a and tenant-b created (done automatically by kind-up)
-#   - TEST_TOKEN and API_URL set, or e2e/.env.test present
+#   - TEST_TOKEN and API_URL set, or tests/cypress/.env.test present
 #
 # Usage:
 #   ./tests/openshell-dual-tenant.sh [API_URL]
@@ -24,9 +24,9 @@ NAMESPACE="${NAMESPACE:-ambient-code}"
 TENANTS=("tenant-a" "tenant-b")
 
 # Load .env.test if it exists and TOKEN not already set
-if [ -z "${TEST_TOKEN:-}" ] && [ -f "$(dirname "$0")/../e2e/.env.test" ]; then
+if [ -z "${TEST_TOKEN:-}" ] && [ -f "$(dirname "$0")/../cypress/.env.test" ]; then
   # shellcheck disable=SC1090
-  source "$(dirname "$0")/../e2e/.env.test"
+  source "$(dirname "$0")/../cypress/.env.test"
 fi
 TOKEN="${TEST_TOKEN:-}"
 
@@ -91,7 +91,7 @@ api_delete() {
 require_token() {
   if [ -z "$TOKEN" ]; then
     echo -e "${RED}Error:${NC} TEST_TOKEN not set. Run 'make kind-up OPENSHELL_USE_GATEWAY=true' first."
-    echo "  Or: source e2e/.env.test && ./tests/openshell-dual-tenant.sh"
+    echo "  Or: source tests/cypress/.env.test && ./tests/e2e/openshell-dual-tenant.sh"
     exit 1
   fi
 }

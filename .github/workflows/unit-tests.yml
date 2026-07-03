@@ -195,7 +195,7 @@ jobs:
           python-version: '3.14'
 
       - name: Run tests
-        run: python tests/test_model_discovery.py -v
+        run: python tests/unit/test_model_discovery.py -v
 
   summary:
     name: Unit Tests CI Gate

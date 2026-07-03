@@ -5,7 +5,7 @@
 .PHONY: local-test local-test-dev local-test-quick test-all local-troubleshoot local-port-forward local-stop-port-forward
 .PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-reload-ambient-control-plane kind-reload-ambient-api-server kind-reload-runner-openshell kind-status kind-login kind-sso-toggle kind-setup-vertex kind-setup-openshell-cli
 .PHONY: preflight-cluster preflight dev-env dev
-.PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift
+.PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift test-gateway-e2e
 .PHONY: unleash-port-forward unleash-status
 .PHONY: kind-port-forward kind-port-forward-stop _kind-start-port-forward kind-acpctl-login
 .PHONY: setup-minio minio-console minio-logs minio-status
@@ -452,9 +452,9 @@ check-shell: ## Validate shell scripts with shellcheck (if available)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Checking shell scripts..."
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		echo "  Running shellcheck on test scripts..."; \
-		shellcheck tests/local-dev-test.sh 2>/dev/null || echo "$(COLOR_YELLOW)⚠$(COLOR_RESET)  shellcheck warnings in tests/local-dev-test.sh"; \
-		if [ -d e2e/scripts ]; then \
-			shellcheck e2e/scripts/*.sh 2>/dev/null || echo "$(COLOR_YELLOW)⚠$(COLOR_RESET)  shellcheck warnings in e2e scripts"; \
+		shellcheck tests/e2e/local-dev-test.sh 2>/dev/null || echo "$(COLOR_YELLOW)⚠$(COLOR_RESET)  shellcheck warnings in tests/e2e/local-dev-test.sh"; \
+		if [ -d tests/infra ]; then \
+			shellcheck tests/infra/*.sh 2>/dev/null || echo "$(COLOR_YELLOW)⚠$(COLOR_RESET)  shellcheck warnings in tests/infra scripts"; \
 		fi; \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Shell scripts checked"; \
 	else \
@@ -481,11 +481,15 @@ makefile-health: check-kind check-kubectl ## Run comprehensive Makefile health c
 
 local-test-dev: ## Run local developer experience tests
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running local developer experience tests..."
-	@./tests/local-dev-test.sh $(if $(filter true,$(CI_MODE)),--ci,)
+	@./tests/e2e/local-dev-test.sh $(if $(filter true,$(CI_MODE)),--ci,)
 
 test-openshell-dual-tenant: ## Test dual-tenant OpenShell gateway provisioning (requires kind-up OPENSHELL_USE_GATEWAY=true)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running dual-tenant OpenShell sandbox provisioning test..."
-	@API_URL="http://localhost:$(KIND_FWD_API_SERVER_PORT)" ./tests/openshell-dual-tenant.sh
+	@API_URL="http://localhost:$(KIND_FWD_API_SERVER_PORT)" ./tests/e2e/openshell-dual-tenant.sh
+
+test-gateway-e2e: check-kubectl _kind-require-cluster ## Run full gateway e2e test (agent start → inference → response)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running gateway e2e test..."
+	@API_URL="http://localhost:$(KIND_FWD_API_SERVER_PORT)" ./tests/e2e/gateway-e2e-test.sh
 
 local-test-quick: check-kubectl ## Quick smoke test of local environment
 	@echo "$(COLOR_BOLD)🧪 Quick Smoke Test$(COLOR_RESET)"
@@ -865,7 +869,7 @@ benchmark-ci: ## Run component benchmarks in CI mode
 
 kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_IMAGES=true builds from source)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Starting kind cluster '$(KIND_CLUSTER_NAME)'..."
-	@cd e2e && KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_HTTP_PORT=$(KIND_HTTP_PORT) KIND_HTTPS_PORT=$(KIND_HTTPS_PORT) KIND_HOST=$(KIND_HOST) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/setup-kind.sh
+	@KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_HTTP_PORT=$(KIND_HTTP_PORT) KIND_HTTPS_PORT=$(KIND_HTTPS_PORT) KIND_HOST=$(KIND_HOST) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./tests/infra/setup-kind.sh
 	@if [ -n "$(KIND_HOST)" ]; then \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rewriting kubeconfig for remote host $(KIND_HOST)..."; \
 		SERVER=$$(kubectl config view -o jsonpath='{.clusters[?(@.name=="kind-$(KIND_CLUSTER_NAME)")].cluster.server}'); \
@@ -902,7 +906,7 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 		kubectl apply --validate=false -k components/manifests/overlays/kind/; \
 	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods..."
-	@cd e2e && ./scripts/wait-for-ready.sh
+	@./tests/infra/wait-for-ready.sh
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring OpenShell mode (gateway=$(OPENSHELL_USE_GATEWAY))..."
 	@kubectl set env deployment/ambient-api-server -n $(NAMESPACE) \
 		OPENSHELL_USE_GATEWAY=$(OPENSHELL_USE_GATEWAY) $(QUIET_REDIRECT)
@@ -919,9 +923,9 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 	@NAMESPACE=$(NAMESPACE) KIND_FWD_AMBIENT_UI_PORT=$(KIND_FWD_AMBIENT_UI_PORT) KIND_FWD_KEYCLOAK_PORT=$(KIND_FWD_KEYCLOAK_PORT) \
 		./scripts/setup-kind-sso.sh
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Initializing MinIO..."
-	@cd e2e && ./scripts/init-minio.sh
+	@./tests/infra/init-minio.sh
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Extracting test token..."
-	@cd e2e && KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_HTTP_PORT=$(KIND_HTTP_PORT) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/extract-token.sh
+	@KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_HTTP_PORT=$(KIND_HTTP_PORT) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./tests/infra/extract-token.sh
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' ready!"
 	@# OpenShell gateway setup if requested
 	@if [ "$(OPENSHELL_USE_GATEWAY)" = "true" ]; then \
@@ -933,17 +937,37 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 		ANTHROPIC_VERTEX_PROJECT_ID="$(ANTHROPIC_VERTEX_PROJECT_ID)" \
 		CLOUD_ML_REGION="$(CLOUD_ML_REGION)" \
 		./scripts/setup-kind-openshell.sh; \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Applying example declarations to tenant namespaces..."; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Applying tenant fleet definitions via acpctl..."; \
+		ACPCTL=""; \
+		if command -v acpctl >/dev/null 2>&1; then \
+			ACPCTL=acpctl; \
+		elif [ -x components/ambient-cli/acpctl ]; then \
+			ACPCTL=components/ambient-cli/acpctl; \
+		elif [ -x ./acpctl ]; then \
+			ACPCTL=./acpctl; \
+		fi; \
+		if [ -z "$$ACPCTL" ]; then \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) acpctl not found — run 'make build-cli' first"; \
+			exit 1; \
+		fi; \
+		PF_PORT=18766; \
+		kubectl port-forward -n $(NAMESPACE) svc/ambient-api-server "$${PF_PORT}:8000" >/dev/null 2>&1 & \
+		PF_PID=$$!; \
+		sleep 2; \
+		TOKEN=$$(kubectl get secret test-user-token -n $(NAMESPACE) -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null); \
+		$$ACPCTL login --url "http://localhost:$${PF_PORT}" --token "$$TOKEN" >/dev/null 2>&1; \
 		for ns in $(OPENSHELL_TENANTS); do \
-			if [ -f examples/agent-sandbox-config.yaml ]; then \
-				kubectl apply -n "$$ns" -f examples/agent-sandbox-config.yaml; \
+			if [ -f "$(VERTEX_CRED)" ]; then \
+				kubectl create secret generic vertex-sa-key \
+					--namespace="$$ns" \
+					"--from-literal=token=$$(cat '$(VERTEX_CRED)')" \
+					--dry-run=client -o yaml | kubectl apply -f - 2>/dev/null; \
 			fi; \
-			if [ -f examples/tenant-rbac.yaml ]; then \
-				kubectl apply -n "$$ns" -f examples/tenant-rbac.yaml; \
-			fi; \
+			VERTEX_SA_KEY=$$(cat "$(VERTEX_CRED)" 2>/dev/null || echo "") \
+			$$ACPCTL apply -k "examples/overlays/$$ns/" --project "$$ns" && \
+			echo "  $$ns: applied"; \
 		done; \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring Vertex AI for gateway..."; \
-		$(MAKE) --no-print-directory kind-setup-vertex; \
+		kill $$PF_PID 2>/dev/null || true; \
 	fi
 	@# Vertex AI setup if requested (non-gateway)
 	@if [ "$(OPENSHELL_USE_GATEWAY)" != "true" ]; then \
@@ -978,7 +1002,7 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 
 kind-down: ## Stop and delete kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Cleaning up kind cluster '$(KIND_CLUSTER_NAME)'..."
-	@cd e2e && KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh
+	@KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./tests/infra/cleanup.sh
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' deleted"
 
 kind-login: check-kubectl check-local-context ## Set kubectl context, port-forward services, configure acpctl, print test token
@@ -1119,7 +1143,7 @@ dev-bootstrap: check-kubectl check-local-context ## Bootstrap developer workspac
 
 test-e2e: ## Run e2e tests against current CYPRESS_BASE_URL
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running e2e tests..."
-	@if [ ! -f e2e/.env.test ] && [ -z "$(CYPRESS_BASE_URL)" ] && [ -z "$(TEST_TOKEN)" ]; then \
+	@if [ ! -f tests/cypress/.env.test ] && [ -z "$(CYPRESS_BASE_URL)" ] && [ -z "$(TEST_TOKEN)" ]; then \
 		echo "$(COLOR_RED)✗$(COLOR_RESET) No .env.test found and environment variables not set"; \
 		echo "   Option 1: Run 'make kind-up' first (creates .env.test)"; \
 		echo "   Option 2: Set environment variables:"; \
@@ -1128,18 +1152,18 @@ test-e2e: ## Run e2e tests against current CYPRESS_BASE_URL
 		echo "     make test-e2e"; \
 		exit 1; \
 	fi
-	cd e2e && CYPRESS_BASE_URL="$(CYPRESS_BASE_URL)" TEST_TOKEN="$(TEST_TOKEN)" ./scripts/run-tests.sh
+	cd tests/cypress && CYPRESS_BASE_URL="$(CYPRESS_BASE_URL)" TEST_TOKEN="$(TEST_TOKEN)" ./run-tests.sh
 
 test-e2e-local: ## Run complete e2e test suite with kind (setup, deploy, test, cleanup)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running e2e tests with kind (local)..."
 	@$(MAKE) kind-up CONTAINER_ENGINE=$(CONTAINER_ENGINE)
-	@cd e2e && trap 'KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./scripts/cleanup.sh' EXIT; ./scripts/run-tests.sh
+	@trap 'KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./tests/infra/cleanup.sh' EXIT; cd tests/cypress && ./run-tests.sh
 
 e2e-test: test-e2e-local ## Alias for test-e2e-local (backward compatibility)
 
 test-e2e-setup: ## Install e2e test dependencies
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Installing e2e test dependencies..."
-	cd e2e && npm install
+	cd tests/cypress && npm install
 
 e2e-setup: test-e2e-setup ## Alias for test-e2e-setup (backward compatibility)
 
@@ -1159,22 +1183,22 @@ docs-lint: ## Lint documentation content (Vale + markdownlint + cspell)
 
 screenshots: ## Capture documentation screenshots against running kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Capturing documentation screenshots..."
-	@if [ ! -f e2e/.env.test ] && [ -z "$(CYPRESS_BASE_URL)" ]; then \
+	@if [ ! -f tests/cypress/.env.test ] && [ -z "$(CYPRESS_BASE_URL)" ]; then \
 		echo "$(COLOR_RED)✗$(COLOR_RESET) No cluster config. Run 'make kind-up' first."; \
 		exit 1; \
 	fi
-	cd e2e && \
+	cd tests/cypress && \
 		CYPRESS_SCREENSHOT_MODE=true \
 		CYPRESS_TEST_TOKEN="$$(grep TEST_TOKEN .env.test 2>/dev/null | cut -d= -f2)" \
 		CYPRESS_BASE_URL="$$(grep CYPRESS_BASE_URL .env.test 2>/dev/null | cut -d= -f2)" \
 		CYPRESS_ANTHROPIC_API_KEY=mock-replay-key \
 		npx cypress run --browser chrome --spec cypress/e2e/screenshots.cy.ts
 	@mkdir -p docs/public/images/screenshots
-	@find e2e/cypress/screenshots/output -name '*.png' ! -name '*failed*' -exec cp {} docs/public/images/screenshots/ \;
+	@find tests/cypress/cypress/screenshots/output -name '*.png' ! -name '*failed*' -exec cp {} docs/public/images/screenshots/ \;
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Screenshots updated in docs/public/images/screenshots/"
 
 screenshots-headed: ## Open Cypress for screenshot debugging
-	cd e2e && \
+	cd tests/cypress && \
 		CYPRESS_SCREENSHOT_MODE=true \
 		CYPRESS_TEST_TOKEN="$$(grep TEST_TOKEN .env.test 2>/dev/null | cut -d= -f2)" \
 		CYPRESS_BASE_URL="$$(grep CYPRESS_BASE_URL .env.test 2>/dev/null | cut -d= -f2)" \
@@ -1182,7 +1206,7 @@ screenshots-headed: ## Open Cypress for screenshot debugging
 		npx cypress open --e2e --browser chrome
 
 screenshots-clean: ## Remove generated screenshots
-	@rm -rf e2e/cypress/screenshots/output/
+	@rm -rf tests/cypress/cypress/screenshots/output/
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Screenshot output cleaned"
 
 kind-rebuild: check-kind check-kubectl check-local-context _kind-require-cluster ## Rebuild, reload, and restart all components in kind
@@ -1326,7 +1350,7 @@ e2e-clean: kind-down ## Alias for kind-down (backward compatibility)
 
 deploy-langfuse-openshift: ## Deploy Langfuse to OpenShift/ROSA cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying Langfuse to OpenShift cluster..."
-	@cd e2e && ./scripts/deploy-langfuse.sh --openshift
+	@./tests/infra/deploy-langfuse.sh --openshift
 
 ##@ Unleash Feature Flags
 # Note: Unleash is deployed automatically via 'make deploy' as part of the platform manifests.

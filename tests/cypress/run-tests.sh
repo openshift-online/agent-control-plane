@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")"
 
 echo "======================================"
 echo "Running Ambient E2E Tests"
@@ -53,7 +53,7 @@ if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
   echo "API Key: ✓ Found in .env (agent tests will run)"
 else
   echo "API Key: ✗ Not found (agent tests will FAIL)"
-  echo "   Add ANTHROPIC_API_KEY to e2e/.env to run full test suite"
+  echo "   Add ANTHROPIC_API_KEY to tests/cypress/.env to run full test suite"
 fi
 echo ""
 

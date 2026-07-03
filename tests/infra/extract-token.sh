@@ -1,7 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+CYPRESS_DIR="${REPO_ROOT}/tests/cypress"
+mkdir -p "$CYPRESS_DIR"
 
 echo "Extracting test user token..."
 
@@ -81,12 +83,12 @@ if [ "$HTTP_PORT" != "80" ]; then
 fi
 
 # Write .env.test
-echo "TEST_TOKEN=$TOKEN" > .env.test
-echo "CYPRESS_BASE_URL=$BASE_URL" >> .env.test
+echo "TEST_TOKEN=$TOKEN" > "${CYPRESS_DIR}/.env.test"
+echo "CYPRESS_BASE_URL=$BASE_URL" >> "${CYPRESS_DIR}/.env.test"
 
-echo "   Token saved to .env.test"
+echo "   Token saved to tests/cypress/.env.test"
 echo "   Base URL: $BASE_URL"
 echo ""
 echo "To enable agent testing:"
-echo "   Add ANTHROPIC_API_KEY to e2e/.env"
+echo "   Add ANTHROPIC_API_KEY to tests/cypress/.env"
 echo "   Then run: make test-e2e"

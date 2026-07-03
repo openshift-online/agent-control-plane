@@ -2,7 +2,8 @@
 
 **Date:** 2026-03-20
 **Status:** Active
-**Last Updated:** 2026-06-03 — added Application (GitOps continuous sync for agent fleets); addressed review feedback: credential_id FK for remote auth, RoleBinding escalation rules, prune safety, health status semantics, gitops role grantability, sync engine kind filtering
+**Last Updated:** 2026-07-03 — added Agent sandbox fields (entrypoint, providers, payloads, environment, sandbox_template, sandbox_policy) for OpenShell gateway integration
+**Previous:** 2026-06-03 — added Application (GitOps continuous sync for agent fleets); addressed review feedback: credential_id FK for remote auth, RoleBinding escalation rules, prune safety, health status semantics, gitops role grantability, sync engine kind filtering
 **Previous:** 2026-05-12 — migrate Credentials from project-scoped to global routes (`/credentials`); remove `project_id` from model, OpenAPI, and SDK; add drop-column migration; update coverage matrix
 **Workflow:** *(merged into skills/build/full-stack-pipeline)* — implementation waves, gap table, build commands, run log
 **Design:** `credentials-session.md` — full Credential Kind design spec and rationale
@@ -85,6 +86,12 @@ erDiagram
         string bot_account_name "nullable — service account for git ops"
         string resource_overrides "nullable — JSON pod resource overrides"
         string environment_variables "nullable — JSON extra env vars"
+        string entrypoint "nullable — CLI to invoke in sandbox (e.g. claude)"
+        jsonb  providers "nullable — provider names bound to this agent"
+        jsonb  payloads "nullable — files and repos staged into sandbox before start"
+        jsonb  environment "nullable — structured key-value env vars for sandbox"
+        jsonb  sandbox_template "nullable — sandbox container resource requests"
+        string sandbox_policy "nullable — name of a policy declaration to apply"
         string current_session_id FK "nullable — denormalized for fast reads"
         jsonb  labels
         jsonb  annotations
@@ -452,11 +459,19 @@ Agent is scoped to a Project. The stable address is `{project_name}/{agent_name}
 | `bot_account_name` | Nullable. Service account name for git operations inside sessions. Copied to `Session.bot_account_name` on ignite. |
 | `resource_overrides` | Nullable. JSON-encoded pod resource requests/limits override for sessions spawned by this agent. Copied to `Session.resource_overrides` on ignite. |
 | `environment_variables` | Nullable. JSON-encoded extra environment variables injected into session pods. Copied to `Session.environment_variables` on ignite. |
+| `entrypoint` | Nullable. The CLI binary to invoke inside the sandbox (e.g. `claude`). Consumed by the control plane reconciler when building the sandbox exec command. Not propagated to Session. |
+| `providers` | Nullable. JSONB array of provider names bound to this agent (e.g. `["vertex", "github"]`). References provider declarations in the same namespace. The control plane resolves provider secrets and configures credential sidecars or gateway providers at session start. Not propagated to Session. |
+| `payloads` | Nullable. JSONB array of file/repo payloads staged into the sandbox before the agent runs. Each entry specifies a `sandbox_path` and either inline `content` or a `repo_url` + `ref` to clone. Not propagated to Session. |
+| `environment` | Nullable. JSONB object of structured key-value environment variables injected into the sandbox container. Distinct from `environment_variables` (legacy string field). Not propagated to Session. |
+| `sandbox_template` | Nullable. JSONB object specifying sandbox container resource requests (e.g. `{"resources": {"cpu": "2", "memory": "4Gi"}}`). Consumed by the control plane when creating the sandbox via the gateway. Not propagated to Session. |
+| `sandbox_policy` | Nullable. Name of a policy declaration (ConfigMap with `ambient.ai/kind: policy` label) that defines network, filesystem, process, and landlock rules for the sandbox. Not propagated to Session. |
 | `current_session_id` | Denormalized FK to the active Session. Null when no session is running. Used by Project Home for fast reads. |
 
 **Agent is mutable.** PATCH updates in place. There is no versioning. If you need to track prompt history, use `labels`/`annotations` or an external audit log.
 
 **Field propagation on ignite:** When `POST /agents/{id}/start` creates a new Session, the `ignite_handler` copies `repo_url`, `workflow_id`, `llm_model`, `llm_temperature`, `llm_max_tokens`, `bot_account_name`, `resource_overrides`, and `environment_variables` from the Agent to the new Session. Fields set directly in the start request body override these defaults.
+
+**Sandbox fields (not propagated):** The six sandbox-related fields (`entrypoint`, `providers`, `payloads`, `environment`, `sandbox_template`, `sandbox_policy`) are consumed directly by the control plane reconciler when building the OpenShell gateway sandbox — they are not copied to the Session model. The control plane reads them from the Agent record at reconcile time. These fields can also be declared via ConfigMap-based agent declarations (`ambient.ai/kind: agent` label) for GitOps-driven sandbox configuration.
 
 ```
 POST /projects/{id}/agents          → create agent in this project
