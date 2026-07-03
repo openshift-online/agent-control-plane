@@ -17,7 +17,9 @@ service OpenShell {
   rpc CreateSandbox(CreateSandboxRequest) returns (SandboxResponse);
   rpc GetSandbox(GetSandboxRequest) returns (SandboxResponse);
   rpc DeleteSandbox(DeleteSandboxRequest) returns (DeleteSandboxResponse);
+  rpc CreateSshSession(CreateSshSessionRequest) returns (CreateSshSessionResponse);
   rpc ExecSandbox(ExecSandboxRequest) returns (stream ExecSandboxEvent);
+  rpc ForwardTcp(stream TcpForwardFrame) returns (stream TcpForwardFrame);
   rpc CreateProvider(CreateProviderRequest) returns (ProviderResponse);
   rpc UpdateProvider(UpdateProviderRequest) returns (ProviderResponse);
   rpc GetProvider(GetProviderRequest) returns (ProviderResponse);
@@ -228,4 +230,42 @@ message RotateProviderCredentialRequest {
 
 message RotateProviderCredentialResponse {
   ProviderCredentialRefreshStatus status = 1;
+}
+
+message CreateSshSessionRequest {
+  string sandbox_id = 1;
+}
+
+message CreateSshSessionResponse {
+  string sandbox_id = 1;
+  string token = 2;
+  string gateway_host = 3;
+  uint32 gateway_port = 4;
+  string gateway_scheme = 5;
+  string host_key_fingerprint = 7;
+  int64 expires_at_ms = 8;
+}
+
+message TcpForwardInit {
+  string sandbox_id = 1;
+  string service_id = 4;
+  oneof target {
+    SshRelayTarget ssh = 5;
+    TcpRelayTarget tcp = 6;
+  }
+  string authorization_token = 7;
+}
+
+message TcpForwardFrame {
+  oneof payload {
+    TcpForwardInit init = 1;
+    bytes data = 2;
+  }
+}
+
+message SshRelayTarget {}
+
+message TcpRelayTarget {
+  string host = 1;
+  uint32 port = 2;
 }

@@ -28,7 +28,9 @@ const (
 	OpenShell_CreateSandbox_FullMethodName            = "/openshell.v1.OpenShell/CreateSandbox"
 	OpenShell_GetSandbox_FullMethodName               = "/openshell.v1.OpenShell/GetSandbox"
 	OpenShell_DeleteSandbox_FullMethodName            = "/openshell.v1.OpenShell/DeleteSandbox"
+	OpenShell_CreateSshSession_FullMethodName         = "/openshell.v1.OpenShell/CreateSshSession"
 	OpenShell_ExecSandbox_FullMethodName              = "/openshell.v1.OpenShell/ExecSandbox"
+	OpenShell_ForwardTcp_FullMethodName               = "/openshell.v1.OpenShell/ForwardTcp"
 	OpenShell_CreateProvider_FullMethodName           = "/openshell.v1.OpenShell/CreateProvider"
 	OpenShell_UpdateProvider_FullMethodName           = "/openshell.v1.OpenShell/UpdateProvider"
 	OpenShell_GetProvider_FullMethodName              = "/openshell.v1.OpenShell/GetProvider"
@@ -45,7 +47,9 @@ type OpenShellClient interface {
 	CreateSandbox(ctx context.Context, in *CreateSandboxRequest, opts ...grpc.CallOption) (*SandboxResponse, error)
 	GetSandbox(ctx context.Context, in *GetSandboxRequest, opts ...grpc.CallOption) (*SandboxResponse, error)
 	DeleteSandbox(ctx context.Context, in *DeleteSandboxRequest, opts ...grpc.CallOption) (*DeleteSandboxResponse, error)
+	CreateSshSession(ctx context.Context, in *CreateSshSessionRequest, opts ...grpc.CallOption) (*CreateSshSessionResponse, error)
 	ExecSandbox(ctx context.Context, in *ExecSandboxRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ExecSandboxEvent], error)
+	ForwardTcp(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TcpForwardFrame, TcpForwardFrame], error)
 	CreateProvider(ctx context.Context, in *CreateProviderRequest, opts ...grpc.CallOption) (*ProviderResponse, error)
 	UpdateProvider(ctx context.Context, in *UpdateProviderRequest, opts ...grpc.CallOption) (*ProviderResponse, error)
 	GetProvider(ctx context.Context, in *GetProviderRequest, opts ...grpc.CallOption) (*ProviderResponse, error)
@@ -93,6 +97,16 @@ func (c *openShellClient) DeleteSandbox(ctx context.Context, in *DeleteSandboxRe
 	return out, nil
 }
 
+func (c *openShellClient) CreateSshSession(ctx context.Context, in *CreateSshSessionRequest, opts ...grpc.CallOption) (*CreateSshSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateSshSessionResponse)
+	err := c.cc.Invoke(ctx, OpenShell_CreateSshSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *openShellClient) ExecSandbox(ctx context.Context, in *ExecSandboxRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ExecSandboxEvent], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &OpenShell_ServiceDesc.Streams[0], OpenShell_ExecSandbox_FullMethodName, cOpts...)
@@ -111,6 +125,19 @@ func (c *openShellClient) ExecSandbox(ctx context.Context, in *ExecSandboxReques
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type OpenShell_ExecSandboxClient = grpc.ServerStreamingClient[ExecSandboxEvent]
+
+func (c *openShellClient) ForwardTcp(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TcpForwardFrame, TcpForwardFrame], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &OpenShell_ServiceDesc.Streams[1], OpenShell_ForwardTcp_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[TcpForwardFrame, TcpForwardFrame]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type OpenShell_ForwardTcpClient = grpc.BidiStreamingClient[TcpForwardFrame, TcpForwardFrame]
 
 func (c *openShellClient) CreateProvider(ctx context.Context, in *CreateProviderRequest, opts ...grpc.CallOption) (*ProviderResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -189,7 +216,9 @@ type OpenShellServer interface {
 	CreateSandbox(context.Context, *CreateSandboxRequest) (*SandboxResponse, error)
 	GetSandbox(context.Context, *GetSandboxRequest) (*SandboxResponse, error)
 	DeleteSandbox(context.Context, *DeleteSandboxRequest) (*DeleteSandboxResponse, error)
+	CreateSshSession(context.Context, *CreateSshSessionRequest) (*CreateSshSessionResponse, error)
 	ExecSandbox(*ExecSandboxRequest, grpc.ServerStreamingServer[ExecSandboxEvent]) error
+	ForwardTcp(grpc.BidiStreamingServer[TcpForwardFrame, TcpForwardFrame]) error
 	CreateProvider(context.Context, *CreateProviderRequest) (*ProviderResponse, error)
 	UpdateProvider(context.Context, *UpdateProviderRequest) (*ProviderResponse, error)
 	GetProvider(context.Context, *GetProviderRequest) (*ProviderResponse, error)
@@ -216,8 +245,14 @@ func (UnimplementedOpenShellServer) GetSandbox(context.Context, *GetSandboxReque
 func (UnimplementedOpenShellServer) DeleteSandbox(context.Context, *DeleteSandboxRequest) (*DeleteSandboxResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteSandbox not implemented")
 }
+func (UnimplementedOpenShellServer) CreateSshSession(context.Context, *CreateSshSessionRequest) (*CreateSshSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateSshSession not implemented")
+}
 func (UnimplementedOpenShellServer) ExecSandbox(*ExecSandboxRequest, grpc.ServerStreamingServer[ExecSandboxEvent]) error {
 	return status.Error(codes.Unimplemented, "method ExecSandbox not implemented")
+}
+func (UnimplementedOpenShellServer) ForwardTcp(grpc.BidiStreamingServer[TcpForwardFrame, TcpForwardFrame]) error {
+	return status.Error(codes.Unimplemented, "method ForwardTcp not implemented")
 }
 func (UnimplementedOpenShellServer) CreateProvider(context.Context, *CreateProviderRequest) (*ProviderResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateProvider not implemented")
@@ -315,6 +350,24 @@ func _OpenShell_DeleteSandbox_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _OpenShell_CreateSshSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateSshSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OpenShellServer).CreateSshSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OpenShell_CreateSshSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OpenShellServer).CreateSshSession(ctx, req.(*CreateSshSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _OpenShell_ExecSandbox_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(ExecSandboxRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -325,6 +378,13 @@ func _OpenShell_ExecSandbox_Handler(srv interface{}, stream grpc.ServerStream) e
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type OpenShell_ExecSandboxServer = grpc.ServerStreamingServer[ExecSandboxEvent]
+
+func _OpenShell_ForwardTcp_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(OpenShellServer).ForwardTcp(&grpc.GenericServerStream[TcpForwardFrame, TcpForwardFrame]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type OpenShell_ForwardTcpServer = grpc.BidiStreamingServer[TcpForwardFrame, TcpForwardFrame]
 
 func _OpenShell_CreateProvider_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateProviderRequest)
@@ -472,6 +532,10 @@ var OpenShell_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _OpenShell_DeleteSandbox_Handler,
 		},
 		{
+			MethodName: "CreateSshSession",
+			Handler:    _OpenShell_CreateSshSession_Handler,
+		},
+		{
 			MethodName: "CreateProvider",
 			Handler:    _OpenShell_CreateProvider_Handler,
 		},
@@ -505,6 +569,12 @@ var OpenShell_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "ExecSandbox",
 			Handler:       _OpenShell_ExecSandbox_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "ForwardTcp",
+			Handler:       _OpenShell_ForwardTcp_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "openshell/v1/openshell.proto",
