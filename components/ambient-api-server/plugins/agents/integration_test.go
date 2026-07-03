@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -11,6 +12,7 @@ import (
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
 	"github.com/ambient-code/platform/components/ambient-api-server/plugins/projects"
 	"github.com/ambient-code/platform/components/ambient-api-server/test"
+	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/environments"
 )
 
@@ -363,4 +365,178 @@ func TestAgentCrossProjectIsolation(t *testing.T) {
 	list, _, err := client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsGet(ctx, proj2.ID).Execute()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(len(list.Items)).To(Equal(0))
+}
+
+func ensureBuiltInRoles() {
+	g := environments.Environment().Database.SessionFactory.New(context.Background())
+	roles := []struct {
+		name string
+		perm string
+	}{
+		{"platform:admin", `["*:*"]`},
+		{"platform:viewer", `["project:read","project:list","session:read","session:list","agent:read","agent:list"]`},
+		{"project:owner", `["project:read","project:update","project:delete","agent:*","session:*","session_message:*","role_binding:*"]`},
+		{"project:editor", `["project:read","agent:create","agent:read","agent:update","agent:list","agent:start","session:create","session:read","session:update","session:list","session_message:*","role_binding:delete"]`},
+		{"project:viewer", `["project:read","agent:read","agent:list","session:read","session:list","session_message:read","session_message:list"]`},
+		{"agent:operator", `["agent:read","agent:update","agent:start","agent:list","session:read","session:list"]`},
+		{"agent:observer", `["agent:read","agent:list","session:read","session:list"]`},
+		{"agent:runner", `["session:read","session_message:*"]`},
+		{"credential:owner", `["credential:create","credential:read","credential:update","credential:delete","credential:list"]`},
+		{"credential:token-reader", `["credential:fetch_token"]`},
+	}
+	for _, r := range roles {
+		g.Exec(
+			`INSERT INTO roles (id, name, display_name, description, permissions, built_in, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, true, NOW(), NOW())
+			 ON CONFLICT (name) DO NOTHING`,
+			api.NewID(), r.name, r.name, r.name, r.perm,
+		)
+	}
+}
+
+func seedProjectOwnerBinding(username, projectID string) {
+	g := environments.Environment().Database.SessionFactory.New(context.Background())
+	var roleID string
+	g.Raw(`SELECT id FROM roles WHERE name = 'project:owner' AND deleted_at IS NULL`).Scan(&roleID)
+	if roleID == "" {
+		return
+	}
+	g.Exec(
+		`INSERT INTO role_bindings (id, role_id, scope, user_id, project_id, created_at, updated_at)
+		 VALUES (?, ?, 'project', ?, ?, NOW(), NOW())
+		 ON CONFLICT DO NOTHING`,
+		api.NewID(), roleID, username, projectID,
+	)
+}
+
+func TestAgentCreateInGatewayMode(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+	ensureBuiltInRoles()
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+	username := strings.ToLower(account.Username())
+
+	proj, err := newTestProject()
+	Expect(err).NotTo(HaveOccurred())
+
+	seedProjectOwnerBinding(username, proj.ID)
+
+	agentInput := openapi.Agent{
+		ProjectId: proj.ID,
+		Name:      "gateway-mode-agent",
+	}
+	agentOutput, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsPost(ctx, proj.ID).Agent(agentInput).Execute()
+	Expect(err).NotTo(HaveOccurred(), "Agent creation must succeed — no gateway-mode guard should block it")
+	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+	Expect(agentOutput.Name).To(Equal("gateway-mode-agent"))
+	Expect(agentOutput.ProjectId).To(Equal(proj.ID))
+}
+
+func TestAgentPatchInGatewayMode(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+	ensureBuiltInRoles()
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+	username := strings.ToLower(account.Username())
+
+	proj, err := newTestProject()
+	Expect(err).NotTo(HaveOccurred())
+
+	seedProjectOwnerBinding(username, proj.ID)
+
+	agentInput := openapi.Agent{
+		ProjectId: proj.ID,
+		Name:      "patch-gw-agent",
+	}
+	created, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsPost(ctx, proj.ID).Agent(agentInput).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+	patchReq := openapi.AgentPatchRequest{
+		DisplayName: openapi.PtrString("Updated via Gateway"),
+	}
+	patched, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsAgentIdPatch(ctx, proj.ID, *created.Id).AgentPatchRequest(patchReq).Execute()
+	Expect(err).NotTo(HaveOccurred(), "Agent patch must succeed — no gateway-mode guard should block it")
+	Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	Expect(*patched.DisplayName).To(Equal("Updated via Gateway"))
+}
+
+func TestAgentDeleteInGatewayMode(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+	ensureBuiltInRoles()
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+	username := strings.ToLower(account.Username())
+
+	proj, err := newTestProject()
+	Expect(err).NotTo(HaveOccurred())
+
+	seedProjectOwnerBinding(username, proj.ID)
+
+	agentInput := openapi.Agent{
+		ProjectId: proj.ID,
+		Name:      "delete-gw-agent",
+	}
+	created, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsPost(ctx, proj.ID).Agent(agentInput).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+	resp, err = client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsAgentIdDelete(ctx, proj.ID, *created.Id).Execute()
+	Expect(err).NotTo(HaveOccurred(), "Agent deletion must succeed — no gateway-mode guard should block it")
+	Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+
+	_, resp, err = client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsAgentIdGet(ctx, proj.ID, *created.Id).Execute()
+	Expect(err).To(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
+}
+
+func TestAgentCRUDFullLifecycleWithRBAC(t *testing.T) {
+	h, client := test.RegisterIntegration(t)
+	ensureBuiltInRoles()
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+	username := strings.ToLower(account.Username())
+
+	proj, err := newTestProject()
+	Expect(err).NotTo(HaveOccurred())
+
+	seedProjectOwnerBinding(username, proj.ID)
+
+	agentInput := openapi.Agent{
+		ProjectId:   proj.ID,
+		Name:        "lifecycle-agent",
+		DisplayName: openapi.PtrString("Lifecycle Agent"),
+		Description: openapi.PtrString("Full CRUD lifecycle test"),
+		RepoUrl:     openapi.PtrString("https://github.com/test/lifecycle"),
+		Prompt:      openapi.PtrString("You are a lifecycle test agent"),
+	}
+	created, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsPost(ctx, proj.ID).Agent(agentInput).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+	fetched, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsAgentIdGet(ctx, proj.ID, *created.Id).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	Expect(fetched.Name).To(Equal("lifecycle-agent"))
+
+	patchReq := openapi.AgentPatchRequest{
+		DisplayName: openapi.PtrString("Updated Lifecycle Agent"),
+	}
+	patched, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsAgentIdPatch(ctx, proj.ID, *created.Id).AgentPatchRequest(patchReq).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	Expect(*patched.DisplayName).To(Equal("Updated Lifecycle Agent"))
+
+	list, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsGet(ctx, proj.ID).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	Expect(list.Total).To(BeNumerically(">=", int32(1)))
+
+	resp, err = client.DefaultAPI.ApiAmbientV1ProjectsIdAgentsAgentIdDelete(ctx, proj.ID, *created.Id).Execute()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
 }
