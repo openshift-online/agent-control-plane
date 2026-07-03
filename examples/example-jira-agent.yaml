@@ -51,6 +51,7 @@ data:
           - path: /usr/bin/curl
           - path: /usr/local/bin/claude
           - path: /usr/bin/node
+          - path: /sandbox/.uv/python/cpython-3.14.3-linux-x86_64-gnu/bin/python3.14
       inference:
         endpoints:
           - host: inference.local
@@ -106,14 +107,16 @@ data:
       - sandbox_path: /sandbox/.mcp.json
         content: |
           {
-            "mcp-atlassian": {
-              "type": "stdio",
-              "command": "mcp-atlassian",
-              "args": [],
-              "env": {
-                "JIRA_URL": "https://redhat.atlassian.net",
-                "JIRA_USERNAME": "${JIRA_USERNAME}",
-                "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
+            "mcpServers": {
+              "mcp-atlassian": {
+                "type": "stdio",
+                "command": "mcp-atlassian",
+                "args": [],
+                "env": {
+                  "JIRA_URL": "https://redhat.atlassian.net",
+                  "JIRA_USERNAME": "${JIRA_USERNAME}",
+                  "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
+                }
               }
             }
           }
