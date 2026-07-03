@@ -29,13 +29,13 @@ spec:
             - name: LOCAL_IMAGES
               value: "true"
             - name: USE_VERTEX
-              value: ""
+              value: "1"
               valueFrom: null
             - name: CLOUD_ML_REGION
-              value: ""
+              value: "us-east5"
               valueFrom: null
             - name: ANTHROPIC_VERTEX_PROJECT_ID
-              value: ""
+              value: "itpc-gcp-hcm-pe-eng-claude"
               valueFrom: null
             - name: GOOGLE_APPLICATION_CREDENTIALS
               value: ""
