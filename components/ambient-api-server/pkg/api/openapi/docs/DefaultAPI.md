@@ -77,6 +77,8 @@ Method | HTTP request | Description
 [**ApiAmbientV1RolesPost**](DefaultAPI.md#ApiAmbientV1RolesPost) | **Post** /api/ambient/v1/roles | Create a new role
 [**ApiAmbientV1SessionsGet**](DefaultAPI.md#ApiAmbientV1SessionsGet) | **Get** /api/ambient/v1/sessions | Returns a list of sessions
 [**ApiAmbientV1SessionsIdDelete**](DefaultAPI.md#ApiAmbientV1SessionsIdDelete) | **Delete** /api/ambient/v1/sessions/{id} | Delete a session by id
+[**ApiAmbientV1SessionsIdEventsGet**](DefaultAPI.md#ApiAmbientV1SessionsIdEventsGet) | **Get** /api/ambient/v1/sessions/{id}/events | Stream live AG-UI events from the runner pod
+[**ApiAmbientV1SessionsIdEventsHistoryGet**](DefaultAPI.md#ApiAmbientV1SessionsIdEventsHistoryGet) | **Get** /api/ambient/v1/sessions/{id}/events/history | List persisted compressed AG-UI events
 [**ApiAmbientV1SessionsIdGet**](DefaultAPI.md#ApiAmbientV1SessionsIdGet) | **Get** /api/ambient/v1/sessions/{id} | Get an session by id
 [**ApiAmbientV1SessionsIdMessagesGet**](DefaultAPI.md#ApiAmbientV1SessionsIdMessagesGet) | **Get** /api/ambient/v1/sessions/{id}/messages | List or stream session messages
 [**ApiAmbientV1SessionsIdMessagesPost**](DefaultAPI.md#ApiAmbientV1SessionsIdMessagesPost) | **Post** /api/ambient/v1/sessions/{id}/messages | Push a message to a session
@@ -5222,6 +5224,157 @@ Name | Type | Description  | Notes
 ### Return type
 
  (empty response body)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1SessionsIdEventsGet
+
+> string ApiAmbientV1SessionsIdEventsGet(ctx, id).Execute()
+
+Stream live AG-UI events from the runner pod
+
+
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1SessionsIdEventsGet(context.Background(), id).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1SessionsIdEventsGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1SessionsIdEventsGet`: string
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1SessionsIdEventsGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdEventsGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+### Return type
+
+**string**
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: text/event-stream, application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1SessionsIdEventsHistoryGet
+
+> SessionEventList ApiAmbientV1SessionsIdEventsHistoryGet(ctx, id).AfterSeq(afterSeq).EventType(eventType).Limit(limit).StartTime(startTime).EndTime(endTime).Execute()
+
+List persisted compressed AG-UI events
+
+
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+    "time"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	afterSeq := int64(789) // int64 | Return only events with seq greater than this value (for replay/catch-up) (optional) (default to 0)
+	eventType := "eventType_example" // string | Filter by AG-UI event type (e.g. TEXT_MESSAGE_CONTENT, TOOL_CALL_START) (optional)
+	limit := int32(56) // int32 | Max events to return (default 100, max 1000) (optional) (default to 100)
+	startTime := time.Now() // time.Time | Filter events created after this timestamp (ISO 8601) (optional)
+	endTime := time.Now() // time.Time | Filter events created before this timestamp (ISO 8601) (optional)
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1SessionsIdEventsHistoryGet(context.Background(), id).AfterSeq(afterSeq).EventType(eventType).Limit(limit).StartTime(startTime).EndTime(endTime).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1SessionsIdEventsHistoryGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1SessionsIdEventsHistoryGet`: SessionEventList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1SessionsIdEventsHistoryGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1SessionsIdEventsHistoryGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **afterSeq** | **int64** | Return only events with seq greater than this value (for replay/catch-up) | [default to 0]
+ **eventType** | **string** | Filter by AG-UI event type (e.g. TEXT_MESSAGE_CONTENT, TOOL_CALL_START) | 
+ **limit** | **int32** | Max events to return (default 100, max 1000) | [default to 100]
+ **startTime** | **time.Time** | Filter events created after this timestamp (ISO 8601) | 
+ **endTime** | **time.Time** | Filter events created before this timestamp (ISO 8601) | 
+
+### Return type
+
+[**SessionEventList**](SessionEventList.md)
 
 ### Authorization
 

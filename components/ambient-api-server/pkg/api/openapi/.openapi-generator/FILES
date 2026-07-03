@@ -53,6 +53,8 @@ docs/ScheduledSession.md
 docs/ScheduledSessionList.md
 docs/ScheduledSessionPatchRequest.md
 docs/Session.md
+docs/SessionEvent.md
+docs/SessionEventList.md
 docs/SessionList.md
 docs/SessionMessage.md
 docs/SessionMessagePushRequest.md
@@ -112,6 +114,8 @@ model_scheduled_session.go
 model_scheduled_session_list.go
 model_scheduled_session_patch_request.go
 model_session.go
+model_session_event.go
+model_session_event_list.go
 model_session_list.go
 model_session_message.go
 model_session_message_push_request.go

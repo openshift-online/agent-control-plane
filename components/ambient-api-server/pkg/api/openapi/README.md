@@ -151,6 +151,8 @@ Class | Method | HTTP request | Description
 *DefaultAPI* | [**ApiAmbientV1RolesPost**](docs/DefaultAPI.md#apiambientv1rolespost) | **Post** /api/ambient/v1/roles | Create a new role
 *DefaultAPI* | [**ApiAmbientV1SessionsGet**](docs/DefaultAPI.md#apiambientv1sessionsget) | **Get** /api/ambient/v1/sessions | Returns a list of sessions
 *DefaultAPI* | [**ApiAmbientV1SessionsIdDelete**](docs/DefaultAPI.md#apiambientv1sessionsiddelete) | **Delete** /api/ambient/v1/sessions/{id} | Delete a session by id
+*DefaultAPI* | [**ApiAmbientV1SessionsIdEventsGet**](docs/DefaultAPI.md#apiambientv1sessionsideventsget) | **Get** /api/ambient/v1/sessions/{id}/events | Stream live AG-UI events from the runner pod
+*DefaultAPI* | [**ApiAmbientV1SessionsIdEventsHistoryGet**](docs/DefaultAPI.md#apiambientv1sessionsideventshistoryget) | **Get** /api/ambient/v1/sessions/{id}/events/history | List persisted compressed AG-UI events
 *DefaultAPI* | [**ApiAmbientV1SessionsIdGet**](docs/DefaultAPI.md#apiambientv1sessionsidget) | **Get** /api/ambient/v1/sessions/{id} | Get an session by id
 *DefaultAPI* | [**ApiAmbientV1SessionsIdMessagesGet**](docs/DefaultAPI.md#apiambientv1sessionsidmessagesget) | **Get** /api/ambient/v1/sessions/{id}/messages | List or stream session messages
 *DefaultAPI* | [**ApiAmbientV1SessionsIdMessagesPost**](docs/DefaultAPI.md#apiambientv1sessionsidmessagespost) | **Post** /api/ambient/v1/sessions/{id}/messages | Push a message to a session
@@ -213,6 +215,8 @@ Class | Method | HTTP request | Description
  - [ScheduledSessionList](docs/ScheduledSessionList.md)
  - [ScheduledSessionPatchRequest](docs/ScheduledSessionPatchRequest.md)
  - [Session](docs/Session.md)
+ - [SessionEvent](docs/SessionEvent.md)
+ - [SessionEventList](docs/SessionEventList.md)
  - [SessionList](docs/SessionList.md)
  - [SessionMessage](docs/SessionMessage.md)
  - [SessionMessagePushRequest](docs/SessionMessagePushRequest.md)

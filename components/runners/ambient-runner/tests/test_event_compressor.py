@@ -90,7 +90,7 @@ class TestTextMessageCompression:
 
         assert len(results) == 1
         ce = results[0]
-        assert ce.event_type == "TEXT_MESSAGE_END"
+        assert ce.event_type == "TEXT_MESSAGE_START"
         assert ce.event_count == 4
         assert ce.completed_at is not None
 
@@ -133,7 +133,7 @@ class TestToolCallCompression:
 
         assert len(results) == 1
         ce = results[0]
-        assert ce.event_type == "TOOL_CALL_END"
+        assert ce.event_type == "TOOL_CALL_START"
         assert ce.event_count == 4
         payload = json.loads(ce.payload)
         assert payload["accumulated_content"] == '{"path":"/tmp"}'
@@ -150,7 +150,7 @@ class TestReasoningMessageCompression:
 
         assert len(results) == 1
         ce = results[0]
-        assert ce.event_type == "REASONING_MESSAGE_END"
+        assert ce.event_type == "REASONING_MESSAGE_START"
         assert ce.event_count == 4
         payload = json.loads(ce.payload)
         assert payload["accumulated_content"] == "step 1 step 2"
@@ -259,8 +259,8 @@ class TestMultipleGroups:
         all_results.extend(c.feed(_tool_end()))
 
         assert len(all_results) == 2
-        assert all_results[0].event_type == "TEXT_MESSAGE_END"
-        assert all_results[1].event_type == "TOOL_CALL_END"
+        assert all_results[0].event_type == "TEXT_MESSAGE_START"
+        assert all_results[1].event_type == "TOOL_CALL_START"
 
     def test_interleaved_standalone_between_groups(self):
         c = EventCompressor()
@@ -274,7 +274,7 @@ class TestMultipleGroups:
 
         assert len(all_results) == 3
         assert all_results[0].event_type == "RUN_STARTED"
-        assert all_results[1].event_type == "TEXT_MESSAGE_END"
+        assert all_results[1].event_type == "TEXT_MESSAGE_START"
         assert all_results[2].event_type == "RUN_FINISHED"
 
 

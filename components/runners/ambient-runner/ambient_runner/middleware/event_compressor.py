@@ -129,7 +129,7 @@ class EventCompressor:
                     self._active, event_dict
                 )
                 results.append(CompressedEvent(
-                    event_type=event_type.replace("_END", "_END"),
+                    event_type=self._active.start_type,
                     payload=compressed_payload,
                     completed_at=now,
                     event_count=total_count,

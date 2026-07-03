@@ -121,7 +121,7 @@ class TestPushCompressedEvents:
         assert len(client.session_events.calls) == 1
 
         call = client.session_events.calls[0]
-        assert call["event_type"] == "TEXT_MESSAGE_END"
+        assert call["event_type"] == "TEXT_MESSAGE_START"
         assert call["event_count"] == 3
         assert call["completed_at"] is not None
 
@@ -248,5 +248,5 @@ class TestGRPCPushMiddlewareDualPush:
         assert len(client.session_events.calls) == 3
         evt_types = [c["event_type"] for c in client.session_events.calls]
         assert "RUN_STARTED" in evt_types
-        assert "TEXT_MESSAGE_END" in evt_types
+        assert "TEXT_MESSAGE_START" in evt_types
         assert "RUN_FINISHED" in evt_types

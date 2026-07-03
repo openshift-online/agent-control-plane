@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 )
@@ -23,8 +24,23 @@ func (h *eventHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := mux.Vars(r)["id"]
 
-	if _, err := h.session.Get(ctx, id); err != nil {
+	session, svcErr := h.session.Get(ctx, id)
+	if svcErr != nil {
 		http.Error(w, "session not found", http.StatusNotFound)
+		return
+	}
+
+	projectID := ""
+	if session.ProjectId != nil {
+		projectID = *session.ProjectId
+	}
+	authResult := rbac.GetAuthResult(ctx)
+	if authResult == nil {
+		http.Error(w, "not authorized", http.StatusForbidden)
+		return
+	}
+	if !authResult.IsGlobalAdmin && !rbac.IsProjectAuthorized(authResult, projectID) {
+		http.Error(w, "not authorized", http.StatusForbidden)
 		return
 	}
 
