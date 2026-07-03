@@ -947,8 +947,9 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 			ACPCTL=./acpctl; \
 		fi; \
 		if [ -z "$$ACPCTL" ]; then \
-			echo "$(COLOR_RED)✗$(COLOR_RESET) acpctl not found — run 'make build-cli' first"; \
-			exit 1; \
+			echo "$(COLOR_BLUE)▶$(COLOR_RESET) acpctl not found — building CLI..."; \
+			$(MAKE) --no-print-directory build-cli; \
+			ACPCTL=components/ambient-cli/acpctl; \
 		fi; \
 		PF_PORT=18766; \
 		kubectl port-forward -n $(NAMESPACE) svc/ambient-api-server "$${PF_PORT}:8000" >/dev/null 2>&1 & \
