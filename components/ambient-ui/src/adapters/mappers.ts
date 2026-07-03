@@ -1,6 +1,6 @@
 import type { Session, Project, Agent, Credential, RoleBinding } from 'ambient-sdk'
 import type {
-  DomainSession, DomainProject, DomainSessionMessage, DomainAgent, SessionPhase, SessionEventType,
+  DomainSession, DomainProject, DomainSessionMessage, DomainSessionEvent, DomainAgent, SessionPhase, SessionEventType,
   DomainRepo, DomainReconciledRepo, DomainCondition, ReconciledRepoStatus, ConditionStatus,
   DomainCredential, DomainRoleBinding, DomainPayload, DomainSandboxTemplate,
 } from '@/domain/types'
@@ -292,6 +292,30 @@ export function mapSessionMessageToDomain(sdk: SdkSessionMessageShape): DomainSe
     payload: sdk.payload,
     seq: sdk.seq,
     createdAt: sdk.created_at ?? '',
+  }
+}
+
+export type SdkSessionEventShape = {
+  id: string
+  session_id: string
+  seq: number
+  event_type: string
+  payload: string
+  created_at: string | null
+  completed_at: string | null
+  event_count: number
+}
+
+export function mapSessionEventToDomain(sdk: SdkSessionEventShape): DomainSessionEvent {
+  return {
+    id: sdk.id,
+    sessionId: sdk.session_id,
+    seq: sdk.seq,
+    eventType: sdk.event_type,
+    payload: sdk.payload,
+    createdAt: sdk.created_at ?? '',
+    completedAt: sdk.completed_at ?? null,
+    eventCount: sdk.event_count ?? 1,
   }
 }
 

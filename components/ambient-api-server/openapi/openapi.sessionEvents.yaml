@@ -1,0 +1,128 @@
+paths:
+  /api/ambient/v1/sessions/{id}/events/history:
+    get:
+      summary: List persisted compressed AG-UI events
+      description: |-
+        Returns the complete AG-UI event audit trail for a session, including
+        compressed events. Supports pagination, time-range filtering, and
+        event-type filtering. Events are ordered by seq ascending.
+      security:
+        - Bearer: []
+      parameters:
+        - $ref: 'openapi.sessions.yaml#/components/parameters/id'
+        - name: after_seq
+          in: query
+          required: false
+          description: Return only events with seq greater than this value (for replay/catch-up)
+          schema:
+            type: integer
+            format: int64
+            default: 0
+        - name: event_type
+          in: query
+          required: false
+          description: Filter by AG-UI event type (e.g. TEXT_MESSAGE_CONTENT, TOOL_CALL_START)
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Max events to return (default 100, max 1000)
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 1000
+        - name: start_time
+          in: query
+          required: false
+          description: Filter events created after this timestamp (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: end_time
+          in: query
+          required: false
+          description: Filter events created before this timestamp (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Paginated list of compressed session events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionEventList'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No session with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+components:
+  schemas:
+    SessionEvent:
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/ObjectReference'
+        - type: object
+          properties:
+            session_id:
+              type: string
+              readOnly: true
+              description: ID of the parent session
+            seq:
+              type: integer
+              format: int64
+              readOnly: true
+              description: Monotonic sequence within session; gaps allowed after compression
+            event_type:
+              type: string
+              description: |-
+                AG-UI event type. One of 33 types: RUN_STARTED, RUN_FINISHED,
+                RUN_ERROR, TEXT_MESSAGE_START, TEXT_MESSAGE_CONTENT,
+                TEXT_MESSAGE_END, TOOL_CALL_START, TOOL_CALL_ARGS,
+                TOOL_CALL_END, TOOL_CALL_RESULT, THINKING_TEXT_MESSAGE_CONTENT,
+                REASONING_MESSAGE_CONTENT, etc.
+            payload:
+              type: string
+              description: JSON-encoded event payload; structure varies by event type
+            completed_at:
+              type: string
+              format: date-time
+              readOnly: true
+              nullable: true
+              description: Last event timestamp for compressed events; null for uncompressed
+            event_count:
+              type: integer
+              format: int32
+              readOnly: true
+              default: 1
+              description: Number of raw events compressed into this row (1 = uncompressed)
+    SessionEventList:
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/List'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/SessionEvent'

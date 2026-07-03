@@ -105,6 +105,17 @@ export type DomainSessionMessage = {
   createdAt: string
 }
 
+export type DomainSessionEvent = {
+  id: string
+  sessionId: string
+  seq: number
+  eventType: string
+  payload: string
+  createdAt: string
+  completedAt: string | null
+  eventCount: number
+}
+
 export type DomainPayload = {
   sandbox_path: string
   content?: string

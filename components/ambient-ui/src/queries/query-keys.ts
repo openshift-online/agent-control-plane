@@ -38,6 +38,12 @@ export const queryKeys = {
     list: (sessionId: string) =>
       [...queryKeys.messages.lists(), sessionId] as const,
   },
+  sessionEvents: {
+    all: ['sessionEvents'] as const,
+    lists: () => [...queryKeys.sessionEvents.all, 'list'] as const,
+    list: (sessionId: string) =>
+      [...queryKeys.sessionEvents.lists(), sessionId] as const,
+  },
   credentials: {
     all: ['credentials'] as const,
     lists: () => [...queryKeys.credentials.all, 'list'] as const,

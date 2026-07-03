@@ -153,6 +153,30 @@ message WatchSessionMessagesRequest {
   int64 after_seq = 2;
 }
 
+message SessionEvent {
+  string id = 1;
+  string session_id = 2;
+  int64 seq = 3;
+  string event_type = 4;
+  string payload = 5;
+  google.protobuf.Timestamp created_at = 6;
+  optional google.protobuf.Timestamp completed_at = 7;
+  int32 event_count = 8;
+}
+
+message PushSessionEventRequest {
+  string session_id = 1;
+  string event_type = 2;
+  string payload = 3;
+  optional google.protobuf.Timestamp completed_at = 4;
+  int32 event_count = 5;
+}
+
+message WatchSessionEventsRequest {
+  string session_id = 1;
+  int64 after_seq = 2;
+}
+
 service SessionService {
   rpc GetSession(GetSessionRequest) returns (Session);
   rpc CreateSession(CreateSessionRequest) returns (Session);
@@ -163,4 +187,6 @@ service SessionService {
   rpc WatchSessions(WatchSessionsRequest) returns (stream SessionWatchEvent);
   rpc PushSessionMessage(PushSessionMessageRequest) returns (SessionMessage);
   rpc WatchSessionMessages(WatchSessionMessagesRequest) returns (stream SessionMessage);
+  rpc PushSessionEvent(PushSessionEventRequest) returns (SessionEvent);
+  rpc WatchSessionEvents(WatchSessionEventsRequest) returns (stream SessionEvent);
 }

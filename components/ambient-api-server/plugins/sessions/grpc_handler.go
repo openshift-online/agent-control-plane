@@ -26,14 +26,16 @@ type sessionGRPCHandler struct {
 	generic    services.GenericService
 	brokerFunc func() *server.EventBroker
 	msgService MessageService
+	evtService EventService
 }
 
-func NewSessionGRPCHandler(service SessionService, generic services.GenericService, brokerFunc func() *server.EventBroker, msgService MessageService) pb.SessionServiceServer {
+func NewSessionGRPCHandler(service SessionService, generic services.GenericService, brokerFunc func() *server.EventBroker, msgService MessageService, evtService EventService) pb.SessionServiceServer {
 	return &sessionGRPCHandler{
 		service:    service,
 		generic:    generic,
 		brokerFunc: brokerFunc,
 		msgService: msgService,
+		evtService: evtService,
 	}
 }
 
@@ -488,4 +490,122 @@ func derefStr(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func sessionEventToProto(evt *SessionEvent) *pb.SessionEvent {
+	pe := &pb.SessionEvent{
+		Id:         evt.ID,
+		SessionId:  evt.SessionID,
+		Seq:        evt.Seq,
+		EventType:  evt.EventType,
+		Payload:    evt.Payload,
+		CreatedAt:  timestamppb.New(evt.CreatedAt),
+		EventCount: evt.EventCount,
+	}
+	if evt.CompletedAt != nil {
+		pe.CompletedAt = timestamppb.New(*evt.CompletedAt)
+	}
+	return pe
+}
+
+func (h *sessionGRPCHandler) PushSessionEvent(ctx context.Context, req *pb.PushSessionEventRequest) (*pb.SessionEvent, error) {
+	if req.GetSessionId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "session_id is required")
+	}
+	if req.GetEventType() == "" {
+		return nil, status.Error(codes.InvalidArgument, "event_type is required")
+	}
+
+	if !middleware.IsServiceCaller(ctx) {
+		session, svcErr := h.service.Get(ctx, req.GetSessionId())
+		if svcErr != nil {
+			return nil, grpcutil.ServiceErrorToGRPC(svcErr)
+		}
+		if err := requireProjectAccess(ctx, derefStr(session.ProjectId)); err != nil {
+			return nil, err
+		}
+	}
+
+	evt := &SessionEvent{
+		SessionID:  req.GetSessionId(),
+		EventType:  req.GetEventType(),
+		Payload:    req.GetPayload(),
+		EventCount: req.GetEventCount(),
+	}
+	if req.CompletedAt != nil {
+		t := req.CompletedAt.AsTime()
+		evt.CompletedAt = &t
+	}
+
+	pushed, err := h.evtService.Push(ctx, evt)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to push event: %v", err)
+	}
+	return sessionEventToProto(pushed), nil
+}
+
+func (h *sessionGRPCHandler) WatchSessionEvents(req *pb.WatchSessionEventsRequest, stream grpc.ServerStreamingServer[pb.SessionEvent]) error {
+	if req.GetSessionId() == "" {
+		return status.Error(codes.InvalidArgument, "session_id is required")
+	}
+
+	ctx := stream.Context()
+
+	if !middleware.IsServiceCaller(ctx) {
+		authResult := rbac.GetAuthResult(ctx)
+		if authResult == nil || authResult.Username == "" {
+			return status.Error(codes.PermissionDenied, "not authorized to watch this session")
+		}
+		if !authResult.IsGlobalAdmin {
+			session, svcErr := h.service.Get(ctx, req.GetSessionId())
+			if svcErr != nil {
+				return grpcutil.ServiceErrorToGRPC(svcErr)
+			}
+			projectID := ""
+			if session.ProjectId != nil {
+				projectID = *session.ProjectId
+			}
+			if !rbac.IsProjectAuthorized(authResult, projectID) {
+				return status.Error(codes.PermissionDenied, "not authorized to watch this session")
+			}
+		}
+	}
+
+	ch, cancel := h.evtService.Subscribe(ctx, req.GetSessionId())
+	defer cancel()
+
+	existing, _, err := h.evtService.ListBySessionID(ctx, req.GetSessionId(), EventListOptions{
+		AfterSeq: req.GetAfterSeq(),
+		Limit:    1000,
+	})
+	if err != nil {
+		return status.Errorf(codes.Internal, "failed to list events: %v", err)
+	}
+
+	var maxReplayed int64
+	for i := range existing {
+		if err := stream.Send(sessionEventToProto(&existing[i])); err != nil {
+			return err
+		}
+		if existing[i].Seq > maxReplayed {
+			maxReplayed = existing[i].Seq
+		}
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case evt, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if evt.Seq <= maxReplayed {
+				continue
+			}
+			if err := stream.Send(sessionEventToProto(evt)); err != nil {
+				return err
+			}
+		}
+	}
 }
