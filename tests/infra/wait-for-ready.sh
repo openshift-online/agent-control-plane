@@ -4,6 +4,12 @@ set -euo pipefail
 echo "Waiting for all deployments to be ready..."
 echo ""
 
+# Wait for PostgreSQL first (api-server migration depends on it)
+echo "⏳ Waiting for ambient-api-server-db..."
+kubectl wait --for=condition=available --timeout=120s \
+  deployment/ambient-api-server-db \
+  -n ambient-code
+
 # Wait for ambient-api-server
 echo "⏳ Waiting for ambient-api-server..."
 kubectl wait --for=condition=available --timeout=300s \

@@ -52,7 +52,7 @@
   - --cors-allowed-headers=X-Ambient-Project
   - --grpc-server-bindaddress=:9000
   - --alsologtostderr
-  - -v=10
+  - -v=8
 - op: replace
   path: /spec/template/spec/containers/0/livenessProbe
   value:

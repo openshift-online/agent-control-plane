@@ -6,6 +6,28 @@ spec:
   template:
     spec:
       initContainers:
+        - name: wait-for-db
+          image: postgres:16
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until pg_isready -h ambient-api-server-db -p 5432 -U "$PGUSER" -q; do
+                echo "Waiting for ambient-api-server-db..."
+                sleep 2
+              done
+          env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  key: db.user
+                  name: ambient-api-server-db
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
         - name: migration
           imagePullPolicy: IfNotPresent
           command:
@@ -18,7 +40,7 @@ spec:
             - --db-name-file=/secrets/db/db.name
             - --db-sslmode=disable
             - --alsologtostderr
-            - -v=10
+            - -v=8
       containers:
         - name: api-server
           imagePullPolicy: IfNotPresent
@@ -65,7 +87,7 @@ spec:
             - --cors-allowed-headers=X-Ambient-Project
             - --grpc-server-bindaddress=:9000
             - --alsologtostderr
-            - -v=10
+            - -v=8
           volumeMounts:
             - name: db-secrets
               mountPath: /secrets/db
