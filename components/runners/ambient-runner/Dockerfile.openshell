@@ -131,6 +131,8 @@ RUN uv tool install atlassian-mcp==1.0.0 && uv cache clean
 COPY --chmod=755 openshell-claude-wrapper.sh /usr/local/bin/claude
 
 COPY policy.yaml /etc/openshell/policy.yaml
+COPY claude.json /sandbox/.claude.json
+COPY claude-settings.json /sandbox/.claude/settings.json
 
 RUN dnf install -y --allowerasing --nodocs jq unzip && dnf clean all
 

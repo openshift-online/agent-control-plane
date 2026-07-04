@@ -18,18 +18,6 @@ if [ -f "$GUARD" ]; then
 fi
 touch "$GUARD"
 
-# Bootstrap Claude config if /sandbox is fresh (e.g. per-instance overlay mount).
-# Without this, the trust-folder prompt appears on every new sandbox instance.
-# The customApiKeyResponses pre-approves the dummy key suffix used for inference
-# routing so Claude Code does not prompt or reject it.
-if [ ! -f /sandbox/.claude.json ]; then
-    printf '{"trustedFolders":["/sandbox"],"hasCompletedOnboarding":true,"projects":{"/sandbox":{"hasTrustDialogAccepted":true}}}\n' > /sandbox/.claude.json
-fi
-if [ ! -f /sandbox/.claude/settings.json ]; then
-    mkdir -p /sandbox/.claude
-    printf '{"theme":"dark"}\n' > /sandbox/.claude/settings.json
-fi
-
 OPENSHELL_CA="/etc/openshell-tls/openshell-ca.pem"
 if [ -f "$OPENSHELL_CA" ] && [ -z "$ANTHROPIC_BASE_URL" ]; then
     export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-inference-routing}"
