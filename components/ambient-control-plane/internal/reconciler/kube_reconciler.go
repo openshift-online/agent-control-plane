@@ -332,6 +332,9 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	existing, err := r.gateway.GetSandbox(ctx, namespace, sbxName)
 	if err == nil && existing != nil && existing.Sandbox != nil {
 		r.logger.Debug().Str("sandbox", sbxName).Msg("sandbox already exists")
+		if err := r.patchSandboxDNSConfig(ctx, namespace, sbxName); err != nil {
+			r.logger.Warn().Err(err).Str("sandbox", sbxName).Msg("failed to patch sandbox dnsConfig; DNS resolution for external FQDNs may fail")
+		}
 		execEnv := r.inferenceExecEnv()
 		execEntrypoint := r.appendPromptToEntrypoint(ctx, entrypoint, session, sdk)
 		var payloads []types.Payload
@@ -405,6 +408,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	return nil
 }
 
+// Workaround for https://github.com/NVIDIA/OpenShell/issues/2053
 func (r *SimpleKubeReconciler) patchSandboxDNSConfig(ctx context.Context, namespace, sandboxName string) error {
 	sandboxGVR := schema.GroupVersionResource{
 		Group:    "agents.x-k8s.io",
@@ -582,29 +586,6 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				Msg("sandbox is ready, executing entrypoint")
 
 			execCtx := context.Background()
-			// Patch ndots before starting the runner. The OpenShell supervisor is
-			// statically linked with musl libc, whose getaddrinfo sends A+AAAA
-			// queries simultaneously. With Kubernetes' default ndots:5, external
-			// FQDNs get expanded through all search domains first, causing musl's
-			// DNS resolver to mishandle the many concurrent responses and return
-			// zero usable addresses (manifests as 503 "inference service unavailable").
-			// Setting ndots:1 makes musl resolve FQDNs directly.
-			//
-			// sed -i and shell redirects fail on bind-mounted /etc/resolv.conf
-			// in OpenShell sandboxes (read-only mount or "Device or resource busy").
-			// Piping through tee overwrites the file via its open fd instead.
-			ndotsResult, ndotsErr := r.gateway.ExecSandbox(execCtx, namespace, &openshellpb.ExecSandboxRequest{
-				SandboxId:      sandboxID,
-				Command:        []string{"/bin/sh", "-c", "cp /etc/resolv.conf /tmp/resolv.conf && sed 's/ndots:[0-9]*/ndots:1/' /tmp/resolv.conf | tee /etc/resolv.conf > /tmp/.ndots_out; rm -f /tmp/.ndots_out"},
-				TimeoutSeconds: 10,
-			})
-			if ndotsErr != nil {
-				r.logger.Warn().Err(ndotsErr).Str("sandbox", sbxName).Msg("failed to patch ndots; inference routing may fail for external FQDNs")
-			} else if ndotsResult.ExitCode != 0 {
-				r.logger.Warn().Int32("exit_code", ndotsResult.ExitCode).Str("stderr", string(ndotsResult.Stderr)).Str("sandbox", sbxName).Msg("ndots patch exited non-zero")
-			} else {
-				r.logger.Info().Str("sandbox", sbxName).Msg("ndots patched to 1 for musl DNS compatibility")
-			}
 
 			if len(payloads) > 0 {
 				var sshPayloads []openshell.Payload
