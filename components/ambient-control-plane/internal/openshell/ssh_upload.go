@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +14,8 @@ import (
 	pb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 	"golang.org/x/crypto/ssh"
 )
+
+var validPayloadPath = regexp.MustCompile(`^/[a-zA-Z0-9/_.\-]+$`)
 
 type Payload struct {
 	Path    string
@@ -58,6 +62,11 @@ func (g *GatewayClient) UploadPayloads(ctx context.Context, namespace string, sa
 	conn := newGrpcConn(stream)
 	defer conn.Close()
 
+	// Host key verification and password auth are intentionally disabled.
+	// This matches the OpenShell upstream pattern: the sandbox SSH server generates
+	// ephemeral host keys per boot and accepts all auth (auth_none returns Accept).
+	// Security is enforced at the gRPC layer: mTLS transport, time-limited session
+	// tokens validated by ForwardTcp, and Unix socket permissions (root-only 0600).
 	sshConn, chans, reqs, err := ssh.NewClientConn(conn, "sandbox", &ssh.ClientConfig{
 		User:            "sandbox",
 		Auth:            []ssh.AuthMethod{ssh.Password("")},
@@ -78,15 +87,32 @@ func (g *GatewayClient) UploadPayloads(ctx context.Context, namespace string, sa
 	return nil
 }
 
+func validatePayloadPath(path string) error {
+	if path == "" {
+		return fmt.Errorf("empty path")
+	}
+	if !validPayloadPath.MatchString(path) {
+		return fmt.Errorf("path contains invalid characters: %q", path)
+	}
+	if strings.Contains(path, "..") {
+		return fmt.Errorf("path contains directory traversal: %q", path)
+	}
+	return nil
+}
+
 func writePayloadViaSSH(client *ssh.Client, p Payload) error {
+	if err := validatePayloadPath(p.Path); err != nil {
+		return fmt.Errorf("invalid payload path: %w", err)
+	}
+
 	session, err := client.NewSession()
 	if err != nil {
 		return fmt.Errorf("open SSH session: %w", err)
 	}
 	defer session.Close()
 
-	dir := p.Path[:strings.LastIndex(p.Path, "/")]
-	cmd := fmt.Sprintf("mkdir -p %s && cat > %s", dir, p.Path)
+	dir := filepath.Dir(p.Path)
+	cmd := fmt.Sprintf("mkdir -p '%s' && cat > '%s'", dir, p.Path)
 
 	stdin, err := session.StdinPipe()
 	if err != nil {

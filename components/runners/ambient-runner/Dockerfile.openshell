@@ -123,7 +123,7 @@ RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     && rm -f /usr/local/bin/claude
 
 # Atlassian mcp
-RUN uv tool install atlassian-mcp && uv cache clean
+RUN uv tool install atlassian-mcp==0.21.1 && uv cache clean
 
 # ------------------------------------------------------------
 # Ambient runner (Layer 3)

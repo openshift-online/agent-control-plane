@@ -152,11 +152,25 @@ Control Plane
   → gRPC: ForwardTcp (bidirectional stream)
       → TcpForwardInit: sandbox_id, service_id, SshRelayTarget, token
       → SSH handshake over the gRPC stream (net.Conn adapter)
-      → SSH session: "mkdir -p <dir> && cat > <path>" with content piped to stdin
+      → Validate sandbox_path against allowlist regex (reject shell metacharacters, traversal)
+      → SSH session: "mkdir -p '<dir>' && cat > '<path>'" with content piped to stdin
   → Repeat for each payload file over the same SSH connection
 ```
 
 This follows the same pattern used by the OpenShell CLI for file uploads (`ssh_tar_upload` in `openshell-cli`). A single SSH connection is established per upload batch — individual payloads each open an SSH session (channel) within that connection.
+
+**Path validation:** Before constructing the shell command, each `sandbox_path` is validated against the regex `^/[a-zA-Z0-9/_.\-]+$` and checked for `..` traversal segments. Paths that fail validation are rejected before any SSH session is opened. This prevents shell injection via crafted payload paths in agent ConfigMaps. The path constraint is defined in `agent-sandbox-config.spec.md` § Payloads.
+
+**SSH security model:** The SSH connection uses `InsecureIgnoreHostKey()` (no host key verification) and `ssh.Password("")` (no-credential auth). This matches the OpenShell upstream pattern:
+- The sandbox SSH server (`openshell-supervisor-process/src/ssh.rs`) generates ephemeral Ed25519 host keys on each boot — there is no stable identity to verify
+- The server unconditionally accepts all auth (`auth_none` and `auth_publickey` both return `Auth::Accept`)
+- The OpenShell CLI uses the equivalent: `StrictHostKeyChecking=no` + `UserKnownHostsFile=/dev/null` (`openshell-cli/src/ssh.rs`)
+- The OpenShell server-side `russh` client uses `authenticate_none("sandbox")` (`openshell-server/src/grpc/sandbox.rs`)
+
+Security is enforced at layers below SSH:
+1. **Unix socket permissions** (0600, root-only) on the supervisor's SSH listener — the sandbox user cannot connect directly
+2. **gRPC session tokens** — time-limited UUIDs validated by `ForwardTcp` before relay streams are opened
+3. **mTLS** on the gRPC transport between control plane and gateway
 
 **Implementation:** `internal/openshell/ssh_upload.go` — `GatewayClient.UploadPayloads()`
 
@@ -169,7 +183,8 @@ This follows the same pattern used by the OpenShell CLI for file uploads (`ssh_t
 - AND it SHALL open a `ForwardTcp` bidirectional gRPC stream
 - AND it SHALL send a `TcpForwardInit` frame with `SshRelayTarget` and the authorization token
 - AND it SHALL perform an SSH handshake over the gRPC stream using `golang.org/x/crypto/ssh`
-- AND it SHALL write each payload by executing `mkdir -p <dir> && cat > <path>` via an SSH session with the file content piped to stdin
+- AND it SHALL validate each `sandbox_path` against the path allowlist (`^/[a-zA-Z0-9/_.\-]+$`, no `..` traversal) before constructing any shell command
+- AND it SHALL write each payload by executing `mkdir -p '<dir>' && cat > '<path>'` via an SSH session with the file content piped to stdin
 - AND it SHALL reuse the same SSH connection for all payloads in the batch
 
 #### Scenario: SSH session creation fails
