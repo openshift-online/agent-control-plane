@@ -1,0 +1,7 @@
+kind: Agent
+name: hello-world
+prompt: "Say hello world"
+providers:
+  - vertex
+labels:
+  purpose: testing

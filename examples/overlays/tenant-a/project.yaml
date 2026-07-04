@@ -1,0 +1,10 @@
+kind: Project
+name: tenant-a
+description: Development tenant for iterating on agent definitions and sandbox configs.
+prompt: |
+  This is the development tenant. Agents here run in permissive mode for rapid
+  iteration. Use this environment for testing new prompts, provider integrations,
+  and sandbox policies before promoting to staging.
+labels:
+  env: dev
+  team: platform

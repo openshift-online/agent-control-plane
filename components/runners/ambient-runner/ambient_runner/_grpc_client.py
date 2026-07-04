@@ -183,6 +183,7 @@ class AmbientGRPCClient:
         self._cp_token_url = cp_token_url
         self._channel: Optional[grpc.Channel] = None
         self._session_messages: Optional["SessionMessagesAPI"] = None  # noqa: F821
+        self._session_events: Optional["SessionEventsAPI"] = None  # noqa: F821
 
     @classmethod
     def from_env(cls) -> AmbientGRPCClient:
@@ -264,11 +265,24 @@ class AmbientGRPCClient:
             logger.info("[GRPC CLIENT] SessionMessagesAPI ready")
         return self._session_messages
 
+    @property
+    def session_events(self) -> "SessionEventsAPI":  # noqa: F821
+        if self._session_events is None:
+            logger.info("[GRPC CLIENT] Creating SessionEventsAPI stub")
+            from ._session_events_api import SessionEventsAPI
+
+            self._session_events = SessionEventsAPI(
+                self._get_channel(), token=self._token, grpc_client=self
+            )
+            logger.info("[GRPC CLIENT] SessionEventsAPI ready")
+        return self._session_events
+
     def close(self) -> None:
         if self._channel is not None:
             self._channel.close()
             self._channel = None
             self._session_messages = None
+            self._session_events = None
 
     def __enter__(self) -> AmbientGRPCClient:
         return self

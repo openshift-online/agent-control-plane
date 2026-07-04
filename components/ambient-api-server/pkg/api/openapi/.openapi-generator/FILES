@@ -10,6 +10,10 @@ docs/Agent.md
 docs/AgentList.md
 docs/AgentPatchRequest.md
 docs/AgentSessionList.md
+docs/Application.md
+docs/ApplicationList.md
+docs/ApplicationPatchRequest.md
+docs/ApplicationSyncRequest.md
 docs/Credential.md
 docs/CredentialList.md
 docs/CredentialPatchRequest.md
@@ -49,6 +53,8 @@ docs/ScheduledSession.md
 docs/ScheduledSessionList.md
 docs/ScheduledSessionPatchRequest.md
 docs/Session.md
+docs/SessionEvent.md
+docs/SessionEventList.md
 docs/SessionList.md
 docs/SessionMessage.md
 docs/SessionMessagePushRequest.md
@@ -66,6 +72,10 @@ model_agent.go
 model_agent_list.go
 model_agent_patch_request.go
 model_agent_session_list.go
+model_application.go
+model_application_list.go
+model_application_patch_request.go
+model_application_sync_request.go
 model_credential.go
 model_credential_list.go
 model_credential_patch_request.go
@@ -104,6 +114,8 @@ model_scheduled_session.go
 model_scheduled_session_list.go
 model_scheduled_session_patch_request.go
 model_session.go
+model_session_event.go
+model_session_event_list.go
 model_session_list.go
 model_session_message.go
 model_session_message_push_request.go

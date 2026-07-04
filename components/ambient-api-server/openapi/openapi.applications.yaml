@@ -1,0 +1,472 @@
+paths:
+  /api/ambient/v1/applications:
+    get:
+      summary: Returns a list of applications
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: A JSON array of application objects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationList'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/size'
+        - $ref: '#/components/parameters/search'
+        - $ref: '#/components/parameters/orderBy'
+        - $ref: '#/components/parameters/fields'
+    post:
+      summary: Create a new application
+      security:
+        - Bearer: []
+      requestBody:
+        description: Application data
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Application'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          description: Validation errors occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '409':
+          description: Application already exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred creating the application
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+  /api/ambient/v1/applications/{app_id}:
+    get:
+      summary: Get an application by id
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: Application found by id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No application with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    patch:
+      summary: Update an application
+      security:
+        - Bearer: []
+      requestBody:
+        description: Updated application data
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationPatchRequest'
+      responses:
+        '200':
+          description: Application updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          description: Validation errors occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No application with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error updating application
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    delete:
+      summary: Delete an application
+      security:
+        - Bearer: []
+      responses:
+        '204':
+          description: Application deleted successfully
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No application with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error deleting application
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    parameters:
+      - $ref: '#/components/parameters/app_id'
+  /api/ambient/v1/applications/{app_id}/sync:
+    post:
+      summary: Trigger a sync operation
+      description: Apply target state from git to live state in the destination project
+      security:
+        - Bearer: []
+      requestBody:
+        description: Optional sync parameters
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationSyncRequest'
+      responses:
+        '200':
+          description: Sync triggered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No application with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error during sync
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    parameters:
+      - $ref: '#/components/parameters/app_id'
+  /api/ambient/v1/applications/{app_id}/refresh:
+    post:
+      summary: Refresh application status
+      description: Fetch latest from git, render kustomize, diff against live state, update sync_status
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: Refresh completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No application with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error during refresh
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    parameters:
+      - $ref: '#/components/parameters/app_id'
+components:
+  schemas:
+    Application:
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/ObjectReference'
+        - type: object
+          required:
+            - name
+            - source_repo_url
+            - source_path
+            - destination_project
+          properties:
+            name:
+              type: string
+              description: Unique human-readable name for this application
+            source_repo_url:
+              type: string
+              description: Git repository URL (HTTPS or SSH)
+            source_target_revision:
+              type: string
+              description: Branch name, tag, or commit SHA (default main)
+            source_path:
+              type: string
+              description: Path within repo to kustomize directory
+            destination_ambient_url:
+              type: string
+              description: Target Ambient API URL; null means local
+            destination_project:
+              type: string
+              description: Target project name
+            credential_id:
+              type: string
+              description: FK to Credential for remote Ambient auth
+            auto_sync:
+              type: boolean
+              description: Enable automated sync on git change
+            auto_prune:
+              type: boolean
+              description: Delete resources removed from git
+            self_heal:
+              type: boolean
+              description: Re-sync when live state drifts
+            sync_options:
+              type: string
+              description: "Comma-separated options: CreateProject=true"
+            retry_limit:
+              type: integer
+              format: int32
+              description: Max sync retries on failure (default 3)
+            sync_status:
+              type: string
+              readOnly: true
+              description: "Synced | OutOfSync | Unknown"
+            health_status:
+              type: string
+              readOnly: true
+              description: "Healthy | Degraded | Progressing | Unknown"
+            sync_revision:
+              type: string
+              readOnly: true
+              description: Last successfully synced git commit SHA
+            operation_phase:
+              type: string
+              readOnly: true
+              description: "Succeeded | Failed | Running"
+            operation_message:
+              type: string
+              readOnly: true
+              description: Human-readable sync result summary
+            resource_status:
+              type: string
+              readOnly: true
+              description: JSON array of per-resource sync results
+            conditions:
+              type: string
+              readOnly: true
+              description: JSON array of error conditions
+            labels:
+              type: string
+            annotations:
+              type: string
+            last_synced_at:
+              type: string
+              format: date-time
+              readOnly: true
+    ApplicationList:
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/List'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Application'
+    ApplicationPatchRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        source_repo_url:
+          type: string
+        source_target_revision:
+          type: string
+        source_path:
+          type: string
+        destination_ambient_url:
+          type: string
+        destination_project:
+          type: string
+        credential_id:
+          type: string
+        auto_sync:
+          type: boolean
+        auto_prune:
+          type: boolean
+        self_heal:
+          type: boolean
+        sync_options:
+          type: string
+        retry_limit:
+          type: integer
+          format: int32
+        labels:
+          type: string
+        annotations:
+          type: string
+    ApplicationSyncRequest:
+      type: object
+      properties:
+        prune:
+          type: boolean
+          description: Override auto_prune for this sync only
+        revision:
+          type: string
+          description: Override source_target_revision for this sync only
+        prune_project:
+          type: boolean
+          description: Required alongside prune to allow project deletion
+  parameters:
+    app_id:
+      name: app_id
+      in: path
+      description: The id of the application
+      required: true
+      schema:
+        type: string
+    page:
+      name: page
+      in: query
+      description: Page number of record list when record list exceeds specified page size
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      required: false
+    size:
+      name: size
+      in: query
+      description: Maximum number of records to return
+      schema:
+        type: integer
+        default: 100
+        minimum: 0
+      required: false
+    search:
+      name: search
+      in: query
+      required: false
+      description: Specifies the search criteria
+      schema:
+        type: string
+    orderBy:
+      name: orderBy
+      in: query
+      required: false
+      description: Specifies the order by criteria
+      schema:
+        type: string
+    fields:
+      name: fields
+      in: query
+      required: false
+      description: Supplies a comma-separated list of fields to be returned
+      schema:
+        type: string

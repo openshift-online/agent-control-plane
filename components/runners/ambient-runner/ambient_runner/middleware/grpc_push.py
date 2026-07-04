@@ -1,9 +1,11 @@
 """
-AG-UI gRPC Push Middleware — forwards events to ambient-api-server via gRPC.
+AG-UI gRPC Dual-Push Middleware — forwards events to ambient-api-server via gRPC.
 
-Wraps an AG-UI event stream and pushes each event as a ``SessionMessage``
-to the ``PushSessionMessage`` RPC on the ambient-api-server.  The push is
-fire-and-forget: failures are logged but never propagate to the caller.
+Wraps an AG-UI event stream and performs dual-push:
+1. Each raw event → ``PushSessionMessage`` (high-level conversation stream)
+2. Compressed events → ``PushSessionEvent`` (compressed AG-UI audit trail)
+
+The push is fire-and-forget: failures are logged but never propagate.
 
 Usage::
 
@@ -98,11 +100,17 @@ async def grpc_push_middleware(
             yield event
         return
 
+    from .event_compressor import EventCompressor
+
+    compressor = EventCompressor()
+
     try:
         async for event in event_stream:
             yield event
             _push_event(grpc_client, sid, event)
+            _push_compressed_events(grpc_client, sid, compressor, event)
     finally:
+        _flush_compressor(grpc_client, sid, compressor)
         try:
             grpc_client.close()
         except Exception:
@@ -110,7 +118,7 @@ async def grpc_push_middleware(
 
 
 def _push_event(grpc_client: object, session_id: str, event: BaseEvent) -> None:
-    """Fire-and-forget push of a single AG-UI event via gRPC."""
+    """Fire-and-forget push of a single AG-UI event as a SessionMessage."""
     try:
         event_type = _event_type_str(event)
         payload = _event_to_payload(event)
@@ -121,7 +129,47 @@ def _push_event(grpc_client: object, session_id: str, event: BaseEvent) -> None:
         )
     except Exception as exc:
         logger.debug(
-            "grpc_push_middleware: push failed (event=%s): %s",
+            "grpc_push_middleware: message push failed (event=%s): %s",
             _event_type_str(event),
             exc,
+        )
+
+
+def _push_compressed_events(
+    grpc_client: object, session_id: str, compressor: object, event: BaseEvent
+) -> None:
+    """Feed the event to the compressor and push any resulting compressed events."""
+    try:
+        compressed_events = compressor.feed(event)
+        for ce in compressed_events:
+            grpc_client.session_events.push(
+                session_id=session_id,
+                event_type=ce.event_type,
+                payload=ce.payload,
+                completed_at=ce.completed_at,
+                event_count=ce.event_count,
+            )
+    except Exception as exc:
+        logger.debug(
+            "grpc_push_middleware: event push failed (event=%s): %s",
+            _event_type_str(event),
+            exc,
+        )
+
+
+def _flush_compressor(grpc_client: object, session_id: str, compressor: object) -> None:
+    """Flush any remaining compressed events at stream end."""
+    try:
+        remaining = compressor.flush()
+        for ce in remaining:
+            grpc_client.session_events.push(
+                session_id=session_id,
+                event_type=ce.event_type,
+                payload=ce.payload,
+                completed_at=ce.completed_at,
+                event_count=ce.event_count,
+            )
+    except Exception as exc:
+        logger.debug(
+            "grpc_push_middleware: compressor flush failed: %s", exc,
         )

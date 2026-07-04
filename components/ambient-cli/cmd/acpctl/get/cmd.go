@@ -42,6 +42,7 @@ Valid resource types:
   roles               (aliases: role)
   role-bindings       (aliases: role-binding, rb)
   credentials         (aliases: credential, cred)
+  applications        (aliases: application, app, apps)
 `,
 	Args:    cobra.RangeArgs(1, 2),
 	RunE:    run,
@@ -144,6 +145,8 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return getRoleBindings(ctx, client, printer, name)
 	case "credentials":
 		return getCredentials(ctx, client, printer, name)
+	case "applications":
+		return getApplications(ctx, client, printer, name)
 	default:
 		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-agents, project-settings, users, agents, providers, policies, roles, role-bindings, credentials", cmdArgs[0])
 	}
@@ -173,6 +176,8 @@ func normalizeResource(r string) string {
 		return "role-bindings"
 	case "credential", "credentials", "cred", "creds":
 		return "credentials"
+	case "application", "applications", "app", "apps":
+		return "applications"
 	default:
 		return r
 	}
@@ -849,6 +854,54 @@ func processAllSessionPages(ctx context.Context, client *sdkclient.Client, pageS
 		}
 	}
 
+	return nil
+}
+
+func getApplications(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
+	if name != "" {
+		app, err := client.Applications().Get(ctx, name)
+		if err != nil {
+			return fmt.Errorf("get application %q: %w", name, err)
+		}
+		if printer.Format() == output.FormatJSON {
+			return printer.PrintJSON(app)
+		}
+		return printApplicationTable(printer, []sdktypes.Application{*app})
+	}
+	opts := sdktypes.NewListOptions().Size(args.limit).Build()
+	list, err := client.Applications().List(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("list applications: %w", err)
+	}
+	if printer.Format() == output.FormatJSON {
+		return printer.PrintJSON(list)
+	}
+	return printApplicationTable(printer, list.Items)
+}
+
+func printApplicationTable(printer *output.Printer, applications []sdktypes.Application) error {
+	columns := []output.Column{
+		{Name: "ID", Width: 27},
+		{Name: "NAME", Width: 24},
+		{Name: "SOURCE", Width: 40},
+		{Name: "PROJECT", Width: 16},
+		{Name: "SYNC", Width: 12},
+		{Name: "HEALTH", Width: 12},
+		{Name: "AGE", Width: 10},
+	}
+	table := output.NewTable(printer.Writer(), columns)
+	table.WriteHeaders()
+	for _, a := range applications {
+		age := ""
+		if a.CreatedAt != nil {
+			age = output.FormatAge(time.Since(*a.CreatedAt))
+		}
+		source := a.SourceRepoURL
+		if a.SourcePath != "" {
+			source = source + "/" + a.SourcePath
+		}
+		table.WriteRow(a.ID, a.Name, source, a.DestinationProject, a.SyncStatus, a.HealthStatus, age)
+	}
 	return nil
 }
 

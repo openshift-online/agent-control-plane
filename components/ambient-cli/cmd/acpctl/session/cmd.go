@@ -16,7 +16,8 @@ Examples:
   acpctl session messages <id> -F            # continuous follow (Ctrl+C to stop)
   acpctl session send <id> "Hello!"          # send a message
   acpctl session send <id> "Hello!" -f       # send and stream until done
-  acpctl session events <id>                 # raw AG-UI event stream`,
+  acpctl session events <id>                 # raw AG-UI event stream
+  acpctl session events-history <id>         # persisted compressed events`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()
 	},
@@ -26,4 +27,5 @@ func init() {
 	Cmd.AddCommand(messagesCmd)
 	Cmd.AddCommand(sendCmd)
 	Cmd.AddCommand(eventsCmd)
+	Cmd.AddCommand(eventsHistoryCmd)
 }

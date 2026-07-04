@@ -78,6 +78,13 @@ All URIs are relative to *http://localhost:8000*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
+*DefaultAPI* | [**ApiAmbientV1ApplicationsAppIdDelete**](docs/DefaultAPI.md#apiambientv1applicationsappiddelete) | **Delete** /api/ambient/v1/applications/{app_id} | Delete an application
+*DefaultAPI* | [**ApiAmbientV1ApplicationsAppIdGet**](docs/DefaultAPI.md#apiambientv1applicationsappidget) | **Get** /api/ambient/v1/applications/{app_id} | Get an application by id
+*DefaultAPI* | [**ApiAmbientV1ApplicationsAppIdPatch**](docs/DefaultAPI.md#apiambientv1applicationsappidpatch) | **Patch** /api/ambient/v1/applications/{app_id} | Update an application
+*DefaultAPI* | [**ApiAmbientV1ApplicationsAppIdRefreshPost**](docs/DefaultAPI.md#apiambientv1applicationsappidrefreshpost) | **Post** /api/ambient/v1/applications/{app_id}/refresh | Refresh application status
+*DefaultAPI* | [**ApiAmbientV1ApplicationsAppIdSyncPost**](docs/DefaultAPI.md#apiambientv1applicationsappidsyncpost) | **Post** /api/ambient/v1/applications/{app_id}/sync | Trigger a sync operation
+*DefaultAPI* | [**ApiAmbientV1ApplicationsGet**](docs/DefaultAPI.md#apiambientv1applicationsget) | **Get** /api/ambient/v1/applications | Returns a list of applications
+*DefaultAPI* | [**ApiAmbientV1ApplicationsPost**](docs/DefaultAPI.md#apiambientv1applicationspost) | **Post** /api/ambient/v1/applications | Create a new application
 *DefaultAPI* | [**ApiAmbientV1CredentialsCredIdDelete**](docs/DefaultAPI.md#apiambientv1credentialscrediddelete) | **Delete** /api/ambient/v1/credentials/{cred_id} | Delete a credential
 *DefaultAPI* | [**ApiAmbientV1CredentialsCredIdGet**](docs/DefaultAPI.md#apiambientv1credentialscredidget) | **Get** /api/ambient/v1/credentials/{cred_id} | Get a credential by id
 *DefaultAPI* | [**ApiAmbientV1CredentialsCredIdPatch**](docs/DefaultAPI.md#apiambientv1credentialscredidpatch) | **Patch** /api/ambient/v1/credentials/{cred_id} | Update a credential
@@ -144,6 +151,8 @@ Class | Method | HTTP request | Description
 *DefaultAPI* | [**ApiAmbientV1RolesPost**](docs/DefaultAPI.md#apiambientv1rolespost) | **Post** /api/ambient/v1/roles | Create a new role
 *DefaultAPI* | [**ApiAmbientV1SessionsGet**](docs/DefaultAPI.md#apiambientv1sessionsget) | **Get** /api/ambient/v1/sessions | Returns a list of sessions
 *DefaultAPI* | [**ApiAmbientV1SessionsIdDelete**](docs/DefaultAPI.md#apiambientv1sessionsiddelete) | **Delete** /api/ambient/v1/sessions/{id} | Delete a session by id
+*DefaultAPI* | [**ApiAmbientV1SessionsIdEventsGet**](docs/DefaultAPI.md#apiambientv1sessionsideventsget) | **Get** /api/ambient/v1/sessions/{id}/events | Stream live AG-UI events from the runner pod
+*DefaultAPI* | [**ApiAmbientV1SessionsIdEventsHistoryGet**](docs/DefaultAPI.md#apiambientv1sessionsideventshistoryget) | **Get** /api/ambient/v1/sessions/{id}/events/history | List persisted compressed AG-UI events
 *DefaultAPI* | [**ApiAmbientV1SessionsIdGet**](docs/DefaultAPI.md#apiambientv1sessionsidget) | **Get** /api/ambient/v1/sessions/{id} | Get an session by id
 *DefaultAPI* | [**ApiAmbientV1SessionsIdMessagesGet**](docs/DefaultAPI.md#apiambientv1sessionsidmessagesget) | **Get** /api/ambient/v1/sessions/{id}/messages | List or stream session messages
 *DefaultAPI* | [**ApiAmbientV1SessionsIdMessagesPost**](docs/DefaultAPI.md#apiambientv1sessionsidmessagespost) | **Post** /api/ambient/v1/sessions/{id}/messages | Push a message to a session
@@ -164,6 +173,10 @@ Class | Method | HTTP request | Description
  - [AgentList](docs/AgentList.md)
  - [AgentPatchRequest](docs/AgentPatchRequest.md)
  - [AgentSessionList](docs/AgentSessionList.md)
+ - [Application](docs/Application.md)
+ - [ApplicationList](docs/ApplicationList.md)
+ - [ApplicationPatchRequest](docs/ApplicationPatchRequest.md)
+ - [ApplicationSyncRequest](docs/ApplicationSyncRequest.md)
  - [Credential](docs/Credential.md)
  - [CredentialList](docs/CredentialList.md)
  - [CredentialPatchRequest](docs/CredentialPatchRequest.md)
@@ -202,6 +215,8 @@ Class | Method | HTTP request | Description
  - [ScheduledSessionList](docs/ScheduledSessionList.md)
  - [ScheduledSessionPatchRequest](docs/ScheduledSessionPatchRequest.md)
  - [Session](docs/Session.md)
+ - [SessionEvent](docs/SessionEvent.md)
+ - [SessionEventList](docs/SessionEventList.md)
  - [SessionList](docs/SessionList.md)
  - [SessionMessage](docs/SessionMessage.md)
  - [SessionMessagePushRequest](docs/SessionMessagePushRequest.md)

@@ -8,7 +8,6 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
@@ -32,11 +31,6 @@ func NewAgentHandler(agent AgentService, generic services.GenericService) *agent
 }
 
 func (h agentHandler) Create(w http.ResponseWriter, r *http.Request) {
-	if err := rbac.RequireGitOpsManaged(r.Context(), "Agent"); err != nil {
-		handlers.HandleError(r.Context(), w, err)
-		return
-	}
-
 	var agent openapi.Agent
 	cfg := &handlers.HandlerConfig{
 		Body: &agent,
@@ -61,11 +55,6 @@ func (h agentHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h agentHandler) Patch(w http.ResponseWriter, r *http.Request) {
-	if err := rbac.RequireGitOpsManaged(r.Context(), "Agent"); err != nil {
-		handlers.HandleError(r.Context(), w, err)
-		return
-	}
-
 	var patch openapi.AgentPatchRequest
 
 	cfg := &handlers.HandlerConfig{
@@ -235,11 +224,6 @@ func (h agentHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h agentHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	if err := rbac.RequireGitOpsManaged(r.Context(), "Agent"); err != nil {
-		handlers.HandleError(r.Context(), w, err)
-		return
-	}
-
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
 			projectID := mux.Vars(r)["id"]

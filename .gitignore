@@ -105,15 +105,17 @@ scripts/coderabbit-triage/data/
 /site
 docs/_build/
 
-# E2E testing
-e2e/.env.test
-e2e/node_modules/
-e2e/cypress/screenshots/
-e2e/cypress/videos/
+# E2E / Cypress testing
+tests/cypress/.env.test
+tests/cypress/.env
+tests/cypress/.env.local
+tests/cypress/node_modules/
+tests/cypress/cypress/screenshots/
+tests/cypress/cypress/videos/
 
 # Langfuse credentials
-e2e/.env.langfuse
-e2e/langfuse/.env.langfuse-keys
+tests/infra/.env.langfuse
+tests/infra/langfuse/.env.langfuse-keys
 
 # Design / spike artifacts (transient)
 .design/

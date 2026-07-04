@@ -24,23 +24,18 @@ func NewScheduledSessionHandler(svc ScheduledSessionService, sessionSvc sessions
 }
 
 // checkTierForMutation returns ServiceError if caller's tier is insufficient
-// for schedule mutations in gateway mode. Returns nil otherwise.
+// for schedule mutations. Returns nil otherwise.
 func checkTierForMutation(ctx context.Context, projectID string) *errors.ServiceError {
-	if !gateway.IsGatewayModeActive() {
-		return nil
-	}
-
 	username := auth.GetUsernameFromContext(ctx)
 	if username == "" {
-		return errors.Unauthenticated("Username required for gateway mode tier resolution")
+		return errors.Unauthenticated("Username required for tier resolution")
 	}
 
 	tier := gateway.GetTierResolver().ResolveTier(ctx, username, projectID)
 
-	// ACP internal role fallback
 	if tier == gateway.TierNone {
 		authResult := rbac.GetAuthResult(ctx)
-		if authResult != nil && authResult.IsGlobalAdmin {
+		if rbac.IsProjectAuthorized(authResult, projectID) {
 			return nil
 		}
 	}

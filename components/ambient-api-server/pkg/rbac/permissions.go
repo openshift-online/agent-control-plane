@@ -9,6 +9,7 @@ const (
 	ResourceAgent           Resource = "agent"
 	ResourceSession         Resource = "session"
 	ResourceSessionMessage  Resource = "session_message"
+	ResourceSessionEvent    Resource = "session_event"
 	ResourceBlackboard      Resource = "blackboard"
 	ResourceRole            Resource = "role"
 	ResourceRoleBinding     Resource = "role_binding"
@@ -84,6 +85,9 @@ var (
 	PermSessionDelete = Permission{ResourceSession, ActionDelete}
 
 	PermSessionMessageWatch = Permission{ResourceSessionMessage, ActionWatch}
+
+	PermSessionEventList  = Permission{ResourceSessionEvent, ActionList}
+	PermSessionEventWatch = Permission{ResourceSessionEvent, ActionWatch}
 
 	PermBlackboardWatch = Permission{ResourceBlackboard, ActionWatch}
 	PermBlackboardRead  = Permission{ResourceBlackboard, ActionRead}

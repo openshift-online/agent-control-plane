@@ -112,10 +112,13 @@ type resource struct {
 	Labels      map[string]string `yaml:"labels"`
 	Annotations map[string]string `yaml:"annotations"`
 	Inbox       []inboxSeed       `yaml:"inbox"`
+	Providers   []string          `yaml:"providers"`
 	Provider    string            `yaml:"provider"`
 	Token       string            `yaml:"token"`
 	URL         string            `yaml:"url"`
 	Email       string            `yaml:"email"`
+	Secret      string            `yaml:"secret"`
+	Type        string            `yaml:"type"`
 	Role        string            `yaml:"role"`
 	Scope       string            `yaml:"scope"`
 	ScopeID     string            `yaml:"scope_id"`
@@ -190,6 +193,8 @@ func run(cmd *cobra.Command, _ []string) error {
 			result, err = applyAgent(ctx, client, doc, projectName, factory)
 		case "credential":
 			result, err = applyCredential(ctx, client, doc)
+		case "provider":
+			result, err = applyProvider(ctx, client, doc)
 		case "rolebinding":
 			result, err = applyRoleBinding(ctx, client, doc)
 		default:
@@ -335,6 +340,67 @@ func buildCredentialPatch(existing *sdktypes.Credential, doc resource) (map[stri
 		changed = true
 	}
 	return patch.Build(), changed
+}
+
+// ── Provider ─────────────────────────────────────────────────────────────────
+
+func applyProvider(ctx context.Context, client *sdkclient.Client, doc resource) (applyResult, error) {
+	existing, err := client.Providers().List(ctx, &sdktypes.ListOptions{
+		Search: fmt.Sprintf("name = '%s'", doc.Name),
+		Size:   1,
+	})
+	if err != nil {
+		return applyResult{}, fmt.Errorf("listing providers: %w", err)
+	}
+	if existing != nil && len(existing.Items) > 0 {
+		prov := existing.Items[0]
+		patch := map[string]any{}
+		if doc.Type != "" && doc.Type != prov.Type {
+			patch["type"] = doc.Type
+		}
+		if doc.Secret != "" && doc.Secret != prov.Secret {
+			patch["secret"] = doc.Secret
+		}
+		if len(doc.Labels) > 0 {
+			patch["labels"] = marshalStringMap(doc.Labels)
+		}
+		if len(doc.Annotations) > 0 {
+			patch["annotations"] = marshalStringMap(doc.Annotations)
+		}
+		if len(patch) == 0 {
+			return applyResult{Kind: "Provider", Name: doc.Name, Status: "unchanged"}, nil
+		}
+		if _, err = client.Providers().Update(ctx, prov.ID, patch); err != nil {
+			return applyResult{}, err
+		}
+		return applyResult{Kind: "Provider", Name: doc.Name, Status: "configured"}, nil
+	}
+
+	provType := doc.Type
+	if provType == "" {
+		provType = doc.Name
+	}
+	builder := sdktypes.NewProviderBuilder().
+		Name(doc.Name).
+		ProjectID(client.Project()).
+		Type(provType)
+	if doc.Secret != "" {
+		builder = builder.Secret(doc.Secret)
+	}
+	if len(doc.Labels) > 0 {
+		builder = builder.Labels(marshalStringMap(doc.Labels))
+	}
+	if len(doc.Annotations) > 0 {
+		builder = builder.Annotations(marshalStringMap(doc.Annotations))
+	}
+	prov, buildErr := builder.Build()
+	if buildErr != nil {
+		return applyResult{}, buildErr
+	}
+	if _, createErr := client.Providers().Create(ctx, prov); createErr != nil {
+		return applyResult{}, createErr
+	}
+	return applyResult{Kind: "Provider", Name: doc.Name, Status: "created"}, nil
 }
 
 // ── RoleBinding ──────────────────────────────────────────────────────────────
@@ -598,6 +664,9 @@ func applyAgent(ctx context.Context, client *sdkclient.Client, doc resource, pro
 		if doc.Prompt != "" {
 			builder = builder.Prompt(doc.Prompt)
 		}
+		if len(doc.Providers) > 0 {
+			builder = builder.Providers(doc.Providers)
+		}
 		pa, buildErr := builder.Build()
 		if buildErr != nil {
 			return applyResult{}, buildErr
@@ -642,6 +711,9 @@ func buildAgentPatch(existing *sdktypes.Agent, doc resource) map[string]any {
 	patch := map[string]any{}
 	if doc.Prompt != "" && doc.Prompt != existing.Prompt {
 		patch["prompt"] = doc.Prompt
+	}
+	if len(doc.Providers) > 0 {
+		patch["providers"] = doc.Providers
 	}
 	if len(doc.Labels) > 0 {
 		patch["labels"] = marshalStringMap(doc.Labels)

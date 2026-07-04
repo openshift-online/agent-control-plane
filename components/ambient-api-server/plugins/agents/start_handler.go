@@ -55,30 +55,26 @@ func (h *startHandler) Start(w http.ResponseWriter, r *http.Request) {
 	projectID := mux.Vars(r)["id"]
 	agentID := mux.Vars(r)["agent_id"]
 
-	// Gateway mode tier check
-	if gateway.IsGatewayModeActive() {
-		username := auth.GetUsernameFromContext(ctx)
-		if username == "" {
-			handlers.HandleError(ctx, w, pkgerrors.Unauthenticated(
-				"Username required for gateway mode tier resolution"))
-			return
-		}
+	username := auth.GetUsernameFromContext(ctx)
+	if username == "" {
+		handlers.HandleError(ctx, w, pkgerrors.Unauthenticated(
+			"Username required for tier resolution"))
+		return
+	}
 
-		tier := gateway.GetTierResolver().ResolveTier(ctx, username, projectID)
+	tier := gateway.GetTierResolver().ResolveTier(ctx, username, projectID)
 
-		// Fallback to ACP internal roles if K8s tier is None
-		if tier == gateway.TierNone {
-			authResult := rbac.GetAuthResult(ctx)
-			if authResult != nil && authResult.IsGlobalAdmin {
-				tier = gateway.TierAdmin // platform:admin bypasses
-			}
+	if tier == gateway.TierNone {
+		authResult := rbac.GetAuthResult(ctx)
+		if rbac.IsProjectAuthorized(authResult, projectID) {
+			tier = gateway.TierEditor
 		}
+	}
 
-		if tier == gateway.TierViewer || tier == gateway.TierNone {
-			handlers.HandleError(ctx, w, pkgerrors.Forbidden(
-				"Session creation requires Editor or Admin tier access"))
-			return
-		}
+	if tier == gateway.TierViewer || tier == gateway.TierNone {
+		handlers.HandleError(ctx, w, pkgerrors.Forbidden(
+			"Session creation requires Editor or Admin tier access"))
+		return
 	}
 
 	mu := &sync.Mutex{}

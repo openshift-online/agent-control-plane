@@ -1,9 +1,7 @@
 #!/bin/bash
 #
-# setup-vertex-provider.sh — Create provider declarations for Vertex AI in a
-# tenant namespace. This configures the gateway-mode provider flow where
-# credentials come from K8s Secrets referenced by provider declarations, not
-# from ACP credential bindings.
+# setup-vertex-provider.sh — Apply tenant fleet definitions with Vertex AI
+# credentials via acpctl apply -k.
 #
 # USAGE:
 #   ./scripts/setup-vertex-provider.sh [NAMESPACE] [VERTEX_CRED]
@@ -12,38 +10,34 @@
 #   VERTEX_CRED     Path to GCP service account JSON key (default: ./vertex.json)
 #
 # WHAT THIS DOES:
-#   1. Creates a K8s Secret (vertex-sa-key) with the SA JSON under a "token" key
-#   2. Applies the example declarations from examples/agent-sandbox-config.yaml
-#      (provider, policy, and agent ConfigMaps) into the target namespace
-#   3. The control plane's ConfigMap syncer picks these up and syncs them to the API
-#   4. Sessions created with --agent <name> will use providers from that agent's declaration
+#   1. Reads the GCP SA JSON key into VERTEX_SA_KEY env var
+#   2. Runs acpctl apply -k on the tenant overlay (examples/overlays/<namespace>/)
+#   3. The Credential kind in the overlay uses $VERTEX_SA_KEY for token expansion
 #
 # PREREQUISITES:
 #   - kind cluster running with OPENSHELL_USE_GATEWAY=true
-#   - operator-config ConfigMap with ANTHROPIC_VERTEX_PROJECT_ID and CLOUD_ML_REGION
+#   - acpctl built and logged in (make build-cli && make kind-acpctl-login)
 #   - kubectl context set to the cluster
-#   - For openshell CLI verification: ./scripts/setup-gateway-cli.sh <namespace>
 #
 # VERIFICATION:
-#   After running, wait ~30s for the ConfigMap syncer, then:
-#     acpctl create session --project-id tenant-a --agent-id <agent-id> \
-#       --name test --prompt "say hello"
-#     openshell sandbox list --gateway tenant-a
+#   acpctl get agents --project-id <namespace>
+#   acpctl get credentials
 #
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-EXAMPLE_FILE="$REPO_ROOT/examples/agent-sandbox-config.yaml"
+OVERLAY_DIR="$REPO_ROOT/examples/overlays"
 
 NAMESPACE="${1:-tenant-a}"
 VERTEX_CRED="${2:-./vertex.json}"
 
+echo "▶ Setting up vertex provider in $NAMESPACE..."
 echo "=== Vertex Provider Setup ==="
 echo "  Namespace:  $NAMESPACE"
 echo "  Key file:   $VERTEX_CRED"
-echo "  Example:    $EXAMPLE_FILE"
+echo "  Overlay:    $OVERLAY_DIR/$NAMESPACE"
 echo ""
 
 if [ ! -f "$VERTEX_CRED" ]; then
@@ -51,51 +45,45 @@ if [ ! -f "$VERTEX_CRED" ]; then
     exit 1
 fi
 
-if [ ! -f "$EXAMPLE_FILE" ]; then
-    echo "Error: Example declarations not found: $EXAMPLE_FILE"
+if [ ! -d "$OVERLAY_DIR/$NAMESPACE" ]; then
+    echo "Error: Overlay not found: $OVERLAY_DIR/$NAMESPACE"
     exit 1
 fi
 
-if ! kubectl get namespace "$NAMESPACE" &>/dev/null; then
-    echo "Error: Namespace '$NAMESPACE' does not exist"
+ACPCTL=""
+if command -v acpctl >/dev/null 2>&1; then
+    ACPCTL=acpctl
+elif [ -x "$REPO_ROOT/components/ambient-cli/acpctl" ]; then
+    ACPCTL="$REPO_ROOT/components/ambient-cli/acpctl"
+elif [ -x "$REPO_ROOT/acpctl" ]; then
+    ACPCTL="$REPO_ROOT/acpctl"
+fi
+
+if [ -z "$ACPCTL" ]; then
+    echo "Error: acpctl not found — run 'make build-cli' first"
     exit 1
 fi
 
-# Step 1: Store the GCP service account JSON key in a K8s Secret under a "token"
-# key. The provider declaration ConfigMap references this Secret by name
-# (vertex-sa-key). At sandbox provisioning time the control plane reads the
-# token value, uses it to create an OpenShell provider on the gateway, and
-# configures automatic credential refresh: the gateway extracts client_email
-# and private_key from the SA JSON to mint short-lived access tokens via
-# JWT → OAuth2 token exchange (Google SA keys don't work as raw bearer tokens).
-echo "Step 1/2: Creating vertex-sa-key Secret..."
+export VERTEX_SA_KEY
+VERTEX_SA_KEY="$(cat "$VERTEX_CRED")"
+
+echo "Creating K8s Secret vertex-sa-key in $NAMESPACE..."
 kubectl create secret generic vertex-sa-key \
-  --from-literal=token="$(cat "$VERTEX_CRED")" \
-  -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+    --namespace="$NAMESPACE" \
+    "--from-literal=token=${VERTEX_SA_KEY}" \
+    --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
 echo "  Done"
-echo ""
 
-# Step 2: Apply the provider, policy, and agent declaration ConfigMaps from
-# the example file. The ConfigMap syncer watches for the ambient.ai/kind label
-# and syncs these to the ACP API server. The agent declaration's "providers"
-# list determines which providers are created on the gateway at sandbox time.
-echo "Step 2/2: Applying example declarations..."
-kubectl apply -n "$NAMESPACE" -f "$EXAMPLE_FILE"
+echo "Applying tenant fleet definitions..."
+$ACPCTL apply -k "$OVERLAY_DIR/$NAMESPACE/" --project "$NAMESPACE"
 echo "  Done"
 echo ""
 
 echo "=== Setup Complete ==="
 echo ""
-echo "The ConfigMap syncer will pick up these declarations within ~30s."
-echo "Check control plane logs for 'provider created from configmap' / 'agent created from configmap'."
-echo ""
 echo "Next steps:"
-echo "  # Set up openshell CLI gateway connectivity (if not already done):"
-echo "  make kind-setup-openshell-cli NAMESPACES=$NAMESPACE"
+echo "  acpctl get agents --project-id $NAMESPACE"
+echo "  acpctl get credentials"
 echo ""
-echo "  # Create a session using an agent with vertex (agent names come from the ConfigMap, for example 'default'):"
-echo "  acpctl create session --project-id $NAMESPACE --agent-id <agent-id> \\"
-echo "    --name test --prompt 'say hello'"
-echo ""
-echo "  # Verify sandbox was created:"
-echo "  openshell sandbox list --gateway ${NAMESPACE}"
+echo "  # Create a session:"
+echo "  acpctl start <agent-name> --project-id $NAMESPACE --prompt 'say hello'"
