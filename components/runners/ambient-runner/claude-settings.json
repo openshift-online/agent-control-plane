@@ -1,38 +1,5 @@
 {
   "enabledMcpjsonServers": [
     "mcp-atlassian"
-  ],
-  "permissions": {
-    "allow": [
-      "Read",
-      "Write",
-      "Edit",
-      "Glob",
-      "Grep",
-      "Skill",
-      "WebFetch",
-      "WebSearch",
-      "mcp__mcp-atlassian__*",
-      "Bash(ls:*)",
-      "Bash(cat:*)",
-      "Bash(grep:*)",
-      "Bash(find:*)",
-      "Bash(head:*)",
-      "Bash(tail:*)",
-      "Bash(wc:*)",
-      "Bash(date:*)",
-      "Bash(echo:*)",
-      "Bash(mkdir:*)",
-      "Bash(python3:*)",
-      "Bash(bash:*)",
-      "Bash(jq:*)"
-    ],
-    "deny": [
-      "Bash(rm -rf:*)",
-      "Bash(sudo:*)",
-      "Bash(chmod:*)",
-      "Bash(chown:*)",
-      "Bash(curl:*)"
-    ]
-  }
+  ]
 }

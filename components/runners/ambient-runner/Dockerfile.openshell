@@ -133,6 +133,7 @@ COPY --chmod=755 openshell-claude-wrapper.sh /usr/local/bin/claude
 COPY policy.yaml /etc/openshell/policy.yaml
 COPY claude.json /sandbox/.claude.json
 COPY claude-settings.json /sandbox/.claude/settings.json
+COPY claude-settings-local.json /sandbox/.claude/settings.local.json
 
 RUN dnf install -y --allowerasing --nodocs jq unzip && dnf clean all
 
