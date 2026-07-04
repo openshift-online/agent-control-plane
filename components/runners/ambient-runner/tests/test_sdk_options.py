@@ -26,8 +26,8 @@ def _make_bridge(**overrides: Any) -> ClaudeBridge:
     """Create a ClaudeBridge with minimal state so _ensure_adapter() can run."""
     bridge = ClaudeBridge()
     bridge._cwd_path = overrides.get("cwd_path", "/workspace")
-    bridge._allowed_tools = overrides.get("allowed_tools", [])
     bridge._mcp_servers = overrides.get("mcp_servers", {})
+    bridge._allowed_tools = overrides.get("allowed_tools", ["Read", "Write", "Bash"])
     bridge._system_prompt = overrides.get(
         "system_prompt", {"type": "preset", "preset": "claude_code", "append": "base"}
     )
@@ -106,6 +106,7 @@ class TestParseSdkOptionsDenylist:
             "cwd",
             "api_key",
             "mcp_servers",
+            "allowed_tools",
             "setting_sources",
             "stderr",
             "resume",

@@ -70,6 +70,21 @@ def load_mcp_config(context: RunnerContext, cwd_path: str) -> dict | None:
         else:
             logger.info(f"No MCP config file found at: {runner_mcp_file}")
 
+        # Merge cwd-level .mcp.json (payload-injected servers)
+        cwd_mcp_file = Path(cwd_path) / ".mcp.json"
+        if cwd_mcp_file.exists() and cwd_mcp_file != runner_mcp_file:
+            try:
+                with open(cwd_mcp_file, "r") as f:
+                    cwd_config = _json.load(f)
+                    cwd_servers = cwd_config.get("mcpServers", {})
+                    if cwd_servers:
+                        mcp_servers.update(cwd_servers)
+                        logger.info(
+                            f"Merged {len(cwd_servers)} cwd-level MCP server(s) from {cwd_mcp_file}"
+                        )
+            except _json.JSONDecodeError as e:
+                logger.error(f"Failed to parse cwd .mcp.json at {cwd_mcp_file}: {e}")
+
         # Merge project-level custom MCP servers
         disabled: list[str] = []
         project_mcp_raw = context.get_env("PROJECT_MCP_SERVERS", "")

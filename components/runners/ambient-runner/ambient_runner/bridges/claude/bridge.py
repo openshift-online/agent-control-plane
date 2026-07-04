@@ -47,6 +47,7 @@ _SDK_OPTIONS_DENYLIST = frozenset(
         "cwd",
         "resume",
         "mcp_servers",
+        "allowed_tools",
         "setting_sources",
         "stderr",
         "continue_conversation",
@@ -710,10 +711,7 @@ class ClaudeBridge(PlatformBridge):
         Called when the user changes so .mcp.json env blocks (e.g.,
         ${JIRA_API_TOKEN}) are re-expanded with the new user's credentials.
         """
-        from ambient_runner.bridges.claude.mcp import (
-            build_allowed_tools,
-            build_mcp_servers,
-        )
+        from ambient_runner.bridges.claude.mcp import build_allowed_tools, build_mcp_servers
 
         self._mcp_servers = build_mcp_servers(self._context, self._cwd_path, self._obs)
         self._allowed_tools = build_allowed_tools(self._mcp_servers)
@@ -742,7 +740,7 @@ class ClaudeBridge(PlatformBridge):
             "permission_mode": "acceptEdits",
             "allowed_tools": self._allowed_tools,
             "mcp_servers": self._mcp_servers,
-            "setting_sources": ["project"],
+            "setting_sources": ["user", "project", "local"],
             "system_prompt": self._system_prompt,
             "include_partial_messages": True,
             "stderr": _stderr_handler,
