@@ -260,10 +260,18 @@ All service URLs in `ambient-control-plane-service.yml` and Kind overlays must
 use FQDNs ending in `.cluster.local` (e.g.,
 `ambient-api-server.ambient-code.svc.cluster.local:8000`).
 
-**Runner image `localhost/...` not found in Kind** — The Kind overlay sets
+**Runner image `localhost/...` not found or stale in Kind** — The Kind overlay sets
 `OPENSHELL_RUNNER_IMAGE=localhost/acp_runner_openshell:latest` but this image
-may not exist on the Kind node. Fix:
-`kubectl set env deployment/ambient-control-plane -n ambient-code OPENSHELL_RUNNER_IMAGE=quay.io/ambient_code/acp_runner_openshell:latest`
+may not exist or may be outdated on the Kind node. `kind load docker-image` is
+unreliable with podman — use the direct ctr method:
+```bash
+NODE=$(kind get clusters | head -1)-control-plane
+podman save localhost/acp_runner_openshell:latest -o /tmp/runner.tar
+podman cp /tmp/runner.tar $NODE:/tmp/runner.tar
+podman exec $NODE ctr -n k8s.io images import /tmp/runner.tar
+rm /tmp/runner.tar && podman exec $NODE rm /tmp/runner.tar
+```
+Then restart the control plane: `kubectl rollout restart deployment/ambient-control-plane -n ambient-code`
 
 **Switching between gateway and pod mode:**
 

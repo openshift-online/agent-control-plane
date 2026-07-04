@@ -54,6 +54,7 @@ Kind clusters do **not** run a container registry. Images are loaded directly in
 - **`imagePullPolicy` must be `IfNotPresent`** (the default for kind deployments). Setting it to `Always` causes `ErrImagePull` because there is no registry to pull from.
 - **Unique image tags are required** for Deployment rollouts. With `IfNotPresent`, Kubernetes won't re-pull an image if the tag hasn't changed, so `kind-reload-*` generates a unique tag per build (`<git-short>-<epoch>`).
 - **Never use `kubectl rollout restart`** alone to pick up a new image — it only adds a restart annotation. Use `kubectl set image` (which `kind-reload-*` does) to update the image reference in the Deployment spec.
+- **Podman caveat:** `kind load docker-image` may load a stale image ID on podman-based clusters. Use the direct ctr method: `podman save | podman cp | podman exec ctr -n k8s.io images import` (see manual reload below). Use `podman inspect` (not `docker inspect`) to verify image metadata.
 
 ### Manual single-component reload (without make targets)
 
