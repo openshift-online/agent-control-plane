@@ -274,7 +274,9 @@ build-credential-google: ## Build Google credential sidecar image
 build-cli: ## Build acpctl CLI binary
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building acpctl CLI..."
 	@cd components/ambient-cli && make build
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CLI built: components/ambient-cli/acpctl"
+	@install -d $(HOME)/.local/bin
+	@install components/ambient-cli/acpctl $(HOME)/.local/bin/acpctl
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CLI built and installed: $(HOME)/.local/bin/acpctl"
 
 lint-cli: ## Lint acpctl CLI
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Linting acpctl CLI..."
