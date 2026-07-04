@@ -867,7 +867,7 @@ benchmark-ci: ## Run component benchmarks in CI mode
 		$(if $(CANDIDATE),--candidate-ref $(CANDIDATE)) \
 		$(if $(FORMAT),--format $(FORMAT))
 
-kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_IMAGES=true builds from source)
+kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platform (LOCAL_IMAGES=true builds from source)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Starting kind cluster '$(KIND_CLUSTER_NAME)'..."
 	@KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_HTTP_PORT=$(KIND_HTTP_PORT) KIND_HTTPS_PORT=$(KIND_HTTPS_PORT) KIND_HOST=$(KIND_HOST) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./tests/infra/setup-kind.sh
 	@if [ -n "$(KIND_HOST)" ]; then \
@@ -938,19 +938,7 @@ kind-up: preflight-cluster ## Start kind cluster and deploy the platform (LOCAL_
 		CLOUD_ML_REGION="$(CLOUD_ML_REGION)" \
 		./scripts/setup-kind-openshell.sh; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Applying tenant fleet definitions via acpctl..."; \
-		ACPCTL=""; \
-		if command -v acpctl >/dev/null 2>&1; then \
-			ACPCTL=acpctl; \
-		elif [ -x components/ambient-cli/acpctl ]; then \
-			ACPCTL=components/ambient-cli/acpctl; \
-		elif [ -x ./acpctl ]; then \
-			ACPCTL=./acpctl; \
-		fi; \
-		if [ -z "$$ACPCTL" ]; then \
-			echo "$(COLOR_BLUE)▶$(COLOR_RESET) acpctl not found — building CLI..."; \
-			$(MAKE) --no-print-directory build-cli; \
-			ACPCTL=components/ambient-cli/acpctl; \
-		fi; \
+		ACPCTL=components/ambient-cli/acpctl; \
 		PF_PORT=18766; \
 		kubectl port-forward -n $(NAMESPACE) svc/ambient-api-server "$${PF_PORT}:8000" >/dev/null 2>&1 & \
 		PF_PID=$$!; \
