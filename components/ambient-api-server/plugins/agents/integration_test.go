@@ -10,7 +10,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/ambient-code/platform/components/ambient-api-server/plugins/projects"
 	"github.com/ambient-code/platform/components/ambient-api-server/test"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
@@ -77,7 +76,7 @@ func TestAgentGet(t *testing.T) {
 }
 
 func TestAgentPost(t *testing.T) {
-	defer rbac.OverrideForTesting(false)()
+
 	h, client := test.RegisterIntegration(t)
 
 	account := h.NewRandAccount()
@@ -128,7 +127,7 @@ func TestAgentPost(t *testing.T) {
 }
 
 func TestAgentPostLlmDefaults(t *testing.T) {
-	defer rbac.OverrideForTesting(false)()
+
 	h, client := test.RegisterIntegration(t)
 
 	account := h.NewRandAccount()
@@ -156,7 +155,7 @@ func TestAgentPostLlmDefaults(t *testing.T) {
 }
 
 func TestAgentPatch(t *testing.T) {
-	defer rbac.OverrideForTesting(false)()
+
 	h, client := test.RegisterIntegration(t)
 
 	account := h.NewRandAccount()
@@ -210,7 +209,7 @@ func TestAgentPatch(t *testing.T) {
 }
 
 func TestAgentPatchTemperatureZeroPreserved(t *testing.T) {
-	defer rbac.OverrideForTesting(false)()
+
 	h, client := test.RegisterIntegration(t)
 
 	account := h.NewRandAccount()
@@ -314,7 +313,7 @@ func TestAgentListSearch(t *testing.T) {
 }
 
 func TestAgentDelete(t *testing.T) {
-	defer rbac.OverrideForTesting(false)()
+
 	h, client := test.RegisterIntegration(t)
 
 	account := h.NewRandAccount()
@@ -343,7 +342,7 @@ func TestAgentDelete(t *testing.T) {
 }
 
 func TestAgentCrossProjectIsolation(t *testing.T) {
-	defer rbac.OverrideForTesting(false)()
+
 	h, client := test.RegisterIntegration(t)
 
 	account := h.NewRandAccount()

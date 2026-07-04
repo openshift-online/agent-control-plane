@@ -7,7 +7,6 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
@@ -26,10 +25,6 @@ func NewPolicyHandler(policy PolicyService, generic services.GenericService) *po
 }
 
 func (h policyHandler) Create(w http.ResponseWriter, r *http.Request) {
-	if err := rbac.RequireGitOpsManaged(r.Context(), "Policy"); err != nil {
-		handlers.HandleError(r.Context(), w, err)
-		return
-	}
 
 	var policy openapi.Policy
 	cfg := &handlers.HandlerConfig{
@@ -110,10 +105,6 @@ func (h policyHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h policyHandler) Patch(w http.ResponseWriter, r *http.Request) {
-	if err := rbac.RequireGitOpsManaged(r.Context(), "Policy"); err != nil {
-		handlers.HandleError(r.Context(), w, err)
-		return
-	}
 
 	var patch openapi.PolicyPatchRequest
 	cfg := &handlers.HandlerConfig{
@@ -164,10 +155,6 @@ func (h policyHandler) Patch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h policyHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	if err := rbac.RequireGitOpsManaged(r.Context(), "Policy"); err != nil {
-		handlers.HandleError(r.Context(), w, err)
-		return
-	}
 
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {

@@ -43,6 +43,7 @@ vendor/
 # SDK binaries (build artifacts, not source)
 **/ambient-sdk-generator
 **/examples/examples
+**/ambient-control-plane/ambient-control-plane
 
 # Node / Frontend
 node_modules/

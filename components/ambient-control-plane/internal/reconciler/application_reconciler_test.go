@@ -992,7 +992,7 @@ func TestApplyDeclarations_DoesNotPruneNonApplicationAgents(t *testing.T) {
 	}
 
 	nonAppAnnotations, _ := json.Marshal(map[string]string{
-		annotationSource: annotationSourceCM,
+		annotationSource: "configmap",
 	})
 	mock.agents["agent-cm"] = types.Agent{
 		ObjectReference: types.ObjectReference{ID: "agent-cm"},

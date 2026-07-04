@@ -1,6 +1,6 @@
 # Gateway Mode Simplified RBAC Policy
 
-**Date:** 2026-07-02
+**Date:** 2026-06-29
 **Status:** Proposed
 **Related:** `specs/security/rbac-enforcement.spec.md` (base RBAC model), `specs/platform/agent-sandbox-config.spec.md` (ConfigMap agent schema), `specs/platform/gateway-provisioning.spec.md` (gateway deployment), `specs/platform/openshell-sandbox-provisioning.spec.md` (sandbox provisioning flow)
 
@@ -8,260 +8,112 @@
 
 ## Purpose
 
-This spec defines two independent RBAC controls:
-
-1. **GitOps resource gating** (`RBAC_ENABLED`, default `true`): When enabled, project, agent, provider, and policy definitions SHALL only be mutable by service accounts (the configmap-syncer). User-initiated API create, update, and delete operations on these resources are rejected with HTTP 403. Resource definitions are managed exclusively through ConfigMaps applied to tenant namespaces (schema defined in `agent-sandbox-config.spec.md`). When `RBAC_ENABLED=false`, any authorized user may create, update, and delete these resources via the API.
-
-2. **Gateway mode tier-based access** (`OPENSHELL_USE_GATEWAY=true` AND `OPENSHELL_ENABLED=true`): When both flags are set, human users are constrained to three effective tiers (Admin, Editor, Viewer) for session and schedule operations. A user's effective ACP tier SHALL be derived from their Kubernetes RoleBindings on the tenant namespace. When either flag is false, the base RBAC model defined in `rbac-enforcement.spec.md` applies without modification.
-
-These controls are independent: `RBAC_ENABLED` gates resource definition CRUD regardless of gateway mode, and gateway mode gates session/schedule operations regardless of `RBAC_ENABLED`.
+When both `OPENSHELL_USE_GATEWAY=true` AND `OPENSHELL_ENABLED=true`, the platform SHALL enforce a simplified RBAC policy that restricts agent, policy, and provider lifecycle management to a GitOps workflow and constrains human users to three effective tiers: Admin, Editor, and Viewer. Agent definitions SHALL be managed exclusively through ConfigMaps applied to tenant namespaces (schema defined in `agent-sandbox-config.spec.md`), and the API SHALL reject agent create, update, and delete operations. Policy and provider declarations (ConfigMaps with labels `ambient.ai/kind: policy` and `ambient.ai/kind: provider`) are already GitOps-only by design — no API endpoints exist for them, and this spec does not introduce any. A user's effective ACP tier SHALL be derived from their Kubernetes RoleBindings on the tenant namespace — if a user has `view` access on the namespace, they are a viewer in ACP for that project. When either flag is false, the system SHALL behave identically to the base RBAC model defined in `rbac-enforcement.spec.md`.
 
 ---
 
 ## Terminology
 
-- **RBAC-enabled mode** — the platform state when `RBAC_ENABLED` is not explicitly set to `false` (defaults to `true`). Controls whether GitOps-managed resource definitions (projects, agents, providers, policies) are mutable only by service accounts.
-- **Gateway mode** — the platform state when both `OPENSHELL_USE_GATEWAY=true` AND `OPENSHELL_ENABLED=true`. Controls tier-based access for session and schedule operations. Independent from RBAC-enabled mode.
-- **Service caller** — a request whose JWT username matches the platform's configured service account (`GRPC_SERVICE_ACCOUNT` env var). The configmap-syncer in the control plane authenticates as a service caller. Service callers are exempt from GitOps resource gating.
+- **Gateway mode** — the platform state when both `OPENSHELL_USE_GATEWAY=true` AND `OPENSHELL_ENABLED=true`. All requirements in this spec apply only when gateway mode is active unless stated otherwise.
 - **Admin tier** — users with `admin` or `cluster-admin` access on the tenant namespace, or holding `platform:admin` or `project:owner` ACP internal roles. Full management access including session creation, schedule management, and role binding grants.
 - **Editor tier** — users with `edit` access on the tenant namespace, or holding `project:editor` or `agent:operator` ACP internal roles. Can start agent sessions and manage schedules, but cannot manage project membership or roles.
 - **Viewer tier** — users with `view` access on the tenant namespace, or holding `project:viewer`, `agent:observer`, `platform:viewer`, or any project-scoped binding not in the Admin or Editor tier. Read-only access to agents, sessions, and schedules.
-- **GitOps-managed resource** — a Project, Agent, Provider, or Policy record reconciled from a ConfigMap (labels `ambient.ai/kind: agent`, `ambient.ai/kind: provider`, `ambient.ai/kind: policy`) in a tenant namespace. The configmap-syncer creates and updates these records via the API server using its service account credentials.
-- **Policy declaration** — a ConfigMap entry with label `ambient.ai/kind: policy` containing an OpenShell `SandboxPolicy` YAML definition. Namespace-scoped, referenced by agents by name. API endpoints exist for policies but are gated by `RBAC_ENABLED` (see `agent-sandbox-config.spec.md`).
-- **Provider declaration** — a ConfigMap entry with label `ambient.ai/kind: provider` defining a named credential provider with its type and Secret reference. Namespace-scoped, referenced by agents by name. API endpoints exist for providers but are gated by `RBAC_ENABLED` (see `agent-sandbox-config.spec.md`).
+- **GitOps-managed agent** — an Agent record reconciled from a ConfigMap with label `ambient.ai/kind: agent` in a tenant namespace. Distinguished from API-created agents by the annotation `ambient.ai/managed-by: configmap`.
+- **Policy declaration** — a ConfigMap entry with label `ambient.ai/kind: policy` containing an OpenShell `SandboxPolicy` YAML definition. Namespace-scoped, referenced by agents by name. No API endpoints exist for policies; they are GitOps-only by design (see `agent-sandbox-config.spec.md`).
+- **Provider declaration** — a ConfigMap entry with label `ambient.ai/kind: provider` defining a named credential provider with its type and Secret reference. Namespace-scoped, referenced by agents by name. No API endpoints exist for providers; they are GitOps-only by design (see `agent-sandbox-config.spec.md`).
 
 ---
 
 ## Requirements
 
-### Requirement: Activation Conditions
+### Requirement: Activation Condition
 
-This spec defines two independent activation conditions:
+Gateway mode simplified RBAC SHALL activate only when **both** `OPENSHELL_USE_GATEWAY=true` AND `OPENSHELL_ENABLED=true`. When either flag is `false` (or unset), the base RBAC model defined in `rbac-enforcement.spec.md` SHALL apply without modification.
 
-**GitOps resource gating** is controlled by `RBAC_ENABLED`. The API server SHALL read this environment variable at startup. When unset or set to any value other than `false`, RBAC-enabled mode is active (defaults to `true`). The activation state SHALL NOT change at runtime without a restart.
+The API server SHALL read both environment variables at startup. The activation state SHALL NOT change at runtime without a restart.
 
-**Gateway mode tier-based access** is controlled by both `OPENSHELL_USE_GATEWAY=true` AND `OPENSHELL_ENABLED=true`. When either flag is `false` (or unset), the base RBAC model defined in `rbac-enforcement.spec.md` SHALL apply for session and schedule operations.
+#### Scenario: Both flags enabled
 
-#### Scenario: RBAC enabled by default (env var unset)
-
-- GIVEN `RBAC_ENABLED` is NOT set in the environment
+- GIVEN `OPENSHELL_USE_GATEWAY=true` AND `OPENSHELL_ENABLED=true`
 - WHEN the API server starts
-- THEN RBAC-enabled mode is active (default `true`)
-- AND user-initiated project, agent, provider, and policy CRUD is rejected
-- AND service account CRUD is permitted
+- THEN gateway mode simplified RBAC is active
+- AND agent CRUD gating and tier-based access controls are enforced
 
-#### Scenario: RBAC explicitly disabled
+#### Scenario: Only gateway flag enabled
 
-- GIVEN `RBAC_ENABLED=false`
+- GIVEN `OPENSHELL_USE_GATEWAY=true` AND `OPENSHELL_ENABLED=false`
 - WHEN the API server starts
-- THEN RBAC-enabled mode is NOT active
-- AND any authorized user can create, update, and delete projects, agents, providers, and policies via the API
+- THEN gateway mode simplified RBAC is NOT active
+- AND the base RBAC model applies unchanged
 
-#### Scenario: RBAC enabled independently of gateway mode
+#### Scenario: Neither flag enabled
 
-- GIVEN `RBAC_ENABLED` is unset (defaults to `true`)
-- AND `OPENSHELL_USE_GATEWAY=false`
+- GIVEN `OPENSHELL_USE_GATEWAY=false` AND `OPENSHELL_ENABLED=false`
 - WHEN the API server starts
-- THEN project, agent, provider, and policy CRUD is gated (RBAC-enabled mode active)
-- AND tier-based access controls for sessions/schedules are NOT enforced (gateway mode inactive)
+- THEN gateway mode simplified RBAC is NOT active
+- AND the base RBAC model applies unchanged
 
-#### Scenario: Gateway mode active with RBAC enabled
-
-- GIVEN `RBAC_ENABLED` is unset (defaults to `true`)
-- AND `OPENSHELL_USE_GATEWAY=true` AND `OPENSHELL_ENABLED=true`
-- WHEN the API server starts
-- THEN both resource CRUD gating and tier-based access controls are enforced
-
-#### Scenario: Gateway mode flags unset default to inactive
+#### Scenario: Flags unset default to inactive
 
 - GIVEN neither `OPENSHELL_USE_GATEWAY` nor `OPENSHELL_ENABLED` is set in the environment
 - WHEN the API server starts
-- THEN gateway mode tier-based access is NOT active
-- AND no tier-based restrictions apply to session or schedule operations
+- THEN gateway mode simplified RBAC is NOT active
+- AND no behavior change from a deployment without these flags
 
-### Requirement: GitOps Resource CRUD Gating
+### Requirement: Agent CRUD Gating
 
-When RBAC-enabled mode is active (`RBAC_ENABLED` unset or not `false`), the API server SHALL reject user-initiated create, update, and delete operations on projects, agents, providers, and policies with HTTP 403. Read and list operations SHALL remain permitted for all authorized users.
+When gateway mode is active, the API server SHALL reject agent create, update, and delete operations with HTTP 403. Agent read and list operations SHALL remain permitted for all authorized users.
 
-Service callers (requests whose JWT username matches the configured `GRPC_SERVICE_ACCOUNT`) are exempt from this restriction. The configmap-syncer in the control plane authenticates as a service caller and SHALL be permitted to create, update, and delete these resources. The exemption is determined by `middleware.IsServiceCaller(ctx)` in the request context, which is set by the RBAC middleware when it detects a verified service account JWT.
+This restriction applies regardless of the caller's role. Even `platform:admin` users SHALL NOT create, update, or delete agents via the API. Agent lifecycle is managed exclusively through the GitOps ConfigMap workflow.
 
-The 403 response body SHALL include a reason indicating that the resource is managed via GitOps.
+The 403 response body SHALL include a reason indicating that agent management is handled via GitOps.
 
-When `RBAC_ENABLED=false`, any authorized user may create, update, and delete projects, agents, providers, and policies via the API.
+#### Scenario: Agent creation rejected in gateway mode
 
-#### Scenario: Project creation rejected for users when RBAC enabled
-
-- GIVEN RBAC-enabled mode is active
-- AND user A has `platform:admin` with `scope=global`
-- WHEN user A calls `POST /projects` with a valid project payload
-- THEN the response is 403 Forbidden
-- AND the response body indicates project management is restricted to GitOps
-
-#### Scenario: Project creation permitted for service account when RBAC enabled
-
-- GIVEN RBAC-enabled mode is active
-- AND the configmap-syncer authenticates with the configured service account
-- WHEN the configmap-syncer calls `POST /projects` with a valid project payload
-- THEN the project is created (201 Created)
-
-#### Scenario: Project update rejected for users when RBAC enabled
-
-- GIVEN RBAC-enabled mode is active
-- AND user A has `project:owner` on proj-1
-- WHEN user A calls `PATCH /projects/proj-1`
-- THEN the response is 403 Forbidden
-
-#### Scenario: Project deletion rejected for users when RBAC enabled
-
-- GIVEN RBAC-enabled mode is active
-- AND user A has `platform:admin` with `scope=global`
-- AND proj-1 exists
-- WHEN user A calls `DELETE /projects/proj-1`
-- THEN the response is 403 Forbidden
-
-#### Scenario: Project read permitted for all callers
-
-- GIVEN RBAC-enabled mode is active
-- AND user A has `project:viewer` on proj-1
-- WHEN user A calls `GET /projects/proj-1`
-- THEN the response is 200 with the project details
-
-#### Scenario: Project list permitted for all callers
-
-- GIVEN RBAC-enabled mode is active
-- AND user A has `project:viewer` on proj-1
-- WHEN user A calls `GET /projects`
-- THEN the response is 200 with a list of projects
-
-#### Scenario: Project CRUD permitted for users when RBAC disabled
-
-- GIVEN `RBAC_ENABLED=false`
-- AND user A has `platform:admin` with `scope=global`
-- WHEN user A calls `POST /projects` with a valid project payload
-- THEN the project is created normally
-- AND no GitOps restrictions apply
-
-#### Scenario: Agent creation rejected for users when RBAC enabled
-
-- GIVEN RBAC-enabled mode is active
+- GIVEN gateway mode is active
 - AND user A has `platform:admin` with `scope=global`
 - WHEN user A calls `POST /projects/proj-1/agents` with a valid agent payload
 - THEN the response is 403 Forbidden
-- AND the response body indicates agent management is restricted to GitOps
+- AND the response body indicates agent creation is managed via GitOps
 
-#### Scenario: Agent creation permitted for service account when RBAC enabled
+#### Scenario: Agent update rejected in gateway mode
 
-- GIVEN RBAC-enabled mode is active
-- AND the configmap-syncer authenticates with the configured service account
-- WHEN the configmap-syncer calls `POST /projects/proj-1/agents` with a valid agent payload
-- THEN the agent is created (201 Created)
-
-#### Scenario: Agent update rejected for users when RBAC enabled
-
-- GIVEN RBAC-enabled mode is active
+- GIVEN gateway mode is active
 - AND user A has `project:editor` on proj-1
 - AND agent-1 exists in proj-1
 - WHEN user A calls `PATCH /projects/proj-1/agents/agent-1`
 - THEN the response is 403 Forbidden
 
-#### Scenario: Agent update permitted for service account when RBAC enabled
+#### Scenario: Agent deletion rejected in gateway mode
 
-- GIVEN RBAC-enabled mode is active
-- AND agent-1 exists in proj-1
-- WHEN the configmap-syncer calls `PATCH /projects/proj-1/agents/agent-1`
-- THEN the agent is updated (200 OK)
-
-#### Scenario: Agent deletion rejected for users when RBAC enabled
-
-- GIVEN RBAC-enabled mode is active
+- GIVEN gateway mode is active
 - AND user A has `project:owner` on proj-1
 - AND agent-1 exists in proj-1
 - WHEN user A calls `DELETE /projects/proj-1/agents/agent-1`
 - THEN the response is 403 Forbidden
 
-#### Scenario: Agent read permitted for all callers
+#### Scenario: Agent read permitted in gateway mode
 
-- GIVEN RBAC-enabled mode is active
+- GIVEN gateway mode is active
 - AND user A has `project:viewer` on proj-1
 - AND agent-1 exists in proj-1
 - WHEN user A calls `GET /projects/proj-1/agents/agent-1`
 - THEN the response is 200 with the agent details
 
-#### Scenario: Agent list permitted for all callers
+#### Scenario: Agent list permitted in gateway mode
 
-- GIVEN RBAC-enabled mode is active
+- GIVEN gateway mode is active
 - AND user A has `project:viewer` on proj-1
 - WHEN user A calls `GET /projects/proj-1/agents`
 - THEN the response is 200 with a list of agents in proj-1
 
-#### Scenario: Agent CRUD permitted for users when RBAC disabled
+#### Scenario: Agent CRUD permitted when gateway mode inactive
 
-- GIVEN `RBAC_ENABLED=false`
+- GIVEN gateway mode is NOT active
 - AND user A has `project:editor` on proj-1
 - WHEN user A calls `POST /projects/proj-1/agents` with a valid agent payload
 - THEN the agent is created normally
-- AND no GitOps restrictions apply
-
-#### Scenario: Provider creation rejected for users when RBAC enabled
-
-- GIVEN RBAC-enabled mode is active
-- AND user A has `project:editor` on proj-1
-- WHEN user A calls `POST /projects/proj-1/providers` with a valid provider payload
-- THEN the response is 403 Forbidden
-
-#### Scenario: Provider creation permitted for service account when RBAC enabled
-
-- GIVEN RBAC-enabled mode is active
-- WHEN the configmap-syncer calls `POST /projects/proj-1/providers` with a valid provider payload
-- THEN the provider is created (201 Created)
-
-#### Scenario: Provider update rejected for users when RBAC enabled
-
-- GIVEN RBAC-enabled mode is active
-- AND provider-1 exists in proj-1
-- WHEN user A calls `PATCH /projects/proj-1/providers/provider-1`
-- THEN the response is 403 Forbidden
-
-#### Scenario: Provider deletion rejected for users when RBAC enabled
-
-- GIVEN RBAC-enabled mode is active
-- AND provider-1 exists in proj-1
-- WHEN user A calls `DELETE /projects/proj-1/providers/provider-1`
-- THEN the response is 403 Forbidden
-
-#### Scenario: Policy creation rejected for users when RBAC enabled
-
-- GIVEN RBAC-enabled mode is active
-- AND user A has `project:editor` on proj-1
-- WHEN user A calls `POST /projects/proj-1/policies` with a valid policy payload
-- THEN the response is 403 Forbidden
-
-#### Scenario: Policy creation permitted for service account when RBAC enabled
-
-- GIVEN RBAC-enabled mode is active
-- WHEN the configmap-syncer calls `POST /projects/proj-1/policies` with a valid policy payload
-- THEN the policy is created (201 Created)
-
-#### Scenario: Policy update rejected for users when RBAC enabled
-
-- GIVEN RBAC-enabled mode is active
-- AND policy-1 exists in proj-1
-- WHEN user A calls `PATCH /projects/proj-1/policies/policy-1`
-- THEN the response is 403 Forbidden
-
-#### Scenario: Policy deletion rejected for users when RBAC enabled
-
-- GIVEN RBAC-enabled mode is active
-- AND policy-1 exists in proj-1
-- WHEN user A calls `DELETE /projects/proj-1/policies/policy-1`
-- THEN the response is 403 Forbidden
-
-#### Scenario: Provider and policy CRUD permitted when RBAC disabled
-
-- GIVEN `RBAC_ENABLED=false`
-- AND user A has `project:editor` on proj-1
-- WHEN user A calls `POST /projects/proj-1/providers` or `POST /projects/proj-1/policies`
-- THEN the resource is created normally
+- AND no gateway-mode restrictions apply
 
 ### Requirement: Role-to-Tier Mapping
 
@@ -434,66 +286,47 @@ In practice, most users in production environments will be viewers — admin and
 - WHEN user A calls `POST /projects/proj-1/agents/agent-1/start`
 - THEN the response is 403 Forbidden
 
-### Requirement: GitOps Resource Lifecycle
+### Requirement: GitOps Agent Lifecycle
 
-When RBAC-enabled mode is active, projects, agents, providers, and policies SHALL be managed through ConfigMaps applied to tenant namespaces. The control plane's configmap-syncer SHALL reconcile these ConfigMaps into records in the API server database via the API, authenticating as a service account.
+When gateway mode is active, agents SHALL be managed exclusively through ConfigMaps with label `ambient.ai/kind: agent` applied to tenant namespaces. The control plane SHALL reconcile these ConfigMaps into Agent records in the API server database.
 
-The configmap-syncer creates and updates resources by calling the API server's standard REST endpoints (`POST /projects/{id}/agents`, `PATCH /projects/{id}/agents/{agent_id}`, etc.) using the service account's JWT. Because service callers are exempt from the GitOps resource gate, these requests succeed even when RBAC-enabled mode is active.
+Agents reconciled from ConfigMaps SHALL carry the annotation `ambient.ai/managed-by: configmap`. This annotation SHALL be set by the reconciler and SHALL NOT be modifiable via the API.
 
-The reconciler SHALL use update-or-create semantics: if a resource with the same name already exists in the project, it is updated; if not, it is created. On ConfigMap deletion, the corresponding record SHALL be deleted from the database.
+The reconciler SHALL use update-or-create semantics: if an Agent with the same name already exists in the project, it is updated; if not, it is created. On ConfigMap deletion, the corresponding Agent record SHALL be deleted from the database.
 
-The ConfigMap YAML schemas are defined in `agent-sandbox-config.spec.md`. This spec does not redefine those schemas.
+The ConfigMap agent YAML schema is defined in `agent-sandbox-config.spec.md`. This spec does not redefine that schema.
 
-#### Scenario: ConfigMap creates an agent via service account
+#### Scenario: ConfigMap creates an agent
 
-- GIVEN RBAC-enabled mode is active
+- GIVEN gateway mode is active
 - AND a ConfigMap with label `ambient.ai/kind: agent` is applied to namespace `proj-1`
 - AND the ConfigMap contains a valid agent declaration named `security-reviewer`
-- WHEN the configmap-syncer reconciles the ConfigMap
-- THEN the configmap-syncer calls `POST /projects/proj-1/agents` with the service account JWT
-- AND the request is permitted (service caller exemption)
-- AND an Agent record named `security-reviewer` is created in project `proj-1`
-
-#### Scenario: ConfigMap creates a provider via service account
-
-- GIVEN RBAC-enabled mode is active
-- AND a ConfigMap with label `ambient.ai/kind: provider` is applied to namespace `proj-1`
-- WHEN the configmap-syncer reconciles the ConfigMap
-- THEN the configmap-syncer calls `POST /projects/proj-1/providers` with the service account JWT
-- AND the request is permitted (service caller exemption)
-- AND a Provider record is created in project `proj-1`
-
-#### Scenario: ConfigMap creates a policy via service account
-
-- GIVEN RBAC-enabled mode is active
-- AND a ConfigMap with label `ambient.ai/kind: policy` is applied to namespace `proj-1`
-- WHEN the configmap-syncer reconciles the ConfigMap
-- THEN the configmap-syncer calls `POST /projects/proj-1/policies` with the service account JWT
-- AND the request is permitted (service caller exemption)
-- AND a Policy record is created in project `proj-1`
+- WHEN the control plane reconciles the ConfigMap
+- THEN an Agent record named `security-reviewer` is created in project `proj-1`
+- AND the Agent carries annotation `ambient.ai/managed-by: configmap`
 
 #### Scenario: ConfigMap updates an existing agent
 
-- GIVEN RBAC-enabled mode is active
-- AND an Agent `security-reviewer` exists in proj-1
+- GIVEN gateway mode is active
+- AND an Agent `security-reviewer` exists in proj-1 with `managed-by: configmap`
 - AND the ConfigMap is updated with a new prompt
-- WHEN the configmap-syncer reconciles the ConfigMap
+- WHEN the control plane reconciles the ConfigMap
 - THEN the Agent `security-reviewer` is updated with the new prompt
 
 #### Scenario: ConfigMap deletion removes the agent
 
-- GIVEN RBAC-enabled mode is active
-- AND an Agent `security-reviewer` exists in proj-1
+- GIVEN gateway mode is active
+- AND an Agent `security-reviewer` exists in proj-1 with `managed-by: configmap`
 - WHEN the ConfigMap is deleted from namespace `proj-1`
 - THEN the Agent `security-reviewer` is deleted from the database
 
-#### Scenario: Pre-existing API-created resources survive RBAC toggle
+#### Scenario: Pre-existing API-created agents survive flag toggle
 
-- GIVEN projects, agents, providers, and policies were created via the API before RBAC-enabled mode was activated
-- WHEN RBAC-enabled mode becomes active
-- THEN existing API-created resources remain in the database
-- AND they are readable and can be used (sessions started against agents, etc.)
-- AND they cannot be updated or deleted via user API calls
+- GIVEN agents were created via the API before gateway mode was enabled
+- WHEN gateway mode is enabled (both flags set to true)
+- THEN existing API-created agents remain in the database
+- AND they are readable and can have sessions started against them
+- AND they cannot be updated or deleted via the API
 
 ### Requirement: Platform Info Endpoint
 
@@ -503,26 +336,19 @@ The response SHALL include at minimum:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `gateway_mode` | boolean | Whether gateway mode tier-based access is active |
-| `rbac_enabled` | boolean | Whether GitOps resource CRUD gating is active |
+| `gateway_mode` | boolean | Whether gateway mode simplified RBAC is active |
 
-#### Scenario: Platform info returns both flags
+#### Scenario: Platform info returns gateway mode status
 
-- GIVEN RBAC-enabled mode is active AND gateway mode is active
+- GIVEN gateway mode is active
 - WHEN any authenticated user calls `GET /api/ambient/v1/platform-info`
-- THEN the response is 200 with `{ "gateway_mode": true, "rbac_enabled": true }`
+- THEN the response is 200 with `{ "gateway_mode": true }`
 
-#### Scenario: Platform info with RBAC enabled but no gateway
+#### Scenario: Platform info returns inactive status
 
-- GIVEN RBAC-enabled mode is active AND gateway mode is NOT active
+- GIVEN gateway mode is NOT active
 - WHEN any authenticated user calls `GET /api/ambient/v1/platform-info`
-- THEN the response is 200 with `{ "gateway_mode": false, "rbac_enabled": true }`
-
-#### Scenario: Platform info with RBAC disabled
-
-- GIVEN `RBAC_ENABLED=false`
-- WHEN any authenticated user calls `GET /api/ambient/v1/platform-info`
-- THEN the response is 200 with `{ ..., "rbac_enabled": false }`
+- THEN the response is 200 with `{ "gateway_mode": false }`
 
 #### Scenario: Platform info requires authentication
 
@@ -532,34 +358,31 @@ The response SHALL include at minimum:
 
 ### Requirement: UI Adaptation
 
-The UI SHALL use both `rbac_enabled` and `gateway_mode` from the platform-info endpoint to adapt its controls:
+When the UI detects that `gateway_mode` is true (via the platform-info endpoint), it SHALL hide agent creation, update, and deletion controls. The UI SHALL also restrict interactive actions (session start, schedule mutation) to users with Admin or Editor tier roles.
 
-- When `rbac_enabled` is true, the UI SHALL hide project, agent, provider, and policy creation, update, and deletion controls.
-- When `gateway_mode` is true, the UI SHALL restrict interactive actions (session start, schedule mutation) to users with Admin or Editor tier roles.
+#### Scenario: Agent creation hidden in gateway mode
 
-#### Scenario: Resource creation hidden when RBAC enabled
-
-- GIVEN `rbac_enabled` is true
+- GIVEN gateway mode is active
 - WHEN any user navigates to the agents page
 - THEN the "New Agent" button is not displayed
 - AND the agent creation form is not accessible
 
-#### Scenario: Resource edit controls hidden when RBAC enabled
+#### Scenario: Agent edit controls hidden in gateway mode
 
-- GIVEN `rbac_enabled` is true
-- WHEN any user views an agent's, provider's, or policy's detail page
+- GIVEN gateway mode is active
+- WHEN any user views an agent's detail page
 - THEN edit and delete actions are not displayed
 
 #### Scenario: Session start hidden for viewers in gateway mode
 
-- GIVEN `gateway_mode` is true
+- GIVEN gateway mode is active
 - AND user A has `project:viewer` on proj-1
 - WHEN user A views an agent's detail page
 - THEN the "Start Session" button is not displayed
 
 #### Scenario: Schedule creation hidden for viewers in gateway mode
 
-- GIVEN `gateway_mode` is true
+- GIVEN gateway mode is active
 - AND user A has `project:viewer` on proj-1
 - WHEN user A navigates to the scheduled sessions page
 - THEN the "Create Schedule" button is not displayed
@@ -603,23 +426,23 @@ Viewer tier users SHALL be able to view session details, session message history
 
 ### Requirement: Backward Compatibility
 
-Setting `RBAC_ENABLED=false` SHALL restore full user API access for agent, provider, and policy CRUD operations. Resources created via ConfigMap reconciliation SHALL remain in the database but are now editable and deletable via the API.
+When gateway mode is NOT active, the system SHALL behave identically to the base RBAC model. No agent CRUD gating, no tier-based restrictions beyond standard RBAC, no ConfigMap reconciliation.
 
-When gateway mode is NOT active (either `OPENSHELL_USE_GATEWAY` or `OPENSHELL_ENABLED` is false/unset), the system SHALL apply the base RBAC model for session and schedule operations — no tier-based restrictions beyond standard RBAC.
+Toggling gateway mode off (by setting either flag to false) SHALL restore full API access for agent CRUD operations. Agents created via ConfigMap reconciliation SHALL remain in the database but are now editable and deletable via the API.
 
-#### Scenario: RBAC disabled restores user API access
+#### Scenario: Flags toggled off restores API agent creation
 
-- GIVEN resources were created via ConfigMap while RBAC-enabled mode was active
-- WHEN `RBAC_ENABLED=false` is set and the API server restarts
-- THEN users with appropriate RBAC bindings can create, update, and delete projects, agents, providers, and policies via the API
-- AND previously GitOps-managed resources are now API-manageable
-
-#### Scenario: Gateway mode off restores base RBAC for sessions
-
-- GIVEN gateway mode was previously active
+- GIVEN agents were created via ConfigMap while gateway mode was active
 - WHEN gateway mode is disabled (either flag set to false)
-- THEN tier-based access controls for sessions and schedules are removed
-- AND the base RBAC model applies unchanged
+- THEN users with appropriate RBAC bindings can create, update, and delete agents via the API
+- AND previously GitOps-managed agents are now API-manageable
+
+#### Scenario: No ConfigMap reconciliation when flags off
+
+- GIVEN gateway mode is NOT active
+- AND ConfigMaps with label `ambient.ai/kind: agent` exist in tenant namespaces
+- THEN the control plane SHALL NOT reconcile these ConfigMaps into Agent records
+- AND the ConfigMaps are ignored
 
 ---
 
@@ -627,17 +450,14 @@ When gateway mode is NOT active (either `OPENSHELL_USE_GATEWAY` or `OPENSHELL_EN
 
 | Decision | Rationale |
 |----------|-----------|
-| `RBAC_ENABLED` separate from gateway mode flags | Resource definition CRUD gating (agents, providers, policies) is a distinct concern from gateway mode tier-based access (sessions, schedules). Decoupling them allows RBAC enforcement without requiring the full OpenShell gateway stack, and avoids the configmap-syncer being blocked by a gate whose message says "managed via GitOps ConfigMaps." |
-| `RBAC_ENABLED` defaults to `true` | Secure by default. Operators must explicitly opt out (`RBAC_ENABLED=false`) to allow user-initiated resource definition CRUD. This prevents accidental exposure in production deployments. |
-| Service account exemption via `middleware.IsServiceCaller(ctx)` | The RBAC middleware already detects service callers by matching the JWT username against `GRPC_SERVICE_ACCOUNT`. Reusing this existing mechanism avoids introducing new headers or bypass tokens. The configmap-syncer authenticates with a service account JWT and is auto-provisioned with `platform:admin`, so the exemption is identity-verified, not header-spoofable. |
-| Uniform gating across projects, agents, providers, and policies | All four resource types follow the same GitOps lifecycle (ConfigMap → configmap-syncer → API). Gating only some resources while leaving others open was inconsistent and could lead to user confusion or misconfigured resources. |
-| Both gateway flags required (AND logic) for tier access | `OPENSHELL_ENABLED` controls sandbox isolation and `OPENSHELL_USE_GATEWAY` controls gateway delegation. Tier-based access is meaningful only when the full gateway sandbox stack is active. |
+| Both flags required (AND logic) | `OPENSHELL_ENABLED` controls sandbox isolation and `OPENSHELL_USE_GATEWAY` controls gateway delegation. The simplified RBAC policy is meaningful only when the full gateway sandbox stack is active. Activating simplified RBAC with only one flag would create inconsistent behavior (e.g., no ConfigMap reconciler running to populate agents). |
 | No new roles created | The existing role hierarchy (`platform:admin`, `project:owner/editor/viewer`, `agent:operator/observer`) maps directly to the Admin/Editor/Viewer tiers. Creating new roles would add migration complexity and fork the RBAC model. |
-| Handler-level gating, not middleware-level | The RBAC middleware is a general-purpose permission evaluator. Resource CRUD gating is a business rule ("when RBAC is enabled, only service accounts mutate definitions"), not a permission check. Keeping it in handlers preserves separation of concerns. |
-| ConfigMap resources stored in database | The session creation flow reads agents from the database. Storing ConfigMap-reconciled resources in the database means existing handlers work unchanged. |
-| Existing resources survive flag toggle | Toggling RBAC on does not destroy data. API-created resources become read-only via user API calls but remain functional. Toggling off restores full API access. |
-| Namespace-backed role resolution in gateway mode | In gateway mode, the user's ACP tier is derived from their Kubernetes namespace RoleBindings. This aligns ACP access with the external identity management system that already controls namespace access. ACP internal bindings remain as a fallback. |
-| Manual session triggering permitted for Admin/Editor | Although resource definitions are GitOps-only, allowing admin/editor users to manually start sessions from pre-defined agents is a valid use case. |
-| Platform-info endpoint over environment variable | The UI proxies to the API server. The endpoint reflects runtime server configuration. A configuration change requires only an API server restart, not a UI rebuild. |
-| 403 (not 405) for gated CRUD | 405 implies the method is never valid on that URL, which is incorrect — the method is valid when RBAC is disabled. 403 with a descriptive reason correctly communicates the restriction. |
-| Auth-exempt platform-info | The UI needs configuration status before establishing project context. Requiring RBAC evaluation would create a chicken-and-egg problem. |
+| Handler-level gating, not middleware-level | The RBAC middleware (`rbac-enforcement.spec.md`) is a general-purpose permission evaluator. Injecting gateway-mode business logic into it violates separation of concerns. Agent CRUD gating is a business rule ("in gateway mode, nobody creates agents via API"), not a permission check. |
+| ConfigMap agents stored in database | The session creation flow reads agents from the database. Storing ConfigMap-reconciled agents in the database means the existing session start handler, scheduled session trigger, and agent-to-session relationship work unchanged. |
+| Existing agents survive flag toggle | Toggling gateway mode on does not destroy data. API-created agents become read-only via the API but remain functional (sessions can be started against them). Toggling off restores full API access. |
+| Namespace-backed role resolution in gateway mode | In gateway mode, the user's ACP tier is derived from their Kubernetes namespace RoleBindings (e.g., `view` in the namespace = viewer in ACP for that project). This aligns ACP access with the external identity management system (app-interface, OpenShift) that already controls namespace access. ACP internal bindings remain as a fallback (e.g., `platform:admin` still works). |
+| Manual session triggering permitted for Admin/Editor | Although agents are GitOps-only, allowing admin/editor users to manually kick off sessions from pre-defined agents is a valid use case. In practice, most prod users will be viewers and won't have this ability. |
+| Users must have namespace access to view projects | No auto-provisioning of viewer bindings for arbitrary authenticated users. Namespace access is managed externally (app-interface, ArgoCD, OpenShift admin). Users without namespace access get no ACP access. |
+| Platform-info endpoint over environment variable | The UI is a server-rendered application that proxies to the API server. Environment variables are baked at build time; the endpoint reflects runtime server configuration. A configuration change requires only an API server restart, not a UI rebuild. |
+| 403 (not 405) for gated agent CRUD | 405 Method Not Allowed implies the method is never valid on that URL, which is incorrect — the method is valid when gateway mode is off. 403 Forbidden with a descriptive reason correctly communicates "you are not permitted to do this in the current configuration." |
+| Auth-exempt platform-info | The UI needs gateway mode status before establishing project context. Requiring RBAC evaluation would create a chicken-and-egg: the UI cannot know whether to show agent creation controls without calling platform-info, but RBAC evaluation requires a project scope. |

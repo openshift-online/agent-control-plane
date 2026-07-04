@@ -11,8 +11,6 @@ import (
 	"gopkg.in/resty.v1"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
-	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/ambient-code/platform/components/ambient-api-server/test"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/environments"
@@ -52,9 +50,7 @@ func ensureBuiltInRoles(t *testing.T) {
 
 func TestRBAC_ProjectCreationCreatesOwnerBinding(t *testing.T) {
 	RegisterTestingT(t)
-	cleanup := pkgrbac.OverrideForTesting(false)
-	defer cleanup()
-	h := test.NewHelper(t)
+h := test.NewHelper(t)
 	h.DBFactory.ResetDB()
 	ensureBuiltInRoles(t)
 	client := h.NewApiClient()
@@ -132,9 +128,7 @@ func TestRBAC_CredentialCreationCreatesOwnerBinding(t *testing.T) {
 
 func TestRBAC_UserAutoProvisioned(t *testing.T) {
 	RegisterTestingT(t)
-	cleanup := pkgrbac.OverrideForTesting(false)
-	defer cleanup()
-	h := test.NewHelper(t)
+h := test.NewHelper(t)
 	h.DBFactory.ResetDB()
 	ensureBuiltInRoles(t)
 	client := h.NewApiClient()
@@ -154,35 +148,6 @@ func TestRBAC_UserAutoProvisioned(t *testing.T) {
 	dbErr := g.Raw(`SELECT username FROM users WHERE username = ? AND deleted_at IS NULL`, "rbac-auto-user").Scan(&username).Error
 	Expect(dbErr).NotTo(HaveOccurred())
 	Expect(username).To(Equal("rbac-auto-user"))
-}
-
-func TestRBAC_GitOpsGating_BlocksUserAndAllowsServiceAccount(t *testing.T) {
-	RegisterTestingT(t)
-	cleanup := pkgrbac.OverrideForTesting(true)
-	defer cleanup()
-	saCleanup := middleware.OverrideServiceAccountForTesting("test-svc-acct")
-	defer saCleanup()
-	h := test.NewHelper(t)
-	h.DBFactory.ResetDB()
-	ensureBuiltInRoles(t)
-	client := h.NewApiClient()
-
-	// User attempt — should get 403
-	account := h.NewRandAccount()
-	ctx := h.NewAuthenticatedContext(account)
-	_, resp, _ := client.DefaultAPI.ApiAmbientV1ProjectsPost(ctx).
-		Project(openapi.Project{Name: "should-fail"}).Execute()
-	Expect(resp.StatusCode).To(Equal(http.StatusForbidden))
-
-	// Service account attempt via OIDC — JWT username matches configured
-	// service account, so the RBAC middleware tags the caller as a service
-	// caller and the GitOps gate allows the request through.
-	saAccount := h.NewAccount("test-svc-acct", "Service Account", "svc@test.com")
-	saCtx := h.NewAuthenticatedContext(saAccount)
-	_, saResp, saErr := client.DefaultAPI.ApiAmbientV1ProjectsPost(saCtx).
-		Project(openapi.Project{Name: "gitops-project"}).Execute()
-	Expect(saErr).NotTo(HaveOccurred())
-	Expect(saResp.StatusCode).To(Equal(http.StatusCreated))
 }
 
 func TestRBAC_MissingRolesSeeded(t *testing.T) {

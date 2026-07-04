@@ -1,0 +1,26 @@
+kind: Agent
+name: jira-task-summarizer
+prompt: "Summarize the tasks my JIRA user has completed in the last 7 days"
+providers:
+  - vertex
+  - jira
+payloads:
+  - sandbox_path: /sandbox/.mcp.json
+    content: |
+      {
+        "mcpServers": {
+          "mcp-atlassian": {
+            "type": "stdio",
+            "command": "mcp-atlassian",
+            "args": [],
+            "env": {
+              "JIRA_URL": "https://redhat.atlassian.net",
+              "JIRA_USERNAME": "${JIRA_USERNAME}",
+              "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
+            }
+          }
+        }
+      }
+labels:
+  purpose: jira-integration
+  team: platform

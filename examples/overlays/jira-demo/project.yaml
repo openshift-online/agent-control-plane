@@ -1,0 +1,6 @@
+kind: Project
+name: jira-demo
+description: JIRA integration demo — summarizes tasks completed in the last 7 days.
+labels:
+  env: demo
+  team: platform

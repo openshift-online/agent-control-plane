@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -105,3 +106,19 @@ const (
 	LabelProjectID = "ambient-code.io/project-id"
 	LabelManagedBy = "ambient-code.io/managed-by"
 )
+
+const (
+	annotationSource      = "ambient.ai/source"
+	annotationContentHash = "ambient.ai/content-hash"
+)
+
+func extractContentHash(annotationsJSON string) string {
+	if annotationsJSON == "" {
+		return ""
+	}
+	var ann map[string]string
+	if err := json.Unmarshal([]byte(annotationsJSON), &ann); err != nil {
+		return ""
+	}
+	return ann[annotationContentHash]
+}

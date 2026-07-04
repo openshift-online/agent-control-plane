@@ -339,7 +339,7 @@ An Application syncs **project-scoped fleet definitions** — a subset of resour
 | Kind | Sync Behavior |
 |---|---|
 | `Project` | Created if `CreateProject=true` in `sync_options`; patched (description, prompt, labels, annotations) on subsequent syncs |
-| `Agent` | Created or patched within the destination project; prompt, labels, annotations updated |
+| `Agent` | Created or patched within the destination project; prompt, providers, payloads, labels, annotations updated |
 | `Credential` | Created if not present; idempotent by name |
 | `RoleBinding` | Created if not present; idempotent by user+role+scope key. **Escalation-bound:** the sync engine can only create RoleBindings at or below the level of the service credential it uses (see Design Decisions). |
 | `Inbox` (seed messages) | Idempotent delivery — only new messages (by `from_agent_id` + `body` content hash dedup) are posted. Uses immutable `from_agent_id` FK, not mutable `from_name`. |
@@ -485,7 +485,7 @@ Agent is scoped to a Project. The stable address is `{project_name}/{agent_name}
 
 **Field propagation on ignite:** When `POST /agents/{id}/start` creates a new Session, the `ignite_handler` copies `repo_url`, `workflow_id`, `llm_model`, `llm_temperature`, `llm_max_tokens`, `bot_account_name`, `resource_overrides`, and `environment_variables` from the Agent to the new Session. Fields set directly in the start request body override these defaults.
 
-**Sandbox fields (not propagated):** The six sandbox-related fields (`entrypoint`, `providers`, `payloads`, `environment`, `sandbox_template`, `sandbox_policy`) are consumed directly by the control plane reconciler when building the OpenShell gateway sandbox — they are not copied to the Session model. The control plane reads them from the Agent record at reconcile time. These fields can also be declared via ConfigMap-based agent declarations (`ambient.ai/kind: agent` label) for GitOps-driven sandbox configuration.
+**Sandbox fields (not propagated):** The six sandbox-related fields (`entrypoint`, `providers`, `payloads`, `environment`, `sandbox_template`, `sandbox_policy`) are consumed directly by the control plane reconciler when building the OpenShell gateway sandbox — they are not copied to the Session model. The control plane reads them from the Agent record at reconcile time. These fields can be declared via `acpctl apply -k` with native ACP kinds for declarative fleet management.
 
 ```
 POST /projects/{id}/agents          → create agent in this project
@@ -1091,7 +1091,7 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | Kind | Fields applied |
 |---|---|
 | `Project` | `name`, `description`, `prompt`, `labels`, `annotations` |
-| `Agent` | `name`, `prompt`, `labels`, `annotations`, `inbox` (seed messages) |
+| `Agent` | `name`, `prompt`, `providers`, `payloads`, `labels`, `annotations`, `inbox` (seed messages) |
 | `Credential` | `name`, `description`, `provider`, `token` (env var reference), `url`, `email`, `labels`, `annotations` — global resource; use `credential bind` to grant project access |
 
 `Agent` resources in `.ambient/teams/` files also carry an `inbox` list of seed messages. On apply, any message in the list is posted to the agent's inbox if an identical message (same `from_name` + `body`) does not already exist there.
@@ -1108,7 +1108,7 @@ Each file may contain one or more YAML documents separated by `---`. Documents w
 
 Apply behaviour per resource:
 - **Project**: if a project with `name` already exists, `PATCH` it (description, prompt, labels, annotations). If it does not exist, `POST` to create it.
-- **Agent**: resolved within the current project context. If an agent with `name` already exists in the project, `PATCH` it (prompt, labels, annotations). If it does not exist, `POST` to create it. After upsert, post any inbox seed messages not already present.
+- **Agent**: resolved within the current project context. If an agent with `name` already exists in the project, `PATCH` it (prompt, providers, payloads, labels, annotations). If it does not exist, `POST` to create it. Payloads are stored as JSONB on the agent record and uploaded to the sandbox via SSH-over-gRPC before the entrypoint launches. After upsert, post any inbox seed messages not already present.
 
 Output (default — one line per resource):
 

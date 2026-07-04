@@ -102,45 +102,6 @@ For each namespace listed in the platform configuration, the control plane SHALL
 
 ---
 
-### Requirement: Managed Namespace Labels
-
-When the gateway startup path (`initGatewayProvisioning`) ensures an ACP project for a namespace listed in `platform-config`, it SHALL also apply the managed namespace labels via the `NamespaceProvisioner`. This ensures the `ConfigMapSyncer` can discover and reconcile agent, provider, and policy ConfigMaps in gateway-managed namespaces.
-
-The following labels SHALL be applied to every gateway-managed namespace:
-
-- `ambient-code.io/managed=true`
-- `ambient-code.io/project-id=<project-name>`
-- `ambient-code.io/managed-by=ambient-control-plane`
-
-These are the same labels applied by `ProjectReconciler.ensureNamespace` in the standard project lifecycle. The gateway path applies them directly because the `ProjectReconciler` may not observe the project creation event due to a startup race between `initGatewayProvisioning` and the gRPC informer watch stream.
-
-#### Scenario: Labels applied on initial provisioning
-
-- GIVEN `platform-config` lists namespace `tenant-alpha`
-- AND `tenant-alpha` exists in the cluster
-- WHEN ACP starts and runs `initGatewayProvisioning`
-- THEN ACP SHALL create an ACP project for `tenant-alpha` (if not already present)
-- AND ACP SHALL apply managed labels to the `tenant-alpha` namespace via `ProvisionNamespace`
-- AND the `ConfigMapSyncer` SHALL include `tenant-alpha` in its reconciliation scope
-
-#### Scenario: Labels applied on platform-config update
-
-- GIVEN ACP is running with gateway mode enabled
-- AND an admin adds namespace `tenant-beta` to `platform-config`
-- WHEN ACP detects the ConfigMap change
-- THEN ACP SHALL ensure an ACP project for `tenant-beta`
-- AND ACP SHALL apply managed labels to the `tenant-beta` namespace
-- AND the `ConfigMapSyncer` SHALL begin reconciling ConfigMaps in `tenant-beta`
-
-#### Scenario: Labels already present
-
-- GIVEN `tenant-alpha` namespace already has managed labels from a prior startup
-- WHEN ACP restarts and runs `initGatewayProvisioning`
-- THEN ACP SHALL update the namespace labels (update-or-create pattern via `ProvisionNamespace`)
-- AND the operation SHALL be idempotent
-
----
-
 ### Requirement: Payload Delivery via SSH-over-gRPC
 
 When the control plane needs to write payload files (`.mcp.json`, `CLAUDE.md`, credential configs) into a running sandbox, it SHALL use the OpenShell SSH-over-gRPC mechanism rather than `ExecSandbox`. Sandbox containers use a read-only root filesystem, so `ExecSandbox`-based writes (which run as the sandbox user) fail with "Permission denied". The SSH path routes through the supervisor's embedded SSH server (russh), which runs as root and can write to any path.

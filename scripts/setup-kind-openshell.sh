@@ -5,7 +5,7 @@
 # Provisions for each tenant in OPENSHELL_TENANTS (default: tenant-a tenant-b):
 #   1. Agent Sandbox CRD + controller (once, cluster-scoped)
 #   2. Tenant namespaces
-#   3. (reserved — ACP projects are created automatically by the control plane)
+#   3. ACP project via the API
 #   4. Patches the control plane deployment with OPENSHELL_USE_GATEWAY=true
 #      and Vertex AI env vars (ANTHROPIC_VERTEX_PROJECT_ID, CLOUD_ML_REGION) if set
 #
@@ -72,8 +72,64 @@ for TENANT in "${TENANTS[@]}"; do
   fi
 done
 
-# 3. ACP projects are created automatically by the control plane when it
-#    reads platform-config (after step 4 patches it with OPENSHELL_USE_GATEWAY=true).
+# 3. Create ACP projects for each tenant via the API
+echo "  Creating ACP projects..."
+TOKEN=$(kubectl get secret test-user-token -n "$NAMESPACE" \
+  -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
+
+if [ -z "$TOKEN" ]; then
+  echo "  Warning: test-user-token not found; skipping ACP project creation"
+else
+  # Temporary port-forward to the API server
+  PF_PORT=18765
+  kubectl port-forward -n "$NAMESPACE" svc/ambient-api-server "${PF_PORT}:8000" \
+    >/dev/null 2>&1 &
+  PF_PID=$!
+  # shellcheck disable=SC2064
+  trap "kill ${PF_PID} 2>/dev/null || true" EXIT
+
+  # Wait for port-forward to be ready (up to 15 s)
+  API_READY=false
+  for i in $(seq 1 15); do
+    if curl -sf -H "Authorization: Bearer ${TOKEN}" \
+        "http://localhost:${PF_PORT}/api/ambient/v1/projects" >/dev/null 2>&1; then
+      API_READY=true
+      break
+    fi
+    sleep 1
+  done
+
+  if [ "$API_READY" = "false" ]; then
+    echo "  Warning: API server unreachable on port ${PF_PORT}; skipping ACP project creation"
+  else
+    for TENANT in "${TENANTS[@]}"; do
+      # Check whether a project with this name already exists
+      SEARCH_QUERY=$(printf "name = '%s'" "${TENANT}")
+      EXISTING=$(curl -sf \
+        -H "Authorization: Bearer ${TOKEN}" \
+        --data-urlencode "search=${SEARCH_QUERY}" \
+        -G "http://localhost:${PF_PORT}/api/ambient/v1/projects" 2>/dev/null || echo "{}")
+      MATCH_COUNT=$(echo "$EXISTING" \
+        | jq -r '[(.items // [])[] | select(.name == "'"${TENANT}"'")] | length' 2>/dev/null || echo "0")
+
+      if [ "${MATCH_COUNT}" -gt 0 ]; then
+        echo "    ACP project '${TENANT}' already exists"
+      else
+        curl -sf -X POST \
+          -H "Authorization: Bearer ${TOKEN}" \
+          -H "Content-Type: application/json" \
+          -d "{\"name\": \"${TENANT}\"}" \
+          "http://localhost:${PF_PORT}/api/ambient/v1/projects" >/dev/null
+        echo "    Created ACP project '${TENANT}'"
+      fi
+    done
+  fi
+
+  # Vertex AI credentials are configured separately by `make kind-setup-vertex`,
+  # which runs after this script in the kind-up target.
+
+  kill "${PF_PID}" 2>/dev/null || true
+fi
 
 # 4. Patch control plane with gateway flag and vertex env vars (idempotent)
 #    TLS is left at its default (true) — certgen-job creates openshell-client-tls

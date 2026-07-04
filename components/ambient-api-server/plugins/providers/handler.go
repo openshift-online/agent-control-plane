@@ -6,7 +6,6 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
@@ -25,10 +24,6 @@ func NewProviderHandler(provider ProviderService, generic services.GenericServic
 }
 
 func (h providerHandler) Create(w http.ResponseWriter, r *http.Request) {
-	if err := rbac.RequireGitOpsManaged(r.Context(), "Provider"); err != nil {
-		handlers.HandleError(r.Context(), w, err)
-		return
-	}
 
 	var provider openapi.Provider
 	cfg := &handlers.HandlerConfig{
@@ -109,10 +104,6 @@ func (h providerHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h providerHandler) Patch(w http.ResponseWriter, r *http.Request) {
-	if err := rbac.RequireGitOpsManaged(r.Context(), "Provider"); err != nil {
-		handlers.HandleError(r.Context(), w, err)
-		return
-	}
 
 	var patch openapi.ProviderPatchRequest
 	cfg := &handlers.HandlerConfig{
@@ -161,10 +152,6 @@ func (h providerHandler) Patch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h providerHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	if err := rbac.RequireGitOpsManaged(r.Context(), "Provider"); err != nil {
-		handlers.HandleError(r.Context(), w, err)
-		return
-	}
 
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {

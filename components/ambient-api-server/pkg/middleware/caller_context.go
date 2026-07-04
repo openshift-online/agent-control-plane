@@ -2,8 +2,6 @@ package middleware
 
 import (
 	"context"
-	"crypto/subtle"
-	"net/http"
 	"os"
 	"strings"
 
@@ -40,8 +38,7 @@ func init() {
 		return
 	}
 	if token != "" {
-		glog.Infof("Service token auth enabled via AMBIENT_API_TOKEN")
-		pkgserver.RegisterPreAuthMiddleware(staticTokenHTTPMiddleware(token))
+		glog.Infof("Service token auth enabled via AMBIENT_API_TOKEN (gRPC only)")
 	}
 	if configuredServiceAccount != "" {
 		glog.Infof("OIDC service account username: %s", configuredServiceAccount)
@@ -73,37 +70,10 @@ func ConfiguredServiceAccountUsername() string {
 	return configuredServiceAccount
 }
 
-// OverrideServiceAccountForTesting temporarily sets the configured service
-// account username, bypassing the init-time cache. Returns a cleanup function
-// that restores the original value. Must only be used in tests.
-func OverrideServiceAccountForTesting(username string) func() {
-	original := configuredServiceAccount
-	configuredServiceAccount = username
-	return func() { configuredServiceAccount = original }
-}
-
 func isServiceAccount(jwtUsername, configured string) bool {
 	if configured == "" {
 		return false
 	}
 	return jwtUsername == configured ||
 		jwtUsername == keycloakServiceAccountPrefix+configured
-}
-
-// staticTokenHTTPMiddleware tags HTTP callers as service callers when
-// their bearer token matches the configured AMBIENT_API_TOKEN. This is
-// the HTTP counterpart of the gRPC pre-auth interceptor.
-func staticTokenHTTPMiddleware(expectedToken string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if authHeader := r.Header.Get("Authorization"); authHeader != "" {
-				if token, err := extractBearerToken(authHeader); err == nil {
-					if subtle.ConstantTimeCompare([]byte(token), []byte(expectedToken)) == 1 {
-						r = r.WithContext(WithCallerType(r.Context(), CallerTypeService))
-					}
-				}
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
 }
