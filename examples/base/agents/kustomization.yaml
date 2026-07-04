@@ -2,3 +2,4 @@ kind: Kustomization
 resources:
   - hello-world.yaml
   - security-reviewer.yaml
+  - jira-task-summarizer.yaml

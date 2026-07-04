@@ -3,4 +3,6 @@ resources:
   - ../../base
   - project.yaml
   - provider-vertex.yaml
+  - provider-jira.yaml
   - credential-vertex.yaml
+  - credential-jira.yaml

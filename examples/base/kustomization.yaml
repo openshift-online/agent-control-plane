@@ -2,3 +2,4 @@ kind: Kustomization
 resources:
   - agents/hello-world.yaml
   - agents/security-reviewer.yaml
+  - agents/jira-task-summarizer.yaml
