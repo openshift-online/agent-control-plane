@@ -182,6 +182,21 @@ network_policies:
       - { path: /usr/bin/node }
       - { path: /usr/local/bin/opencode }
 
+  # Atlassian Cloud — Jira and Confluence REST APIs used by mcp-atlassian.
+  # The MCP server is a Python script at /sandbox/.venv/bin/mcp-atlassian;
+  # the kernel sees the Python interpreter, already listed in binaries.
+  atlassian:
+    name: atlassian
+    endpoints:
+      - { host: "*.atlassian.net", port: 443, protocol: rest, enforcement: enforce, access: full, tls: terminate }
+      - { host: "*.atlassian.com", port: 443 }
+      - { host: "auth.atlassian.com", port: 443 }
+      - { host: "api.atlassian.com", port: 443 }
+    binaries:
+      - { path: /sandbox/.venv/bin/python }
+      - { path: /sandbox/.venv/bin/python3 }
+      - { path: "/sandbox/.uv/python/cpython-*/bin/python*" }
+
   # ACP internal traffic — runner connects to the control plane token
   # endpoint and the API server gRPC stream from inside the sandbox
   # network namespace, where all traffic routes through the proxy.
