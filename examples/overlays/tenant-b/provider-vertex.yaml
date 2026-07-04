@@ -1,3 +1,7 @@
+# Prerequisite: create the backing secret in the tenant namespace:
+#   kubectl create secret generic vertex-sa-key \
+#     --from-literal=token="$(cat /path/to/vertex-sa-key.json)" \
+#     -n tenant-b
 kind: Provider
 name: vertex
 type: vertex

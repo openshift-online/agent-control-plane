@@ -120,6 +120,7 @@ ANTHROPIC_VERTEX_PROJECT_ID ?= $(shell echo $$ANTHROPIC_VERTEX_PROJECT_ID)
 CLOUD_ML_REGION ?= $(shell echo $$CLOUD_ML_REGION)
 # Default to ADC location if not set (created by: gcloud auth application-default login)
 GOOGLE_APPLICATION_CREDENTIALS ?= $(or $(shell echo $$GOOGLE_APPLICATION_CREDENTIALS),$(HOME)/.config/gcloud/application_default_credentials.json)
+VERTEX_CRED ?= $(GOOGLE_APPLICATION_CREDENTIALS)
 
 # OpenShell Gateway Configuration (OPENSHELL_USE_GATEWAY=true by default)
 # Provisions two tenant namespaces (tenant-a, tenant-b) with an OpenShell gateway each.
