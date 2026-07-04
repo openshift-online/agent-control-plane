@@ -1,6 +1,6 @@
 kind: Agent
-name: jira-task-summarizer
-prompt: "Summarize the tasks my JIRA user has completed in the last 7 days"
+name: jira-simple-whoami
+prompt: "Tell me what my username is in JIRA"
 providers:
   - vertex
   - jira
