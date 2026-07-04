@@ -1,4 +1,7 @@
 {
+  "enabledMcpjsonServers": [
+    "mcp-atlassian"
+  ],
   "permissions": {
     "allow": [
       "Read",
