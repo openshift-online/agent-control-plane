@@ -134,8 +134,6 @@ COPY policy.yaml /etc/openshell/policy.yaml
 
 RUN dnf install -y --allowerasing --nodocs jq unzip && dnf clean all
 
-WORKDIR /runner
-
 COPY . /runner/ambient-runner
 
 RUN uv pip install --python /sandbox/.venv/bin/python '/runner/ambient-runner[all]'
