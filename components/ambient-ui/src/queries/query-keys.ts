@@ -100,6 +100,15 @@ export const queryKeys = {
     detail: (projectId: string, id: string) =>
       [...queryKeys.policies.details(), projectId, id] as const,
   },
+  applications: {
+    all: ['applications'] as const,
+    lists: () => [...queryKeys.applications.all, 'list'] as const,
+    list: (params?: ListParams) =>
+      [...queryKeys.applications.lists(), params] as const,
+    details: () => [...queryKeys.applications.all, 'detail'] as const,
+    detail: (id: string) =>
+      [...queryKeys.applications.details(), id] as const,
+  },
   platformInfo: {
     all: ['platform-info'] as const,
   },

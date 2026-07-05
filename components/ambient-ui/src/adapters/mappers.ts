@@ -1,6 +1,6 @@
-import type { Session, Project, Agent, Credential, RoleBinding } from 'ambient-sdk'
+import type { Session, Project, Agent, Application, Credential, RoleBinding } from 'ambient-sdk'
 import type {
-  DomainSession, DomainProject, DomainSessionMessage, DomainSessionEvent, DomainAgent, SessionPhase, SessionEventType,
+  DomainSession, DomainProject, DomainSessionMessage, DomainSessionEvent, DomainAgent, DomainApplication, SessionPhase, SessionEventType,
   DomainRepo, DomainReconciledRepo, DomainCondition, ReconciledRepoStatus, ConditionStatus,
   DomainCredential, DomainRoleBinding, DomainPayload, DomainSandboxTemplate,
 } from '@/domain/types'
@@ -344,6 +344,36 @@ export function mapSdkRoleBindingToDomain(sdk: RoleBinding): DomainRoleBinding {
     agentId: emptyToNull(sdk.agent_id ?? ''),
     credentialId: emptyToNull(sdk.credential_id ?? ''),
     sessionId: emptyToNull(sdk.session_id ?? ''),
+    createdAt: sdk.created_at ?? '',
+    updatedAt: sdk.updated_at ?? '',
+  }
+}
+
+export function mapSdkApplicationToDomain(sdk: Application): DomainApplication {
+  return {
+    id: sdk.id,
+    name: sdk.name,
+    sourceRepoUrl: sdk.source_repo_url,
+    sourceTargetRevision: emptyToNull(sdk.source_target_revision),
+    sourcePath: sdk.source_path,
+    destinationAmbientUrl: emptyToNull(sdk.destination_ambient_url),
+    destinationProject: sdk.destination_project,
+    credentialId: emptyToNull(sdk.credential_id),
+    autoSync: sdk.auto_sync,
+    autoPrune: sdk.auto_prune,
+    selfHeal: sdk.self_heal,
+    syncOptions: emptyToNull(sdk.sync_options),
+    retryLimit: sdk.retry_limit,
+    syncStatus: emptyToNull(sdk.sync_status),
+    healthStatus: emptyToNull(sdk.health_status),
+    syncRevision: emptyToNull(sdk.sync_revision),
+    operationPhase: emptyToNull(sdk.operation_phase),
+    operationMessage: emptyToNull(sdk.operation_message),
+    resourceStatus: emptyToNull(sdk.resource_status),
+    conditions: emptyToNull(sdk.conditions),
+    annotations: parseAnnotations(sdk.annotations),
+    labels: parseJsonObject(sdk.labels),
+    lastSyncedAt: emptyToNull(sdk.last_synced_at),
     createdAt: sdk.created_at ?? '',
     updatedAt: sdk.updated_at ?? '',
   }

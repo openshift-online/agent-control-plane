@@ -13,6 +13,7 @@ import {
   Settings,
   Moon,
   Sun,
+  GitBranch,
 } from 'lucide-react'
 import { useSessions } from '@/queries/use-sessions'
 import { useGatewayMode } from '@/lib/use-gateway-mode'
@@ -57,6 +58,7 @@ const projectNavItems: readonly NavItem[] = [
 
 const configureNavItems: readonly NavItem[] = [
   { label: 'Credentials', icon: KeyRound, href: '/credentials', global: true },
+  { label: 'Applications', icon: GitBranch, href: '/applications', global: true },
 ]
 
 function NavGroup({

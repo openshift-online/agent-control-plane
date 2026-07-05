@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/table'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { DomainSession, SessionPhase } from '@/domain/types'
+import { sessionMatchesPath } from '@/domain/folder-tree'
 import { useTableKeyboardNav } from '@/hooks/use-table-keyboard-nav'
 import { cn } from '@/lib/utils'
 import { fleetColumns } from './fleet-columns'
@@ -35,6 +36,7 @@ export function FleetTable({
   agentNames,
   phaseFilter,
   showTestRuns = false,
+  pathFilter,
   onFilteredCountChange,
 }: {
   sessions: DomainSession[]
@@ -42,6 +44,7 @@ export function FleetTable({
   agentNames?: Map<string, string>
   phaseFilter?: SessionPhase | null
   showTestRuns?: boolean
+  pathFilter?: string | null
   onFilteredCountChange?: (count: number) => void
 }) {
   const router = useRouter()
@@ -58,11 +61,17 @@ export function FleetTable({
   const [useAbsoluteTime, setUseAbsoluteTime] = useState(false)
 
   const filteredSessions = useMemo(() => {
-    if (showTestRuns) return sessions
-    return sessions.filter(
-      (s) => s.annotations[TEST_SESSION_ANNOTATION] !== 'true',
-    )
-  }, [sessions, showTestRuns])
+    let result = sessions
+    if (!showTestRuns) {
+      result = result.filter(
+        (s) => s.annotations[TEST_SESSION_ANNOTATION] !== 'true',
+      )
+    }
+    if (pathFilter) {
+      result = result.filter((s) => sessionMatchesPath(s, pathFilter))
+    }
+    return result
+  }, [sessions, showTestRuns, pathFilter])
 
   const handleToggleTimeFormat = useCallback(() => {
     setUseAbsoluteTime(prev => !prev)

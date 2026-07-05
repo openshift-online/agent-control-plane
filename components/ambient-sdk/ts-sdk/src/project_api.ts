@@ -30,6 +30,10 @@ export class ProjectAPI {
     return ambientFetch<void>(this.config, 'DELETE', `/projects/${id}`, undefined, opts);
   }
 
+  async transferOwnership(id: string, targetUserId: string, opts?: RequestOptions): Promise<Project> {
+    return ambientFetch<Project>(this.config, 'POST', `/projects/${id}/transfer-ownership`, { target_user_id: targetUserId }, opts);
+  }
+
   async *listAll(size: number = 100, opts?: RequestOptions): AsyncGenerator<Project> {
     let page = 1;
     while (true) {

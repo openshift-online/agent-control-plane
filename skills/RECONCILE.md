@@ -49,7 +49,7 @@ skills/
 
 ## Reconciliation State
 
-**Last analyzed**: 2026-07-05 (Wave 2 + Wave 4 + Wave 5 executed)
+**Last analyzed**: 2026-07-05 (Wave 2 + Wave 4 + Wave 5 + Wave 6 executed)
 **Spec corpus**: 29 specs across 4 domains
 **Codebase commit**: feat/reconcile-skill-and-spec-alignment branch
 
@@ -57,11 +57,11 @@ skills/
 
  < /dev/null |  Domain | Specs | Requirements | Present | Partial | Missing | Coverage |
 |--------|-------|-------------|---------|---------|---------|----------|
-| Platform | 12 | 110 | 104 | 1 | 5 | 94.5% |
+| Platform | 12 | 110 | 105 | 1 | 4 | 95.5% |
 | Security | 6 | 55 | 45 | 5 | 5 | 81.8% |
-| UI | 7 | 70 | 57 | 8 | 5 | 81.4% |
+| UI | 7 | 70 | 60 | 8 | 2 | 85.7% |
 | CLI | 1 | 13 | 13 | 0 | 0 | 100% |
-| **TOTAL** | **29** | **248** | **219** | **14** | **15** | **88.3%** |
+| **TOTAL** | **29** | **248** | **223** | **14** | **11** | **89.9%** |
 
 ### Spec Dependency Order
 
@@ -112,7 +112,7 @@ Severity: `blocker` > `critical` > `major` > `minor`
 |----|------|-------------|-------|--------|----------|-------|
 | P1 | data-model | Application GitOps sync engine | CP | partial | critical | Only syncs Agent kind. Missing: Project, Credential, RoleBinding, Inbox sync. No kustomize rendering, auto_sync, self_heal, per-resource status. |
 | P2 | data-model | Application CLI sync/refresh commands | CLI | **done** | major | SDK `Sync()`/`Refresh()` methods added. CLI calls `POST /sync` and `POST /refresh`. Flags: `--prune`, `--revision`, `--prune-project`. |
-| P3 | data-model | Application frontend UI | FE | missing | major | No pages, adapters, queries, or domain types for Application entity. |
+| P3 | data-model | Application frontend UI | FE | **done** | major | Full CRUD UI: domain types, port, adapter, mapper, query hooks, list page, detail page. Gated behind `feature.applications.enabled` flag. |
 | P4 | data-model | SessionEvent runner-side compression | Runner | **done** | major | `EventCompressor` integrated into gRPC transport path. Compressed events pushed to `session_events.push()` with `event_count` and `completed_at`. |
 | P5 | data-model | Scoped RoleBinding query endpoints | BE | **done** | major | 4 new scoped endpoints: `/users/{id}/role_bindings`, `/projects/{id}/role_bindings`, `/sessions/{id}/role_bindings`, `/credentials/{cred_id}/role_bindings`. |
 | P6 | data-model | GET /applications/{id}/status endpoint | BE | **done** | major | Added `GetStatus` handler + `ApplicationStatusResponse` presenter. Also fixed `LastSyncedAt` in main presenter. |
@@ -125,12 +125,12 @@ Severity: `blocker` > `critical` > `major` > `minor`
 
 | ID | Spec | Requirement | Layer | Status | Severity | Notes |
 |----|------|-------------|-------|--------|----------|-------|
-| U1 | views | Virtual folder tree (ui/path annotation) | FE | missing | major | Annotation key registered but no tree panel component exists. |
-| U2 | project-sharing | Ownership transfer | BE | **done** | major | Already implemented: `TransferOwnership` handler with advisory lock, atomic transaction, downgrade caller. UI flow still missing. |
-| U3 | project-sharing | Self-removal ("Leave project") | FE | missing | major | No leave-project flow in collaborator manager. |
-| U4 | views | Settings: API Keys tab | FE | missing | minor | No API key management UI in settings page. |
-| U5 | views | Settings: Feature Flags tab | FE | missing | minor | `use-feature-flags-admin.ts` hook exists. No UI tab. |
-| U6 | live-preview | SSE fallback indicator | FE | missing | minor | No "stream unavailable" status when runner unreachable. |
+| U1 | views | Virtual folder tree (ui/path annotation) | FE | **done** | major | `FolderTreePanel` component with recursive tree, `buildFolderTree` utility, `sessionMatchesPath` filter. Integrated into sessions page with toggle. |
+| U2 | project-sharing | Ownership transfer | BE+FE | **done** | major | Backend handler + UI: SDK `transferOwnership` method, port/adapter/query hook, typed-confirmation dialog in collaborator manager. |
+| U3 | project-sharing | Self-removal ("Leave project") | FE | **done** | major | Leave-project flow exists. Added tooltip on sole-owner row: "Transfer project ownership before leaving". |
+| U4 | views | Settings: API Keys tab | FE | missing | minor | Blocked: no API key entity/migration/handlers in backend. |
+| U5 | views | Settings: Feature Flags tab | FE | missing | minor | Blocked: `useWorkspaceFlag` is a stub. No Unleash integration yet. |
+| U6 | live-preview | SSE fallback indicator | FE | missing | minor | Blocked: no SSE client exists. Uses polling only. |
 | U7 | architecture | Sidebar "Configure" group label | FE | partial | minor | Uses "Admin" label. Settings in separate "Project" group instead of "Configure". |
 | U8 | project-sharing | Settings access via gear icon | FE | partial | minor | Settings is sidebar nav item, not gear icon in nav header per spec. |
 
@@ -199,3 +199,4 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-05 | (pending) | Wave 2 executed: P5, P6, U2(BE) | 84.5% | 3 API gaps closed. Bug fix: agents/subresource_handler.go scope_id→agent_id |
 | 2026-07-05 | (pending) | Wave 4 executed: S1,S2,S3,S4,S5,S7,S8,P10 | 87.1% | 8 gaps closed (5 implemented, 3 already done). P1,S6 deferred. |
 | 2026-07-05 | (pending) | Wave 5 executed: P2,P4,P8 | 88.3% | 3 gaps closed. SDK Sync/Refresh, runner compression, RESUME_AFTER_SEQ. |
+| 2026-07-05 | (pending) | Wave 6 executed: P3,U1,U2(UI),U3 | 89.9% | 4 gaps closed. Application CRUD UI, folder tree, transfer ownership UI, sole-owner tooltip. U4/U5/U6 blocked on backend. |

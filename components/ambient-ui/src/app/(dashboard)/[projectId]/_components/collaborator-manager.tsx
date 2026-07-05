@@ -34,9 +34,18 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+
+import { Input } from '@/components/ui/input'
 
 import { useCurrentUser } from '@/hooks/use-current-user'
 import { useUserSearch } from '@/queries/use-users'
+import { useTransferOwnership } from '@/queries/use-projects'
 import {
   useAllRoleBindings,
   useCreateRoleBinding,
@@ -295,6 +304,8 @@ function CollaboratorRow({
   isCurrentUser,
   isSoleOwner,
   readOnly,
+  projectId,
+  canTransfer,
 }: {
   collaborator: ResolvedCollaborator
   assignableRoles: DomainRole[]
@@ -302,11 +313,16 @@ function CollaboratorRow({
   isCurrentUser: boolean
   isSoleOwner: boolean
   readOnly: boolean
+  projectId: string
+  canTransfer: boolean
 }) {
   const router = useRouter()
   const patchBinding = usePatchRoleBinding()
   const deleteBinding = useDeleteRoleBinding()
+  const transferOwnership = useTransferOwnership()
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [transferOpen, setTransferOpen] = useState(false)
+  const [transferConfirmInput, setTransferConfirmInput] = useState('')
 
   const canMutate = !readOnly && assignableRoles.length > 0
   const isOwnerRole = collaborator.roleName === RoleName.ProjectOwner
@@ -324,6 +340,11 @@ function CollaboratorRow({
       }
       if (value === '__leave__') {
         setConfirmOpen(true)
+        return
+      }
+      if (value === '__transfer__') {
+        setTransferOpen(true)
+        setTransferConfirmInput('')
         return
       }
       const newRole = allRoles.find((r) => r.id === value)
@@ -398,6 +419,12 @@ function CollaboratorRow({
                 </SelectItem>
               ))}
               <SelectSeparator />
+              {canTransfer && !isCurrentUser && (
+                <SelectItem value="__transfer__">
+                  Transfer ownership
+                </SelectItem>
+              )}
+              <SelectSeparator />
               <SelectItem
                 value={isCurrentUser ? '__leave__' : '__remove__'}
                 className="text-destructive focus:text-destructive"
@@ -407,9 +434,24 @@ function CollaboratorRow({
             </SelectContent>
           </Select>
         ) : (
-          <span className="text-sm text-muted-foreground pr-2">
-            {collaborator.roleDisplayName}
-          </span>
+          isSoleOwner && isCurrentUser ? (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-sm text-muted-foreground pr-2 cursor-default">
+                    {collaborator.roleDisplayName}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Transfer project ownership before leaving</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            <span className="text-sm text-muted-foreground pr-2">
+              {collaborator.roleDisplayName}
+            </span>
+          )
         )}
       </div>
 
@@ -433,6 +475,48 @@ function CollaboratorRow({
             >
               {deleteBinding.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
               {isCurrentUser ? 'Leave' : 'Remove'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={transferOpen} onOpenChange={(open) => { setTransferOpen(open); if (!open) setTransferConfirmInput('') }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Transfer project ownership
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will make <strong>{collaborator.name || collaborator.username}</strong> the new owner. You will be downgraded to Editor. Type their username to confirm.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            placeholder={collaborator.username}
+            value={transferConfirmInput}
+            onChange={(e) => setTransferConfirmInput(e.target.value)}
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={transferConfirmInput !== collaborator.username || transferOwnership.isPending}
+              onClick={() => {
+                transferOwnership.mutate(
+                  { projectId, targetUserId: collaborator.username },
+                  {
+                    onSuccess: () => {
+                      toast.success(`Ownership transferred to ${collaborator.name || collaborator.username}`)
+                      setTransferOpen(false)
+                      setTransferConfirmInput('')
+                    },
+                    onError: (error) => {
+                      toast.error(error instanceof Error ? error.message : 'Failed to transfer ownership')
+                    },
+                  },
+                )
+              }}
+            >
+              {transferOwnership.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+              Transfer ownership
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -578,6 +662,8 @@ export function CollaboratorManager({
     )
   }
 
+  const canTransfer = resolvedUserRole === RoleName.ProjectOwner || resolvedUserRole === RoleName.PlatformAdmin
+
   const effectiveReadOnly = readOnly === true || assignableRoles.length === 0
 
   return (
@@ -616,6 +702,8 @@ export function CollaboratorManager({
                   isCurrentUser={isCurrentUser}
                   isSoleOwner={isSoleOwner}
                   readOnly={effectiveReadOnly}
+                  projectId={projectId}
+                  canTransfer={canTransfer}
                 />
               )
             })}

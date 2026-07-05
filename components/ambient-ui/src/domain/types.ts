@@ -367,3 +367,61 @@ export type DomainPolicy = {
   createdAt: string
   updatedAt: string
 }
+
+export type DomainApplication = {
+  id: string
+  name: string
+  sourceRepoUrl: string
+  sourceTargetRevision: string | null
+  sourcePath: string
+  destinationAmbientUrl: string | null
+  destinationProject: string
+  credentialId: string | null
+  autoSync: boolean
+  autoPrune: boolean
+  selfHeal: boolean
+  syncOptions: string | null
+  retryLimit: number
+  syncStatus: string | null
+  healthStatus: string | null
+  syncRevision: string | null
+  operationPhase: string | null
+  operationMessage: string | null
+  resourceStatus: string | null
+  conditions: string | null
+  annotations: Record<string, string>
+  labels: Record<string, string>
+  lastSyncedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type DomainApplicationCreateRequest = {
+  name: string
+  sourceRepoUrl: string
+  sourcePath: string
+  destinationProject: string
+  sourceTargetRevision?: string
+  destinationAmbientUrl?: string
+  credentialId?: string
+  autoSync?: boolean
+  autoPrune?: boolean
+  selfHeal?: boolean
+  syncOptions?: string
+  retryLimit?: number
+}
+
+export type DomainApplicationUpdateRequest = {
+  name?: string
+  sourceRepoUrl?: string
+  sourcePath?: string
+  destinationProject?: string
+  sourceTargetRevision?: string
+  destinationAmbientUrl?: string
+  credentialId?: string
+  autoSync?: boolean
+  autoPrune?: boolean
+  selfHeal?: boolean
+  syncOptions?: string
+  retryLimit?: number
+}

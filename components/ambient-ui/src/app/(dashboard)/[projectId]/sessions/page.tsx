@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useParams } from 'next/navigation'
-import { Monitor, Plus, FlaskConical } from 'lucide-react'
+import { Monitor, Plus, FlaskConical, FolderTree } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -10,8 +10,10 @@ import { EmptyState } from '@/components/empty-state'
 import { useSessions } from '@/queries/use-sessions'
 import { useAgentNames } from '@/queries/use-agents'
 import type { SessionPhase } from '@/domain/types'
+import { buildFolderTree } from '@/domain/folder-tree'
 import { FleetTable } from './_components/fleet-table'
 import { FleetSummary } from './_components/fleet-summary'
+import { FolderTreePanel } from './_components/folder-tree-panel'
 import { CreateSessionSheet } from './_components/create-session-sheet'
 
 export default function FleetPage() {
@@ -21,6 +23,8 @@ export default function FleetPage() {
   const [filteredCount, setFilteredCount] = useState<number | undefined>(undefined)
   const [createOpen, setCreateOpen] = useState(false)
   const [showTestRuns, setShowTestRuns] = useState(false)
+  const [showFolderTree, setShowFolderTree] = useState(false)
+  const [pathFilter, setPathFilter] = useState<string | null>(null)
   const { data, isLoading, error } = useSessions(projectId)
   const { data: agentNames } = useAgentNames(projectId)
 
@@ -55,6 +59,8 @@ export default function FleetPage() {
   const testSessionCount = sessions.filter(
     (s) => s.annotations['ambient-code.io/ui/test-session'] === 'true',
   ).length
+  const folderTree = useMemo(() => buildFolderTree(sessions), [sessions])
+  const hasFolders = folderTree.length > 0
 
   if (sessions.length === 0) {
     return (
@@ -89,6 +95,20 @@ export default function FleetPage() {
           />
         </div>
         <div className="flex items-center gap-2">
+          {hasFolders && (
+            <Button
+              variant={showFolderTree ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => {
+                setShowFolderTree((prev) => !prev)
+                if (showFolderTree) setPathFilter(null)
+              }}
+              className="text-xs text-muted-foreground"
+            >
+              <FolderTree className="mr-1 size-3.5" />
+              Folders
+            </Button>
+          )}
           {testSessionCount > 0 && (
             <Button
               variant={showTestRuns ? 'secondary' : 'ghost'}
@@ -114,14 +134,26 @@ export default function FleetPage() {
         activePhase={phaseFilter}
         onPhaseFilter={setPhaseFilter}
       />
-      <FleetTable
-        sessions={sessions}
-        searchFilter={search}
-        agentNames={agentNames}
-        phaseFilter={phaseFilter}
-        showTestRuns={showTestRuns}
-        onFilteredCountChange={handleFilteredCountChange}
-      />
+      <div className="flex gap-4">
+        {showFolderTree && (
+          <FolderTreePanel
+            tree={folderTree}
+            selectedPath={pathFilter}
+            onSelect={setPathFilter}
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <FleetTable
+            sessions={sessions}
+            searchFilter={search}
+            agentNames={agentNames}
+            phaseFilter={phaseFilter}
+            showTestRuns={showTestRuns}
+            pathFilter={pathFilter}
+            onFilteredCountChange={handleFilteredCountChange}
+          />
+        </div>
+      </div>
       <CreateSessionSheet open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   )
