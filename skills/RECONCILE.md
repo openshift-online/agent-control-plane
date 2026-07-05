@@ -55,7 +55,7 @@ skills/
 
 ### Coverage Summary
 
- < /dev/null |  Domain | Specs | Requirements | Present | Partial | Missing | Coverage |
+| Domain | Specs | Requirements | Present | Partial | Missing | Coverage |
 |--------|-------|-------------|---------|---------|---------|----------|
 | Platform | 12 | 110 | 105 | 2 | 3 | 95.5% |
 | Security | 6 | 55 | 45 | 5 | 5 | 81.8% |
@@ -201,3 +201,4 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-05 | (pending) | Wave 5 executed: P2,P4,P8 | 88.3% | 3 gaps closed. SDK Sync/Refresh, runner compression, RESUME_AFTER_SEQ. |
 | 2026-07-05 | (pending) | Wave 6 executed: P3,U1,U2(UI),U3 | 89.9% | 4 gaps closed. Application CRUD UI, folder tree, transfer ownership UI, sole-owner tooltip. U4/U5/U6 blocked on backend. |
 | 2026-07-05 | (pending) | Wave 7 executed: P7 | 90.3% | SSE stream forwarding implemented in MCP watch tool. P9 blocked on api-server plugin. |
+| 2026-07-05 | (pending) | E2E validation: Kind deploy + LLM round-trip | 90.3% | All 3 components rebuilt and deployed to Kind. LLM round-trip confirmed: Hello world + 2+2=4. |
