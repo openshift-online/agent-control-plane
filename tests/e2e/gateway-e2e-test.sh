@@ -244,6 +244,109 @@ else
   skip "Session state verification" "session not created"
 fi
 
+section "9. Sandbox configuration verification"
+
+if [ -n "$CREATED_SESSION_ID" ]; then
+  # Derive sandbox pod name: "session-" + lowercased session ID (first 40 chars)
+  SBX_NAME="session-$(echo "${CREATED_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
+
+  # Wait for the sandbox pod to be running (up to 60s)
+  POD_READY=false
+  for i in $(seq 1 30); do
+    POD_PHASE=$(kubectl get pod "$SBX_NAME" -n "$TENANT" \
+      -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+    if [ "$POD_PHASE" = "Running" ]; then
+      POD_READY=true
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$POD_READY" = "true" ]; then
+    pass "Sandbox pod '${SBX_NAME}' is running"
+
+    # The control plane uploads payloads after the sandbox is ready but before
+    # starting the runner. Give it a few seconds to complete the SSH upload.
+    sleep 5
+
+    # 9a. Payload upload — agent-defined file written via SSH-over-gRPC
+    PAYLOAD_CONTENT=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+      cat /sandbox/CLAUDE.md 2>/dev/null || echo "")
+    if echo "$PAYLOAD_CONTENT" | grep -q "hello"; then
+      pass "Payload /sandbox/CLAUDE.md uploaded successfully"
+    else
+      fail "Payload /sandbox/CLAUDE.md not found or content mismatch"
+      echo "  Got: $(echo "$PAYLOAD_CONTENT" | head -c 200)"
+    fi
+
+    # 9b. Agent environment variable passed through to sandbox
+    ENV_VAL=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+      printenv ENV_NAME 2>/dev/null || echo "")
+    if [ "$ENV_VAL" = "test" ]; then
+      pass "Agent env var ENV_NAME passed through to sandbox"
+    else
+      fail "Agent env var ENV_NAME not found or wrong value (got: '${ENV_VAL}')"
+    fi
+
+    # 9c. MCP config env var patterns preserved (not auto-expanded)
+    MCP_CONTENT=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+      cat /sandbox/.mcp.json 2>/dev/null || echo "")
+    if [ -n "$MCP_CONTENT" ]; then
+      # Check that any ${...} patterns in the config were NOT replaced with
+      # empty strings or resolved values — they should survive as literals.
+      DOLLAR_BRACE_COUNT=$(echo "$MCP_CONTENT" | grep -o '\${[^}]*}' | wc -l | tr -d ' ')
+      if [ "${DOLLAR_BRACE_COUNT}" -ge 1 ]; then
+        pass "MCP config preserves \${} env var patterns (${DOLLAR_BRACE_COUNT} found)"
+      else
+        fail "MCP config env var patterns were expanded — no \${} literals remain"
+        echo "  Got: $(echo "$MCP_CONTENT" | head -c 300)"
+      fi
+    else
+      fail "Baked-in MCP config /sandbox/.mcp.json not found"
+    fi
+
+    # 9d. Claude settings baked into image match source
+    SETTINGS_ACTUAL=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+      cat /sandbox/.claude/settings.json 2>/dev/null || echo "")
+    SETTINGS_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/claude-settings.json" 2>/dev/null || echo "")
+    if [ -n "$SETTINGS_ACTUAL" ] && [ "$SETTINGS_ACTUAL" = "$SETTINGS_EXPECTED" ]; then
+      pass "Claude settings.json matches source in image"
+    elif [ -n "$SETTINGS_ACTUAL" ]; then
+      fail "Claude settings.json differs from source"
+    else
+      fail "Claude settings.json not found at /sandbox/.claude/settings.json"
+    fi
+
+    # 9e. Claude settings.local.json baked into image matches source
+    SETTINGS_LOCAL_ACTUAL=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+      cat /sandbox/.claude/settings.local.json 2>/dev/null || echo "")
+    SETTINGS_LOCAL_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/claude-settings-local.json" 2>/dev/null || echo "")
+    if [ -n "$SETTINGS_LOCAL_ACTUAL" ] && [ "$SETTINGS_LOCAL_ACTUAL" = "$SETTINGS_LOCAL_EXPECTED" ]; then
+      pass "Claude settings.local.json matches source in image"
+    elif [ -n "$SETTINGS_LOCAL_ACTUAL" ]; then
+      fail "Claude settings.local.json differs from source"
+    else
+      fail "Claude settings.local.json not found at /sandbox/.claude/settings.local.json"
+    fi
+
+    # 9f. Sandbox network policy present at /etc/openshell/policy.yaml
+    POLICY_ACTUAL=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+      cat /etc/openshell/policy.yaml 2>/dev/null || echo "")
+    POLICY_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/policy.yaml" 2>/dev/null || echo "")
+    if [ -n "$POLICY_ACTUAL" ] && [ "$POLICY_ACTUAL" = "$POLICY_EXPECTED" ]; then
+      pass "Sandbox policy.yaml matches source in image"
+    elif [ -n "$POLICY_ACTUAL" ]; then
+      fail "Sandbox policy.yaml differs from source"
+    else
+      fail "Sandbox policy.yaml not found at /etc/openshell/policy.yaml"
+    fi
+  else
+    skip "Sandbox configuration verification" "sandbox pod not ready (phase: ${POD_PHASE:-unknown})"
+  fi
+else
+  skip "Sandbox configuration verification" "session not created"
+fi
+
 section "Cleanup"
 
 if [ -n "$CREATED_SESSION_ID" ]; then

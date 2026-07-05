@@ -3,5 +3,10 @@ name: hello-world
 prompt: "Say hello world"
 providers:
   - vertex
+payloads:
+  - sandbox_path: /sandbox/CLAUDE.md
+    content: "Whenever you say hello, also tell me how to say hello in a different language."
+environment:
+  ENV_NAME: "test"
 labels:
   purpose: testing
