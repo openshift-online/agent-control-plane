@@ -1462,7 +1462,7 @@ DELETE /api/ambient/v1/credentials/{cred_id}                              soft d
 GET    /api/ambient/v1/credentials/{cred_id}/token                        fetch raw token — restricted to credential:token-reader
 ```
 
-> **Note:** `credential bind` (via `POST /role_bindings` with `scope=credential`, `credential_id`, and `project_id`) is planned but not yet implemented.
+> **Note:** `credential bind` uses `POST /role_bindings` with `scope=credential`, `credential_id`, and `project_id`.
 
 `token` is accepted on `POST` and `PATCH` but **never returned** by standard read endpoints.
 `GET .../token` is gated by `credential:token-reader`. See
@@ -1927,7 +1927,7 @@ design rationale (storage, rotation, provider serialization, migration).
 
 ## Implementation Coverage Matrix
 
-_Last updated: 2026-04-28. Use this as the authoritative index — click into component source to verify._
+_Last updated: 2026-07-05. Use this as the authoritative index — click into component source to verify._
 
 | Area | API Server | Go SDK | CLI (`acpctl`) | Notes |
 |---|---|---|---|---|
@@ -1936,9 +1936,9 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 | **Messages API — list/push/watch** | ✅ `/messages` | ✅ `PushMessage`, `ListMessages`, `WatchSessionMessages` (gRPC) | ✅ `session messages`, `session send` | Human-readable conversation in `session_messages` table |
 | **Session messages (top-level)** | ✅ `GET /session_messages` | ✅ `SessionMessages().List()` | n/a | SDK/CP-internal; used by CP to resolve max seq on restart |
 | **Events API — live SSE stream** | ✅ `/events` → runner pod SSE | ✅ `SessionAPI.StreamEvents` → `io.ReadCloser` | ✅ `session events` | Ephemeral; runner must be Running; 502 if unreachable |
-| **Events API — persisted history** | 🔲 `/events/history` | 🔲 `ListSessionEvents`, `PushSessionEvent` (gRPC) | 🔲 CLI not yet implemented | New `session_events` table with compression |
-| **Events API — compression** | 🔲 runner gRPC client compressor | 🔲 `completed_at`, `event_count` fields in `SessionEvent` | 🔲 migration pending | Context-aware accumulation; 5:1 to 20:1 compression |
-| **Events API — 33 AG-UI event types** | ✅ runners emit AG-UI types | 🔲 stored in `session_events.event_type` | 🔲 query support pending | TEXT_MESSAGE_START, TOOL_CALL_ARGS, THINKING_*, REASONING_*, etc. |
+| **Events API — persisted history** | ✅ `plugins/sessionEvents/` | ✅ `ListSessionEvents`, `PushSessionEvent` (gRPC) | ✅ `session events --history` | `session_events` table with compression schema |
+| **Events API — compression** | ✅ schema supports `completed_at`, `event_count` | ✅ `completed_at`, `event_count` fields in `SessionEvent` | ✅ fields in SDK | Runner-side compression not yet active (all events stored uncompressed) |
+| **Events API — 33 AG-UI event types** | ✅ runners emit AG-UI types | ✅ stored in `session_events.event_type` | ✅ query by event type | TEXT_MESSAGE_START, TOOL_CALL_ARGS, THINKING_*, REASONING_*, etc. |
 | **Sessions — labels/annotations** | ✅ PATCH accepts `labels`/`annotations` | ✅ fields on `Session` type; `SessionAPI.Update(patch map[string]any)` | ⚠️ no dedicated subcommand; use `acpctl get session -o json` + manual PATCH | |
 | **Sessions — workspace files** | ✅ sessions plugin; stubs empty list when no runner; 503 per-file-op | 🔲 | 🔲 `session workspace list/get/put/delete` | Requires running session for file ops |
 | **Sessions — pre-upload files** | ✅ sessions plugin; stubs empty list when no runner; 503 per-file-op | 🔲 | 🔲 `session files list/upload/delete` | S3-staged; available before session starts |
@@ -1957,7 +1957,7 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 | **RBAC — roles** | ✅ full CRUD | ✅ `RoleAPI` | ✅ `create role`, `get roles`, `get roles <id>`, `delete role` | |
 | **RBAC — role bindings** | ✅ full CRUD | ✅ `RoleBindingAPI` | ✅ `create role-binding`, `get role-bindings`, `get role-bindings <id>`, `delete role-binding` | |
 | **RBAC — scoped role_bindings queries** | ✅ agents only; 🔲 users/projects/sessions/credentials | n/a | n/a | `GET /projects/{id}/agents/{agent_id}/role_bindings` implemented; other 4 scoped endpoints not yet |
-| **Credentials — CRUD** | ✅ `plugins/credentials/` (global at `/credentials`) | ✅ `credential_api.go` + `credential_extensions.go` | ✅ `credential list/get/create/update/delete/token` | `credential bind` not yet implemented. |
+| **Credentials — CRUD** | ✅ `plugins/credentials/` (global at `/credentials`) | ✅ `credential_api.go` + `credential_extensions.go` | ✅ `credential list/get/create/update/delete/token/bind` | |
 | **Credentials — token fetch** | ✅ `GET /credentials/{cred_id}/token` | ✅ `GetToken()` in `credential_extensions.go` | ✅ `credential token <id>` | Gated by `credential:token-reader`; granted to runner SA by operator |
 | **ScheduledSessions — CRUD** | ✅ scheduledSessions plugin | ✅ `ScheduledSessionAPI.{List,Get,Create,Update,Delete,GetByName}` | ✅ `scheduled-session list/get/create/update/delete` | |
 | **ScheduledSessions — lifecycle** | ✅ suspend/resume/trigger/runs handlers | ✅ `ScheduledSessionAPI.{Suspend,Resume,Trigger,Runs}` | ✅ `scheduled-session suspend/resume/trigger/runs` | |
@@ -1968,9 +1968,9 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 | **Declarative apply** | n/a | uses SDK | ✅ `apply -f`, `apply -k` | Upsert semantics; supports inbox seeding |
 | **Declarative apply — Credential kind** | n/a | uses SDK | ✅ `apply -f credential.yaml` | Global resource; token sourced from env var in YAML |
 | **Declarative apply — ScheduledSession kind** | n/a | 🔲 | 🔲 | Planned; schedule and agent reference in YAML |
-| **Applications — CRUD** | 🔲 planned | 🔲 planned | 🔲 planned | GitOps sync binding |
-| **Applications — sync/refresh** | 🔲 planned | 🔲 planned | 🔲 planned | Trigger sync or refresh operations |
-| **Applications — status** | 🔲 planned | 🔲 planned | 🔲 planned | Per-resource sync/health detail |
+| **Applications — CRUD** | ✅ `plugins/applications/` | ✅ `ApplicationAPI.{Get,List,Create,Update,Delete}` | ✅ `application list/get/create/update/delete` | GitOps sync binding |
+| **Applications — sync/refresh** | ✅ `sync`/`refresh` handlers | ✅ `ApplicationAPI.{Sync,Refresh}` | ⚠️ `application sync/refresh` (stub implementations) | Sync engine partial — only Agent kind synced |
+| **Applications — status** | ⚠️ status on main GET only | ✅ status fields in `Application` type | ✅ `application get` shows status | Dedicated `/status` endpoint not yet implemented |
 
 ### Labels/Annotations — SDK Ergonomics Gap
 
@@ -1985,7 +1985,7 @@ All Kinds with `labels`/`annotations` store them as JSON strings in the DB (`*st
 | Command | Status | Path to close |
 |---|---|---|
 | Project/Agent/Session label subcommands | 🔲 no `acpctl label`/`acpctl annotate` | add typed label helpers to SDK first, then CLI |
-| `acpctl credential bind` | 🔲 not implemented | `POST /role_bindings` with `scope=credential`; global migration complete, command not yet written |
+| `acpctl credential bind` | ✅ implemented | `POST /role_bindings` with `scope=credential`; global migration complete |
 | Session workspace/files/git/repos subcommands | 🔲 planned | see Session Operations table above |
 
 

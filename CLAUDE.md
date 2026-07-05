@@ -17,7 +17,7 @@ Kubernetes-native AI automation platform that orchestrates agentic sessions thro
 - `components/manifests/` - Kustomize-based deployment manifests and overlays
 - `docs/` - Astro Starlight documentation site
 - `specs/` - Desired state of the system ([platform](specs/platform/), [security](specs/security/), [ui](specs/ui/), [standards](specs/standards/))
-- `skills/` - Agent skills: [spec](skills/plan/spec), [full-stack-pipeline](skills/build/full-stack-pipeline), [dev-cluster](skills/build/dev-cluster), [pr-test](skills/test/pr-test), [deploy-cluster](skills/deploy/deploy-cluster), [review](skills/review/acp-review-guidance), [tooling](skills/tooling/)
+- `skills/` - Agent skills: [reconcile](skills/build/reconcile), [spec](skills/plan/spec), [full-stack-pipeline](skills/build/full-stack-pipeline), [dev-cluster](skills/build/dev-cluster), [pr-test](skills/test/pr-test), [deploy-cluster](skills/deploy/deploy-cluster), [review](skills/review/acp-review-guidance), [tooling](skills/tooling/)
 - `apm.yml` - APM manifest declaring upstream skill dependencies (fleet-sdlc)
 - `.claude/skills/` - APM-installed upstream skills (gitignored, run `apm install`)
 - `.claude/commands/` - APM-installed upstream commands (gitignored)
@@ -38,15 +38,21 @@ Pod Runs AI Agent → Results Stream to API Server → UI Displays Progress
 
 ## SDLC Workflow
 
-The development lifecycle follows 5 steps, each backed by a skill:
+The development lifecycle follows 6 steps, each backed by a skill:
 
 ```
+0. /reconcile             — autonomous spec-to-code reconciliation (build/reconcile)
 1. /spec                  — define desired state (plan/spec)
 2. /full-stack-pipeline   — build the feature (build/full-stack-pipeline)
 3. /dev-cluster           — test locally in Kind (build/dev-cluster)
 4. /pr-test               — deploy PR to OpenShift (test/pr-test)
 5. /deploy-cluster        — ship to production (deploy/deploy-cluster)
 ```
+
+`/reconcile` is the top-level entrypoint. It reads `skills/RECONCILE.md` for checkpoint
+state (coverage summary, gap table, wave plan), then executes waves to close gaps.
+Idempotent: safe to run repeatedly. See `skills/RECONCILE.md` for current spec coverage
+and the full gap table. Use individual skills for targeted work.
 
 Support skills available at any point:
 - `/acp-review-guidance` — PR review checklist
