@@ -90,7 +90,7 @@ def write_gemini_settings(
     with open(settings_path, "w") as f:
         json.dump(existing, f, indent=2)
 
-    # Restrict permissions — settings may contain expanded credentials
+    # Restrict permissions — settings may contain credential references
     settings_path.chmod(0o600)
 
     abs_path = str(settings_path.resolve())

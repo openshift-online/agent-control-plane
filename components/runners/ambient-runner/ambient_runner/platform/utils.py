@@ -254,23 +254,6 @@ def parse_owner_repo(url: str) -> tuple[str, str, str]:
     return "", "", host
 
 
-def expand_env_vars(value: Any) -> Any:
-    """Recursively expand ${VAR} and ${VAR:-default} patterns in config values."""
-    if isinstance(value, str):
-        pattern = r"\$\{([^}:]+)(?::-([^}]*))?\}"
-
-        def replace_var(match):
-            var_name = match.group(1)
-            default_val = match.group(2) if match.group(2) is not None else ""
-            return os.environ.get(var_name, default_val)
-
-        return re.sub(pattern, replace_var, value)
-    elif isinstance(value, dict):
-        return {k: expand_env_vars(v) for k, v in value.items()}
-    elif isinstance(value, list):
-        return [expand_env_vars(item) for item in value]
-    return value
-
 
 async def run_cmd(
     cmd: list,

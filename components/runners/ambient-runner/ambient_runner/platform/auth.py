@@ -636,10 +636,15 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
 
 
 def clear_runtime_credentials() -> None:
+    # TODO: remove this entire function once OpenShell gateway manages all credential lifecycle
     """Remove sensitive credentials from environment after turn completes.
 
     Clears fixed credential keys, dynamically-injected MCP_* env vars,
     and token files. Google credential files are preserved (issue #1222).
+
+    Env vars whose values start with ``openshell:resolve:env:`` are
+    lazy-resolution tokens owned by the OpenShell gateway.  The backend
+    cannot repopulate them, so they are preserved across turns.
     """
     cleared = []
     for key in [
@@ -652,6 +657,9 @@ def clear_runtime_credentials() -> None:
         "CODERABBIT_API_KEY",
         "KUBECONFIG",
     ]:
+        val = os.environ.get(key, "")
+        if val.startswith("openshell:resolve:env:"):
+            continue
         if os.environ.pop(key, None) is not None:
             cleared.append(key)
 
