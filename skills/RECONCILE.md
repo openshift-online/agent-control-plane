@@ -49,19 +49,19 @@ skills/
 
 ## Reconciliation State
 
-**Last analyzed**: 2026-07-05 (divergences resolved)
+**Last analyzed**: 2026-07-05 (Wave 2 + Wave 4 executed)
 **Spec corpus**: 29 specs across 4 domains
-**Codebase commit**: 999f1f06 (main)
+**Codebase commit**: feat/reconcile-skill-and-spec-alignment branch
 
 ### Coverage Summary
 
  < /dev/null |  Domain | Specs | Requirements | Present | Partial | Missing | Coverage |
 |--------|-------|-------------|---------|---------|---------|----------|
-| Platform | 12 | 110 | 97 | 5 | 8 | 88.2% |
-| Security | 6 | 55 | 38 | 7 | 10 | 69.1% |
-| UI | 7 | 70 | 56 | 8 | 6 | 80.0% |
+| Platform | 12 | 110 | 101 | 4 | 5 | 91.8% |
+| Security | 6 | 55 | 45 | 5 | 5 | 81.8% |
+| UI | 7 | 70 | 57 | 8 | 5 | 81.4% |
 | CLI | 1 | 13 | 13 | 0 | 0 | 100% |
-| **TOTAL** | **29** | **248** | **204** | **20** | **24** | **82.3%** |
+| **TOTAL** | **29** | **248** | **216** | **17** | **15** | **87.1%** |
 
 ### Spec Dependency Order
 
@@ -93,14 +93,14 @@ Severity: `blocker` > `critical` > `major` > `minor`
 
 | ID | Spec | Requirement | Layer | Status | Severity | Notes |
 |----|------|-------------|-------|--------|----------|-------|
-| S1 | identity-boundaries | Per-session RBAC Roles with resourceNames | CP | missing | blocker | Sessions can read other sessions' secrets in same namespace. No K8s Role/RoleBinding scoping per session SA. |
-| S2 | credential-binding | credential:token-reader grant lifecycle | CP | missing | blocker | CP doesn't create/revoke `credential:token-reader` RoleBindings per session. Credentials resolved via env vars instead. |
-| S3 | identity-boundaries | NetworkPolicy session isolation | CP | missing | blocker | No pod-to-pod network isolation between sessions in same namespace. |
-| S4 | gateway-rbac | Platform-info endpoint authentication | BE | missing | critical | `/api/ambient/v1/platform-info` uses pre-auth middleware, bypasses JWT. Spec now requires authentication (401 for unauthenticated). |
-| S5 | identity-boundaries | Cluster-internal caller validation | BE | missing | critical | No mechanism prevents external callers from reaching runner credential endpoints with valid token. |
+| S1 | identity-boundaries | Per-session RBAC Roles with resourceNames | CP | **done** | blocker | `ensureSessionRole` creates Role+RoleBinding with `resourceNames` scoping per session SA. |
+| S2 | credential-binding | credential:token-reader grant lifecycle | CP | **done** | blocker | Already implemented: `grantTokenReaderBindings`/`revokeTokenReaderBindings` in reconciler. |
+| S3 | identity-boundaries | NetworkPolicy session isolation | CP | **done** | blocker | `ensureSessionNetworkPolicy` creates per-session NetworkPolicy restricting ingress to CP + self only. |
+| S4 | gateway-rbac | Platform-info endpoint authentication | BE | **done** | critical | Converted from `RegisterPreAuthMiddleware` to `RegisterRoutes` with `AuthenticateAccountJWT`. |
+| S5 | identity-boundaries | Cluster-internal caller validation | BE | **done** | critical | `GetToken` handler now requires `IsServiceCaller` or `IsGlobalAdmin`. |
 | S6 | sso-authentication | K8s Impersonation headers | BE | missing | major | Backend doesn't implement `Impersonate-User`/`Impersonate-Group` headers. Deferred since API server uses PostgreSQL not K8s CRs. |
-| S7 | credential-binding | Duplicate binding prevention at API level | BE | missing | major | Spec requires rejecting duplicate bindings at same scope for same provider. No validation in RoleBinding handler. |
-| S8 | gateway-rbac | Role-to-tier enforcement in handlers | BE | partial | major | `TierResolver` exists with correct tiers but not integrated into handler-level access enforcement. |
+| S7 | credential-binding | Duplicate binding prevention at API level | BE | **done** | major | Already implemented: UNIQUE index `idx_role_bindings_unique` + `HandleCreateError` returns 409 Conflict. |
+| S8 | gateway-rbac | Role-to-tier enforcement in handlers | BE | **done** | major | Shared `CheckEditorTier`/`CheckAdminTier` in `pkg/gateway/`. Integrated into agent, session, scheduled session handlers. |
 | S9 | sso-authentication | API key dual-path (JWT + TokenReview) | BE | partial | major | JWT auth present. K8s TokenReview fallback for SA tokens not implemented. |
 | S10 | rbac-enforcement | gRPC watch idle timeout | BE | partial | minor | gRPC interceptor populates AuthResult but no idle timeout for watch streams. |
 | S11 | sso-authentication | E2E test auth helper | Tests | partial | minor | Keycloak client_credentials flow exists in CLI. No E2E test helper using Kind Keycloak. |
@@ -114,19 +114,19 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | P2 | data-model | Application CLI sync/refresh commands | CLI | partial | major | `sync` does no-op PATCH. `refresh` returns current state without git fetch. |
 | P3 | data-model | Application frontend UI | FE | missing | major | No pages, adapters, queries, or domain types for Application entity. |
 | P4 | data-model | SessionEvent runner-side compression | Runner | missing | major | Schema/API/gRPC/SDK support compression fields. Runner doesn't compress -- all events stored with event_count=1. |
-| P5 | data-model | Scoped RoleBinding query endpoints | BE | missing | major | Only agent-scoped list exists. Missing: by-user, by-project, by-session, by-credential (4 endpoints). |
-| P6 | data-model | GET /applications/{id}/status endpoint | BE | missing | major | Spec defines dedicated status endpoint. Status only available on main GET. |
+| P5 | data-model | Scoped RoleBinding query endpoints | BE | **done** | major | 4 new scoped endpoints: `/users/{id}/role_bindings`, `/projects/{id}/role_bindings`, `/sessions/{id}/role_bindings`, `/credentials/{cred_id}/role_bindings`. |
+| P6 | data-model | GET /applications/{id}/status endpoint | BE | **done** | major | Added `GetStatus` handler + `ApplicationStatusResponse` presenter. Also fixed `LastSyncedAt` in main presenter. |
 | P7 | mcp-server | watch_session_messages SSE forwarding | MCP | partial | major | Tool returns subscription_id. Actual SSE stream forwarding is stubbed (`_ = c`). |
 | P8 | control-plane | RESUME_AFTER_SEQ env var | CP | missing | minor | Spec defines it for session restart. Not found in codebase. |
 | P9 | mcp-server | MCP HTTP endpoint in api-server | BE | partial | minor | `tokenexchange/` dir exists in ambient-mcp. Proxy route registration in api-server unverified. |
-| P10 | scheduled-session | Idempotency UNIQUE constraint | BE | partial | minor | Fields set on created session. UNIQUE(source_scheduled_session_id, scheduled_for) constraint in migration unverified. |
+| P10 | scheduled-session | Idempotency UNIQUE constraint | BE | **done** | minor | Verified: UNIQUE index `idx_sessions_schedule_idempotency` exists in migration 202606230002. |
 
 ### UI Gaps
 
 | ID | Spec | Requirement | Layer | Status | Severity | Notes |
 |----|------|-------------|-------|--------|----------|-------|
 | U1 | views | Virtual folder tree (ui/path annotation) | FE | missing | major | Annotation key registered but no tree panel component exists. |
-| U2 | project-sharing | Ownership transfer | FE+BE | missing | major | No `POST /projects/{id}/transfer-ownership` endpoint or UI action. |
+| U2 | project-sharing | Ownership transfer | BE | **done** | major | Already implemented: `TransferOwnership` handler with advisory lock, atomic transaction, downgrade caller. UI flow still missing. |
 | U3 | project-sharing | Self-removal ("Leave project") | FE | missing | major | No leave-project flow in collaborator manager. |
 | U4 | views | Settings: API Keys tab | FE | missing | minor | No API key management UI in settings page. |
 | U5 | views | Settings: Feature Flags tab | FE | missing | minor | `use-feature-flags-admin.ts` hook exists. No UI tab. |
@@ -196,3 +196,5 @@ Gaps grouped by execution wave. Each wave gates the next.
 |------|--------|--------|----------|-------|
 | 2026-07-05 | 999f1f06 | Initial dry-run gap analysis | 82.3% | 29 specs, 248 requirements, 24 missing, 20 partial |
 | 2026-07-05 | (pending) | Divergences D1/D2/D3 resolved -- specs updated | 82.3% | gateway-rbac-policy.spec.md renamed to OpenShell RBAC, data-model matrix corrected |
+| 2026-07-05 | (pending) | Wave 2 executed: P5, P6, U2(BE) | 84.5% | 3 API gaps closed. Bug fix: agents/subresource_handler.go scope_id→agent_id |
+| 2026-07-05 | (pending) | Wave 4 executed: S1,S2,S3,S4,S5,S7,S8,P10 | 87.1% | 8 gaps closed (5 implemented, 3 already done). P1,S6 deferred. |

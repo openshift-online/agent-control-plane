@@ -401,6 +401,90 @@ func (h roleBindingHandler) List(w http.ResponseWriter, r *http.Request) {
 	handlers.HandleList(w, r, cfg)
 }
 
+func (h roleBindingHandler) ListByUser(w http.ResponseWriter, r *http.Request) {
+	h.listByScope(w, r, "user_id", mux.Vars(r)["id"])
+}
+
+func (h roleBindingHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
+	h.listByScope(w, r, "project_id", mux.Vars(r)["id"])
+}
+
+func (h roleBindingHandler) ListBySession(w http.ResponseWriter, r *http.Request) {
+	h.listByScope(w, r, "session_id", mux.Vars(r)["id"])
+}
+
+func (h roleBindingHandler) ListByCredential(w http.ResponseWriter, r *http.Request) {
+	h.listByScope(w, r, "credential_id", mux.Vars(r)["cred_id"])
+}
+
+func (h roleBindingHandler) listByScope(w http.ResponseWriter, r *http.Request, column, scopeID string) {
+	cfg := &handlers.HandlerConfig{
+		Action: func() (interface{}, *errors.ServiceError) {
+			ctx := r.Context()
+			listArgs := services.NewListArguments(r.URL.Query())
+
+			scopeFilter, valErr := pkgrbac.TSLEqual(column, scopeID)
+			if valErr != nil {
+				return nil, errors.Validation("invalid id")
+			}
+			pkgrbac.PrependTSLFilter(listArgs, scopeFilter)
+
+			authResult := pkgrbac.GetAuthResult(ctx)
+			if authResult != nil && !authResult.IsGlobalAdmin {
+				username := auth.GetUsernameFromContext(ctx)
+				userFilter, err := pkgrbac.TSLEqualUsername("user_id", username)
+				if err != nil {
+					return nil, errors.Forbidden("invalid username")
+				}
+				visibilityFilter := userFilter
+
+				if len(authResult.ProjectIDs) > 0 {
+					projFilter, err := pkgrbac.TSLIn("project_id", authResult.ProjectIDs)
+					if err != nil {
+						return nil, errors.Forbidden("invalid project id")
+					}
+					visibilityFilter = pkgrbac.TSLOr(visibilityFilter, projFilter)
+				}
+
+				if len(authResult.CredentialIDs) > 0 {
+					credFilter, err := pkgrbac.TSLIn("credential_id", authResult.CredentialIDs)
+					if err != nil {
+						return nil, errors.Forbidden("invalid credential id")
+					}
+					visibilityFilter = pkgrbac.TSLOr(visibilityFilter, credFilter)
+				}
+
+				pkgrbac.AppendTSLFilter(listArgs, visibilityFilter)
+			}
+
+			var roleBindings []RoleBinding
+			paging, err := h.generic.List(ctx, "id", listArgs, &roleBindings)
+			if err != nil {
+				return nil, err
+			}
+			roleBindingList := openapi.RoleBindingList{
+				Kind:  "RoleBindingList",
+				Page:  int32(paging.Page),
+				Size:  int32(paging.Size),
+				Total: int32(paging.Total),
+				Items: []openapi.RoleBinding{},
+			}
+			for _, rb := range roleBindings {
+				roleBindingList.Items = append(roleBindingList.Items, PresentRoleBinding(&rb))
+			}
+			if listArgs.Fields != nil {
+				filteredItems, err := presenters.SliceFilter(listArgs.Fields, roleBindingList.Items)
+				if err != nil {
+					return nil, err
+				}
+				return filteredItems, nil
+			}
+			return roleBindingList, nil
+		},
+	}
+	handlers.HandleList(w, r, cfg)
+}
+
 func (h roleBindingHandler) Get(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {

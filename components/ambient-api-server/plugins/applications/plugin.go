@@ -58,6 +58,7 @@ func init() {
 		appsRouter.HandleFunc("/{app_id}", applicationHandler.Get).Methods(http.MethodGet)
 		appsRouter.HandleFunc("/{app_id}", applicationHandler.Patch).Methods(http.MethodPatch)
 		appsRouter.HandleFunc("/{app_id}", applicationHandler.Delete).Methods(http.MethodDelete)
+		appsRouter.HandleFunc("/{app_id}/status", applicationHandler.GetStatus).Methods(http.MethodGet)
 		appsRouter.HandleFunc("/{app_id}/sync", applicationHandler.Sync).Methods(http.MethodPost)
 		appsRouter.HandleFunc("/{app_id}/refresh", applicationHandler.Refresh).Methods(http.MethodPost)
 		appsRouter.Use(authMiddleware.AuthenticateAccountJWT)

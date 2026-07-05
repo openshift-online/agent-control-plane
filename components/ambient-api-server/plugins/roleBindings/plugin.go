@@ -63,6 +63,26 @@ func init() {
 		roleBindingsRouter.HandleFunc("/{id}", roleBindingHandler.Delete).Methods(http.MethodDelete)
 		roleBindingsRouter.Use(authMiddleware.AuthenticateAccountJWT)
 		roleBindingsRouter.Use(authzMiddleware.AuthorizeApi)
+
+		usersRBRouter := apiV1Router.PathPrefix("/users").Subrouter()
+		usersRBRouter.HandleFunc("/{id}/role_bindings", roleBindingHandler.ListByUser).Methods(http.MethodGet)
+		usersRBRouter.Use(authMiddleware.AuthenticateAccountJWT)
+		usersRBRouter.Use(authzMiddleware.AuthorizeApi)
+
+		projectsRBRouter := apiV1Router.PathPrefix("/projects").Subrouter()
+		projectsRBRouter.HandleFunc("/{id}/role_bindings", roleBindingHandler.ListByProject).Methods(http.MethodGet)
+		projectsRBRouter.Use(authMiddleware.AuthenticateAccountJWT)
+		projectsRBRouter.Use(authzMiddleware.AuthorizeApi)
+
+		sessionsRBRouter := apiV1Router.PathPrefix("/sessions").Subrouter()
+		sessionsRBRouter.HandleFunc("/{id}/role_bindings", roleBindingHandler.ListBySession).Methods(http.MethodGet)
+		sessionsRBRouter.Use(authMiddleware.AuthenticateAccountJWT)
+		sessionsRBRouter.Use(authzMiddleware.AuthorizeApi)
+
+		credentialsRBRouter := apiV1Router.PathPrefix("/credentials").Subrouter()
+		credentialsRBRouter.HandleFunc("/{cred_id}/role_bindings", roleBindingHandler.ListByCredential).Methods(http.MethodGet)
+		credentialsRBRouter.Use(authMiddleware.AuthenticateAccountJWT)
+		credentialsRBRouter.Use(authzMiddleware.AuthorizeApi)
 	})
 
 	pkgserver.RegisterController("RoleBindings", func(manager *controllers.KindControllerManager, services pkgserver.ServicesInterface) {

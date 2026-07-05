@@ -209,6 +209,21 @@ func (h applicationHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	handlers.HandleGet(w, r, cfg)
 }
 
+func (h applicationHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
+	cfg := &handlers.HandlerConfig{
+		Action: func() (interface{}, *errors.ServiceError) {
+			id := mux.Vars(r)["app_id"]
+			ctx := r.Context()
+			app, err := h.application.Get(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			return PresentApplicationStatus(app), nil
+		},
+	}
+	handlers.HandleGet(w, r, cfg)
+}
+
 func (h applicationHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {

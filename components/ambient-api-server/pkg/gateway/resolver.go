@@ -1,9 +1,14 @@
 package gateway
 
 import (
+	"context"
 	"sync"
 
 	"github.com/golang/glog"
+
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
+	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 )
 
 var (
@@ -11,8 +16,6 @@ var (
 	resolverOnce   sync.Once
 )
 
-// GetTierResolver returns the singleton TierResolver instance.
-// Initialized once at first call.
 func GetTierResolver() *TierResolver {
 	resolverOnce.Do(func() {
 		var err error
@@ -23,4 +26,46 @@ func GetTierResolver() *TierResolver {
 		}
 	})
 	return globalResolver
+}
+
+func CheckEditorTier(ctx context.Context, projectID string) *errors.ServiceError {
+	username := auth.GetUsernameFromContext(ctx)
+	if username == "" {
+		return errors.Unauthenticated("Username required for tier resolution")
+	}
+
+	tier := GetTierResolver().ResolveTier(ctx, username, projectID)
+
+	if tier == TierNone {
+		authResult := rbac.GetAuthResult(ctx)
+		if rbac.IsProjectAuthorized(authResult, projectID) {
+			return nil
+		}
+	}
+
+	if tier == TierViewer || tier == TierNone {
+		return errors.Forbidden("This operation requires Editor or Admin tier access")
+	}
+	return nil
+}
+
+func CheckAdminTier(ctx context.Context, projectID string) *errors.ServiceError {
+	username := auth.GetUsernameFromContext(ctx)
+	if username == "" {
+		return errors.Unauthenticated("Username required for tier resolution")
+	}
+
+	tier := GetTierResolver().ResolveTier(ctx, username, projectID)
+
+	if tier == TierNone {
+		authResult := rbac.GetAuthResult(ctx)
+		if authResult != nil && authResult.IsGlobalAdmin {
+			return nil
+		}
+	}
+
+	if tier != TierAdmin {
+		return errors.Forbidden("This operation requires Admin tier access")
+	}
+	return nil
 }

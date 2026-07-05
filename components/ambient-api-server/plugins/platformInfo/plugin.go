@@ -3,12 +3,12 @@ package platformInfo
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
+	"github.com/gorilla/mux"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
+	"github.com/openshift-online/rh-trex-ai/pkg/environments"
 	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
 )
-
-const platformInfoPath = "/api/ambient/v1/platform-info"
 
 var responseBytes []byte
 
@@ -17,19 +17,17 @@ func init() {
 		GatewayMode: true,
 	})
 
-	// Pre-auth middleware — bypasses JWT validation, runs before RBAC
-	pkgserver.RegisterPreAuthMiddleware(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == http.MethodGet &&
-				strings.TrimSuffix(r.URL.Path, "/") == platformInfoPath {
-				w.Header().Set("Content-Type", "application/json")
-				w.Header().Set("Cache-Control", "public, max-age=300") // 5 min
-				_, _ = w.Write(responseBytes)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
+	pkgserver.RegisterRoutes("platformInfo", func(apiV1Router *mux.Router, _ pkgserver.ServicesInterface, authMiddleware environments.JWTMiddleware, _ auth.AuthorizationMiddleware) {
+		router := apiV1Router.PathPrefix("/platform-info").Subrouter()
+		router.HandleFunc("", handleGetPlatformInfo).Methods(http.MethodGet)
+		router.Use(authMiddleware.AuthenticateAccountJWT)
 	})
+}
+
+func handleGetPlatformInfo(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	_, _ = w.Write(responseBytes)
 }
 
 type platformInfoResponse struct {

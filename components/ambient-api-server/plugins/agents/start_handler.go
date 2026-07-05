@@ -14,7 +14,6 @@ import (
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/gateway"
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/ambient-code/platform/components/ambient-api-server/plugins/inbox"
 	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
@@ -55,25 +54,8 @@ func (h *startHandler) Start(w http.ResponseWriter, r *http.Request) {
 	projectID := mux.Vars(r)["id"]
 	agentID := mux.Vars(r)["agent_id"]
 
-	username := auth.GetUsernameFromContext(ctx)
-	if username == "" {
-		handlers.HandleError(ctx, w, pkgerrors.Unauthenticated(
-			"Username required for tier resolution"))
-		return
-	}
-
-	tier := gateway.GetTierResolver().ResolveTier(ctx, username, projectID)
-
-	if tier == gateway.TierNone {
-		authResult := rbac.GetAuthResult(ctx)
-		if rbac.IsProjectAuthorized(authResult, projectID) {
-			tier = gateway.TierEditor
-		}
-	}
-
-	if tier == gateway.TierViewer || tier == gateway.TierNone {
-		handlers.HandleError(ctx, w, pkgerrors.Forbidden(
-			"Session creation requires Editor or Admin tier access"))
+	if tierErr := gateway.CheckEditorTier(ctx, projectID); tierErr != nil {
+		handlers.HandleError(ctx, w, tierErr)
 		return
 	}
 

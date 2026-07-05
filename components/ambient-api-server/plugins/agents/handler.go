@@ -8,6 +8,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/gateway"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
@@ -40,6 +41,9 @@ func (h agentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
 			projectID := mux.Vars(r)["id"]
+			if err := gateway.CheckEditorTier(ctx, projectID); err != nil {
+				return nil, err
+			}
 			agentModel := ConvertAgent(agent)
 			agentModel.ProjectId = projectID
 			agentModel, err := h.agent.Create(ctx, agentModel)
@@ -63,6 +67,9 @@ func (h agentHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
 			projectID := mux.Vars(r)["id"]
+			if err := gateway.CheckEditorTier(ctx, projectID); err != nil {
+				return nil, err
+			}
 			id := mux.Vars(r)["agent_id"]
 			found, err := h.agent.Get(ctx, id)
 			if err != nil {
@@ -227,8 +234,11 @@ func (h agentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
 			projectID := mux.Vars(r)["id"]
-			id := mux.Vars(r)["agent_id"]
 			ctx := r.Context()
+			if err := gateway.CheckEditorTier(ctx, projectID); err != nil {
+				return nil, err
+			}
+			id := mux.Vars(r)["agent_id"]
 			agent, getErr := h.agent.Get(ctx, id)
 			if getErr != nil {
 				return nil, getErr
