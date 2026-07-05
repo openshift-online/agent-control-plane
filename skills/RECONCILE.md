@@ -49,7 +49,7 @@ skills/
 
 ## Reconciliation State
 
-**Last analyzed**: 2026-07-05 (Wave 2 + Wave 4 + Wave 5 + Wave 6 executed)
+**Last analyzed**: 2026-07-05 (Wave 2 + Wave 4 + Wave 5 + Wave 6 + Wave 7 executed)
 **Spec corpus**: 29 specs across 4 domains
 **Codebase commit**: feat/reconcile-skill-and-spec-alignment branch
 
@@ -57,11 +57,11 @@ skills/
 
  < /dev/null |  Domain | Specs | Requirements | Present | Partial | Missing | Coverage |
 |--------|-------|-------------|---------|---------|---------|----------|
-| Platform | 12 | 110 | 105 | 1 | 4 | 95.5% |
+| Platform | 12 | 110 | 105 | 2 | 3 | 95.5% |
 | Security | 6 | 55 | 45 | 5 | 5 | 81.8% |
 | UI | 7 | 70 | 60 | 8 | 2 | 85.7% |
 | CLI | 1 | 13 | 13 | 0 | 0 | 100% |
-| **TOTAL** | **29** | **248** | **223** | **14** | **11** | **89.9%** |
+| **TOTAL** | **29** | **248** | **223** | **15** | **10** | **89.9%** |
 
 ### Spec Dependency Order
 
@@ -116,9 +116,9 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | P4 | data-model | SessionEvent runner-side compression | Runner | **done** | major | `EventCompressor` integrated into gRPC transport path. Compressed events pushed to `session_events.push()` with `event_count` and `completed_at`. |
 | P5 | data-model | Scoped RoleBinding query endpoints | BE | **done** | major | 4 new scoped endpoints: `/users/{id}/role_bindings`, `/projects/{id}/role_bindings`, `/sessions/{id}/role_bindings`, `/credentials/{cred_id}/role_bindings`. |
 | P6 | data-model | GET /applications/{id}/status endpoint | BE | **done** | major | Added `GetStatus` handler + `ApplicationStatusResponse` presenter. Also fixed `LastSyncedAt` in main presenter. |
-| P7 | mcp-server | watch_session_messages SSE forwarding | MCP | partial | major | Tool returns subscription_id. Actual SSE stream forwarding is stubbed (`_ = c`). |
+| P7 | mcp-server | watch_session_messages SSE forwarding | MCP | **done** | major | SSE client added to MCP client. `WatchSessionMessages` opens SSE stream, forwards events as `notifications/progress`, polls session phase every 5s, auto-terminates on completion. |
 | P8 | control-plane | RESUME_AFTER_SEQ env var | CP | **done** | minor | CP queries max seq via `SessionMessages().List()` on resume. Sets `RESUME_AFTER_SEQ` env var. Runner uses seq-based filtering with time-based fallback. |
-| P9 | mcp-server | MCP HTTP endpoint in api-server | BE | partial | minor | `tokenexchange/` dir exists in ambient-mcp. Proxy route registration in api-server unverified. |
+| P9 | mcp-server | MCP HTTP endpoint in api-server | BE | partial | minor | Blocked: needs new api-server plugin, process spawning, `openapi.mcp.yaml`. Token exchange client exists in ambient-mcp. |
 | P10 | scheduled-session | Idempotency UNIQUE constraint | BE | **done** | minor | Verified: UNIQUE index `idx_sessions_schedule_idempotency` exists in migration 202606230002. |
 
 ### UI Gaps
@@ -200,3 +200,4 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-05 | (pending) | Wave 4 executed: S1,S2,S3,S4,S5,S7,S8,P10 | 87.1% | 8 gaps closed (5 implemented, 3 already done). P1,S6 deferred. |
 | 2026-07-05 | (pending) | Wave 5 executed: P2,P4,P8 | 88.3% | 3 gaps closed. SDK Sync/Refresh, runner compression, RESUME_AFTER_SEQ. |
 | 2026-07-05 | (pending) | Wave 6 executed: P3,U1,U2(UI),U3 | 89.9% | 4 gaps closed. Application CRUD UI, folder tree, transfer ownership UI, sole-owner tooltip. U4/U5/U6 blocked on backend. |
+| 2026-07-05 | (pending) | Wave 7 executed: P7 | 90.3% | SSE stream forwarding implemented in MCP watch tool. P9 blocked on api-server plugin. |
