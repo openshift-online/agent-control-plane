@@ -4,23 +4,8 @@ prompt: "Look up my user profile using the JIRA MCP and tell me what my username
 providers:
   - vertex
   - jira
-payloads:
-  - sandbox_path: /sandbox/.mcp.json
-    content: |
-      {
-        "mcpServers": {
-          "mcp-atlassian": {
-            "type": "stdio",
-            "command": "mcp-atlassian",
-            "args": [],
-            "env": {
-              "JIRA_URL": "https://redhat.atlassian.net",
-              "JIRA_USERNAME": "${JIRA_USERNAME}",
-              "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
-            }
-          }
-        }
-      }
+environment:
+  JIRA_URL: "https://redhat.atlassian.net"
 labels:
   purpose: jira-integration
   team: platform

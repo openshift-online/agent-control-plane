@@ -118,6 +118,7 @@ type resource struct {
 	Inbox       []inboxSeed       `yaml:"inbox"`
 	Providers   []string          `yaml:"providers"`
 	Payloads    []payloadDecl     `yaml:"payloads"`
+	Environment map[string]string `yaml:"environment"`
 	Provider    string            `yaml:"provider"`
 	Token       string            `yaml:"token"`
 	URL         string            `yaml:"url"`
@@ -695,6 +696,9 @@ func applyAgent(ctx context.Context, client *sdkclient.Client, doc resource, pro
 		if len(doc.Payloads) > 0 {
 			builder = builder.Payloads(toSDKPayloads(doc.Payloads))
 		}
+		if len(doc.Environment) > 0 {
+			builder = builder.Environment(doc.Environment)
+		}
 		pa, buildErr := builder.Build()
 		if buildErr != nil {
 			return applyResult{}, buildErr
@@ -745,6 +749,9 @@ func buildAgentPatch(existing *sdktypes.Agent, doc resource) map[string]any {
 	}
 	if len(doc.Payloads) > 0 {
 		patch["payloads"] = toSDKPayloads(doc.Payloads)
+	}
+	if len(doc.Environment) > 0 {
+		patch["environment"] = doc.Environment
 	}
 	if len(doc.Labels) > 0 {
 		patch["labels"] = marshalStringMap(doc.Labels)
@@ -1000,6 +1007,12 @@ func strategicMerge(base, patch resource) resource {
 	}
 	if len(patch.Payloads) > 0 {
 		base.Payloads = patch.Payloads
+	}
+	for k, v := range patch.Environment {
+		if base.Environment == nil {
+			base.Environment = make(map[string]string)
+		}
+		base.Environment[k] = v
 	}
 	for k, v := range patch.Labels {
 		if base.Labels == nil {
