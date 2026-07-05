@@ -699,7 +699,10 @@ class ClaudeBridge(PlatformBridge):
         Called when the user changes so .mcp.json env blocks (e.g.,
         ${JIRA_API_TOKEN}) are re-expanded with the new user's credentials.
         """
-        from ambient_runner.bridges.claude.mcp import build_allowed_tools, build_mcp_servers
+        from ambient_runner.bridges.claude.mcp import (
+            build_allowed_tools,
+            build_mcp_servers,
+        )
 
         self._mcp_servers = build_mcp_servers(self._context, self._cwd_path, self._obs)
         self._allowed_tools = build_allowed_tools(self._mcp_servers)

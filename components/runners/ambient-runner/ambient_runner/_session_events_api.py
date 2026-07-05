@@ -216,7 +216,9 @@ class _PushEventRequest:
         if self.payload:
             out += _encode_string(3, self.payload)
         if self.completed_at_seconds or self.completed_at_nanos:
-            out += _encode_timestamp(4, self.completed_at_seconds, self.completed_at_nanos)
+            out += _encode_timestamp(
+                4, self.completed_at_seconds, self.completed_at_nanos
+            )
         if self.event_count:
             out += _encode_int32(5, self.event_count)
         return out
@@ -232,8 +234,14 @@ class _TimestampLike:
 
 class _SessionEventProto:
     __slots__ = (
-        "id", "session_id", "seq", "event_type", "payload",
-        "created_at", "completed_at", "event_count",
+        "id",
+        "session_id",
+        "seq",
+        "event_type",
+        "payload",
+        "created_at",
+        "completed_at",
+        "event_count",
     )
 
     def __init__(self) -> None:

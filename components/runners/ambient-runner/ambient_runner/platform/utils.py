@@ -254,7 +254,6 @@ def parse_owner_repo(url: str) -> tuple[str, str, str]:
     return "", "", host
 
 
-
 async def run_cmd(
     cmd: list,
     cwd: str | None = None,

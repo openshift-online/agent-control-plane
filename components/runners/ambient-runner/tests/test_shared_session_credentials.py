@@ -109,7 +109,6 @@ class TestSanitizeUserContext:
         assert uname == ""
 
 
-
 # ---------------------------------------------------------------------------
 # Token file lifecycle (mid-run refresh support)
 # ---------------------------------------------------------------------------
@@ -642,7 +641,6 @@ class TestPopulateCredentialsResponseFormats:
             thread.join(timeout=2)
             for key in ["JIRA_API_TOKEN", "JIRA_URL", "JIRA_EMAIL"]:
                 os.environ.pop(key, None)
-
 
 
 # ---------------------------------------------------------------------------

@@ -50,7 +50,7 @@ func ensureBuiltInRoles(t *testing.T) {
 
 func TestRBAC_ProjectCreationCreatesOwnerBinding(t *testing.T) {
 	RegisterTestingT(t)
-h := test.NewHelper(t)
+	h := test.NewHelper(t)
 	h.DBFactory.ResetDB()
 	ensureBuiltInRoles(t)
 	client := h.NewApiClient()
@@ -128,7 +128,7 @@ func TestRBAC_CredentialCreationCreatesOwnerBinding(t *testing.T) {
 
 func TestRBAC_UserAutoProvisioned(t *testing.T) {
 	RegisterTestingT(t)
-h := test.NewHelper(t)
+	h := test.NewHelper(t)
 	h.DBFactory.ResetDB()
 	ensureBuiltInRoles(t)
 	client := h.NewApiClient()

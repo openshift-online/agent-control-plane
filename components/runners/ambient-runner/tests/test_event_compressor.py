@@ -1,6 +1,5 @@
 import json
 
-import pytest
 
 from ag_ui.core import (
     EventType,

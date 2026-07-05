@@ -15,29 +15,35 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Callable, Optional
+from typing import Optional
 
 from ag_ui.core import BaseEvent
 
 logger = logging.getLogger(__name__)
 
-_FRAGMENT_EVENTS = frozenset({
-    "TEXT_MESSAGE_CONTENT",
-    "REASONING_MESSAGE_CONTENT",
-    "TOOL_CALL_ARGS",
-})
+_FRAGMENT_EVENTS = frozenset(
+    {
+        "TEXT_MESSAGE_CONTENT",
+        "REASONING_MESSAGE_CONTENT",
+        "TOOL_CALL_ARGS",
+    }
+)
 
-_START_EVENTS = frozenset({
-    "TEXT_MESSAGE_START",
-    "REASONING_MESSAGE_START",
-    "TOOL_CALL_START",
-})
+_START_EVENTS = frozenset(
+    {
+        "TEXT_MESSAGE_START",
+        "REASONING_MESSAGE_START",
+        "TOOL_CALL_START",
+    }
+)
 
-_END_EVENTS = frozenset({
-    "TEXT_MESSAGE_END",
-    "REASONING_MESSAGE_END",
-    "TOOL_CALL_END",
-})
+_END_EVENTS = frozenset(
+    {
+        "TEXT_MESSAGE_END",
+        "REASONING_MESSAGE_END",
+        "TOOL_CALL_END",
+    }
+)
 
 _START_TO_END = {
     "TEXT_MESSAGE_START": "TEXT_MESSAGE_END",
@@ -128,24 +134,28 @@ class EventCompressor:
                 compressed_payload = self._build_compressed_payload(
                     self._active, event_dict
                 )
-                results.append(CompressedEvent(
-                    event_type=self._active.start_type,
-                    payload=compressed_payload,
-                    completed_at=now,
-                    event_count=total_count,
-                ))
+                results.append(
+                    CompressedEvent(
+                        event_type=self._active.start_type,
+                        payload=compressed_payload,
+                        completed_at=now,
+                        event_count=total_count,
+                    )
+                )
                 self._active = None
                 return results
 
         if self._active is not None:
             results.extend(self._flush_active())
 
-        results.append(CompressedEvent(
-            event_type=event_type,
-            payload=json.dumps(event_dict),
-            completed_at=None,
-            event_count=1,
-        ))
+        results.append(
+            CompressedEvent(
+                event_type=event_type,
+                payload=json.dumps(event_dict),
+                completed_at=None,
+                event_count=1,
+            )
+        )
         return results
 
     def flush(self) -> list[CompressedEvent]:
@@ -163,12 +173,14 @@ class EventCompressor:
         total_count = 1 + ctx.fragment_count
 
         compressed_payload = self._build_compressed_payload(ctx, None)
-        return [CompressedEvent(
-            event_type=ctx.start_type,
-            payload=compressed_payload,
-            completed_at=now,
-            event_count=total_count,
-        )]
+        return [
+            CompressedEvent(
+                event_type=ctx.start_type,
+                payload=compressed_payload,
+                completed_at=now,
+                event_count=total_count,
+            )
+        ]
 
     def _build_compressed_payload(
         self,

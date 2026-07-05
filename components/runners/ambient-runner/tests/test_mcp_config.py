@@ -154,9 +154,7 @@ class TestLoadMcpConfig:
 
     def test_returns_none_when_no_file(self, tmp_path: Path):
         """Should return None when no .mcp.json file exists."""
-        ctx = _make_context(
-            {"MCP_CONFIG_FILE": str(tmp_path / "nonexistent.json")}
-        )
+        ctx = _make_context({"MCP_CONFIG_FILE": str(tmp_path / "nonexistent.json")})
         result = load_mcp_config(ctx, str(tmp_path))
         assert result is None
 

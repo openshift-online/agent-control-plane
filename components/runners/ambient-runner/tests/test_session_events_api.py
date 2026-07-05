@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock, PropertyMock
 
 import grpc
-import pytest
 
 from ambient_runner._session_events_api import (
     SessionEvent,

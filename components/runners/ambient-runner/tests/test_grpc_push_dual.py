@@ -1,13 +1,11 @@
 import json
 from dataclasses import dataclass, field
-from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ag_ui.core import BaseEvent, EventType
 
-from ambient_runner.middleware.event_compressor import CompressedEvent, EventCompressor
+from ambient_runner.middleware.event_compressor import EventCompressor
 from ambient_runner.middleware.grpc_push import (
     _event_to_payload,
     _event_type_str,
@@ -22,9 +20,6 @@ from tests.conftest import (
     make_text_content,
     make_text_end,
     make_text_start,
-    make_tool_args,
-    make_tool_end,
-    make_tool_start,
 )
 
 
@@ -34,7 +29,12 @@ class FakePushCapture:
 
     def push(self, session_id: str, event_type: str, payload: str, **kwargs):
         self.calls.append(
-            {"session_id": session_id, "event_type": event_type, "payload": payload, **kwargs}
+            {
+                "session_id": session_id,
+                "event_type": event_type,
+                "payload": payload,
+                **kwargs,
+            }
         )
 
 
@@ -114,7 +114,9 @@ class TestPushCompressedEvents:
         _push_compressed_events(client, "sess-1", compressor, make_text_start())
         assert len(client.session_events.calls) == 0
 
-        _push_compressed_events(client, "sess-1", compressor, make_text_content(delta="hi"))
+        _push_compressed_events(
+            client, "sess-1", compressor, make_text_content(delta="hi")
+        )
         assert len(client.session_events.calls) == 0
 
         _push_compressed_events(client, "sess-1", compressor, make_text_end())
@@ -166,7 +168,9 @@ class TestGRPCPushMiddlewareNoOp:
 
         events = [make_run_started(), make_text_start(), make_run_finished()]
         with patch.dict("os.environ", {}, clear=True):
-            collected = [e async for e in grpc_push_middleware(async_event_stream(events))]
+            collected = [
+                e async for e in grpc_push_middleware(async_event_stream(events))
+            ]
 
         assert len(collected) == 3
         assert collected[0] is events[0]
@@ -175,8 +179,12 @@ class TestGRPCPushMiddlewareNoOp:
         from ambient_runner.middleware.grpc_push import grpc_push_middleware
 
         events = [make_run_started()]
-        with patch.dict("os.environ", {"AMBIENT_GRPC_URL": "localhost:9000"}, clear=True):
-            collected = [e async for e in grpc_push_middleware(async_event_stream(events))]
+        with patch.dict(
+            "os.environ", {"AMBIENT_GRPC_URL": "localhost:9000"}, clear=True
+        ):
+            collected = [
+                e async for e in grpc_push_middleware(async_event_stream(events))
+            ]
 
         assert len(collected) == 1
 
@@ -215,9 +223,11 @@ class TestGRPCPushMiddlewareDualPush:
             ):
                 pass
 
-            import ambient_runner.middleware.grpc_push as gpm
-
-            original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
+            original_import = (
+                __builtins__.__import__
+                if hasattr(__builtins__, "__import__")
+                else __import__
+            )
 
             def fake_import(name, *args, **kwargs):
                 if name == "ambient_platform._grpc_client":
@@ -228,7 +238,8 @@ class TestGRPCPushMiddlewareDualPush:
 
             with patch("builtins.__import__", side_effect=fake_import):
                 collected = [
-                    e async for e in grpc_push_middleware(
+                    e
+                    async for e in grpc_push_middleware(
                         async_event_stream(events), session_id="sess-42"
                     )
                 ]

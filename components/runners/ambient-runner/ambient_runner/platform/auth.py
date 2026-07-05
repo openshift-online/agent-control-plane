@@ -476,7 +476,9 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         logger.warning(f"Failed to refresh Google credentials: {google_creds}")
         if isinstance(google_creds, PermissionError):
             auth_failures.append(str(google_creds))
-    elif "google" not in sidecar_providers and (google_creds.get("token") or google_creds.get("accessToken")):
+    elif "google" not in sidecar_providers and (
+        google_creds.get("token") or google_creds.get("accessToken")
+    ):
         try:
             if google_creds.get("accessToken"):
                 _GOOGLE_WORKSPACE_CREDS_DIR.mkdir(parents=True, exist_ok=True)
@@ -538,7 +540,9 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         logger.warning(f"Failed to refresh Jira credentials: {jira_creds}")
         if isinstance(jira_creds, PermissionError):
             auth_failures.append(str(jira_creds))
-    elif "jira" not in sidecar_providers and (jira_creds.get("token") or jira_creds.get("apiToken")):
+    elif "jira" not in sidecar_providers and (
+        jira_creds.get("token") or jira_creds.get("apiToken")
+    ):
         os.environ["JIRA_URL"] = jira_creds.get("url", "")
         os.environ["JIRA_API_TOKEN"] = jira_creds.get("apiToken") or jira_creds.get(
             "token", ""
@@ -633,7 +637,6 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         )
 
     logger.info("Runtime credentials populated successfully")
-
 
 
 async def _fetch_mcp_credentials(context: RunnerContext, server_name: str) -> dict:

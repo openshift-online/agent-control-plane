@@ -171,5 +171,6 @@ def _flush_compressor(grpc_client: object, session_id: str, compressor: object) 
             )
     except Exception as exc:
         logger.debug(
-            "grpc_push_middleware: compressor flush failed: %s", exc,
+            "grpc_push_middleware: compressor flush failed: %s",
+            exc,
         )
