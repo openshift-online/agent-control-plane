@@ -1,6 +1,6 @@
 # OpenShell Sandbox Provisioning Specification
 
-**Date:** 2026-06-23
+**Date:** 2026-07-05
 **Status:** Design
 **Related:** `control-plane.spec.md` — CP provisioning; `openshell-sandbox.spec.md` — file-mode sandbox
 **Skill:** `skills/build/full-stack-pipeline/` — wave-based implementation pipeline
@@ -543,6 +543,63 @@ The sandbox OPA network policy SHALL permit the runner process (Python/uvicorn) 
 - AND the runner SHALL fail to authenticate and exit with a non-zero exit code
 - AND the sandbox logs SHALL show `DENIED FORWARD` for the control plane hostname
 
+### Requirement: DNS Configuration via Sandbox CRD Patch
+
+The control plane SHALL configure DNS resolution for sandboxes by patching the Sandbox CRD's `podTemplate.spec.dnsConfig` with `ndots:1`, then deleting the sandbox pod to force recreation with the updated DNS config. This is a workaround for [OpenShell#2053](https://github.com/NVIDIA/OpenShell/issues/2053) — without it, DNS resolution for external FQDNs (e.g., `api.github.com`) fails inside sandboxes because the default `ndots:5` causes excessive search-domain expansion.
+
+#### Scenario: DNS configuration after sandbox creation
+
+- GIVEN a sandbox has been created via `CreateSandbox`
+- WHEN the control plane prepares the sandbox for runner execution
+- THEN it SHALL patch the `agents.x-k8s.io/v1alpha1` Sandbox CR using a Kubernetes merge-patch on `spec.podTemplate.spec.dnsConfig` with `options: [{name: ndots, value: "1"}]`
+- AND it SHALL delete the sandbox pod to trigger recreation by the sandbox controller with the updated DNS config
+- AND if the pod deletion fails with NotFound, the error SHALL be ignored (pod may not exist yet)
+- AND DNS patching failures SHALL be logged as warnings but SHALL NOT block sandbox provisioning
+
+#### Scenario: DNS configuration on re-reconcile
+
+- GIVEN a sandbox already exists for a session (idempotent creation path)
+- WHEN the control plane reconciles the same session again
+- THEN it SHALL re-apply the DNS config patch (idempotent merge-patch)
+- AND it SHALL delete the existing sandbox pod to ensure the DNS config is applied
+
+### Requirement: Payload Upload via SSH
+
+The control plane SHALL upload payload files into the sandbox filesystem via SSH-over-gRPC before starting the runner entrypoint. The upload uses the gateway's `CreateSshSession` and `ForwardTcp` gRPC RPCs to establish an SSH connection to the sandbox's embedded SSH server, then writes files via `mkdir -p <dir> && cat > <path>` commands. This runs as root through the supervisor's SSH server, bypassing the sandbox's read-only root filesystem restriction that prevents writes via `ExecSandbox`.
+
+#### Scenario: Payload upload before entrypoint execution
+
+- GIVEN a sandbox has reached `SANDBOX_PHASE_READY`
+- AND the agent has inline content payloads (payloads with `sandbox_path` and `content`)
+- WHEN the control plane starts the exec-after-Ready goroutine
+- THEN it SHALL upload all inline content payloads via SSH BEFORE calling `ExecSandbox` to start the runner
+- AND if any payload upload fails, the session SHALL transition to `Failed` with a descriptive error
+- AND the `ExecSandbox` call SHALL NOT proceed
+
+#### Scenario: SSH connection establishment
+
+- GIVEN the control plane needs to upload payloads to a sandbox
+- WHEN it initiates the upload
+- THEN it SHALL call `CreateSshSession` with the sandbox's gateway UUID to obtain an SSH session token and host key fingerprint
+- AND it SHALL open a `ForwardTcp` bidirectional stream with a `TcpForwardInit` frame containing the sandbox ID, a service ID (`payload-upload:<sandboxID>`), an `SshRelayTarget`, and the authorization token
+- AND it SHALL perform an SSH handshake over the gRPC stream using the `sandbox` user
+- AND it SHALL verify the SSH host key fingerprint against the `CreateSshSession` response (if provided; empty fingerprint is accepted when gRPC mTLS provides the outer security boundary)
+
+#### Scenario: File write via SSH
+
+- GIVEN an SSH connection is established to the sandbox
+- WHEN the control plane writes a payload
+- THEN it SHALL execute `mkdir -p '<dir>' && cat > '<path>'` via an SSH session with the payload content piped to stdin
+- AND `sandbox_path` SHALL be validated: must be an absolute path, must not contain `..` traversal, must match `^/[a-zA-Z0-9/_.\-]+$`
+- AND invalid paths SHALL be rejected before the SSH command is executed
+
+#### Scenario: No payloads — upload skipped
+
+- GIVEN an agent with no inline content payloads (or no agent associated with the session)
+- WHEN the sandbox reaches `SANDBOX_PHASE_READY`
+- THEN the control plane SHALL skip the SSH upload step entirely
+- AND proceed directly to `ExecSandbox`
+
 ### Requirement: Proto Vendoring and Code Generation
 
 The control plane SHALL vendor OpenShell proto definitions and generate Go gRPC client stubs using buf v2, following the same pattern as the ambient-api-server.
@@ -554,7 +611,8 @@ The control plane SHALL vendor OpenShell proto definitions and generate Go gRPC 
 - THEN they SHALL be placed at `components/ambient-control-plane/proto/openshell/v1/`
 - AND each file SHALL have a `go_package` option added
 - AND generated Go stubs SHALL be output to `internal/openshell/grpc/` (component-scoped, matching the control plane's convention of keeping packages under `internal/`; only the control plane consumes these stubs)
-- AND the vendored proto SHALL include the `ExecSandbox` RPC (server-streaming: `ExecSandboxRequest` → `stream ExecSandboxEvent`) in addition to sandbox lifecycle and provider management RPCs
+- AND the vendored proto SHALL include the `ExecSandbox` RPC (server-streaming: `ExecSandboxRequest` → `stream ExecSandboxEvent`), `CreateSshSession` RPC (`CreateSshSessionRequest` → `CreateSshSessionResponse`), and `ForwardTcp` RPC (bidirectional streaming: `stream TcpForwardFrame` → `stream TcpForwardFrame`) in addition to sandbox lifecycle and provider management RPCs
+- AND the vendored proto SHALL include `TcpForwardFrame` (oneof: `TcpForwardInit init`, `bytes data`), `TcpForwardInit` (fields: `sandbox_id`, `service_id`, `SshRelayTarget ssh`), `SshRelayTarget` (empty message), `CreateSshSessionRequest` (field: `sandbox_id`), and `CreateSshSessionResponse` (fields: `token`, `host_key_fingerprint`) messages
 
 ### Requirement: gRPC Connection Management
 
@@ -656,7 +714,7 @@ The control plane SHALL load client TLS credentials dynamically from a Kubernete
 Namespace lifecycle is mode-dependent:
 
 - **Pod mode** (`OPENSHELL_USE_GATEWAY=false`): The control plane manages namespace lifecycle directly. `StandardNamespaceProvisioner.ProvisionNamespace` creates the namespace if absent or updates its labels if it already exists. `DeprovisionNamespace` deletes the namespace on cleanup.
-- **Gateway mode** (`OPENSHELL_USE_GATEWAY=true`): Project namespaces are created and managed externally to ACP (e.g., by the OpenShell gateway Helm install or cluster provisioning tooling). The control plane verifies existence via a direct `GetNamespace` call and fails with a descriptive error if a required namespace is missing. It never creates or deletes namespaces. However, during gateway initialization (`initGatewayProvisioning`), the control plane SHALL apply managed labels (`ambient-code.io/managed=true`, `ambient-code.io/project-id`, `ambient-code.io/managed-by=ambient-control-plane`) to each namespace listed in `platform-config` via `ProvisionNamespace`. This is required for the `ConfigMapSyncer` to discover and reconcile agent/provider/policy ConfigMaps in gateway-managed namespaces.
+- **Gateway mode** (`OPENSHELL_USE_GATEWAY=true`): Project namespaces are created and managed externally to ACP (e.g., by the OpenShell gateway Helm install or cluster provisioning tooling). The control plane verifies existence via a direct `GetNamespace` call and fails with a descriptive error if a required namespace is missing. It never creates or deletes namespaces. However, during gateway initialization (`initGatewayProvisioning`), the control plane SHALL apply managed labels (`ambient-code.io/managed=true`, `ambient-code.io/project-id`, `ambient-code.io/managed-by=ambient-control-plane`) to each namespace listed in `platform-config` via `ProvisionNamespace`. This labeling identifies ACP-managed namespaces for the `ApplicationReconciler` and general namespace discovery.
 
 #### Scenario: Pod mode — namespace provisioning
 
@@ -781,8 +839,13 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | `GatewayClient.SetClusterInference()` | New method — calls the `SetClusterInference` gRPC RPC on the `openshell.inference.v1.Inference` service; used by `configureInference` to set provider and model for inference routing |
 | [kube_reconciler.go] `enableProvidersV2()` | New method — called before `ensureGatewayProviders`; sets `providers_v2_enabled=true` on the gateway, required for v0.0.72+ gateways |
 | [kube_reconciler.go] `configureInference()` | New method — called after `ensureGatewayProviders`; sets gateway inference routing via `SetClusterInference` when an inference-capable credential is present |
+| `GatewayClient.UploadPayloads()` | New method — opens an SSH session via `CreateSshSession` / `ForwardTcp` gRPC RPCs and writes payload files into the sandbox via `mkdir -p && cat >` SSH commands. Called in the exec-after-Ready goroutine before `ExecSandbox` when the agent has inline content payloads |
+| `GatewayClient.ExecSandboxStreaming()` | New method — fire-and-forget variant of `ExecSandbox` that discards output and uses a caller-provided context, replacing the blocking `ExecSandbox` for long-running processes |
+| [kube_reconciler.go] `patchSandboxDNSConfig()` | New method — patches `agents.x-k8s.io/v1alpha1` Sandbox CR's `podTemplate.spec.dnsConfig` with `ndots:1` and deletes the sandbox pod to force recreation. Workaround for [OpenShell#2053](https://github.com/NVIDIA/OpenShell/issues/2053) |
+| [kube_reconciler.go] `resolveEntrypoint()` | Default entrypoint changed from `/sandbox/runner/entrypoint.sh` to `/runner/entrypoint.sh` to match the gateway runner image's directory layout |
 | `provider_mapping.go` | Updated `vertex` mapping from `vertex-prod` to `google-vertex-ai` to match the OpenShell CLI's provider type |
-| Vendored proto (`openshell.proto`, `sandbox.proto`) | Extended with `UpdateConfig` RPC, `UpdateConfigRequest`/`UpdateConfigResponse` messages, and `SettingValue` message |
+| Vendored proto (`openshell.proto`, `sandbox.proto`) | Extended with `UpdateConfig` RPC, `UpdateConfigRequest`/`UpdateConfigResponse` messages, `SettingValue` message, `CreateSshSession` RPC, `ForwardTcp` RPC (bidirectional streaming), `TcpForwardFrame`, `TcpForwardInit`, `SshRelayTarget`, `CreateSshSessionRequest`, and `CreateSshSessionResponse` messages |
+| `ssh_upload.go` | New file — implements SSH-over-gRPC payload upload using `CreateSshSession`/`ForwardTcp` RPCs with a `grpcConn` adapter that wraps the bidirectional `ForwardTcp` stream as a `net.Conn` for the Go SSH client |
 
 ### Backward compatibility
 
