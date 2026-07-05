@@ -175,6 +175,7 @@ type gitAgentDeclaration struct {
 	Prompt      string            `yaml:"prompt,omitempty" json:"prompt,omitempty"`
 	Entrypoint  string            `yaml:"entrypoint,omitempty" json:"entrypoint,omitempty"`
 	Providers   []string          `yaml:"providers,omitempty" json:"providers,omitempty"`
+	Payloads    []types.Payload   `yaml:"payloads,omitempty" json:"payloads,omitempty"`
 	Environment map[string]string `yaml:"environment,omitempty" json:"environment,omitempty"`
 	RepoURL     string            `yaml:"repo_url,omitempty" json:"repo_url,omitempty"`
 	LlmModel    string            `yaml:"llm_model,omitempty" json:"llm_model,omitempty"`
@@ -346,6 +347,9 @@ func (r *ApplicationReconciler) buildAgentPatch(decl gitAgentDeclaration, conten
 	if len(decl.Providers) > 0 {
 		patch["providers"] = decl.Providers
 	}
+	if len(decl.Payloads) > 0 {
+		patch["payloads"] = decl.Payloads
+	}
 	if len(decl.Environment) > 0 {
 		patch["environment"] = decl.Environment
 	}
@@ -373,6 +377,7 @@ func (r *ApplicationReconciler) buildAgentResource(decl gitAgentDeclaration, pro
 		Prompt:      decl.Prompt,
 		Entrypoint:  decl.Entrypoint,
 		Providers:   decl.Providers,
+		Payloads:    decl.Payloads,
 		Environment: decl.Environment,
 		RepoURL:     decl.RepoURL,
 		LlmModel:    decl.LlmModel,

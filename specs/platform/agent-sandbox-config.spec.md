@@ -824,7 +824,7 @@ This spec describes the complete desired state. Implementation is expected to pr
 - Session provisioning from ConfigMap-declared agents via the gateway (building on Iteration 1)
 - `acpctl apply` support for agent declaration ConfigMaps
 
-> **Known gap (PR #246):** The `ApplicationReconciler`'s `gitAgentDeclaration` struct currently supports `name`, `display_name`, `description`, `prompt`, `entrypoint`, `providers`, `environment`, `repo_url`, `llm_model`, `labels`, and `annotations` — but does NOT include `payloads`, `sandbox_template`, or `sandbox_policy`. Git-sourced agent declarations cannot yet declare payloads, compute resources, or custom sandbox policies. The `UploadPayloads` SSH mechanism (Iteration 1) is wired to `agent.Payloads` at sandbox creation time, so payload delivery will work once the struct is extended.
+> **Known gap (PR #246):** The `ApplicationReconciler`'s `gitAgentDeclaration` struct currently supports `name`, `display_name`, `description`, `prompt`, `entrypoint`, `providers`, `payloads`, `environment`, `repo_url`, `llm_model`, `labels`, and `annotations` — but does NOT include `sandbox_template` or `sandbox_policy`. Git-sourced agent declarations cannot yet declare compute resources or custom sandbox policies. The `UploadPayloads` SSH mechanism (Iteration 1) is wired to `agent.Payloads` at sandbox creation time, so payload delivery works end-to-end for git-sourced agents.
 
 **Depends on:** Iteration 1 (gateway provisioning)
 
