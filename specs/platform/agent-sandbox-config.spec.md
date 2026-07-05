@@ -1,6 +1,6 @@
 # Agent Sandbox Configuration
 
-**Date:** 2026-06-25
+**Date:** 2026-07-05
 **Status:** Proposed
 **Related:** `specs/platform/data-model.spec.md` (Agent entity), `specs/platform/openshell-sandbox-provisioning.spec.md` (gateway-mode sandbox provisioning — Iteration 1), `specs/security/openshell-sandbox.spec.md` (file-mode sandbox isolation), `specs/security/credential-binding.spec.md` (credential resolution), `specs/platform/control-plane.spec.md` (session provisioning), `specs/platform/runner.spec.md` (runner lifecycle — being replaced)
 
@@ -823,6 +823,8 @@ This spec describes the complete desired state. Implementation is expected to pr
 - Reconciliation of ConfigMap-declared agents into the `agents` table
 - Session provisioning from ConfigMap-declared agents via the gateway (building on Iteration 1)
 - `acpctl apply` support for agent declaration ConfigMaps
+
+> **Known gap (PR #246):** The `ApplicationReconciler`'s `gitAgentDeclaration` struct currently supports `name`, `display_name`, `description`, `prompt`, `entrypoint`, `providers`, `environment`, `repo_url`, `llm_model`, `labels`, and `annotations` — but does NOT include `payloads`, `sandbox_template`, or `sandbox_policy`. Git-sourced agent declarations cannot yet declare payloads, compute resources, or custom sandbox policies. The `UploadPayloads` SSH mechanism (Iteration 1) is wired to `agent.Payloads` at sandbox creation time, so payload delivery will work once the struct is extended.
 
 **Depends on:** Iteration 1 (gateway provisioning)
 
