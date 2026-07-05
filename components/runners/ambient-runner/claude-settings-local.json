@@ -34,9 +34,13 @@
     "deny": [
       "Bash(rm -rf:*)",
       "Bash(sudo:*)",
-      "Bash(chmod:*)",
+      "Bash(chmod 777:*)",
+      "Bash(chmod 0777:*)",
+      "Bash(chmod -R 777:*)",
+      "Bash(chmod -R 0777:*)",
       "Bash(chown:*)",
-      "Bash(curl:*)"
+      "Bash(curl * --upload-file:*)",
+      "Bash(curl * -T :*)"
     ]
   }
 }

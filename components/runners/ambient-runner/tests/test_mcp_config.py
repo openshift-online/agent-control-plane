@@ -18,7 +18,7 @@ def _make_context(env: dict[str, str] | None = None) -> RunnerContext:
 
 
 class TestLoadMcpConfig:
-    """Tests for load_mcp_config with baked-in and cwd-level .mcp.json merge."""
+    """Tests for load_mcp_config with baked-in and payload .mcp.json merge."""
 
     def test_loads_from_default_file(self, tmp_path: Path):
         """Should load servers from baked-in .mcp.json file."""
@@ -43,8 +43,8 @@ class TestLoadMcpConfig:
         assert "webfetch" in result
         assert result["context7"]["url"] == "https://mcp.context7.com/mcp"
 
-    def test_merges_cwd_level_mcp_json(self, tmp_path: Path):
-        """cwd-level .mcp.json (payload) should merge with baked-in config."""
+    def test_merges_payload_mcp_json(self, tmp_path: Path):
+        """Payload .mcp.json (platform-controlled path) should merge with baked-in."""
         baked_dir = tmp_path / "baked"
         baked_dir.mkdir()
         baked_file = baked_dir / ".mcp.json"
@@ -61,10 +61,9 @@ class TestLoadMcpConfig:
             )
         )
 
-        cwd_dir = tmp_path / "cwd"
-        cwd_dir.mkdir()
-        cwd_file = cwd_dir / ".mcp.json"
-        cwd_file.write_text(
+        payload_file = tmp_path / "payload" / ".mcp.json"
+        payload_file.parent.mkdir()
+        payload_file.write_text(
             json.dumps(
                 {
                     "mcpServers": {
@@ -81,14 +80,19 @@ class TestLoadMcpConfig:
             )
         )
 
-        ctx = _make_context({"MCP_CONFIG_FILE": str(baked_file)})
-        result = load_mcp_config(ctx, str(cwd_dir))
+        ctx = _make_context(
+            {
+                "MCP_CONFIG_FILE": str(baked_file),
+                "PAYLOAD_MCP_CONFIG_FILE": str(payload_file),
+            }
+        )
+        result = load_mcp_config(ctx, "/workspace/repos/user-repo")
         assert result is not None
         assert "context7" in result
         assert "mcp-atlassian" in result
 
-    def test_cwd_overrides_baked_in(self, tmp_path: Path):
-        """cwd-level config should override baked-in for same server name."""
+    def test_payload_overrides_baked_in(self, tmp_path: Path):
+        """Payload config should override baked-in for same server name."""
         baked_dir = tmp_path / "baked"
         baked_dir.mkdir()
         baked_file = baked_dir / ".mcp.json"
@@ -102,10 +106,8 @@ class TestLoadMcpConfig:
             )
         )
 
-        cwd_dir = tmp_path / "cwd"
-        cwd_dir.mkdir()
-        cwd_file = cwd_dir / ".mcp.json"
-        cwd_file.write_text(
+        payload_file = tmp_path / "payload.mcp.json"
+        payload_file.write_text(
             json.dumps(
                 {
                     "mcpServers": {
@@ -115,10 +117,48 @@ class TestLoadMcpConfig:
             )
         )
 
+        ctx = _make_context(
+            {
+                "MCP_CONFIG_FILE": str(baked_file),
+                "PAYLOAD_MCP_CONFIG_FILE": str(payload_file),
+            }
+        )
+        result = load_mcp_config(ctx, "/workspace/repos/user-repo")
+        assert result is not None
+        assert result["shared"]["url"] == "https://payload.com"
+
+    def test_ignores_cwd_mcp_json(self, tmp_path: Path):
+        """Must NOT load .mcp.json from cwd (user-controlled workspace)."""
+        baked_dir = tmp_path / "baked"
+        baked_dir.mkdir()
+        baked_file = baked_dir / ".mcp.json"
+        baked_file.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "safe": {"type": "http", "url": "https://safe.com"},
+                    }
+                }
+            )
+        )
+
+        cwd_dir = tmp_path / "workspace"
+        cwd_dir.mkdir()
+        (cwd_dir / ".mcp.json").write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "malicious": {"command": "evil-binary", "args": ["--pwn"]},
+                    }
+                }
+            )
+        )
+
         ctx = _make_context({"MCP_CONFIG_FILE": str(baked_file)})
         result = load_mcp_config(ctx, str(cwd_dir))
         assert result is not None
-        assert result["shared"]["url"] == "https://payload.com"
+        assert "safe" in result
+        assert "malicious" not in result
 
     def test_env_vars_not_expanded(self, tmp_path: Path):
         """Env var patterns like ${VAR} must be passed through as-is."""
@@ -158,8 +198,8 @@ class TestLoadMcpConfig:
         result = load_mcp_config(ctx, str(tmp_path))
         assert result is None
 
-    def test_handles_invalid_cwd_json(self, tmp_path: Path):
-        """Should gracefully handle malformed cwd .mcp.json."""
+    def test_handles_invalid_payload_json(self, tmp_path: Path):
+        """Should gracefully handle malformed payload .mcp.json."""
         baked_dir = tmp_path / "baked"
         baked_dir.mkdir()
         baked_file = baked_dir / ".mcp.json"
@@ -169,11 +209,15 @@ class TestLoadMcpConfig:
             )
         )
 
-        cwd_dir = tmp_path / "cwd"
-        cwd_dir.mkdir()
-        (cwd_dir / ".mcp.json").write_text("not-json")
+        payload_file = tmp_path / "bad-payload.mcp.json"
+        payload_file.write_text("not-json")
 
-        ctx = _make_context({"MCP_CONFIG_FILE": str(baked_file)})
-        result = load_mcp_config(ctx, str(cwd_dir))
+        ctx = _make_context(
+            {
+                "MCP_CONFIG_FILE": str(baked_file),
+                "PAYLOAD_MCP_CONFIG_FILE": str(payload_file),
+            }
+        )
+        result = load_mcp_config(ctx, "/workspace/repos/user-repo")
         assert result is not None
         assert "s1" in result

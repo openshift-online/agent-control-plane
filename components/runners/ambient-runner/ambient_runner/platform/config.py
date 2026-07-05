@@ -47,7 +47,12 @@ def load_mcp_config(context: RunnerContext, cwd_path: str) -> dict | None:
 
     Merge order (later wins):
         1. Default .mcp.json (baked into runner image)
-        2. cwd-level .mcp.json (payload-injected servers)
+        2. Payload .mcp.json (platform-controlled path, NOT the workspace)
+
+    The payload path defaults to ``/sandbox/.mcp.json`` and can be overridden
+    via ``PAYLOAD_MCP_CONFIG_FILE``.  It intentionally does NOT read from
+    ``cwd_path`` — that directory contains user-provided repo content, and a
+    crafted ``.mcp.json`` there would gain platform-level tool permissions.
 
     Env vars in server configs (e.g. ``${JIRA_USERNAME}``) are NOT expanded
     here — they are passed through as-is so that MCP subprocesses inherit
@@ -72,20 +77,25 @@ def load_mcp_config(context: RunnerContext, cwd_path: str) -> dict | None:
         else:
             logger.info(f"No MCP config file found at: {runner_mcp_file}")
 
-        # Merge cwd-level .mcp.json (payload-injected servers)
-        cwd_mcp_file = Path(cwd_path) / ".mcp.json"
-        if cwd_mcp_file.exists() and cwd_mcp_file != runner_mcp_file:
+        # Merge payload .mcp.json from a platform-controlled path (not cwd).
+        payload_mcp_file = Path(
+            context.get_env("PAYLOAD_MCP_CONFIG_FILE", "/sandbox/.mcp.json")
+        )
+        if payload_mcp_file.exists() and payload_mcp_file != runner_mcp_file:
             try:
-                with open(cwd_mcp_file, "r") as f:
-                    cwd_config = _json.load(f)
-                    cwd_servers = cwd_config.get("mcpServers", {})
-                    if cwd_servers:
-                        mcp_servers.update(cwd_servers)
+                with open(payload_mcp_file, "r") as f:
+                    payload_config = _json.load(f)
+                    payload_servers = payload_config.get("mcpServers", {})
+                    if payload_servers:
+                        mcp_servers.update(payload_servers)
                         logger.info(
-                            f"Merged {len(cwd_servers)} cwd-level MCP server(s) from {cwd_mcp_file}"
+                            f"Merged {len(payload_servers)} payload MCP server(s) "
+                            f"from {payload_mcp_file}"
                         )
             except _json.JSONDecodeError as e:
-                logger.error(f"Failed to parse cwd .mcp.json at {cwd_mcp_file}: {e}")
+                logger.error(
+                    f"Failed to parse payload .mcp.json at {payload_mcp_file}: {e}"
+                )
 
         logger.info(f"Loaded MCP config with {len(mcp_servers)} server(s)")
         return mcp_servers if mcp_servers else None

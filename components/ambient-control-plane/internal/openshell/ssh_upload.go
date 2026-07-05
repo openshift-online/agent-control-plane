@@ -62,16 +62,21 @@ func (g *GatewayClient) UploadPayloads(ctx context.Context, namespace string, sa
 	conn := newGrpcConn(stream)
 	defer conn.Close()
 
-	// Host key verification and password auth are intentionally disabled.
-	// This matches the OpenShell upstream pattern: the sandbox SSH server generates
-	// ephemeral host keys per boot and accepts all auth (auth_none returns Accept).
-	// Security is enforced at the gRPC layer: mTLS transport, time-limited session
-	// tokens validated by ForwardTcp, and Unix socket permissions (root-only 0600).
 	sshConn, chans, reqs, err := ssh.NewClientConn(conn, "sandbox", &ssh.ClientConfig{
-		User:            "sandbox",
-		Auth:            []ssh.AuthMethod{ssh.Password("")},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         30 * time.Second,
+		User: "sandbox",
+		Auth: []ssh.AuthMethod{ssh.Password("")},
+		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
+			if fp := sshResp.HostKeyFingerprint; fp != "" {
+				actual := ssh.FingerprintSHA256(key)
+				if actual != fp {
+					return fmt.Errorf("SSH host key mismatch: got %s, want %s", actual, fp)
+				}
+			}
+			// fp empty → accept (ephemeral key not pinned by gateway); gRPC mTLS +
+			// time-limited session token is the outer security boundary.
+			return nil
+		},
+		Timeout: 30 * time.Second,
 	})
 	if err != nil {
 		return fmt.Errorf("SSH handshake: %w", err)
