@@ -522,7 +522,7 @@ func checkHasDelete(paths map[string]interface{}, pathSegment string) bool {
 func detectActions(paths map[string]interface{}, pathSegment string, resourceName string) []Action {
 	basePath := extractBasePath(paths)
 	fullCollection := basePath + "/" + pathSegment
-	knownActions := []string{"start", "stop", "suspend", "resume", "trigger", "runs"}
+	knownActions := []string{"start", "stop", "suspend", "resume", "trigger", "runs", "sync", "refresh"}
 	var found []Action
 	for _, action := range knownActions {
 		for path, val := range paths {

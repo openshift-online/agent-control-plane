@@ -51,11 +51,6 @@ function createSdkProjectsAdapter(api: ProjectAPI): ProjectsPort {
     async delete(projectId: string): Promise<void> {
       await api.delete(projectId)
     },
-
-    async transferOwnership(projectId: string, targetUserId: string): Promise<DomainProject> {
-      const project = await api.transferOwnership(projectId, targetUserId)
-      return mapSdkProjectToDomain(project)
-    },
   }
 }
 

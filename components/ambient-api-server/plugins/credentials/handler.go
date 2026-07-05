@@ -178,8 +178,25 @@ func (h credentialHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 			if !middleware.IsServiceCaller(ctx) {
 				authResult := pkgrbac.GetAuthResult(ctx)
-				if authResult == nil || !authResult.IsGlobalAdmin {
-					return nil, errors.Forbidden("token fetch restricted to cluster-internal callers")
+				if authResult == nil {
+					return nil, errors.Forbidden("token fetch restricted to authorized callers")
+				}
+				if !authResult.IsGlobalAdmin {
+					id := mux.Vars(r)["cred_id"]
+					authorized := false
+					if authResult.CredentialIDs == nil {
+						authorized = true
+					} else {
+						for _, cid := range authResult.CredentialIDs {
+							if cid == id {
+								authorized = true
+								break
+							}
+						}
+					}
+					if !authorized {
+						return nil, errors.Forbidden("token fetch restricted to authorized callers")
+					}
 				}
 			}
 			id := mux.Vars(r)["cred_id"]

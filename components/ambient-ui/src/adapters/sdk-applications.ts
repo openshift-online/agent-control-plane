@@ -16,7 +16,7 @@ function getAPI(): ApplicationAPI {
 }
 
 function sanitizeSearch(value: string): string {
-  return value.replace(/['"%;\\]/g, '')
+  return value.replace(/['"%;\\\_]/g, '')
 }
 
 function buildSdkListOptions(params?: ListParams) {

@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, memo, useMemo } from 'react'
 import { ChevronRight, Folder, FolderOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { FolderNode } from '@/domain/folder-tree'
 import { Badge } from '@/components/ui/badge'
 
-function TreeNode({
+const TreeNode = memo(function TreeNode({
   node,
   selectedPath,
   onSelect,
@@ -22,7 +22,7 @@ function TreeNode({
   const isSelected = selectedPath === node.path
   const FolderIcon = expanded && hasChildren ? FolderOpen : Folder
 
-  const totalCount = countDescendants(node)
+  const totalCount = useMemo(() => countDescendants(node), [node])
 
   return (
     <div>
@@ -73,7 +73,7 @@ function TreeNode({
       )}
     </div>
   )
-}
+})
 
 function countDescendants(node: FolderNode): number {
   let total = node.sessionCount

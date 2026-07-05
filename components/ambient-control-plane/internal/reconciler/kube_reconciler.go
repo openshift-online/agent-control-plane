@@ -1167,6 +1167,9 @@ func (r *SimpleKubeReconciler) cleanupSessionPod(ctx context.Context, session ty
 	if err := r.nsKube().DeleteRolesByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
 		r.logger.Warn().Err(err).Msg("deleting roles")
 	}
+	if err := r.nsKube().DeleteNetworkPoliciesByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
+		r.logger.Warn().Err(err).Msg("deleting network policies")
+	}
 
 	if err := r.provisioner.DeprovisionNamespace(ctx, namespace); err != nil {
 		r.logger.Warn().Err(err).Str("namespace", namespace).Msg("deprovisioning namespace")
@@ -1215,6 +1218,9 @@ func (r *SimpleKubeReconciler) cleanupSessionSandbox(ctx context.Context, sessio
 	}
 	if err := r.nsKube().DeleteRolesByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
 		r.logger.Warn().Err(err).Msg("deleting roles")
+	}
+	if err := r.nsKube().DeleteNetworkPoliciesByLabel(ctx, namespace, selector); err != nil && !k8serrors.IsNotFound(err) {
+		r.logger.Warn().Err(err).Msg("deleting network policies")
 	}
 
 	return nil
@@ -1504,14 +1510,28 @@ func (r *SimpleKubeReconciler) ensureSessionRole(ctx context.Context, namespace 
 		secretResourceNames[i] = n
 	}
 
+	var ownerRefs []interface{}
+	if sa, saErr := r.nsKube().GetServiceAccount(ctx, namespace, saName); saErr == nil {
+		ownerRefs = []interface{}{
+			map[string]interface{}{
+				"apiVersion":         "v1",
+				"kind":               "ServiceAccount",
+				"name":               saName,
+				"uid":                string(sa.GetUID()),
+				"blockOwnerDeletion": true,
+			},
+		}
+	}
+
 	role := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "rbac.authorization.k8s.io/v1",
 			"kind":       "Role",
 			"metadata": map[string]interface{}{
-				"name":      roleName,
-				"namespace": namespace,
-				"labels":    sessionLabels(session.ID, session.ProjectID),
+				"name":            roleName,
+				"namespace":       namespace,
+				"labels":          sessionLabels(session.ID, session.ProjectID),
+				"ownerReferences": ownerRefs,
 			},
 			"rules": []interface{}{
 				map[string]interface{}{
@@ -1553,9 +1573,10 @@ func (r *SimpleKubeReconciler) ensureSessionRole(ctx context.Context, namespace 
 			"apiVersion": "rbac.authorization.k8s.io/v1",
 			"kind":       "RoleBinding",
 			"metadata": map[string]interface{}{
-				"name":      rbName,
-				"namespace": namespace,
-				"labels":    sessionLabels(session.ID, session.ProjectID),
+				"name":            rbName,
+				"namespace":       namespace,
+				"labels":          sessionLabels(session.ID, session.ProjectID),
+				"ownerReferences": ownerRefs,
 			},
 			"roleRef": map[string]interface{}{
 				"apiGroup": "rbac.authorization.k8s.io",
@@ -1596,16 +1617,31 @@ func (r *SimpleKubeReconciler) sessionSecretNames(sessionID string) []string {
 
 func (r *SimpleKubeReconciler) ensureSessionNetworkPolicy(ctx context.Context, namespace string, session types.Session) error {
 	name := fmt.Sprintf("session-%s-isolation", safeResourceName(session.ID))
+	saName := serviceAccountName(session.ID)
 	cpNS := r.cfg.CPRuntimeNamespace
+
+	var ownerRefs []interface{}
+	if sa, saErr := r.nsKube().GetServiceAccount(ctx, namespace, saName); saErr == nil {
+		ownerRefs = []interface{}{
+			map[string]interface{}{
+				"apiVersion":         "v1",
+				"kind":               "ServiceAccount",
+				"name":               saName,
+				"uid":                string(sa.GetUID()),
+				"blockOwnerDeletion": true,
+			},
+		}
+	}
 
 	np := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "networking.k8s.io/v1",
 			"kind":       "NetworkPolicy",
 			"metadata": map[string]interface{}{
-				"name":      name,
-				"namespace": namespace,
-				"labels":    sessionLabels(session.ID, session.ProjectID),
+				"name":            name,
+				"namespace":       namespace,
+				"labels":          sessionLabels(session.ID, session.ProjectID),
+				"ownerReferences": ownerRefs,
 			},
 			"spec": map[string]interface{}{
 				"podSelector": map[string]interface{}{

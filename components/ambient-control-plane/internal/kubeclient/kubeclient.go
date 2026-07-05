@@ -285,6 +285,10 @@ func (kc *KubeClient) DeleteRoleBindingsByLabel(ctx context.Context, namespace, 
 	return kc.deleteCollectionWithFallback(ctx, RoleBindingGVR, namespace, labelSelector)
 }
 
+func (kc *KubeClient) DeleteNetworkPoliciesByLabel(ctx context.Context, namespace, labelSelector string) error {
+	return kc.deleteCollectionWithFallback(ctx, NetworkPolicyGVR, namespace, labelSelector)
+}
+
 func (kc *KubeClient) deleteCollectionWithFallback(ctx context.Context, gvr schema.GroupVersionResource, namespace, labelSelector string) error {
 	err := kc.dynamic.Resource(gvr).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: labelSelector})
 	if err == nil {

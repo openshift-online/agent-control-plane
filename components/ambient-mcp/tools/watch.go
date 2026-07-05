@@ -38,7 +38,7 @@ func WatchSessionMessages(c *client.Client, transport string) func(ctx context.C
 
 		subID := fmt.Sprintf("sub_%s_%d", sessionID, time.Now().UnixNano())
 
-		streamCtx, cancel := context.WithCancel(context.Background())
+		streamCtx, cancel := context.WithCancel(ctx)
 
 		subscriptionsMu.Lock()
 		subscriptions[subID] = cancel

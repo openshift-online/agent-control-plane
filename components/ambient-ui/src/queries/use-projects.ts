@@ -76,17 +76,3 @@ export function useDeleteProject(port?: ProjectsPort) {
     },
   })
 }
-
-export function useTransferOwnership(port?: ProjectsPort) {
-  const queryClient = useQueryClient()
-  const adapter = port ?? getDefaultPort()
-  return useMutation({
-    mutationFn: ({ projectId, targetUserId }: { projectId: string; targetUserId: string }) =>
-      adapter.transferOwnership(projectId, targetUserId),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(variables.projectId) })
-      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all })
-      queryClient.invalidateQueries({ queryKey: queryKeys.roleBindings.all })
-    },
-  })
-}

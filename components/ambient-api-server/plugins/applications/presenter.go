@@ -3,6 +3,8 @@ package applications
 import (
 	"time"
 
+	"github.com/golang/glog"
+
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
@@ -103,6 +105,7 @@ func parseOptionalTime(s *string) *time.Time {
 	}
 	t, err := time.Parse(time.RFC3339, *s)
 	if err != nil {
+		glog.Warningf("parseOptionalTime: failed to parse %q as RFC3339: %v", *s, err)
 		return nil
 	}
 	return &t

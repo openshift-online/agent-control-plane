@@ -16,5 +16,4 @@ export type ProjectsPort = {
   create: (input: ProjectCreateInput) => Promise<DomainProject>
   patch: (projectId: string, input: ProjectPatchInput) => Promise<DomainProject>
   delete: (projectId: string) => Promise<void>
-  transferOwnership: (projectId: string, targetUserId: string) => Promise<DomainProject>
 }

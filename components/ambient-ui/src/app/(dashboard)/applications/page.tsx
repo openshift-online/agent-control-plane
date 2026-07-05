@@ -84,7 +84,7 @@ export default function ApplicationsPage() {
   const router = useRouter()
   const containerRef = useRef<HTMLDivElement>(null)
   const [search, setSearch] = useState('')
-  const { data, isLoading, error } = useApplications()
+  const { data, isLoading, error } = useApplications(undefined, undefined, applicationsEnabled)
 
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'name', desc: false },

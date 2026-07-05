@@ -15,11 +15,12 @@ function getDefaultPort(): ApplicationsPort {
   return defaultPort
 }
 
-export function useApplications(params?: ListParams, port?: ApplicationsPort) {
+export function useApplications(params?: ListParams, port?: ApplicationsPort, enabled = true) {
   const adapter = port ?? getDefaultPort()
   return useQuery({
     queryKey: queryKeys.applications.list(params),
     queryFn: () => adapter.list(params),
+    enabled,
   })
 }
 
