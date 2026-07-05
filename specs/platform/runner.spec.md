@@ -1,7 +1,7 @@
 # Runner
 
 **Date:** 2026-04-05
-**Last Updated:** 2026-06-03
+**Last Updated:** 2026-07-05
 **Status:** Living Document — current state documented, desired state (OpenShell) appended
 **Related:** `control-plane.spec.md` — CP provisioning, token endpoint, start context assembly
 
@@ -68,7 +68,7 @@ ambient_runner/
 
   platform/
     context.py                    ← RunnerContext dataclass (shared runtime state)
-    config.py                     ← Config loaders (.ambient/ambient.json, .mcp.json, REPOS_JSON)
+    config.py                     ← Config loaders (.ambient/ambient.json, payload .mcp.json, REPOS_JSON)
     auth.py                       ← Credential fetching + git identity + env population
     workspace.py                  ← Working directory resolution (workflow / multi-repo / default)
     prompts.py                    ← System prompt constants + workspace context builder
@@ -92,6 +92,12 @@ ambient_runner/
 
   bridges/gemini_cli/             ← Gemini CLI bridge (separate impl, same ABC)
   bridges/langgraph/              ← LangGraph bridge (stub)
+
+  # Baked-in config files (copied into runner image at build time)
+  claude.json                     ← Claude Code onboarding state + trusted folders
+  claude-settings.json            ← Tool permissions (allow/deny lists) for standard mode
+  claude-settings-local.json      ← Tool permissions for local dev mode
+  mcp.json                        ← Baked-in MCP servers (e.g. mcp-atlassian with env var refs)
 
   endpoints/
     run.py                        ← POST / (AG-UI run endpoint)
@@ -250,10 +256,9 @@ bridge.run(input_data):
   5. wrap stream: tracing_middleware → secret_redaction_middleware
   6. yield events
   7. Detect HITL halt: _halted_by_thread[thread_id] = True → interrupt worker
-  finally: clear_runtime_credentials(context)
 ```
 
-Credentials are populated before step 1 and cleared in the `finally` block. This is intentional: each turn runs with a fresh credential set, and credentials are never retained between turns.
+Credentials are populated before step 1. They persist across turns within the same pod lifetime — credential isolation is enforced by sidecar containers, not by per-turn cleanup.
 
 ### Adapter Rebuild (`mark_dirty()`)
 
@@ -469,6 +474,7 @@ All env vars are injected by the CP at pod creation time.
 | `REPOS_JSON` | JSON array of `{url, branch, autoPush}` repo configs |
 | `ACTIVE_WORKFLOW_GIT_URL` | Active workflow repo URL (overrides REPOS_JSON workspace setup) |
 | `AGUI_TOKEN` | Session-scoped bearer token; when set, all non-health endpoints require `X-Ambient-Session-Token` header (constant-time comparison) |
+| `PAYLOAD_MCP_CONFIG_FILE` | Path to payload `.mcp.json` (default `/sandbox/.mcp.json`); merged on top of baked-in MCP config |
 | `SDK_OPTIONS` | JSON string of additional Claude SDK options |
 
 ---
@@ -583,7 +589,7 @@ propagated to each runner namespace by the reconciler's `ensureOpenShellPolicy()
 
 | Access | Paths |
 |--------|-------|
-| Read-only | `/usr`, `/lib`, `/proc`, `/dev/urandom`, `/app`, `/etc`, `/var/log`, `/home/sandbox` |
+| Read-only | `/usr`, `/lib`, `/proc`, `/dev/urandom`, `/app`, `/runner`, `/etc`, `/var/log`, `/home/sandbox` |
 | Read-write | `/workspace`, `/tmp`, `/dev/null`, `/app/.claude` |
 
 **Network policy** (`policy.yaml`):
@@ -596,6 +602,7 @@ propagated to each runner namespace by the reconciler's `ensureOpenShellPolicy()
 | `npm-registry` | `registry.npmjs.org:443` | `npm`, `node`, `npx` |
 | `pypi` | `pypi.org:443`, `files.pythonhosted.org:443` | `pip3`, `python3` |
 | `gitlab` | `gitlab.com:443` | `git`, `glab` |
+| `atlassian` | `*.atlassian.net:443`, `*.atlassian.com:443`, `auth.atlassian.com:443`, `api.atlassian.com:443` | `/sandbox/.venv/bin/python`, `/sandbox/.venv/bin/python3`, `/sandbox/.uv/python/cpython-*/bin/python*` |
 
 **Rego rules** (`policy.rego`): Official policy from the OpenShell repository
 (`package openshell.sandbox`). Evaluates `allow_network`, `network_action`,
