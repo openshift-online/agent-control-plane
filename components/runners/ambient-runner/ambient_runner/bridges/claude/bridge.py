@@ -200,7 +200,6 @@ class ClaudeBridge(PlatformBridge):
         client if the user changed (so MCP servers pick up new creds).
         """
         from ambient_runner.platform.auth import (
-            clear_runtime_credentials,
             populate_mcp_server_credentials,
             populate_runtime_credentials,
         )
@@ -213,8 +212,6 @@ class ClaudeBridge(PlatformBridge):
 
         await self._ensure_ready()
 
-        # Fresh credentials for this user on every run
-        clear_runtime_credentials()
         await populate_runtime_credentials(self._context)
         await populate_mcp_server_credentials(self._context)
         self._last_creds_refresh = time.monotonic()
@@ -325,15 +322,6 @@ class ClaudeBridge(PlatformBridge):
                 # Clear caller token immediately — never persist between turns.
                 if self._context:
                     self._context.caller_token = ""
-
-                # Clear credentials after turn completes (shared session security).
-                # In finally to ensure cleanup even on errors/cancellation.
-                if (
-                    self._context.get_env("KEEP_CREDENTIALS_PERSISTENT") or ""
-                ).lower() != "true":
-                    from ambient_runner.platform.auth import clear_runtime_credentials
-
-                    clear_runtime_credentials()
 
         self._first_run = False
 
