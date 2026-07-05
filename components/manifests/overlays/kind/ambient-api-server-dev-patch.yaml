@@ -41,7 +41,6 @@ spec:
             - --db-sslmode=disable
             - --alsologtostderr
             - -v=8
-            - -v=8
       containers:
         - name: api-server
           imagePullPolicy: IfNotPresent
