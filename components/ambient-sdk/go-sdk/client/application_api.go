@@ -73,3 +73,27 @@ func (a *ApplicationAPI) ListAll(ctx context.Context, opts *types.ListOptions) *
 		return a.List(ctx, &o)
 	})
 }
+
+func (a *ApplicationAPI) Sync(ctx context.Context, id string, req *types.ApplicationSyncRequest) (*types.Application, error) {
+	var body []byte
+	var err error
+	if req != nil {
+		body, err = json.Marshal(req)
+		if err != nil {
+			return nil, fmt.Errorf("marshal sync request: %w", err)
+		}
+	}
+	var result types.Application
+	if err := a.client.do(ctx, http.MethodPost, "/applications/"+url.PathEscape(id)+"/sync", body, http.StatusOK, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (a *ApplicationAPI) Refresh(ctx context.Context, id string) (*types.Application, error) {
+	var result types.Application
+	if err := a.client.do(ctx, http.MethodPost, "/applications/"+url.PathEscape(id)+"/refresh", nil, http.StatusOK, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}

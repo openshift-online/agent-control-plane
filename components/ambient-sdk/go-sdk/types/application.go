@@ -227,3 +227,9 @@ func (b *ApplicationPatchBuilder) SyncOptions(v string) *ApplicationPatchBuilder
 func (b *ApplicationPatchBuilder) Build() map[string]any {
 	return b.patch
 }
+
+type ApplicationSyncRequest struct {
+	Prune        *bool   `json:"prune,omitempty"`
+	Revision     *string `json:"revision,omitempty"`
+	PruneProject *bool   `json:"prune_project,omitempty"`
+}

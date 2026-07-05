@@ -369,6 +369,9 @@ var deleteCmd = &cobra.Command{
 
 var syncArgs struct {
 	outputFormat string
+	prune        bool
+	revision     string
+	pruneProject bool
 }
 
 var syncCmd = &cobra.Command{
@@ -396,14 +399,21 @@ var syncCmd = &cobra.Command{
 			return err
 		}
 
-		app, err := client.Applications().Get(ctx, appID)
-		if err != nil {
-			return fmt.Errorf("get application %q: %w", args[0], err)
+		var syncReq *sdktypes.ApplicationSyncRequest
+		if cmd.Flags().Changed("prune") || cmd.Flags().Changed("revision") || cmd.Flags().Changed("prune-project") {
+			syncReq = &sdktypes.ApplicationSyncRequest{}
+			if cmd.Flags().Changed("prune") {
+				syncReq.Prune = &syncArgs.prune
+			}
+			if cmd.Flags().Changed("revision") {
+				syncReq.Revision = &syncArgs.revision
+			}
+			if cmd.Flags().Changed("prune-project") {
+				syncReq.PruneProject = &syncArgs.pruneProject
+			}
 		}
 
-		syncPatch := sdktypes.NewApplicationPatchBuilder()
-		syncPatch = syncPatch.Name(app.Name)
-		_, err = client.Applications().Update(ctx, appID, syncPatch.Build())
+		result, err := client.Applications().Sync(ctx, appID, syncReq)
 		if err != nil {
 			return fmt.Errorf("sync application: %w", err)
 		}
@@ -414,13 +424,8 @@ var syncCmd = &cobra.Command{
 		}
 		printer := output.NewPrinter(format, cmd.OutOrStdout())
 
-		refreshed, err := client.Applications().Get(ctx, appID)
-		if err != nil {
-			return fmt.Errorf("refresh application after sync: %w", err)
-		}
-
 		if printer.Format() == output.FormatJSON {
-			return printer.PrintJSON(refreshed)
+			return printer.PrintJSON(result)
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "application/%s sync triggered\n", appName)
 		return nil
@@ -456,9 +461,9 @@ var refreshCmd = &cobra.Command{
 			return err
 		}
 
-		app, err := client.Applications().Get(ctx, appID)
+		app, err := client.Applications().Refresh(ctx, appID)
 		if err != nil {
-			return fmt.Errorf("get application %q: %w", args[0], err)
+			return fmt.Errorf("refresh application %q: %w", args[0], err)
 		}
 
 		format, err := output.ParseFormat(refreshArgs.outputFormat)
@@ -521,6 +526,9 @@ func init() {
 	deleteCmd.Flags().BoolVar(&deleteArgs.confirm, "confirm", false, "Confirm deletion")
 
 	syncCmd.Flags().StringVarP(&syncArgs.outputFormat, "output", "o", "", "Output format: json")
+	syncCmd.Flags().BoolVar(&syncArgs.prune, "prune", false, "Override auto_prune for this sync")
+	syncCmd.Flags().StringVar(&syncArgs.revision, "revision", "", "Override source_target_revision for this sync")
+	syncCmd.Flags().BoolVar(&syncArgs.pruneProject, "prune-project", false, "Allow project deletion during prune")
 	refreshCmd.Flags().StringVarP(&refreshArgs.outputFormat, "output", "o", "", "Output format: json")
 }
 

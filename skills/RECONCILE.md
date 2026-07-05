@@ -49,7 +49,7 @@ skills/
 
 ## Reconciliation State
 
-**Last analyzed**: 2026-07-05 (Wave 2 + Wave 4 executed)
+**Last analyzed**: 2026-07-05 (Wave 2 + Wave 4 + Wave 5 executed)
 **Spec corpus**: 29 specs across 4 domains
 **Codebase commit**: feat/reconcile-skill-and-spec-alignment branch
 
@@ -57,11 +57,11 @@ skills/
 
  < /dev/null |  Domain | Specs | Requirements | Present | Partial | Missing | Coverage |
 |--------|-------|-------------|---------|---------|---------|----------|
-| Platform | 12 | 110 | 101 | 4 | 5 | 91.8% |
+| Platform | 12 | 110 | 104 | 1 | 5 | 94.5% |
 | Security | 6 | 55 | 45 | 5 | 5 | 81.8% |
 | UI | 7 | 70 | 57 | 8 | 5 | 81.4% |
 | CLI | 1 | 13 | 13 | 0 | 0 | 100% |
-| **TOTAL** | **29** | **248** | **216** | **17** | **15** | **87.1%** |
+| **TOTAL** | **29** | **248** | **219** | **14** | **15** | **88.3%** |
 
 ### Spec Dependency Order
 
@@ -111,13 +111,13 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | ID | Spec | Requirement | Layer | Status | Severity | Notes |
 |----|------|-------------|-------|--------|----------|-------|
 | P1 | data-model | Application GitOps sync engine | CP | partial | critical | Only syncs Agent kind. Missing: Project, Credential, RoleBinding, Inbox sync. No kustomize rendering, auto_sync, self_heal, per-resource status. |
-| P2 | data-model | Application CLI sync/refresh commands | CLI | partial | major | `sync` does no-op PATCH. `refresh` returns current state without git fetch. |
+| P2 | data-model | Application CLI sync/refresh commands | CLI | **done** | major | SDK `Sync()`/`Refresh()` methods added. CLI calls `POST /sync` and `POST /refresh`. Flags: `--prune`, `--revision`, `--prune-project`. |
 | P3 | data-model | Application frontend UI | FE | missing | major | No pages, adapters, queries, or domain types for Application entity. |
-| P4 | data-model | SessionEvent runner-side compression | Runner | missing | major | Schema/API/gRPC/SDK support compression fields. Runner doesn't compress -- all events stored with event_count=1. |
+| P4 | data-model | SessionEvent runner-side compression | Runner | **done** | major | `EventCompressor` integrated into gRPC transport path. Compressed events pushed to `session_events.push()` with `event_count` and `completed_at`. |
 | P5 | data-model | Scoped RoleBinding query endpoints | BE | **done** | major | 4 new scoped endpoints: `/users/{id}/role_bindings`, `/projects/{id}/role_bindings`, `/sessions/{id}/role_bindings`, `/credentials/{cred_id}/role_bindings`. |
 | P6 | data-model | GET /applications/{id}/status endpoint | BE | **done** | major | Added `GetStatus` handler + `ApplicationStatusResponse` presenter. Also fixed `LastSyncedAt` in main presenter. |
 | P7 | mcp-server | watch_session_messages SSE forwarding | MCP | partial | major | Tool returns subscription_id. Actual SSE stream forwarding is stubbed (`_ = c`). |
-| P8 | control-plane | RESUME_AFTER_SEQ env var | CP | missing | minor | Spec defines it for session restart. Not found in codebase. |
+| P8 | control-plane | RESUME_AFTER_SEQ env var | CP | **done** | minor | CP queries max seq via `SessionMessages().List()` on resume. Sets `RESUME_AFTER_SEQ` env var. Runner uses seq-based filtering with time-based fallback. |
 | P9 | mcp-server | MCP HTTP endpoint in api-server | BE | partial | minor | `tokenexchange/` dir exists in ambient-mcp. Proxy route registration in api-server unverified. |
 | P10 | scheduled-session | Idempotency UNIQUE constraint | BE | **done** | minor | Verified: UNIQUE index `idx_sessions_schedule_idempotency` exists in migration 202606230002. |
 
@@ -198,3 +198,4 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-05 | (pending) | Divergences D1/D2/D3 resolved -- specs updated | 82.3% | gateway-rbac-policy.spec.md renamed to OpenShell RBAC, data-model matrix corrected |
 | 2026-07-05 | (pending) | Wave 2 executed: P5, P6, U2(BE) | 84.5% | 3 API gaps closed. Bug fix: agents/subresource_handler.go scope_id→agent_id |
 | 2026-07-05 | (pending) | Wave 4 executed: S1,S2,S3,S4,S5,S7,S8,P10 | 87.1% | 8 gaps closed (5 implemented, 3 already done). P1,S6 deferred. |
+| 2026-07-05 | (pending) | Wave 5 executed: P2,P4,P8 | 88.3% | 3 gaps closed. SDK Sync/Refresh, runner compression, RESUME_AFTER_SEQ. |

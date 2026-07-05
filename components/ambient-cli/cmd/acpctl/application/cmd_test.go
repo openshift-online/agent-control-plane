@@ -374,7 +374,10 @@ func TestSyncApplication_Success(t *testing.T) {
 			Items:    []types.Application{sampleApplication("app-1", "fleet-prod", "https://github.com/org/repo", "agents/", "prod")},
 		})
 	})
-	srv.Handle("/api/ambient/v1/applications/app-1", func(w http.ResponseWriter, r *http.Request) {
+	srv.Handle("/api/ambient/v1/applications/app-1/sync", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
 		srv.RespondJSON(t, w, http.StatusOK, sampleApplication("app-1", "fleet-prod", "https://github.com/org/repo", "agents/", "prod"))
 	})
 
@@ -396,7 +399,10 @@ func TestRefreshApplication_Success(t *testing.T) {
 			Items:    []types.Application{sampleApplication("app-1", "fleet-prod", "https://github.com/org/repo", "agents/", "prod")},
 		})
 	})
-	srv.Handle("/api/ambient/v1/applications/app-1", func(w http.ResponseWriter, r *http.Request) {
+	srv.Handle("/api/ambient/v1/applications/app-1/refresh", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
 		srv.RespondJSON(t, w, http.StatusOK, sampleApplication("app-1", "fleet-prod", "https://github.com/org/repo", "agents/", "prod"))
 	})
 

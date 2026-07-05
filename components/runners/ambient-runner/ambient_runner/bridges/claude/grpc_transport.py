@@ -29,6 +29,7 @@ import grpc
 from ag_ui.core import BaseEvent
 
 from .operational_events import OperationalEventWriter
+from ambient_runner.middleware.event_compressor import EventCompressor
 
 if TYPE_CHECKING:
     from ambient_runner._grpc_client import AmbientGRPCClient
@@ -187,19 +188,26 @@ class GRPCSessionListener:
 
     async def _listen_loop(self) -> None:
         is_resume = os.getenv("IS_RESUME", "").strip().lower() == "true"
-        # Record start time for filtering historical user messages on resume.
-        # Use a 5-second grace window to handle clock skew between the runner
-        # pod and the API server that stamps created_at.
+        resume_after_seq: int | None = None
         resume_cutoff: float | None = None
         if is_resume:
-            resume_cutoff = time.time() - 5.0
-            logger.info(
-                "[GRPC LISTENER] Resume mode: will skip user messages created before %.3f: session=%s",
-                resume_cutoff,
-                self._session_id,
-            )
+            raw_seq = os.getenv("RESUME_AFTER_SEQ", "").strip()
+            if raw_seq.isdigit():
+                resume_after_seq = int(raw_seq)
+                logger.info(
+                    "[GRPC LISTENER] Resume mode (seq-based): skip messages with seq <= %d: session=%s",
+                    resume_after_seq,
+                    self._session_id,
+                )
+            else:
+                resume_cutoff = time.time() - 5.0
+                logger.info(
+                    "[GRPC LISTENER] Resume mode (time-based fallback): skip messages before %.3f: session=%s",
+                    resume_cutoff,
+                    self._session_id,
+                )
 
-        last_seq = 0
+        last_seq = resume_after_seq if resume_after_seq is not None else 0
         backoff = _BACKOFF_INITIAL
 
         while True:
@@ -236,9 +244,16 @@ class GRPCSessionListener:
                         )
                         continue
 
-                    # On resume, skip historical user messages that existed
-                    # before this runner pod started.
-                    if resume_cutoff is not None and msg.created_at is not None:
+                    if resume_after_seq is not None:
+                        if msg.seq <= resume_after_seq:
+                            logger.info(
+                                "[GRPC LISTENER] Skipping historical user message: seq=%d <= resume_after_seq=%d session=%s",
+                                msg.seq,
+                                resume_after_seq,
+                                self._session_id,
+                            )
+                            continue
+                    elif resume_cutoff is not None and msg.created_at is not None:
                         msg_epoch = msg.created_at.timestamp()
                         if msg_epoch < resume_cutoff:
                             logger.info(
@@ -320,6 +335,7 @@ class GRPCSessionListener:
             session_id=self._session_id,
             grpc_client=self._grpc_client,
         )
+        compressor = EventCompressor()
 
         logger.info(
             "[GRPC LISTENER] bridge.run() starting: session=%s thread=%s run=%s",
@@ -332,6 +348,31 @@ class GRPCSessionListener:
             self._bridge, "_active_streams", {}
         )
         run_queue = active_streams.get(thread_id)
+
+        async def _push_compressed(compressed_events: list) -> None:
+            if not self._grpc_client or not compressed_events:
+                return
+            client = self._grpc_client
+            sid = self._session_id
+
+            def _do_push() -> None:
+                for ce in compressed_events:
+                    client.session_events.push(
+                        sid,
+                        event_type=ce.event_type,
+                        payload=ce.payload,
+                        completed_at=ce.completed_at,
+                        event_count=ce.event_count,
+                    )
+
+            try:
+                await asyncio.get_running_loop().run_in_executor(None, _do_push)
+            except Exception as exc:
+                logger.warning(
+                    "[GRPC LISTENER] Compressed event push failed: session=%s error=%s",
+                    self._session_id,
+                    exc,
+                )
 
         async def _run_once():
             async for event in self._bridge.run(input_data):
@@ -346,6 +387,8 @@ class GRPCSessionListener:
                         )
                 await writer.consume(event)
                 await ops_writer.consume(event)
+                await _push_compressed(compressor.feed(event))
+            await _push_compressed(compressor.flush())
 
         try:
             await _run_once()
@@ -377,6 +420,7 @@ class GRPCSessionListener:
                     session_id=self._session_id,
                     grpc_client=self._grpc_client,
                 )
+                compressor = EventCompressor()
                 await _run_once()
             except Exception as retry_exc:
                 logger.error(

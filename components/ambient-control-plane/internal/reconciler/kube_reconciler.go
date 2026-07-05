@@ -937,6 +937,25 @@ func (r *SimpleKubeReconciler) resolveAgentSandboxPolicy(ctx context.Context, sd
 	return &sbxPolicy, nil
 }
 
+func (r *SimpleKubeReconciler) resolveMaxSeq(ctx context.Context, sdk *sdkclient.Client, sessionID string) string {
+	if err := validateTSLValue(sessionID); err != nil {
+		r.logger.Warn().Err(err).Str("session_id", sessionID).Msg("invalid session_id for max seq query")
+		return ""
+	}
+	opts := types.NewListOptions().Size(1).Build()
+	opts.Search = fmt.Sprintf("session_id = '%s'", sessionID)
+	opts.OrderBy = "seq desc"
+	list, err := sdk.SessionMessages().List(ctx, opts)
+	if err != nil {
+		r.logger.Warn().Err(err).Str("session_id", sessionID).Msg("failed to resolve max seq for resume")
+		return ""
+	}
+	if len(list.Items) == 0 {
+		return "0"
+	}
+	return fmt.Sprintf("%d", list.Items[0].Seq)
+}
+
 func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session types.Session, projectName string, sdk *sdkclient.Client, providerNames []string) map[string]string {
 	workspacePath := "/workspace"
 	if r.cfg.OpenShellUseGateway {
@@ -968,6 +987,9 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 
 	if session.StartTime != nil {
 		env["IS_RESUME"] = "true"
+		if maxSeq := r.resolveMaxSeq(ctx, sdk, session.ID); maxSeq != "" {
+			env["RESUME_AFTER_SEQ"] = maxSeq
+		}
 	}
 
 	if r.cfg.OpenShellUseGateway {
@@ -1970,6 +1992,9 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 
 	if session.StartTime != nil {
 		env = append(env, envVar("IS_RESUME", "true"))
+		if maxSeq := r.resolveMaxSeq(ctx, sdk, session.ID); maxSeq != "" {
+			env = append(env, envVar("RESUME_AFTER_SEQ", maxSeq))
+		}
 	}
 
 	if r.cfg.AnthropicAPIKey != "" {
