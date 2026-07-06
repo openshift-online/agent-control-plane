@@ -57,8 +57,8 @@ func TestInternalRoles(t *testing.T) {
 	if !InternalRoles[RoleAgentRunner] {
 		t.Error("agent:runner should be internal")
 	}
-	if !InternalRoles[RoleCredentialTokenReader] {
-		t.Error("credential:token-reader should be internal")
+	if InternalRoles[RoleCredentialTokenReader] {
+		t.Error("credential:token-reader should not be internal")
 	}
 	if InternalRoles[RoleProjectOwner] {
 		t.Error("project:owner should not be internal")

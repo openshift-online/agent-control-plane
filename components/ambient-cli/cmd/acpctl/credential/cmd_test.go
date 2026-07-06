@@ -386,11 +386,21 @@ func TestTokenCredential_MissingID(t *testing.T) {
 }
 
 func TestBindCredential_Success(t *testing.T) {
+	const viewerRoleKSUID = "2mGFZaKBkntMN5vTBKMPcFEj9Gu"
 	srv := testhelper.NewServer(t)
 	srv.Handle("/api/ambient/v1/credentials", func(w http.ResponseWriter, r *http.Request) {
 		srv.RespondJSON(t, w, http.StatusOK, &types.CredentialList{
 			ListMeta: types.ListMeta{Total: 1},
 			Items:    []types.Credential{sampleCredential("cred-bind-1", "github-pat", "github")},
+		})
+	})
+	srv.Handle("/api/ambient/v1/roles", func(w http.ResponseWriter, r *http.Request) {
+		srv.RespondJSON(t, w, http.StatusOK, &types.RoleList{
+			ListMeta: types.ListMeta{Total: 1},
+			Items: []types.Role{{
+				ObjectReference: types.ObjectReference{ID: viewerRoleKSUID},
+				Name:            "credential:viewer",
+			}},
 		})
 	})
 	srv.Handle("/api/ambient/v1/role_bindings", func(w http.ResponseWriter, r *http.Request) {
@@ -405,14 +415,14 @@ func TestBindCredential_Success(t *testing.T) {
 		if rb["scope"] != "credential" {
 			t.Errorf("expected scope 'credential', got %v", rb["scope"])
 		}
-		if rb["role_id"] != "credential:viewer" {
-			t.Errorf("expected role_id 'credential:viewer', got %v", rb["role_id"])
+		if rb["role_id"] != viewerRoleKSUID {
+			t.Errorf("expected role_id %q, got %v", viewerRoleKSUID, rb["role_id"])
 		}
 		credID := "cred-bind-1"
 		projectID := "my-project"
 		srv.RespondJSON(t, w, http.StatusCreated, &types.RoleBinding{
 			ObjectReference: types.ObjectReference{ID: "rb-new"},
-			RoleID:          "credential:viewer",
+			RoleID:          viewerRoleKSUID,
 			Scope:           "credential",
 			CredentialID:    &credID,
 			ProjectID:       &projectID,

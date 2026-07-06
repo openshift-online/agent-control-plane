@@ -407,8 +407,13 @@ in that project. Creates a RoleBinding with scope=credential.`,
 			return err
 		}
 
+		roleID, err := resolveRoleID(ctx, client, "credential:viewer")
+		if err != nil {
+			return fmt.Errorf("resolve credential:viewer role: %w", err)
+		}
+
 		binding, err := sdktypes.NewRoleBindingBuilder().
-			RoleID("credential:viewer").
+			RoleID(roleID).
 			Scope("credential").
 			CredentialID(credID).
 			ProjectID(bindArgs.project).
@@ -484,6 +489,21 @@ func resolveCredential(ctx context.Context, client *sdkclient.Client, nameOrID s
 		return "", "", fmt.Errorf("credential %q not found", nameOrID)
 	}
 	return cred.ID, cred.Name, nil
+}
+
+func resolveRoleID(ctx context.Context, client *sdkclient.Client, roleName string) (string, error) {
+	opts := sdktypes.NewListOptions().Size(100).
+		Search(fmt.Sprintf("name = '%s'", roleName)).Build()
+	list, err := client.Roles().List(ctx, opts)
+	if err != nil {
+		return "", fmt.Errorf("search roles for %q: %w", roleName, err)
+	}
+	for _, r := range list.Items {
+		if r.Name == roleName {
+			return r.ID, nil
+		}
+	}
+	return "", fmt.Errorf("role %q not found", roleName)
 }
 
 func printCredentialTable(printer *output.Printer, credentials []sdktypes.Credential) error {
