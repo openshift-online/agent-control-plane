@@ -1,30 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import { agentToYaml } from '../agent-yaml'
-import type { DomainAgent } from '@/domain/types'
+import type { AgentYamlInput } from '../agent-yaml'
 
-function makeAgent(overrides: Partial<DomainAgent> = {}): DomainAgent {
+function makeAgent(overrides: Partial<AgentYamlInput> = {}): AgentYamlInput {
   return {
-    id: 'agent-1',
     name: 'test-agent',
-    displayName: null,
-    description: null,
-    model: null,
-    ownerUserId: null,
-    currentSessionId: null,
-    projectId: 'proj-1',
     prompt: null,
-    repoUrl: null,
-    workflowId: null,
-    entrypoint: null,
     providers: [],
     payloads: [],
     environment: {},
-    sandboxTemplate: null,
-    sandboxPolicy: null,
     annotations: {},
     labels: {},
-    createdAt: '2025-01-01T00:00:00Z',
-    updatedAt: '2025-01-01T00:00:00Z',
     ...overrides,
   }
 }

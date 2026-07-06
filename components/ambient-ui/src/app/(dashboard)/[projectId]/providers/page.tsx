@@ -80,7 +80,7 @@ export default function ProvidersPage() {
         </div>
         <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
           <Plus className="size-4" />
-          New Provider
+          Generate Provider Manifest
         </Button>
       </div>
       <ProvidersTable providers={providers} searchFilter={search} />

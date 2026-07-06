@@ -1,6 +1,11 @@
 import type { DomainProvider } from '@/domain/types'
 
-export function providerToYaml(provider: DomainProvider): string {
+export type ProviderYamlInput = Pick<
+  DomainProvider,
+  'name' | 'type' | 'secret' | 'labels' | 'annotations'
+>
+
+export function providerToYaml(provider: ProviderYamlInput): string {
   const lines: string[] = [
     'kind: Provider',
     `name: ${provider.name}`,

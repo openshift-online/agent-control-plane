@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useParams } from 'next/navigation'
 import {
   Sheet,
   SheetContent,
@@ -14,7 +13,7 @@ import { ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { YamlPreview } from '@/components/configmap-yaml-preview'
+import { YamlPreview } from '@/components/yaml-preview'
 import { policyToYaml } from '@/lib/policy-yaml'
 
 const POLICY_TEMPLATE = `version: 1
@@ -53,17 +52,13 @@ export function CreatePolicySheet({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const { projectId } = useParams<{ projectId: string }>()
-
   const [name, setName] = useState('')
-  const [namespace, setNamespace] = useState(projectId ?? '')
   const [specYaml, setSpecYaml] = useState(POLICY_TEMPLATE)
   const [generatedYaml, setGeneratedYaml] = useState<string | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
 
   function resetForm() {
     setName('')
-    setNamespace(projectId ?? '')
     setSpecYaml(POLICY_TEMPLATE)
     setGeneratedYaml(null)
     setParseError(null)
@@ -85,18 +80,13 @@ export function CreatePolicySheet({
     }
 
     const yaml = policyToYaml({
-      id: '',
       name,
-      namespace,
-      projectId: projectId ?? '',
       spec,
       annotations: {},
       labels: {},
-      createdAt: '',
-      updatedAt: '',
     })
     setGeneratedYaml(yaml)
-  }, [name, namespace, specYaml])
+  }, [name, specYaml])
 
   const handleClose = useCallback(
     (isOpen: boolean) => {
@@ -129,18 +119,6 @@ export function CreatePolicySheet({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="restricted-github-only"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label htmlFor="policy-namespace" className="text-sm font-medium">
-              Namespace
-            </label>
-            <Input
-              id="policy-namespace"
-              value={namespace}
-              onChange={(e) => setNamespace(e.target.value)}
-              placeholder="tenant-a"
             />
           </div>
 

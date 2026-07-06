@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useParams } from 'next/navigation'
 import {
   Sheet,
   SheetContent,
@@ -19,12 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { YamlPreview } from '@/components/configmap-yaml-preview'
+import { YamlPreview } from '@/components/yaml-preview'
 import { providerToYaml } from '@/lib/provider-yaml'
 
 const PROVIDER_TYPES = [
   'github',
-  'jira',
   'vertex',
   'generic',
 ]
@@ -36,37 +34,28 @@ export function CreateProviderSheet({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const { projectId } = useParams<{ projectId: string }>()
-
   const [name, setName] = useState('')
   const [type, setType] = useState('')
   const [secret, setSecret] = useState('')
-  const [namespace, setNamespace] = useState(projectId ?? '')
   const [generatedYaml, setGeneratedYaml] = useState<string | null>(null)
 
   function resetForm() {
     setName('')
     setType('')
     setSecret('')
-    setNamespace(projectId ?? '')
     setGeneratedYaml(null)
   }
 
   const handleGenerate = useCallback(() => {
     const yaml = providerToYaml({
-      id: '',
       name,
       type: type || '',
       secret: secret || '',
-      namespace,
-      projectId: projectId ?? '',
       annotations: {},
       labels: {},
-      createdAt: '',
-      updatedAt: '',
     })
     setGeneratedYaml(yaml)
-  }, [name, namespace, type, secret])
+  }, [name, type, secret])
 
   const handleClose = useCallback(
     (isOpen: boolean) => {
@@ -133,21 +122,6 @@ export function CreateProviderSheet({
             <p className="text-xs text-muted-foreground">
               Name of the K8s Secret containing the credentials.
             </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <label
-              htmlFor="provider-namespace"
-              className="text-sm font-medium"
-            >
-              Namespace
-            </label>
-            <Input
-              id="provider-namespace"
-              value={namespace}
-              onChange={(e) => setNamespace(e.target.value)}
-              placeholder="tenant-a"
-            />
           </div>
 
           {generatedYaml && (

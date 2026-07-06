@@ -14,7 +14,6 @@ export type PayloadRow = {
 }
 
 export type SandboxConfigState = {
-  namespace: string
   entrypoint: string
   providers: string
   sandboxPolicy: string
@@ -26,7 +25,6 @@ export type SandboxConfigState = {
 }
 
 export const INITIAL_SANDBOX_CONFIG: SandboxConfigState = {
-  namespace: '',
   entrypoint: '',
   providers: '',
   sandboxPolicy: '',
@@ -101,18 +99,6 @@ export function SandboxConfigFields({
       {expanded && (
         <div className="space-y-4 pl-1">
           <div className="space-y-1.5">
-            <label htmlFor="sandbox-namespace" className="text-sm font-medium">
-              Namespace <span className="text-destructive">*</span>
-            </label>
-            <Input
-              id="sandbox-namespace"
-              placeholder="tenant-a"
-              value={state.namespace}
-              onChange={(e) => update({ namespace: e.target.value })}
-            />
-          </div>
-
-          <div className="space-y-1.5">
             <label htmlFor="sandbox-entrypoint" className="text-sm font-medium">
               Entrypoint
             </label>
@@ -130,7 +116,7 @@ export function SandboxConfigFields({
             </label>
             <Input
               id="sandbox-providers"
-              placeholder="github, anthropic"
+              placeholder="github, vertex"
               value={state.providers}
               onChange={(e) => update({ providers: e.target.value })}
             />
@@ -148,19 +134,15 @@ export function SandboxConfigFields({
             />
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 opacity-50">
             <label htmlFor="sandbox-image" className="text-sm font-medium">
-              Image
+              Image <span className="text-xs font-normal text-muted-foreground">(coming soon)</span>
             </label>
             <Input
               id="sandbox-image"
               placeholder="quay.io/ambient_code/ambient_runner_openshell:latest"
-              value={state.image}
-              onChange={(e) => update({ image: e.target.value })}
+              disabled
             />
-            <p className="text-xs text-muted-foreground">
-              Images must be from an allowed registry: <code className="text-[11px] bg-muted px-1 py-0.5 rounded">quay.io/ambient_code/</code> or <code className="text-[11px] bg-muted px-1 py-0.5 rounded">ghcr.io/nvidia/</code>. Images from other registries will be rejected.
-            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useMemo, useCallback } from 'react'
-import { useParams } from 'next/navigation'
 import {
   Sheet,
   SheetContent,
@@ -20,12 +19,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { DomainAgent, DomainPayload } from '@/domain/types'
+import type { DomainPayload } from '@/domain/types'
+import type { AgentYamlInput } from '@/lib/agent-yaml'
 import { MODEL_OPTIONS } from '@/domain/models'
 import { agentToYaml } from '@/lib/agent-yaml'
 import { SandboxConfigFields, INITIAL_SANDBOX_CONFIG } from './sandbox-config-fields'
 import type { SandboxConfigState } from './sandbox-config-fields'
-import { YamlPreview } from './configmap-yaml-preview'
+import { YamlPreview } from './yaml-preview'
 
 export function CreateAgentSheet({
   open,
@@ -34,8 +34,6 @@ export function CreateAgentSheet({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const { projectId } = useParams<{ projectId: string }>()
-
   const [name, setName] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [model, setModel] = useState('')
@@ -44,10 +42,7 @@ export function CreateAgentSheet({
   const [description, setDescription] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const [sandboxConfig, setSandboxConfig] = useState<SandboxConfigState>({
-    ...INITIAL_SANDBOX_CONFIG,
-    namespace: projectId ?? '',
-  })
+  const [sandboxConfig, setSandboxConfig] = useState<SandboxConfigState>(INITIAL_SANDBOX_CONFIG)
   const [generatedYaml, setGeneratedYaml] = useState<string | null>(null)
 
   function resetForm() {
@@ -58,11 +53,11 @@ export function CreateAgentSheet({
     setRepoUrl('')
     setDescription('')
     setError(null)
-    setSandboxConfig({ ...INITIAL_SANDBOX_CONFIG, namespace: projectId ?? '' })
+    setSandboxConfig(INITIAL_SANDBOX_CONFIG)
     setGeneratedYaml(null)
   }
 
-  const buildAgentForYaml = useCallback((): DomainAgent => {
+  const buildAgentForYaml = useCallback((): AgentYamlInput => {
     const providers = sandboxConfig.providers
       .split(',')
       .map((p) => p.trim())
@@ -85,37 +80,15 @@ export function CreateAgentSheet({
       }))
 
     return {
-      id: '',
       name: name.trim(),
-      displayName: displayName.trim() || null,
-      description: description.trim() || null,
-      model: model || null,
-      ownerUserId: null,
-      currentSessionId: null,
-      projectId: projectId ?? null,
       prompt: prompt.trim() || null,
-      repoUrl: repoUrl.trim() || null,
-      workflowId: null,
-      entrypoint: sandboxConfig.entrypoint.trim() || null,
       providers,
       payloads,
       environment,
-      sandboxTemplate: (sandboxConfig.image.trim() || sandboxConfig.cpu.trim() || sandboxConfig.memory.trim()) ? {
-        ...(sandboxConfig.image.trim() ? { image: sandboxConfig.image.trim() } : {}),
-        ...((sandboxConfig.cpu.trim() || sandboxConfig.memory.trim()) ? {
-          resources: {
-            ...(sandboxConfig.cpu.trim() ? { cpu: sandboxConfig.cpu.trim() } : {}),
-            ...(sandboxConfig.memory.trim() ? { memory: sandboxConfig.memory.trim() } : {}),
-          },
-        } : {}),
-      } : null,
-      sandboxPolicy: sandboxConfig.sandboxPolicy.trim() || null,
       annotations: {},
       labels: {},
-      createdAt: '',
-      updatedAt: '',
     }
-  }, [name, displayName, description, model, prompt, repoUrl, sandboxConfig, projectId])
+  }, [name, prompt, sandboxConfig])
 
   function handleGenerateYaml(e: React.FormEvent) {
     e.preventDefault()
@@ -125,11 +98,6 @@ export function CreateAgentSheet({
       setError('Name is required.')
       return
     }
-    if (!sandboxConfig.namespace.trim()) {
-      setError('Namespace is required.')
-      return
-    }
-
     const yaml = agentToYaml(buildAgentForYaml())
     setGeneratedYaml(yaml)
   }

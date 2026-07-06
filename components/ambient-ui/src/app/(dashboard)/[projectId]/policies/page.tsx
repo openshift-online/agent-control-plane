@@ -80,7 +80,7 @@ export default function PoliciesPage() {
         </div>
         <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
           <Plus className="size-4" />
-          New Policy
+          Generate Policy Manifest
         </Button>
       </div>
       <PoliciesTable policies={policies} searchFilter={search} />

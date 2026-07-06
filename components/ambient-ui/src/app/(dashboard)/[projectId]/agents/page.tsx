@@ -83,7 +83,7 @@ export default function AgentsPage() {
         </div>
         <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
           <Plus className="size-4" />
-          New Agent
+          Generate Agent Manifest
         </Button>
       </div>
       <ConfigMapSummaryBar projectId={projectId} />

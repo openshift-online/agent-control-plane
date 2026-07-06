@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/table'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { usePolicy } from '@/queries/use-policies'
-import { LifecycleBadge } from '../../agents/_components/lifecycle-badge'
+import { LifecycleBadge, getResourceLifecycle } from '../../agents/_components/lifecycle-badge'
 import { formatRelativeTime } from '@/lib/format-timestamp'
 import { PolicyManifestTab } from './_components/policy-manifest-tab'
 
@@ -71,7 +71,7 @@ export default function PolicyDetailPage() {
             <h1 className="text-2xl font-semibold tracking-tight">
               {policy.name}
             </h1>
-            <LifecycleBadge lifecycle="gitops" />
+            <LifecycleBadge lifecycle={getResourceLifecycle(policy.annotations)} />
           </div>
           <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
             <span>

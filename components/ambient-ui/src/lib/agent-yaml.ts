@@ -1,6 +1,11 @@
-import type { DomainAgent } from '@/domain/types'
+import type { DomainAgent, DomainPayload } from '@/domain/types'
 
-export function agentToYaml(agent: DomainAgent): string {
+export type AgentYamlInput = Pick<
+  DomainAgent,
+  'name' | 'prompt' | 'providers' | 'payloads' | 'environment' | 'labels' | 'annotations'
+>
+
+export function agentToYaml(agent: AgentYamlInput): string {
   const lines: string[] = [
     'kind: Agent',
     `name: ${agent.name}`,

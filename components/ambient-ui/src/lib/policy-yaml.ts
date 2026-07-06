@@ -1,5 +1,10 @@
 import type { DomainPolicy } from '@/domain/types'
 
+export type PolicyYamlInput = Pick<
+  DomainPolicy,
+  'name' | 'spec' | 'labels' | 'annotations'
+>
+
 function yamlValue(value: unknown, indent: number): string {
   const pad = ' '.repeat(indent)
   if (value === null || value === undefined) return `${pad}~`
@@ -39,7 +44,7 @@ function yamlValue(value: unknown, indent: number): string {
   return `${pad}${String(value)}`
 }
 
-export function policyToYaml(policy: DomainPolicy): string {
+export function policyToYaml(policy: PolicyYamlInput): string {
   const lines: string[] = [
     'kind: Policy',
     `name: ${policy.name}`,
