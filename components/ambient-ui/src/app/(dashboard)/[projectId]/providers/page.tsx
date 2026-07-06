@@ -48,17 +48,17 @@ export default function ProvidersPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Providers</h1>
           <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
             <Plus className="size-4" />
-            Generate Provider YAML
+            New Provider
           </Button>
         </div>
         <EmptyState
           icon={KeyRound}
           title="No providers"
-          description="No providers have been declared via GitOps yet."
+          description="No providers have been declared yet."
           action={
             <Button onClick={() => setCreateSheetOpen(true)}>
               <Plus className="size-4 mr-1.5" />
-              Generate Provider YAML
+              New Provider
             </Button>
           }
         />
@@ -84,7 +84,7 @@ export default function ProvidersPage() {
         </div>
         <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
           <Plus className="size-4" />
-          Generate Provider YAML
+          New Provider
         </Button>
       </div>
       <ProvidersTable providers={providers} searchFilter={search} />

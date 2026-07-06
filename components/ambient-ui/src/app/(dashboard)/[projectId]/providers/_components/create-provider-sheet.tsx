@@ -76,10 +76,9 @@ export function CreateProviderSheet({
     <Sheet open={open} onOpenChange={handleClose}>
       <SheetContent className="sm:max-w-lg overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>Generate Provider YAML</SheetTitle>
+          <SheetTitle>New Provider</SheetTitle>
           <SheetDescription>
-            Generate a ConfigMap declaration for a provider. Apply it with
-            kubectl to register the provider.
+            Define a provider and generate its ConfigMap declaration.
           </SheetDescription>
         </SheetHeader>
 

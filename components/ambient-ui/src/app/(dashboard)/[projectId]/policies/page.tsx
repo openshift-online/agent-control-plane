@@ -48,17 +48,17 @@ export default function PoliciesPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Policies</h1>
           <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
             <Plus className="size-4" />
-            Generate Policy YAML
+            New Policy
           </Button>
         </div>
         <EmptyState
           icon={Shield}
           title="No policies"
-          description="No policies have been declared via GitOps yet."
+          description="No policies have been declared yet."
           action={
             <Button onClick={() => setCreateSheetOpen(true)}>
               <Plus className="size-4 mr-1.5" />
-              Generate Policy YAML
+              New Policy
             </Button>
           }
         />
@@ -84,7 +84,7 @@ export default function PoliciesPage() {
         </div>
         <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
           <Plus className="size-4" />
-          Generate Policy YAML
+          New Policy
         </Button>
       </div>
       <PoliciesTable policies={policies} searchFilter={search} />

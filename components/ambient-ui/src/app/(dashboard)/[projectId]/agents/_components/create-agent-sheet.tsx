@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useCallback } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import {
   Sheet,
   SheetContent,
@@ -20,10 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { useCreateAgent } from '@/queries/use-agents'
-import type { DomainAgentCreateRequest, DomainPayload } from '@/domain/types'
+import type { DomainPayload } from '@/domain/types'
 import { MODEL_OPTIONS } from '@/domain/models'
-import { useGatewayMode } from '@/lib/use-gateway-mode'
 import { agentToConfigMapYaml } from '@/lib/agent-yaml'
 import type { ConfigMapAgentInput } from '@/lib/agent-yaml'
 import { SandboxConfigFields, INITIAL_SANDBOX_CONFIG } from './sandbox-config-fields'
@@ -37,10 +35,7 @@ export function CreateAgentSheet({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const router = useRouter()
   const { projectId } = useParams<{ projectId: string }>()
-  const createAgent = useCreateAgent()
-  const { enabled: gatewayMode } = useGatewayMode()
 
   const [name, setName] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -134,60 +129,27 @@ export function CreateAgentSheet({
     setGeneratedYaml(yaml)
   }
 
-  async function handleSubmitApi(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-
-    if (!name.trim()) {
-      setError('Name is required.')
-      return
-    }
-
-    const request: DomainAgentCreateRequest = {
-      name: name.trim(),
-      projectId,
-    }
-
-    if (displayName.trim()) request.displayName = displayName.trim()
-    if (model) request.model = model
-    if (prompt.trim()) request.prompt = prompt.trim()
-    if (repoUrl.trim()) request.repoUrl = repoUrl.trim()
-    if (description.trim()) request.description = description.trim()
-
-    try {
-      const agent = await createAgent.mutateAsync({ projectId, request })
-      resetForm()
-      onOpenChange(false)
-      router.push(`/${projectId}/agents/${agent.id}`)
-    } catch (err) {
-      console.error('create agent failed', err)
-      setError('Failed to create agent. Please try again.')
-    }
-  }
-
   const previewYaml = useMemo(() => {
-    if (!gatewayMode || !name.trim()) return null
+    if (!name.trim()) return null
     try {
       return agentToConfigMapYaml(buildConfigMapInput())
     } catch {
       return null
     }
-  }, [gatewayMode, name, buildConfigMapInput])
+  }, [name, buildConfigMapInput])
 
   return (
     <Sheet open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v) }}>
       <SheetContent side="right" className="sm:max-w-lg overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>{gatewayMode ? 'Generate Agent YAML' : 'New Agent'}</SheetTitle>
+          <SheetTitle>New Agent</SheetTitle>
           <SheetDescription>
-            {gatewayMode
-              ? 'Define an agent and generate a ConfigMap YAML for kubectl apply.'
-              : 'Create a new agent definition in this project.'}
+            Define an agent and generate its ConfigMap declaration.
           </SheetDescription>
         </SheetHeader>
 
         <form
-          onSubmit={gatewayMode ? handleGenerateYaml : handleSubmitApi}
+          onSubmit={handleGenerateYaml}
           className="flex flex-col gap-4 px-4 pb-4"
         >
           <div className="space-y-1.5">
@@ -271,18 +233,16 @@ export function CreateAgentSheet({
             />
           </div>
 
-          {gatewayMode && (
-            <SandboxConfigFields
-              state={sandboxConfig}
-              onChange={setSandboxConfig}
-            />
-          )}
+          <SandboxConfigFields
+            state={sandboxConfig}
+            onChange={setSandboxConfig}
+          />
 
           {error && (
             <p className="text-sm text-destructive">{error}</p>
           )}
 
-          {gatewayMode && generatedYaml && (
+          {generatedYaml && (
             <ConfigMapYamlPreview yaml={generatedYaml} agentName={name.trim()} />
           )}
 
@@ -294,18 +254,9 @@ export function CreateAgentSheet({
             >
               Cancel
             </Button>
-            {gatewayMode ? (
-              <Button type="submit" disabled={!name.trim()}>
-                Generate YAML
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                disabled={createAgent.isPending || !name.trim()}
-              >
-                {createAgent.isPending ? 'Creating...' : 'Create Agent'}
-              </Button>
-            )}
+            <Button type="submit" disabled={!name.trim()}>
+              Generate YAML
+            </Button>
           </SheetFooter>
         </form>
       </SheetContent>

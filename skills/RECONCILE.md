@@ -49,9 +49,9 @@ skills/
 
 ## Reconciliation State
 
-**Last analyzed**: 2026-07-05 (Wave 2 + Wave 4 + Wave 5 + Wave 6 + Wave 7 executed)
+**Last analyzed**: 2026-07-06 (Wave 2 through Wave 8 executed)
 **Spec corpus**: 29 specs across 4 domains
-**Codebase commit**: feat/reconcile-skill-and-spec-alignment branch
+**Codebase commit**: 2213d3cc (squizzi/sydney branch)
 
 ### Coverage Summary
 
@@ -59,9 +59,9 @@ skills/
 |--------|-------|-------------|---------|---------|---------|----------|
 | Platform | 12 | 110 | 105 | 2 | 3 | 95.5% |
 | Security | 6 | 55 | 45 | 5 | 5 | 81.8% |
-| UI | 7 | 70 | 60 | 8 | 2 | 85.7% |
+| UI | 7 | 70 | 62 | 6 | 2 | 88.6% |
 | CLI | 1 | 13 | 13 | 0 | 0 | 100% |
-| **TOTAL** | **29** | **248** | **223** | **15** | **10** | **89.9%** |
+| **TOTAL** | **29** | **248** | **225** | **13** | **10** | **90.7%** |
 
 ### Spec Dependency Order
 
@@ -131,8 +131,8 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | U4 | views | Settings: API Keys tab | FE | missing | minor | Blocked: no API key entity/migration/handlers in backend. |
 | U5 | views | Settings: Feature Flags tab | FE | missing | minor | Blocked: `useWorkspaceFlag` is a stub. No Unleash integration yet. |
 | U6 | live-preview | SSE fallback indicator | FE | missing | minor | Blocked: no SSE client exists. Uses polling only. |
-| U7 | architecture | Sidebar "Configure" group label | FE | partial | minor | Uses "Admin" label. Settings in separate "Project" group instead of "Configure". |
-| U8 | project-sharing | Settings access via gear icon | FE | partial | minor | Settings is sidebar nav item, not gear icon in nav header per spec. |
+| U7 | architecture | Sidebar "Configure" group label | FE | **done** | minor | Sidebar uses "Config" label. Non-OpenShell dual-mode code path removed. |
+| U8 | project-sharing | Settings access via gear icon | FE | **done** | minor | Gear icon added to nav header. Visible only on project-scoped pages. |
 
 ### Divergences (Require Human Decision)
 
@@ -157,8 +157,9 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 5 | CLI + Runner | 3 | P2, P4, P8 | CLI tests, `python -m pytest tests/` |
 | 6 | FE | 7 | P3, U1, U2 (UI), U3, U4, U5, U6 | `npm run build` -- 0 errors |
 | 7 | Integration | 2 | P7, P9 | MCP tool test in Kind |
+| 8 | FE | 2 | U7, U8 | UI cleanup: sidebar label, gear icon, OpenShell-only mode |
 
-**Partials** (U7, U8, S9, S10, S11) are low-severity and can be addressed opportunistically.
+**Partials** (S9, S10, S11) are low-severity and can be addressed opportunistically.
 
 ---
 
@@ -202,3 +203,4 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-05 | (pending) | Wave 6 executed: P3,U1,U2(UI),U3 | 89.9% | 4 gaps closed. Application CRUD UI, folder tree, transfer ownership UI, sole-owner tooltip. U4/U5/U6 blocked on backend. |
 | 2026-07-05 | (pending) | Wave 7 executed: P7 | 90.3% | SSE stream forwarding implemented in MCP watch tool. P9 blocked on api-server plugin. |
 | 2026-07-05 | (pending) | E2E validation: Kind deploy + LLM round-trip | 90.3% | All 3 components rebuilt and deployed to Kind. LLM round-trip confirmed: Hello world + 2+2=4. |
+| 2026-07-06 | 2213d3cc | Wave 8 executed: U7, U8 + OpenShell cleanup | 90.7% | Sidebar label → "Config". Gear icon in nav header. Removed non-OpenShell dual-mode paths, GitOps info boxes, "Generate YAML" button labels. |

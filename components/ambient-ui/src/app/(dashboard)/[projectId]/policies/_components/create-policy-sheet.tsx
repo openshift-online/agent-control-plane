@@ -81,10 +81,9 @@ export function CreatePolicySheet({
     <Sheet open={open} onOpenChange={handleClose}>
       <SheetContent className="sm:max-w-lg overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>Generate Policy YAML</SheetTitle>
+          <SheetTitle>New Policy</SheetTitle>
           <SheetDescription>
-            Generate a ConfigMap declaration for a sandbox policy. Apply it with
-            kubectl to register the policy.
+            Define a sandbox policy and generate its ConfigMap declaration.
           </SheetDescription>
         </SheetHeader>
 

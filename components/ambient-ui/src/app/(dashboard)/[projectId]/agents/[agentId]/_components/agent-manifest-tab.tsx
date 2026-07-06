@@ -159,19 +159,6 @@ function GatewayManifestTab({ agent }: { agent: DomainAgent }) {
 
   return (
     <div className="space-y-6 pt-4">
-      <div className="flex items-start gap-3 rounded-md border border-muted bg-muted/50 p-4">
-        <Info className="size-5 shrink-0 text-muted-foreground mt-0.5" />
-        <div>
-          <p className="text-sm font-medium">GitOps-managed agent</p>
-          <p className="text-sm text-muted-foreground">
-            This agent is managed via GitOps in namespace{" "}
-            <span className="font-mono">{sourceNamespace}</span>. To modify it,
-            update the ConfigMap and re-apply with{" "}
-            <span className="font-mono">kubectl apply</span>.
-          </p>
-        </div>
-      </div>
-
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Configuration</CardTitle>
@@ -418,23 +405,6 @@ function StandardManifestTab({
 
   return (
     <div className="space-y-6 pt-4">
-      {isManaged && (
-        <div className="flex items-start gap-3 rounded-md border border-muted bg-muted/50 p-4">
-          <Info className="size-5 shrink-0 text-muted-foreground mt-0.5" />
-          <div>
-            <p className="text-sm font-medium">GitOps-managed agent</p>
-            <p className="text-sm text-muted-foreground">
-              This agent is managed via GitOps
-              {agent.annotations["ambient.ai/source-namespace"]
-                ? ` in namespace ${agent.annotations["ambient.ai/source-namespace"]}`
-                : ""}
-              . This is viewable only. Edits to this resource should occur via
-              the ConfigMap declaration.
-            </p>
-          </div>
-        </div>
-      )}
-
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Configuration</CardTitle>
