@@ -815,10 +815,12 @@ else
   skip "Scenario 33: agent:runner role not found"
 fi
 
-# Also test credential:token-reader (internal role)
+# credential:token-reader is no longer internal — owner (level 1) can grant it (level 2)
 if [[ -n "$ROLE_CRED_TOKEN_READER" ]]; then
   api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_CRED_TOKEN_READER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-b\",\"credential_id\":\"${CRED_A_ID}\"}"
-  assert_status "403" "$HTTP_STATUS" "Scenario 33: Granting credential:token-reader (internal role) rejected"
+  assert_status "201" "$HTTP_STATUS" "Scenario 33: Owner can grant credential:token-reader"
+  local_bid=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+  [[ -n "$local_bid" ]] && api DELETE "/role_bindings/${local_bid}" "$TOKEN_A"
 else
   skip "Scenario 33: credential:token-reader role not found"
 fi
@@ -1033,7 +1035,7 @@ GRANTABLE_ROLES=(
   "credential:owner|ROLE_CREDENTIAL_OWNER|1|no"
   "credential:viewer|ROLE_CREDENTIAL_VIEWER|2|no"
   "agent:runner|ROLE_AGENT_RUNNER|0|yes"
-  "credential:token-reader|ROLE_CRED_TOKEN_READER|0|yes"
+  "credential:token-reader|ROLE_CRED_TOKEN_READER|2|no"
 )
 
 # Format: "label|token_var|level"
@@ -1509,7 +1511,7 @@ echo -e "${BOLD}Phase 26: Credential Binding Enforcement (spec: credential-bindi
 #   - agent not belonging to project is rejected (400)
 #   - global credential bindings require platform:admin
 #   - project:editor can unbind without credential:owner (asymmetric)
-#   - non-admin users cannot create internal role bindings (credential:token-reader)
+#   - owner can grant credential:token-reader (level 2, no longer internal)
 
 # Setup: give User B project:editor on proj-alpha for this phase
 api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_PROJECT_EDITOR}\",\"scope\":\"project\",\"user_id\":\"rbac-user-b\",\"project_id\":\"rbac-proj-alpha\"}"
@@ -1606,12 +1608,14 @@ else
 fi
 [[ -n "$CB_VIEWER_BIND_2" ]] && api DELETE "/role_bindings/${CB_VIEWER_BIND_2}" "$TOKEN_A"
 
-# --- Scenario: non-admin user cannot create credential:token-reader binding (internal role) ---
+# --- Scenario: owner can grant credential:token-reader (no longer internal) ---
 if [[ -n "$ROLE_CRED_TOKEN_READER" ]]; then
   api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_CRED_TOKEN_READER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-a\",\"credential_id\":\"${CRED_A_ID}\"}"
-  assert_status "403" "$HTTP_STATUS" "CB: non-admin cannot create credential:token-reader binding"
+  assert_status "201" "$HTTP_STATUS" "CB: owner can create credential:token-reader binding"
+  local_bid=$(echo "$HTTP_BODY" | jq -r '.id // empty')
+  [[ -n "$local_bid" ]] && api DELETE "/role_bindings/${local_bid}" "$TOKEN_A"
 else
-  skip "CB: token-reader internal role test (role not found)"
+  skip "CB: token-reader role test (role not found)"
 fi
 
 # Cleanup phase bindings
