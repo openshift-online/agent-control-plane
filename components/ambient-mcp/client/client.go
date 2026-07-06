@@ -138,7 +138,7 @@ func (c *Client) StreamSSE(ctx context.Context, path string) (<-chan SSEEvent, <
 		req.Header.Set("Authorization", "Bearer "+c.Token())
 		req.Header.Set("Accept", "text/event-stream")
 
-		sseClient := &http.Client{}
+		sseClient := &http.Client{Transport: c.httpClient.Transport}
 		resp, err := sseClient.Do(req)
 		if err != nil {
 			errs <- fmt.Errorf("SSE connect failed: %w", err)
@@ -174,7 +174,7 @@ func (c *Client) StreamSSE(ctx context.Context, path string) (<-chan SSEEvent, <
 			}
 
 			if strings.HasPrefix(line, "data:") {
-				dataLines = append(dataLines, strings.TrimPrefix(line, "data:"))
+				dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
 			} else if strings.HasPrefix(line, "id:") {
 				currentID = strings.TrimSpace(strings.TrimPrefix(line, "id:"))
 			}

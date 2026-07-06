@@ -36,6 +36,12 @@ func WatchSessionMessages(c *client.Client, transport string) func(ctx context.C
 			return errResult("INTERNAL_ERROR", "MCP server not available in context"), nil
 		}
 
+		clientSession := server.ClientSessionFromContext(ctx)
+		if clientSession == nil {
+			return errResult("INTERNAL_ERROR", "MCP client session not available in context"), nil
+		}
+		mcpSessionID := clientSession.SessionID()
+
 		subID := fmt.Sprintf("sub_%s_%d", sessionID, time.Now().UnixNano())
 
 		streamCtx, cancel := context.WithCancel(ctx)
@@ -44,7 +50,7 @@ func WatchSessionMessages(c *client.Client, transport string) func(ctx context.C
 		subscriptions[subID] = cancel
 		subscriptionsMu.Unlock()
 
-		go streamMessages(streamCtx, c, mcpServer, sessionID, subID, afterSeq)
+		go streamMessages(streamCtx, c, mcpServer, mcpSessionID, sessionID, subID, afterSeq)
 
 		return jsonResult(map[string]interface{}{
 			"subscription_id": subID,
@@ -54,7 +60,7 @@ func WatchSessionMessages(c *client.Client, transport string) func(ctx context.C
 	}
 }
 
-func streamMessages(ctx context.Context, c *client.Client, mcpServer *server.MCPServer, sessionID, subID string, afterSeq int) {
+func streamMessages(ctx context.Context, c *client.Client, mcpServer *server.MCPServer, mcpSessionID, sessionID, subID string, afterSeq int) {
 	defer func() {
 		subscriptionsMu.Lock()
 		delete(subscriptions, subID)
@@ -80,7 +86,7 @@ func streamMessages(ctx context.Context, c *client.Client, mcpServer *server.MCP
 			if err := json.Unmarshal([]byte(evt.Data), &msgPayload); err != nil {
 				msgPayload = evt.Data
 			}
-			mcpServer.SendNotificationToAllClients("notifications/progress", map[string]any{
+			_ = mcpServer.SendNotificationToSpecificClient(mcpSessionID, "notifications/progress", map[string]any{
 				"progressToken": subID,
 				"progress": map[string]any{
 					"session_id": sessionID,
@@ -90,7 +96,7 @@ func streamMessages(ctx context.Context, c *client.Client, mcpServer *server.MCP
 
 		case err, ok := <-errs:
 			if ok && err != nil {
-				mcpServer.SendNotificationToAllClients("notifications/progress", map[string]any{
+				_ = mcpServer.SendNotificationToSpecificClient(mcpSessionID, "notifications/progress", map[string]any{
 					"progressToken": subID,
 					"progress": map[string]any{
 						"session_id": sessionID,
@@ -109,7 +115,7 @@ func streamMessages(ctx context.Context, c *client.Client, mcpServer *server.MCP
 				continue
 			}
 			if session.Phase == "Completed" || session.Phase == "Failed" || session.Phase == "Stopped" {
-				mcpServer.SendNotificationToAllClients("notifications/progress", map[string]any{
+				_ = mcpServer.SendNotificationToSpecificClient(mcpSessionID, "notifications/progress", map[string]any{
 					"progressToken": subID,
 					"progress": map[string]any{
 						"session_id": sessionID,

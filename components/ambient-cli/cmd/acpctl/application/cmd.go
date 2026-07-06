@@ -369,9 +369,6 @@ var deleteCmd = &cobra.Command{
 
 var syncArgs struct {
 	outputFormat string
-	prune        bool
-	revision     string
-	pruneProject bool
 }
 
 var syncCmd = &cobra.Command{
@@ -399,21 +396,7 @@ var syncCmd = &cobra.Command{
 			return err
 		}
 
-		var syncReq *sdktypes.ApplicationSyncRequest
-		if cmd.Flags().Changed("prune") || cmd.Flags().Changed("revision") || cmd.Flags().Changed("prune-project") {
-			syncReq = &sdktypes.ApplicationSyncRequest{}
-			if cmd.Flags().Changed("prune") {
-				syncReq.Prune = &syncArgs.prune
-			}
-			if cmd.Flags().Changed("revision") {
-				syncReq.Revision = &syncArgs.revision
-			}
-			if cmd.Flags().Changed("prune-project") {
-				syncReq.PruneProject = &syncArgs.pruneProject
-			}
-		}
-
-		result, err := client.Applications().Sync(ctx, appID, syncReq)
+		result, err := client.Applications().Sync(ctx, appID)
 		if err != nil {
 			return fmt.Errorf("sync application: %w", err)
 		}
@@ -526,9 +509,6 @@ func init() {
 	deleteCmd.Flags().BoolVar(&deleteArgs.confirm, "confirm", false, "Confirm deletion")
 
 	syncCmd.Flags().StringVarP(&syncArgs.outputFormat, "output", "o", "", "Output format: json")
-	syncCmd.Flags().BoolVar(&syncArgs.prune, "prune", false, "Override auto_prune for this sync")
-	syncCmd.Flags().StringVar(&syncArgs.revision, "revision", "", "Override source_target_revision for this sync")
-	syncCmd.Flags().BoolVar(&syncArgs.pruneProject, "prune-project", false, "Allow project deletion during prune")
 	refreshCmd.Flags().StringVarP(&refreshArgs.outputFormat, "output", "o", "", "Output format: json")
 }
 

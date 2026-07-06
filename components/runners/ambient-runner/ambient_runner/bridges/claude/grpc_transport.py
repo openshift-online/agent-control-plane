@@ -375,20 +375,22 @@ class GRPCSessionListener:
                 )
 
         async def _run_once():
-            async for event in self._bridge.run(input_data):
-                stream_queue = active_streams.get(thread_id)
-                if stream_queue is not None:
-                    try:
-                        stream_queue.put_nowait(event)
-                    except asyncio.QueueFull:
-                        logger.warning(
-                            "[GRPC LISTENER] SSE tap queue full, dropping event: thread=%s",
-                            thread_id,
-                        )
-                await writer.consume(event)
-                await ops_writer.consume(event)
-                await _push_compressed(compressor.feed(event))
-            await _push_compressed(compressor.flush())
+            try:
+                async for event in self._bridge.run(input_data):
+                    stream_queue = active_streams.get(thread_id)
+                    if stream_queue is not None:
+                        try:
+                            stream_queue.put_nowait(event)
+                        except asyncio.QueueFull:
+                            logger.warning(
+                                "[GRPC LISTENER] SSE tap queue full, dropping event: thread=%s",
+                                thread_id,
+                            )
+                    await writer.consume(event)
+                    await ops_writer.consume(event)
+                    await _push_compressed(compressor.feed(event))
+            finally:
+                await _push_compressed(compressor.flush())
 
         try:
             await _run_once()

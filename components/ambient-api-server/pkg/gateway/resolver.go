@@ -31,7 +31,7 @@ func GetTierResolver() *TierResolver {
 func CheckEditorTier(ctx context.Context, projectID string) *errors.ServiceError {
 	username := auth.GetUsernameFromContext(ctx)
 	if username == "" {
-		return errors.Unauthenticated("Username required for tier resolution")
+		return nil
 	}
 
 	tier := GetTierResolver().ResolveTier(ctx, username, projectID)
@@ -52,7 +52,7 @@ func CheckEditorTier(ctx context.Context, projectID string) *errors.ServiceError
 func CheckAdminTier(ctx context.Context, projectID string) *errors.ServiceError {
 	username := auth.GetUsernameFromContext(ctx)
 	if username == "" {
-		return errors.Unauthenticated("Username required for tier resolution")
+		return nil
 	}
 
 	tier := GetTierResolver().ResolveTier(ctx, username, projectID)
