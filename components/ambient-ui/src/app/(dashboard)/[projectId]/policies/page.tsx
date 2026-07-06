@@ -47,7 +47,7 @@ export default function PoliciesPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Policies</h1>
           <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
             <Plus className="size-4" />
-            New Policy
+            Generate Policy Manifest
           </Button>
         </div>
         <EmptyState
@@ -57,7 +57,7 @@ export default function PoliciesPage() {
           action={
             <Button onClick={() => setCreateSheetOpen(true)}>
               <Plus className="size-4 mr-1.5" />
-              New Policy
+              Generate Policy Manifest
             </Button>
           }
         />

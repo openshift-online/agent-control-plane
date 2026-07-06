@@ -147,7 +147,7 @@ export function CreateAgentSheet({
     <Sheet open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v) }}>
       <SheetContent side="right" className="sm:max-w-lg overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>New Agent</SheetTitle>
+          <SheetTitle>Generate Agent Manifest</SheetTitle>
           <SheetDescription>
             Define an agent and generate its manifest.
           </SheetDescription>
@@ -260,7 +260,7 @@ export function CreateAgentSheet({
               Cancel
             </Button>
             <Button type="submit" disabled={!name.trim()}>
-              Generate YAML
+              Generate Manifest
             </Button>
           </SheetFooter>
         </form>

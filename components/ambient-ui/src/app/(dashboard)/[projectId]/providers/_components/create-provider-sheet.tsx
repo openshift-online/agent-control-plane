@@ -24,11 +24,9 @@ import { providerToYaml } from '@/lib/provider-yaml'
 
 const PROVIDER_TYPES = [
   'github',
-  'anthropic',
   'jira',
-  'google',
-  'kubernetes',
-  'custom',
+  'vertex',
+  'generic',
 ]
 
 export function CreateProviderSheet({
@@ -82,13 +80,16 @@ export function CreateProviderSheet({
     <Sheet open={open} onOpenChange={handleClose}>
       <SheetContent className="sm:max-w-lg overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>New Provider</SheetTitle>
+          <SheetTitle>Generate Provider Manifest</SheetTitle>
           <SheetDescription>
             Define a provider and generate its manifest.
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-4 py-4">
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleGenerate() }}
+          className="flex flex-col gap-4 px-4 pb-4"
+        >
           <div className="space-y-1.5">
             <label htmlFor="provider-name" className="text-sm font-medium">
               Name *
@@ -156,16 +157,20 @@ export function CreateProviderSheet({
               kind="provider"
             />
           )}
-        </div>
 
-        <SheetFooter>
-          <Button
-            onClick={handleGenerate}
-            disabled={!name.trim()}
-          >
-            Generate YAML
-          </Button>
-        </SheetFooter>
+          <SheetFooter className="px-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => { resetForm(); onOpenChange(false) }}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!name.trim()}>
+              Generate Manifest
+            </Button>
+          </SheetFooter>
+        </form>
       </SheetContent>
     </Sheet>
   )

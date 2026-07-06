@@ -47,7 +47,7 @@ export default function ProvidersPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Providers</h1>
           <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
             <Plus className="size-4" />
-            New Provider
+            Generate Provider Manifest
           </Button>
         </div>
         <EmptyState
@@ -57,7 +57,7 @@ export default function ProvidersPage() {
           action={
             <Button onClick={() => setCreateSheetOpen(true)}>
               <Plus className="size-4 mr-1.5" />
-              New Provider
+              Generate Provider Manifest
             </Button>
           }
         />
