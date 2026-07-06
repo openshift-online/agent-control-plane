@@ -49,9 +49,9 @@ skills/
 
 ## Reconciliation State
 
-**Last analyzed**: 2026-07-06 (Wave 2 through Wave 8 executed)
+**Last analyzed**: 2026-07-06 (Wave 2 through Wave 9 executed)
 **Spec corpus**: 29 specs across 4 domains
-**Codebase commit**: 2213d3cc (squizzi/sydney branch)
+**Codebase commit**: 1fbebf75 (squizzi/reconcile-frontend-gaps branch)
 
 ### Coverage Summary
 
@@ -158,6 +158,7 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 6 | FE | 7 | P3, U1, U2 (UI), U3, U4, U5, U6 | `npm run build` -- 0 errors |
 | 7 | Integration | 2 | P7, P9 | MCP tool test in Kind |
 | 8 | FE | 2 | U7, U8 | UI cleanup: sidebar label, gear icon, OpenShell-only mode |
+| 9 | FE | 0 new | (cleanup) | YAML types, lifecycle badges, namespace removal, file renames |
 
 **Partials** (S9, S10, S11) are low-severity and can be addressed opportunistically.
 
@@ -204,3 +205,4 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-05 | (pending) | Wave 7 executed: P7 | 90.3% | SSE stream forwarding implemented in MCP watch tool. P9 blocked on api-server plugin. |
 | 2026-07-05 | (pending) | E2E validation: Kind deploy + LLM round-trip | 90.3% | All 3 components rebuilt and deployed to Kind. LLM round-trip confirmed: Hello world + 2+2=4. |
 | 2026-07-06 | 2213d3cc | Wave 8 executed: U7, U8 + OpenShell cleanup | 90.7% | Sidebar label → "Config". Gear icon in nav header. Removed non-OpenShell dual-mode paths, GitOps info boxes, "Generate YAML" button labels. |
+| 2026-07-06 | 1fbebf75 | Wave 9: FE consistency + type safety | 90.7% | Dynamic lifecycle badges for providers/policies (was hardcoded GitOps). Narrow YAML input types (AgentYamlInput, ProviderYamlInput, PolicyYamlInput). Removed namespace fields from all create sheets (inherited from project). Renamed configmap-yaml-preview → yaml-preview. Provider types narrowed to github/vertex/generic. Image field disabled (coming soon). All buttons → "Generate X Manifest". |
