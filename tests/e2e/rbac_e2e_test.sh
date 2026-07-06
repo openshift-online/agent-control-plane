@@ -820,7 +820,7 @@ fi
 # full access to the credential's token, so delegation is safe. The GetToken
 # handler independently verifies the caller's credential scope as defense-in-depth.
 if [[ -n "$ROLE_CRED_TOKEN_READER" ]]; then
-  api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_CRED_TOKEN_READER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-b\",\"credential_id\":\"${CRED_A_ID}\"}"
+  api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_CRED_TOKEN_READER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-b\",\"credential_id\":\"${CRED_A_ID}\",\"project_id\":\"rbac-proj-alpha\"}"
   assert_status "201" "$HTTP_STATUS" "Scenario 33: Owner delegates credential:token-reader (credential-scoped, owner already has full access)"
   local_bid=$(echo "$HTTP_BODY" | jq -r '.id // empty')
   [[ -n "$local_bid" ]] && api DELETE "/role_bindings/${local_bid}" "$TOKEN_A"
@@ -1623,7 +1623,7 @@ fi
 # (2) the owner already has full access to the token, (3) GetToken handler
 # checks AuthResult.CredentialIDs as defense-in-depth.
 if [[ -n "$ROLE_CRED_TOKEN_READER" ]]; then
-  api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_CRED_TOKEN_READER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-a\",\"credential_id\":\"${CRED_A_ID}\"}"
+  api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_CRED_TOKEN_READER}\",\"scope\":\"credential\",\"user_id\":\"rbac-user-a\",\"credential_id\":\"${CRED_A_ID}\",\"project_id\":\"rbac-proj-alpha\"}"
   assert_status "201" "$HTTP_STATUS" "CB: owner delegates credential:token-reader (credential-scoped, defense-in-depth in GetToken handler)"
   local_bid=$(echo "$HTTP_BODY" | jq -r '.id // empty')
   [[ -n "$local_bid" ]] && api DELETE "/role_bindings/${local_bid}" "$TOKEN_A"
