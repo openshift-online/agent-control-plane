@@ -3,19 +3,16 @@
 // Feature-gated by NEXT_PUBLIC_OPENSHELL_USE_GATEWAY env var (sidebar nav only visible when enabled)
 import { useState } from 'react'
 import { useParams } from 'next/navigation'
-import { KeyRound, Plus } from 'lucide-react'
+import { KeyRound } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/empty-state'
 import { useProviders } from '@/queries/use-providers'
 import { ProvidersTable } from './_components/providers-table'
-import { CreateProviderSheet } from './_components/create-provider-sheet'
 
 export default function ProvidersPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const [search, setSearch] = useState('')
-  const [createSheetOpen, setCreateSheetOpen] = useState(false)
   const { data: providers, isLoading, error } = useProviders(projectId)
 
   if (error) {
@@ -44,27 +41,11 @@ export default function ProvidersPage() {
   if (!providers || providers.length === 0) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold tracking-tight">Providers</h1>
-          <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
-            <Plus className="size-4" />
-            New Provider
-          </Button>
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight">Providers</h1>
         <EmptyState
           icon={KeyRound}
           title="No providers"
           description="No providers have been declared yet."
-          action={
-            <Button onClick={() => setCreateSheetOpen(true)}>
-              <Plus className="size-4 mr-1.5" />
-              New Provider
-            </Button>
-          }
-        />
-        <CreateProviderSheet
-          open={createSheetOpen}
-          onOpenChange={setCreateSheetOpen}
         />
       </div>
     )
@@ -72,26 +53,16 @@ export default function ProvidersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">Providers</h1>
-          <Input
-            placeholder="Filter by name, type, or secret..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-80"
-          />
-        </div>
-        <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
-          <Plus className="size-4" />
-          New Provider
-        </Button>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">Providers</h1>
+        <Input
+          placeholder="Filter by name, type, or secret..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-80"
+        />
       </div>
       <ProvidersTable providers={providers} searchFilter={search} />
-      <CreateProviderSheet
-        open={createSheetOpen}
-        onOpenChange={setCreateSheetOpen}
-      />
     </div>
   )
 }
