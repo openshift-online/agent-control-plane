@@ -194,7 +194,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		return fmt.Errorf("resolving initial API token: %w", err)
 	}
 
-	sdk, err := sdkclient.NewClient(cfg.APIServerURL, initToken, "")
+	sdk, err := sdkclient.NewServiceClient(cfg.APIServerURL, initToken)
 	if err != nil {
 		return fmt.Errorf("creating SDK client: %w", err)
 	}
@@ -430,7 +430,7 @@ func runTestMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		return fmt.Errorf("resolving API token: %w", err)
 	}
 
-	sdk, err := sdkclient.NewClient(cfg.APIServerURL, initToken, "")
+	sdk, err := sdkclient.NewServiceClient(cfg.APIServerURL, initToken)
 	if err != nil {
 		return fmt.Errorf("creating SDK client: %w", err)
 	}
