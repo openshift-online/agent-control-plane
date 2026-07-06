@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react'
 import { Copy, Download, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-export function ConfigMapYamlPreview({
+export function YamlPreview({
   yaml,
   name,
   kind,
@@ -36,7 +36,7 @@ export function ConfigMapYamlPreview({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium">Generated ConfigMap</p>
+        <p className="text-sm font-medium">Generated Manifest</p>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleCopy}>
             {copied ? (
@@ -55,7 +55,7 @@ export function ConfigMapYamlPreview({
         {yaml}
       </pre>
       <p className="text-xs text-muted-foreground">
-        Apply with: <code className="bg-muted px-1 py-0.5 rounded">kubectl apply -f {kind}-{name}.yaml</code>
+        Apply with: <code className="bg-muted px-1 py-0.5 rounded">acpctl apply -k {kind}-{name}.yaml</code>
       </p>
     </div>
   )

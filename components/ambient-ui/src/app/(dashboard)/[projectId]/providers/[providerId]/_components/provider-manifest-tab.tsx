@@ -11,25 +11,16 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { DomainProvider } from '@/domain/types'
-import { providerToConfigMapYaml } from '@/lib/provider-yaml'
+import { providerToYaml } from '@/lib/provider-yaml'
 
 type ConfigRow = { label: string; value: React.ReactNode; mono?: boolean }
 
 export function ProviderManifestTab({ provider }: { provider: DomainProvider }) {
   const [copied, setCopied] = useState(false)
 
-  const sourceNamespace =
-    provider.annotations['ambient.ai/source-namespace'] ?? provider.namespace
-
   const yaml = useMemo(
-    () =>
-      providerToConfigMapYaml({
-        name: provider.name,
-        namespace: sourceNamespace,
-        type: provider.type || undefined,
-        secret: provider.secret || undefined,
-      }),
-    [provider, sourceNamespace],
+    () => providerToYaml(provider),
+    [provider],
   )
 
   const handleCopy = useCallback(async () => {
@@ -56,7 +47,8 @@ export function ProviderManifestTab({ provider }: { provider: DomainProvider }) 
   if (provider.type) configRows.push({ label: 'Type', value: provider.type })
   if (provider.secret)
     configRows.push({ label: 'Secret', value: provider.secret, mono: true })
-  configRows.push({ label: 'Namespace', value: sourceNamespace, mono: true })
+  if (provider.namespace)
+    configRows.push({ label: 'Namespace', value: provider.namespace, mono: true })
 
   return (
     <div className="space-y-6 pt-4">
@@ -87,7 +79,7 @@ export function ProviderManifestTab({ provider }: { provider: DomainProvider }) 
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">ConfigMap YAML</CardTitle>
+            <CardTitle className="text-base">Manifest</CardTitle>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={handleCopy}>
                 {copied ? (

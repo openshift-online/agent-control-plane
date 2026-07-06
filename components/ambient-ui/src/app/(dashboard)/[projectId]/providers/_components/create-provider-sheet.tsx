@@ -19,8 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ConfigMapYamlPreview } from '@/components/configmap-yaml-preview'
-import { providerToConfigMapYaml } from '@/lib/provider-yaml'
+import { YamlPreview } from '@/components/configmap-yaml-preview'
+import { providerToYaml } from '@/lib/provider-yaml'
 
 const PROVIDER_TYPES = [
   'github',
@@ -55,11 +55,17 @@ export function CreateProviderSheet({
   }
 
   const handleGenerate = useCallback(() => {
-    const yaml = providerToConfigMapYaml({
+    const yaml = providerToYaml({
+      id: '',
       name,
+      type: type || '',
+      secret: secret || '',
       namespace,
-      type: type || undefined,
-      secret: secret || undefined,
+      projectId: projectId ?? '',
+      annotations: {},
+      labels: {},
+      createdAt: '',
+      updatedAt: '',
     })
     setGeneratedYaml(yaml)
   }, [name, namespace, type, secret])
@@ -78,7 +84,7 @@ export function CreateProviderSheet({
         <SheetHeader>
           <SheetTitle>New Provider</SheetTitle>
           <SheetDescription>
-            Define a provider and generate its ConfigMap declaration.
+            Define a provider and generate its manifest.
           </SheetDescription>
         </SheetHeader>
 
@@ -144,7 +150,7 @@ export function CreateProviderSheet({
           </div>
 
           {generatedYaml && (
-            <ConfigMapYamlPreview
+            <YamlPreview
               yaml={generatedYaml}
               name={name}
               kind="provider"

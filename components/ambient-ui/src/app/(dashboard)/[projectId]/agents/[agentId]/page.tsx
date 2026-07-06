@@ -64,7 +64,7 @@ export default function AgentDetailPage() {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="manifest">
-          <AgentManifestTab agent={agent} lifecycle={lifecycle} />
+          <AgentManifestTab agent={agent} />
         </TabsContent>
         <TabsContent value="sessions">
           <AgentSessionsTab agentId={agentId} projectId={projectId} />

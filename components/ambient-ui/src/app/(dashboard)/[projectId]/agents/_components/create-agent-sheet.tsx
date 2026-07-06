@@ -20,13 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { DomainPayload } from '@/domain/types'
+import type { DomainAgent, DomainPayload } from '@/domain/types'
 import { MODEL_OPTIONS } from '@/domain/models'
-import { agentToConfigMapYaml } from '@/lib/agent-yaml'
-import type { ConfigMapAgentInput } from '@/lib/agent-yaml'
+import { agentToYaml } from '@/lib/agent-yaml'
 import { SandboxConfigFields, INITIAL_SANDBOX_CONFIG } from './sandbox-config-fields'
 import type { SandboxConfigState } from './sandbox-config-fields'
-import { ConfigMapYamlPreview } from './configmap-yaml-preview'
+import { YamlPreview } from './configmap-yaml-preview'
 
 export function CreateAgentSheet({
   open,
@@ -63,7 +62,7 @@ export function CreateAgentSheet({
     setGeneratedYaml(null)
   }
 
-  const buildConfigMapInput = useCallback((): ConfigMapAgentInput => {
+  const buildAgentForYaml = useCallback((): DomainAgent => {
     const providers = sandboxConfig.providers
       .split(',')
       .map((p) => p.trim())
@@ -86,29 +85,35 @@ export function CreateAgentSheet({
       }))
 
     return {
+      id: '',
       name: name.trim(),
-      namespace: sandboxConfig.namespace.trim() || projectId,
-      ...(displayName.trim() ? { displayName: displayName.trim() } : {}),
-      ...(description.trim() ? { description: description.trim() } : {}),
-      ...(model ? { model } : {}),
-      ...(prompt.trim() ? { prompt: prompt.trim() } : {}),
-      ...(repoUrl.trim() ? { repoUrl: repoUrl.trim() } : {}),
-      ...(sandboxConfig.entrypoint.trim() ? { entrypoint: sandboxConfig.entrypoint.trim() } : {}),
-      ...(providers.length > 0 ? { providers } : {}),
-      ...(payloads.length > 0 ? { payloads } : {}),
-      ...(Object.keys(environment).length > 0 ? { environment } : {}),
-      ...(sandboxConfig.sandboxPolicy.trim() ? { sandboxPolicy: sandboxConfig.sandboxPolicy.trim() } : {}),
-      ...((sandboxConfig.image.trim() || sandboxConfig.cpu.trim() || sandboxConfig.memory.trim()) ? {
-        sandboxTemplate: {
-          ...(sandboxConfig.image.trim() ? { image: sandboxConfig.image.trim() } : {}),
-          ...((sandboxConfig.cpu.trim() || sandboxConfig.memory.trim()) ? {
-            resources: {
-              ...(sandboxConfig.cpu.trim() ? { cpu: sandboxConfig.cpu.trim() } : {}),
-              ...(sandboxConfig.memory.trim() ? { memory: sandboxConfig.memory.trim() } : {}),
-            },
-          } : {}),
-        },
-      } : {}),
+      displayName: displayName.trim() || null,
+      description: description.trim() || null,
+      model: model || null,
+      ownerUserId: null,
+      currentSessionId: null,
+      projectId: projectId ?? null,
+      prompt: prompt.trim() || null,
+      repoUrl: repoUrl.trim() || null,
+      workflowId: null,
+      entrypoint: sandboxConfig.entrypoint.trim() || null,
+      providers,
+      payloads,
+      environment,
+      sandboxTemplate: (sandboxConfig.image.trim() || sandboxConfig.cpu.trim() || sandboxConfig.memory.trim()) ? {
+        ...(sandboxConfig.image.trim() ? { image: sandboxConfig.image.trim() } : {}),
+        ...((sandboxConfig.cpu.trim() || sandboxConfig.memory.trim()) ? {
+          resources: {
+            ...(sandboxConfig.cpu.trim() ? { cpu: sandboxConfig.cpu.trim() } : {}),
+            ...(sandboxConfig.memory.trim() ? { memory: sandboxConfig.memory.trim() } : {}),
+          },
+        } : {}),
+      } : null,
+      sandboxPolicy: sandboxConfig.sandboxPolicy.trim() || null,
+      annotations: {},
+      labels: {},
+      createdAt: '',
+      updatedAt: '',
     }
   }, [name, displayName, description, model, prompt, repoUrl, sandboxConfig, projectId])
 
@@ -125,18 +130,18 @@ export function CreateAgentSheet({
       return
     }
 
-    const yaml = agentToConfigMapYaml(buildConfigMapInput())
+    const yaml = agentToYaml(buildAgentForYaml())
     setGeneratedYaml(yaml)
   }
 
   const previewYaml = useMemo(() => {
     if (!name.trim()) return null
     try {
-      return agentToConfigMapYaml(buildConfigMapInput())
+      return agentToYaml(buildAgentForYaml())
     } catch {
       return null
     }
-  }, [name, buildConfigMapInput])
+  }, [name, buildAgentForYaml])
 
   return (
     <Sheet open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v) }}>
@@ -144,7 +149,7 @@ export function CreateAgentSheet({
         <SheetHeader>
           <SheetTitle>New Agent</SheetTitle>
           <SheetDescription>
-            Define an agent and generate its ConfigMap declaration.
+            Define an agent and generate its manifest.
           </SheetDescription>
         </SheetHeader>
 
@@ -243,7 +248,7 @@ export function CreateAgentSheet({
           )}
 
           {generatedYaml && (
-            <ConfigMapYamlPreview yaml={generatedYaml} agentName={name.trim()} />
+            <YamlPreview yaml={generatedYaml} agentName={name.trim()} />
           )}
 
           <SheetFooter className="px-0">

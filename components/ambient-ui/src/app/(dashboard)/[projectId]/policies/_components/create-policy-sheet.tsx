@@ -13,8 +13,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { ConfigMapYamlPreview } from '@/components/configmap-yaml-preview'
-import { policyToConfigMapYaml } from '@/lib/policy-yaml'
+import { YamlPreview } from '@/components/configmap-yaml-preview'
+import { policyToYaml } from '@/lib/policy-yaml'
 
 const POLICY_TEMPLATE = `filesystem:
   read_write:
@@ -65,7 +65,17 @@ export function CreatePolicySheet({
       }
     }
 
-    const yaml = policyToConfigMapYaml({ name, namespace, spec })
+    const yaml = policyToYaml({
+      id: '',
+      name,
+      namespace,
+      projectId: projectId ?? '',
+      spec,
+      annotations: {},
+      labels: {},
+      createdAt: '',
+      updatedAt: '',
+    })
     setGeneratedYaml(yaml)
   }, [name, namespace, specYaml])
 
@@ -83,7 +93,7 @@ export function CreatePolicySheet({
         <SheetHeader>
           <SheetTitle>New Policy</SheetTitle>
           <SheetDescription>
-            Define a sandbox policy and generate its ConfigMap declaration.
+            Define a sandbox policy and generate its manifest.
           </SheetDescription>
         </SheetHeader>
 
@@ -124,7 +134,7 @@ export function CreatePolicySheet({
               className="min-h-48 font-mono text-sm"
             />
             <p className="text-xs text-muted-foreground">
-              The spec is included as-is in the ConfigMap data value.
+              The spec fields are included inline in the manifest.
             </p>
             {parseError && (
               <p className="text-xs text-destructive">{parseError}</p>
@@ -132,7 +142,7 @@ export function CreatePolicySheet({
           </div>
 
           {generatedYaml && (
-            <ConfigMapYamlPreview
+            <YamlPreview
               yaml={generatedYaml}
               name={name}
               kind="policy"
