@@ -1025,7 +1025,10 @@ func (r *SimpleKubeReconciler) ensureCredentialSecret(ctx context.Context, sandb
 		return nil, fmt.Errorf("reading credential secret %s/%s: %w", r.cfg.CPRuntimeNamespace, credentialType, err)
 	}
 
-	data, _, _ := unstructured.NestedMap(src.Object, "data")
+	data, found, nestedErr := unstructured.NestedMap(src.Object, "data")
+	if nestedErr != nil || !found || len(data) == 0 {
+		return nil, fmt.Errorf("credential secret %s/%s has no data field", r.cfg.CPRuntimeNamespace, credentialType)
+	}
 
 	dst := &unstructured.Unstructured{
 		Object: map[string]interface{}{
