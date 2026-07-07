@@ -1,6 +1,7 @@
 # MLflow Tracing
 
 **Date:** 2026-07-01
+**Last Updated:** 2026-07-07
 **Status:** Partially Implemented
 **Related:** `runner.spec.md` — runner lifecycle and observability; `credential-binding.spec.md` — credential resolution hierarchy; `openshell-sandbox-provisioning.spec.md` — gateway credential providers and provider type mapping; `agent-sandbox-config.spec.md` — agent sandbox provider declarations
 
@@ -20,7 +21,7 @@ Tracing is enabled by default when all three MLflow environment variables are pr
 
 The openshell runner image (built from `Dockerfile.openshell`) MUST include the Red Hat IT Root CA certificate in the system trust store when built for internal use. This is required because MLflow tracking servers deployed on Red Hat internal infrastructure use certificates signed by this CA.
 
-The Dockerfile MUST accept an `INTERNAL_BUILD` build argument. When `INTERNAL_BUILD=true`, the CA certificate MUST be fetched from `https://certs.corp.redhat.com/certs/2022-IT-Root-CA.pem` and installed into the system certificate trust store. If the fetch fails during an internal build, the image build MUST fail. When `INTERNAL_BUILD` is not set or is `false`, the CA fetch MUST be skipped silently.
+The Dockerfile MUST accept an `INTERNAL_BUILD` build argument that defaults to `true`. When `INTERNAL_BUILD=true`, the CA certificate MUST be fetched from `https://certs.corp.redhat.com/certs/2022-IT-Root-CA.pem` and installed into the system certificate trust store. If the fetch fails during an internal build, the image build MUST fail. When `INTERNAL_BUILD` is explicitly set to `false`, the CA fetch MUST be skipped silently.
 
 #### Scenario: CA certificate is trusted (internal build)
 
@@ -34,9 +35,9 @@ The Dockerfile MUST accept an `INTERNAL_BUILD` build argument. When `INTERNAL_BU
 - WHEN the CA certificate fetch from `https://certs.corp.redhat.com/certs/2022-IT-Root-CA.pem` fails
 - THEN the image build MUST fail with a descriptive error
 
-#### Scenario: CA fetch skipped for non-internal builds
+#### Scenario: CA fetch skipped when INTERNAL_BUILD=false
 
-- GIVEN a `Dockerfile.openshell` build without `INTERNAL_BUILD=true`
+- GIVEN a `Dockerfile.openshell` build with `INTERNAL_BUILD=false`
 - WHEN the image build runs
 - THEN the CA certificate fetch MUST be skipped
 - AND the build MUST succeed without the Red Hat IT Root CA
@@ -124,9 +125,9 @@ When any of the three is missing or empty, tracing MUST be disabled.
 
 The `MLFLOW_REQUIRED` environment variable serves as the enforcement toggle. When `MLFLOW_REQUIRED` is set to `true` (e.g., in staging/production environments), sandboxes MUST fail to start if any of the three MLflow environment variables are missing or empty, indicating an environment configuration error. When `MLFLOW_REQUIRED` is not set or is `false` (e.g., in development environments), missing variables simply disable tracing without blocking the session.
 
-#### Scenario: All three env vars present — tracing enabled
+#### Scenario: All three env vars present (standard) — tracing enabled
 
-- GIVEN `MLFLOW_TRACKING_URI` is set to `https://mlflow.example.com`
+- GIVEN `MLFLOW_TRACKING_URI` is set to `https://mlflow.example.com` (a real URL, not an openshell resolve token)
 - AND `MLFLOW_TRACKING_TOKEN` is set to a non-empty value
 - AND `MLFLOW_EXPERIMENT_NAME` is set to `my-experiment`
 - WHEN the runner initializes the Claude SDK bridge
@@ -134,6 +135,17 @@ The `MLFLOW_REQUIRED` environment variable serves as the enforcement toggle. Whe
 - AND it MUST call `mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)`
 - AND it MUST call `mlflow.anthropic.autolog()` before creating the `ClaudeSDKClient`
 - AND all subsequent Claude SDK interactions MUST be automatically traced to the MLflow tracking server
+
+#### Scenario: OpenShell resolve tokens — deferred configuration
+
+- GIVEN `MLFLOW_TRACKING_URI` is set to a value prefixed with `openshell:resolve:env:` (an openshell lazy-resolve token)
+- AND `MLFLOW_TRACKING_TOKEN` is set to a non-empty value
+- AND `MLFLOW_EXPERIMENT_NAME` is set to a non-empty value
+- WHEN the runner initializes the Claude SDK bridge
+- THEN the runner MUST NOT call `mlflow.set_tracking_uri()` or `mlflow.set_experiment()` explicitly
+- AND the runner MUST defer tracking URI and experiment configuration to runtime environment resolution by the openshell supervisor (which intercepts `getenv()` at the C library level and returns real values)
+- AND the runner MUST still call `mlflow.anthropic.autolog()` before creating the `ClaudeSDKClient`
+- AND tracing MUST be enabled, relying on MLflow's native environment variable reading through supervisor-intercepted `getenv()`
 
 #### Scenario: Missing MLFLOW_TRACKING_URI — tracing disabled
 
@@ -178,9 +190,9 @@ The `MLFLOW_REQUIRED` environment variable serves as the enforcement toggle. Whe
 - WHEN the sandbox starts
 - THEN tracing MUST activate normally
 
-#### Scenario: Tracing activation is best-effort
+#### Scenario: Tracing activation is best-effort (standard env)
 
-- GIVEN all three MLflow environment variables are set
+- GIVEN all three MLflow environment variables are set to real values (not openshell resolve tokens)
 - WHEN `mlflow.set_tracking_uri()`, `mlflow.set_experiment()`, or `mlflow.anthropic.autolog()` raises an exception (e.g., network unreachable, invalid URI)
 - THEN the runner MUST log a warning
 - AND the runner MUST continue operating normally without tracing
@@ -214,23 +226,22 @@ The `MLFLOW_TRACKING_TOKEN` MUST be treated as a secret. It MUST NOT appear in l
 
 ### Requirement: OPA Network Policy for MLflow Traffic (Gateway Mode)
 
-When operating in gateway mode with MLflow tracing enabled, the sandbox OPA network policy MUST permit the runner process to reach the MLflow tracking server through the supervisor proxy. The `MLFLOW_TRACKING_URI` MUST be validated against a domain allowlist at credential-bind time (enforced by the API server). The resolved `host:port` from the validated URI MUST be encoded into the OPA policy at sandbox-creation time as a static entry — it MUST NOT be derived dynamically at policy evaluation time.
+When operating in gateway mode with MLflow tracing enabled, the sandbox OPA network policy MUST permit the runner process to reach the MLflow tracking server through the supervisor proxy. The MLflow network policy is defined as a static entry in the runner's `policy.yaml` file with a known endpoint, prefixed with `_` to indicate it is a platform-managed (non-tenant) policy. The policy entry uses the key `_mlflow_rh` and the name `mlflow-tracking`.
 
 #### Scenario: MLflow tracking server egress
 
 - GIVEN a sandbox with MLflow tracing enabled
-- AND the `MLFLOW_TRACKING_URI` has been validated against the domain allowlist at credential-bind time
 - WHEN the runner sends traces to the tracking server
-- THEN the OPA policy MUST include a network policy section permitting egress to the tracking server's resolved `host:port`
+- THEN the OPA policy MUST include a `_mlflow_rh` network policy section permitting egress to the MLflow tracking server's `host:port`
 - AND the allowed binaries MUST include the runner's Python binaries (`/sandbox/.venv/bin/python`, `/sandbox/.venv/bin/python3`, `/sandbox/.venv/bin/uvicorn`)
-- AND the OPA policy entry MUST be static (injected at sandbox creation, not evaluated dynamically)
+- AND the policy entry MUST be a static entry in `policy.yaml`, not dynamically generated at sandbox-creation time
 
-#### Scenario: OPA policy scoped to validated host only
+#### Scenario: Platform-managed policy prefix convention
 
-- GIVEN a sandbox with MLflow tracing enabled
-- WHEN the OPA network policy is generated
-- THEN the policy MUST only allow egress to the specific `host:port` derived from the validated `MLFLOW_TRACKING_URI`
-- AND the policy MUST NOT use wildcard host matching or permit egress to arbitrary HTTPS endpoints
+- GIVEN the runner's `policy.yaml` defines network policies
+- WHEN a network policy is platform-managed (not tenant-specific)
+- THEN the policy key MUST be prefixed with `_` (e.g., `_mlflow_rh`, `_acp_internal`)
+- AND this convention distinguishes platform infrastructure policies from tenant-declared provider policies
 
 ---
 
@@ -242,12 +253,14 @@ When operating in gateway mode with MLflow tracing enabled, the sandbox OPA netw
 |----------|-----------------|-----------------|
 | `mlflow_observability.py` | Manual span tracking using `mlflow.start_span()` for turn/tool boundaries; activated by `OBSERVABILITY_BACKENDS=mlflow` + `MLFLOW_TRACING_ENABLED=true` | The autologging activation (`mlflow.anthropic.autolog()`) replaces the manual span-tracking approach. Autologging traces Claude SDK calls at the SDK level, capturing the full call graph automatically |
 | `observability_config.py` | Controls MLflow backend via `OBSERVABILITY_BACKENDS` env var and `MLFLOW_TRACING_ENABLED` flag | No change — the new autologging activation is independent of the `OBSERVABILITY_BACKENDS` config. It is gated solely on the three MLflow credential env vars |
-| `Dockerfile.openshell` | No Red Hat IT Root CA | Add `INTERNAL_BUILD` build arg; when `true`, fetch CA certificate and update trust store; fail build if fetch fails |
+| `Dockerfile.openshell` | No Red Hat IT Root CA | Add `INTERNAL_BUILD` build arg (default `true`); when `true`, fetch CA certificate and update trust store; fail build if fetch fails |
 | `pyproject.toml` | `mlflow[kubernetes]==3.13.0` in `mlflow-observability` extra | Verify `mlflow>=3.10` constraint is satisfied (current 3.13.0 already satisfies) |
 | `openshell-sandbox-provisioning.spec.md` § Provider type mapping | Maps `jira`, `google`, `kubeconfig`, and unknown types to `generic` | Add `mlflow` → `generic` to the mapping table |
 | `agent-sandbox-config.spec.md` § Provider type mapping | Maps credential types to OpenShell provider types | Add `mlflow` → `generic` to the mapping table |
-| Control plane `provider_mapping.go` | Maps ambient credential providers to OpenShell provider types | Add `mlflow` → `generic` entry (follows existing pattern for `jira`, `google`, `kubeconfig`) |
-| OPA policy (`policy.yaml`) | Network policy sections for known endpoints | Add MLflow tracking server endpoint when MLflow credential is present; the resolved `host:port` from the validated `MLFLOW_TRACKING_URI` is injected as a static policy entry at sandbox-creation time (validated against domain allowlist at credential-bind time) |
+| Control plane `provider_mapping.go` | Maps ambient credential providers to OpenShell provider types; contained `MLflowNetworkPolicy()` for dynamic OPA policy generation | Add `mlflow` → `generic` entry (follows existing pattern for `jira`, `google`, `kubeconfig`); remove `MLflowNetworkPolicy()` function (superseded by static `policy.yaml` entry) |
+| OPA policy (`policy.yaml`) | Network policy sections for known endpoints | Add `_mlflow_rh` static entry with the MLflow tracking server endpoint; uses `_` prefix convention for platform-managed policies (matching `_acp_internal`) |
+| `mlflow_observability.py` | Manual span tracking using `mlflow.start_span()` | Add openshell resolve token detection — when `MLFLOW_TRACKING_URI` starts with `openshell:resolve:env:`, skip explicit `mlflow.set_tracking_uri()` / `mlflow.set_experiment()` and defer to runtime env resolution by the openshell supervisor |
+| Control plane `config.go` | No MLflow config fields | Add `MLflowTrackingURI` and `MLflowExperimentName` config fields read from `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` env vars (used for auto-creating default MLflow provider from CP namespace secret) |
 
 ### Specs requiring amendment
 
