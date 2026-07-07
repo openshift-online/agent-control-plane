@@ -1,7 +1,7 @@
 """Unit tests for app.py initial prompt dispatch functions.
 
 Coverage targets:
-- _read_initial_prompt_file: file exists, file missing
+- _read_initial_prompt_file: file exists, file missing, file unreadable (OSError)
 - _push_initial_prompt_via_grpc: happy path, push raises (client still closed),
   None result, from_env error, offloaded to executor (non-blocking)
 - _push_initial_prompt_via_http: happy path, missing env vars bail, bot token,
@@ -19,6 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ambient_runner.app import (
+    _INITIAL_PROMPT_FILE,
     _auto_execute_initial_prompt,
     _push_initial_prompt_via_grpc,
     _push_initial_prompt_via_http,
@@ -39,6 +40,12 @@ class TestReadInitialPromptFile:
 
     def test_returns_empty_when_missing(self):
         assert _read_initial_prompt_file("/nonexistent/path.txt") == ""
+
+    def test_returns_empty_when_unreadable(self, tmp_path):
+        f = tmp_path / "prompt.txt"
+        f.write_text("hello")
+        f.chmod(0o000)
+        assert _read_initial_prompt_file(str(f)) == ""
 
 
 # ---------------------------------------------------------------------------

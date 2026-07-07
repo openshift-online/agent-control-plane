@@ -337,7 +337,7 @@ The `ExecSandbox` RPC is a server-streaming call that returns stdout, stderr, an
 - THEN the control plane SHALL call `ExecSandbox` with the command `["/bin/bash", "-c", "cd /runner/ambient-runner && PATH=/sandbox/.venv/bin:$PATH uvicorn main:app --host 0.0.0.0 --port 8001"]`
 - AND the `SandboxId` SHALL be the gateway's internal UUID obtained from `GetSandbox` response metadata
 - AND the exec SHALL run asynchronously (fire-and-forget) — the control plane launches a goroutine that consumes the exec stream but does not block reconciliation
-- AND the exec goroutine SHALL use a separate context from the readiness-polling context — the polling context has a 600-second timeout suitable for provisioning, but the exec context must remain open for the lifetime of the uvicorn process (which runs until session completion)
+- AND the exec goroutine SHALL use a separate context from the readiness-polling context — the polling context has a configurable timeout (default 600s via `SANDBOX_READINESS_TIMEOUT_SECONDS`) suitable for provisioning, but the exec context must remain open for the lifetime of the uvicorn process (which runs until session completion)
 - AND the exec goroutine SHALL NOT accumulate stdout/stderr in memory — it SHALL discard or stream output to the logger to avoid unbounded memory growth for long-running processes
 
 #### Scenario: Gateway image runner path
@@ -353,7 +353,8 @@ The `ExecSandbox` RPC is a server-streaming call that returns stdout, stderr, an
 
 - GIVEN a sandbox was just created
 - WHEN the control plane polls `GetSandbox` for readiness
-- THEN it SHALL poll every 2 seconds with a 600-second timeout
+- THEN it SHALL poll every 2 seconds with a configurable timeout (default 600 seconds, set via `SANDBOX_READINESS_TIMEOUT_SECONDS` env var)
+- AND the control plane SHALL log a progress message every 30 seconds during polling, including sandbox name, session ID, and elapsed time
 - AND if the sandbox enters `SANDBOX_PHASE_ERROR`, the control plane SHALL log an error and stop polling
 - AND if the timeout expires before `SANDBOX_PHASE_READY`, the control plane SHALL log an error
 
@@ -809,6 +810,7 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | `OPENSHELL_GATEWAY_CLIENT_TLS_SECRET` | `openshell-client-tls` | Name of the Kubernetes TLS Secret (per project namespace) containing `tls.crt`, `tls.key`, and `ca.crt` for mTLS client authentication |
 | `OPENSHELL_GATEWAY_TLS_SERVER_NAME` | (empty — uses actual DNS name) | Override TLS ServerName for certificate verification; set when the gateway's server certificate SANs don't match the Service DNS name |
 | `OPENSHELL_RUNNER_IMAGE` | `quay.io/ambient_code/acp_runner_openshell:latest` | Container image used for gateway-mode sandboxes (built from `Dockerfile.openshell`); separate from `RUNNER_IMAGE` which is used for direct pod creation |
+| `SANDBOX_READINESS_TIMEOUT_SECONDS` | `600` | Maximum seconds to wait for a sandbox to reach `SANDBOX_PHASE_READY` before failing the session |
 
 #### Scenario: Mode interaction
 
@@ -842,7 +844,7 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | `provisionSessionGateway()` | Bypasses the provisioner for session provisioning — uses a direct `GetNamespace` check so no provisioner implementation can inadvertently create the namespace. Namespace labeling is handled separately during gateway initialization via `ensureProject` |
 | `cleanupSessionGateway()` | Does not call `DeprovisionNamespace` — namespace lifecycle is fully external in gateway mode |
 | [openshell-sandbox.spec.md] | Unchanged — file-mode spec remains authoritative when `OPENSHELL_USE_GATEWAY=false` |
-| Runner pod | Same image and env vars, but the runner process is started via `ExecSandbox` with `["/bin/bash", "-c", "cd /runner/ambient-runner && PATH=/sandbox/.venv/bin:$PATH uvicorn main:app --host 0.0.0.0 --port 8001"]` after the sandbox reaches Ready — the gateway overrides the container entrypoint to the supervisor binary with `sleep infinity`, so the image's CMD is never executed directly. The exec goroutine must use a long-lived context (not the 600s polling context) and must not accumulate stdout/stderr in memory |
+| Runner pod | Same image and env vars, but the runner process is started via `ExecSandbox` with `["/bin/bash", "-c", "cd /runner/ambient-runner && PATH=/sandbox/.venv/bin:$PATH uvicorn main:app --host 0.0.0.0 --port 8001"]` after the sandbox reaches Ready — the gateway overrides the container entrypoint to the supervisor binary with `sleep infinity`, so the image's CMD is never executed directly. The exec goroutine must use a long-lived context (not the configurable polling timeout context) and must not accumulate stdout/stderr in memory |
 | `GatewayClient.ExecSandbox()` | Current implementation blocks on the full stream and accumulates output — must be updated to support fire-and-forget semantics for long-running processes (discard/stream output, use caller-provided context) |
 | `GatewayClient.UpdateConfig()` | New method — calls the `UpdateConfig` gRPC RPC; used by `enableProvidersV2` to set `providers_v2_enabled=true` globally on the gateway |
 | `GatewayClient.SetClusterInference()` | New method — calls the `SetClusterInference` gRPC RPC on the `openshell.inference.v1.Inference` service; used by `configureInference` to set provider and model for inference routing |

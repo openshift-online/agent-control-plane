@@ -149,7 +149,7 @@ ambient_runner/
      d. Pre-register SSE queue for SESSION_ID (prevents race with backend)
 
 6. If not IS_RESUME, read initial prompt:
-     a. Try /tmp/initial_prompt.txt (gateway file upload path)
+     a. Try /tmp/initial_prompt.txt (gateway file upload path); on any OS-level read error (permissions, I/O), log a warning and fall back
      b. Fall back to INITIAL_PROMPT env var (operator Job path)
    If prompt found:
      _auto_execute_initial_prompt(prompt, session_id, grpc_url)

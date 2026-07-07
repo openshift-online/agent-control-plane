@@ -42,8 +42,9 @@ func validateTSLValue(value string) error {
 }
 
 const (
-	mcpSidecarPort = int64(8090)
-	mcpSidecarURL  = "http://localhost:8090"
+	mcpSidecarPort   = int64(8090)
+	mcpSidecarURL    = "http://localhost:8090"
+	initialPromptPath = "/tmp/initial_prompt.txt"
 )
 
 type credentialSidecarSpec struct {
@@ -104,7 +105,8 @@ type KubeReconcilerConfig struct {
 	OpenShellPolicyName      string
 	ServiceIdentity          string
 	CACertFile               string
-	AllowedSandboxRegistries []string
+	AllowedSandboxRegistries       []string
+	SandboxReadinessTimeoutSeconds int
 }
 
 type SimpleKubeReconciler struct {
@@ -352,9 +354,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		if agent != nil {
 			payloads = agent.Payloads
 		}
-		if prompt := r.assembleInitialPrompt(ctx, session, sdk); prompt != "" {
-			payloads = append(payloads, types.Payload{SandboxPath: "/tmp/initial_prompt.txt", Content: prompt})
-		}
+		payloads = r.appendInitialPromptPayload(ctx, session, sdk, payloads)
 		go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads)
 		r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 		return nil
@@ -415,9 +415,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	if agent != nil {
 		payloads = agent.Payloads
 	}
-	if prompt := r.assembleInitialPrompt(ctx, session, sdk); prompt != "" {
-		payloads = append(payloads, types.Payload{SandboxPath: "/tmp/initial_prompt.txt", Content: prompt})
-	}
+	payloads = r.appendInitialPromptPayload(ctx, session, sdk, payloads)
 	go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads)
 
 	r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
@@ -532,8 +530,23 @@ func (r *SimpleKubeReconciler) mergeAgentEnvironment(env map[string]string, agen
 	}
 }
 
+func (r *SimpleKubeReconciler) appendInitialPromptPayload(ctx context.Context, session types.Session, sdk *sdkclient.Client, payloads []types.Payload) []types.Payload {
+	if prompt := r.assembleInitialPrompt(ctx, session, sdk); prompt != "" {
+		return append(payloads, types.Payload{SandboxPath: initialPromptPath, Content: prompt})
+	}
+	return payloads
+}
+
+func (r *SimpleKubeReconciler) sandboxReadinessTimeout() time.Duration {
+	if r.cfg.SandboxReadinessTimeoutSeconds > 0 {
+		return time.Duration(r.cfg.SandboxReadinessTimeoutSeconds) * time.Second
+	}
+	return 600 * time.Second
+}
+
 func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string, sdk *sdkclient.Client, execEnv map[string]string, payloads []types.Payload) {
-	pollCtx, pollCancel := context.WithTimeout(context.Background(), 600*time.Second)
+	timeout := r.sandboxReadinessTimeout()
+	pollCtx, pollCancel := context.WithTimeout(context.Background(), timeout)
 	defer pollCancel()
 
 	failSession := func(reason string) {
@@ -553,6 +566,8 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
+	pollStart := time.Now()
+	lastProgressLog := pollStart
 
 	for {
 		select {
@@ -560,10 +575,19 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			r.logger.Error().
 				Str("sandbox", sbxName).
 				Str("session_id", sessionID).
+				Dur("elapsed", time.Since(pollStart)).
 				Msg("timed out waiting for sandbox to become ready")
-			failSession("sandbox did not become ready within 600s")
+			failSession(fmt.Sprintf("sandbox did not become ready within %ds", int(timeout.Seconds())))
 			return
 		case <-ticker.C:
+			if time.Since(lastProgressLog) >= 30*time.Second {
+				r.logger.Info().
+					Str("sandbox", sbxName).
+					Str("session_id", sessionID).
+					Dur("elapsed", time.Since(pollStart)).
+					Msg("still waiting for sandbox readiness")
+				lastProgressLog = time.Now()
+			}
 			resp, err := r.gateway.GetSandbox(pollCtx, namespace, sbxName)
 			if err != nil {
 				r.logger.Debug().Err(err).Str("sandbox", sbxName).Msg("polling sandbox status")

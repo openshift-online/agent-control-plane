@@ -49,6 +49,8 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+_INITIAL_PROMPT_FILE = "/tmp/initial_prompt.txt"
+
 
 def _log_auto_exec_failure(task: asyncio.Task) -> None:
     """Callback for the auto-execution task — logs unhandled exceptions."""
@@ -161,7 +163,7 @@ def create_ambient_app(
         if not is_resume:
             # Fetch workflow startupPrompt independently
             workflow_startup_prompt = _get_workflow_startup_prompt()
-            user_initial_prompt = _read_initial_prompt_file("/tmp/initial_prompt.txt")
+            user_initial_prompt = _read_initial_prompt_file(_INITIAL_PROMPT_FILE)
             if not user_initial_prompt:
                 user_initial_prompt = os.getenv("INITIAL_PROMPT", "").strip()
 
@@ -198,7 +200,7 @@ def create_ambient_app(
         else:
             has_workflow = bool(os.getenv("ACTIVE_WORKFLOW_GIT_URL", "").strip())
             has_user_prompt = bool(
-                _read_initial_prompt_file("/tmp/initial_prompt.txt")
+                _read_initial_prompt_file(_INITIAL_PROMPT_FILE)
                 or os.getenv("INITIAL_PROMPT", "").strip()
             )
             if has_workflow or has_user_prompt:
@@ -394,6 +396,9 @@ def _read_initial_prompt_file(path: str) -> str:
         with open(path, "r") as f:
             return f.read().strip()
     except FileNotFoundError:
+        return ""
+    except OSError:
+        logger.warning("Failed to read initial prompt file %s, falling back to env var", path, exc_info=True)
         return ""
 
 

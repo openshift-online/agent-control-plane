@@ -171,7 +171,8 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		OpenShellPolicyName:      cfg.OpenShellPolicyName,
 		ServiceIdentity:          cfg.ServiceIdentity,
 		CACertFile:               cfg.CACertFile,
-		AllowedSandboxRegistries: cfg.AllowedSandboxRegistries,
+		AllowedSandboxRegistries:       cfg.AllowedSandboxRegistries,
+		SandboxReadinessTimeoutSeconds: cfg.SandboxReadinessTimeoutSeconds,
 	}
 
 	conn, err := grpc.NewClient(cfg.GRPCServerAddr, grpc.WithTransportCredentials(grpcCredentials(cfg.GRPCUseTLS)))
