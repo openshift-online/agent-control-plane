@@ -9,6 +9,8 @@ import os
 
 logger = logging.getLogger(__name__)
 
+_OPENSHELL_RESOLVE_PREFIX = "openshell:resolve:env:"
+
 _REQUIRED_ENV_VARS = (
     "MLFLOW_TRACKING_URI",
     "MLFLOW_TRACKING_TOKEN",

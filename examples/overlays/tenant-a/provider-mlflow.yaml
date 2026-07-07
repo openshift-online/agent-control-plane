@@ -1,4 +1,0 @@
-kind: Provider
-name: mlflow
-type: generic
-secret: mlflow

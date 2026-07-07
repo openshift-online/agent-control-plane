@@ -40,3 +40,7 @@ spec:
             - name: GOOGLE_APPLICATION_CREDENTIALS
               value: ""
               valueFrom: null
+            - name: MLFLOW_TRACKING_URI
+              value: "https://mlflow.apps.int.spoke.prod.us-west-2.aws.paas.redhat.com/"
+            - name: MLFLOW_EXPERIMENT_NAME
+              value: "acp-general"

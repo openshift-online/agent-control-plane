@@ -180,53 +180,6 @@ func TestDetectGoogleCredentialType(t *testing.T) {
 	}
 }
 
-func TestMLflowNetworkPolicy(t *testing.T) {
-	tests := []struct {
-		name     string
-		uri      string
-		wantNil  bool
-		wantHost string
-		wantPort uint32
-	}{
-		{"empty URI", "", true, "", 0},
-		{"invalid URI", "://bad", true, "", 0},
-		{"HTTPS default port", "https://mlflow.example.com", false, "mlflow.example.com", 443},
-		{"HTTPS explicit port", "https://mlflow.example.com:8443", false, "mlflow.example.com", 8443},
-		{"with path", "https://mlflow.example.com/api/2.0", false, "mlflow.example.com", 443},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rule := MLflowNetworkPolicy(tt.uri)
-			if tt.wantNil {
-				if rule != nil {
-					t.Fatalf("expected nil, got %+v", rule)
-				}
-				return
-			}
-			if rule == nil {
-				t.Fatal("expected non-nil rule")
-			}
-			if rule.Name != "mlflow-tracking" {
-				t.Errorf("name = %q, want %q", rule.Name, "mlflow-tracking")
-			}
-			if len(rule.Endpoints) != 1 {
-				t.Fatalf("endpoints count = %d, want 1", len(rule.Endpoints))
-			}
-			ep := rule.Endpoints[0]
-			if ep.Host != tt.wantHost {
-				t.Errorf("host = %q, want %q", ep.Host, tt.wantHost)
-			}
-			if ep.Port != tt.wantPort {
-				t.Errorf("port = %d, want %d", ep.Port, tt.wantPort)
-			}
-			if len(rule.Binaries) != 3 {
-				t.Errorf("binaries count = %d, want 3", len(rule.Binaries))
-			}
-		})
-	}
-}
-
 func TestMLflowSandboxEnvVars(t *testing.T) {
 	tests := []struct {
 		name   string

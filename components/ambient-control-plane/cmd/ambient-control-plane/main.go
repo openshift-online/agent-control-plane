@@ -172,6 +172,8 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		ServiceIdentity:          cfg.ServiceIdentity,
 		CACertFile:               cfg.CACertFile,
 		AllowedSandboxRegistries: cfg.AllowedSandboxRegistries,
+		MLflowTrackingURI:        cfg.MLflowTrackingURI,
+		MLflowExperimentName:     cfg.MLflowExperimentName,
 	}
 
 	conn, err := grpc.NewClient(cfg.GRPCServerAddr, grpc.WithTransportCredentials(grpcCredentials(cfg.GRPCUseTLS)))
@@ -247,7 +249,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 
 	tsErrCh := make(chan error, 1)
 	go func() {
-		tsErrCh <- startTokenServer(ctx, cfg, tokenProvider, kp)
+		tsErrCh <- startTokenServer(ctx, cfg, tokenProvider, kp, gateway)
 	}()
 
 	infErrCh := make(chan error, 1)
@@ -287,12 +289,16 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	}
 }
 
-func startTokenServer(ctx context.Context, cfg *config.ControlPlaneConfig, tokenProvider auth.TokenProvider, kp *keypair.KeyPair) error {
+func startTokenServer(ctx context.Context, cfg *config.ControlPlaneConfig, tokenProvider auth.TokenProvider, kp *keypair.KeyPair, gateway *openshell.GatewayClient) error {
 	privKey, err := keypair.ParsePrivateKey(kp.PrivateKeyPEM)
 	if err != nil {
 		return fmt.Errorf("parsing CP token private key: %w", err)
 	}
-	ts, err := tokenserver.New(cfg.CPTokenListenAddr, tokenProvider, privKey, log.Logger)
+	var opts []tokenserver.Option
+	if gateway != nil {
+		opts = append(opts, tokenserver.WithGateway(gateway))
+	}
+	ts, err := tokenserver.New(cfg.CPTokenListenAddr, tokenProvider, privKey, log.Logger, opts...)
 	if err != nil {
 		return fmt.Errorf("creating token server: %w", err)
 	}

@@ -60,6 +60,8 @@ type ControlPlaneConfig struct {
 	ServiceIdentity                 string
 	CACertFile                      string
 	AllowedSandboxRegistries        []string
+	MLflowTrackingURI               string
+	MLflowExperimentName            string
 }
 
 func Load() (*ControlPlaneConfig, error) {
@@ -116,6 +118,8 @@ func Load() (*ControlPlaneConfig, error) {
 		ServiceIdentity:                 strings.TrimSpace(os.Getenv("GRPC_SERVICE_ACCOUNT")),
 		CACertFile:                      envOrDefault("CA_CERT_FILE", "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"),
 		AllowedSandboxRegistries:        parseAllowedRegistries(os.Getenv("ALLOWED_SANDBOX_REGISTRIES")),
+		MLflowTrackingURI:               os.Getenv("MLFLOW_TRACKING_URI"),
+		MLflowExperimentName:            os.Getenv("MLFLOW_EXPERIMENT_NAME"),
 	}
 
 	if cfg.MCPAPIServerURL == "" {
