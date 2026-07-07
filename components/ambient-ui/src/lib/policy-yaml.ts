@@ -1,8 +1,9 @@
-export type ConfigMapPolicyInput = {
-  name: string
-  namespace: string
-  spec?: Record<string, unknown>
-}
+import type { DomainPolicy } from '@/domain/types'
+
+export type PolicyYamlInput = Pick<
+  DomainPolicy,
+  'name' | 'spec' | 'labels' | 'annotations'
+>
 
 function yamlValue(value: unknown, indent: number): string {
   const pad = ' '.repeat(indent)
@@ -43,27 +44,34 @@ function yamlValue(value: unknown, indent: number): string {
   return `${pad}${String(value)}`
 }
 
-export function policyToConfigMapYaml(input: ConfigMapPolicyInput): string {
-  const dataLines: string[] = []
-  dataLines.push(`    name: ${input.name}`)
+export function policyToYaml(policy: PolicyYamlInput): string {
+  const lines: string[] = [
+    'kind: Policy',
+    `name: ${policy.name}`,
+  ]
 
-  if (input.spec && Object.keys(input.spec).length > 0) {
-    const specYaml = yamlValue(input.spec, 4)
-    dataLines.push(specYaml)
+  if (policy.spec && Object.keys(policy.spec).length > 0) {
+    const specYaml = yamlValue(policy.spec, 0)
+    lines.push(specYaml)
   }
 
-  const lines: string[] = [
-    'apiVersion: v1',
-    'kind: ConfigMap',
-    'metadata:',
-    `  name: policy-${input.name}`,
-    `  namespace: ${input.namespace}`,
-    '  labels:',
-    '    ambient.ai/kind: policy',
-    'data:',
-    `  ${input.name}: |`,
-    ...dataLines,
-  ]
+  const labelEntries = Object.entries(policy.labels)
+  if (labelEntries.length > 0) {
+    lines.push('labels:')
+    for (const [key, value] of labelEntries) {
+      lines.push(`  ${key}: ${value}`)
+    }
+  }
+
+  const annotationEntries = Object.entries(policy.annotations).filter(
+    ([k]) => !k.startsWith('ambient.ai/'),
+  )
+  if (annotationEntries.length > 0) {
+    lines.push('annotations:')
+    for (const [key, value] of annotationEntries) {
+      lines.push(`  ${key}: "${value}"`)
+    }
+  }
 
   return lines.join('\n') + '\n'
 }

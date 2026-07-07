@@ -176,6 +176,9 @@ func createSession(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 	if cmd.Flags().Changed("timeout") {
 		builder = builder.Timeout(createArgs.timeout)
 	}
+	if createArgs.agentID != "" {
+		builder = builder.AgentID(createArgs.agentID)
+	}
 
 	session, err := builder.Build()
 	if err != nil {

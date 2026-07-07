@@ -3,9 +3,12 @@
 import { FileStack, CircleDashed } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 
-export type AgentLifecycle = 'unmanaged' | 'gitops'
+export type ResourceLifecycle = 'unmanaged' | 'gitops'
 
-export function getAgentLifecycle(annotations: Record<string, string>): AgentLifecycle {
+/** @deprecated Use ResourceLifecycle instead */
+export type AgentLifecycle = ResourceLifecycle
+
+export function getResourceLifecycle(annotations: Record<string, string>): ResourceLifecycle {
   if (
     annotations['ambient.ai/source'] === 'configmap' ||
     annotations['ambient-code.io/managed-by'] === 'gitops'
@@ -15,7 +18,7 @@ export function getAgentLifecycle(annotations: Record<string, string>): AgentLif
   return 'unmanaged'
 }
 
-export function LifecycleBadge({ lifecycle }: { lifecycle: AgentLifecycle }) {
+export function LifecycleBadge({ lifecycle }: { lifecycle: ResourceLifecycle }) {
   if (lifecycle === 'gitops') {
     return (
       <Badge variant="secondary" className="gap-1 text-blue-600 dark:text-blue-400">

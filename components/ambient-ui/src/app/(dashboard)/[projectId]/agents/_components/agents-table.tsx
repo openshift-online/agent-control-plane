@@ -24,7 +24,7 @@ import type { DomainAgent } from '@/domain/types'
 import { formatRelativeTime } from '@/lib/format-timestamp'
 import { useTableKeyboardNav } from '@/hooks/use-table-keyboard-nav'
 import { cn } from '@/lib/utils'
-import { LifecycleBadge, getAgentLifecycle } from './lifecycle-badge'
+import { LifecycleBadge, getResourceLifecycle } from './lifecycle-badge'
 
 const col = createColumnHelper<DomainAgent>()
 
@@ -47,7 +47,7 @@ const agentColumns = [
     id: 'source',
     header: 'Source',
     cell: ({ row }) => {
-      const lifecycle = getAgentLifecycle(row.original.annotations)
+      const lifecycle = getResourceLifecycle(row.original.annotations)
       return <LifecycleBadge lifecycle={lifecycle} />
     },
   }),

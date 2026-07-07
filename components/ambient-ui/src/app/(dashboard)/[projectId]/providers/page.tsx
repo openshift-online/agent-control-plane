@@ -1,6 +1,5 @@
 'use client'
 
-// Feature-gated by NEXT_PUBLIC_OPENSHELL_USE_GATEWAY env var (sidebar nav only visible when enabled)
 import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { KeyRound, Plus } from 'lucide-react'
@@ -48,24 +47,21 @@ export default function ProvidersPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Providers</h1>
           <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
             <Plus className="size-4" />
-            Generate Provider YAML
+            Generate Provider Manifest
           </Button>
         </div>
         <EmptyState
           icon={KeyRound}
           title="No providers"
-          description="No providers have been declared via GitOps yet."
+          description="No providers have been declared yet."
           action={
             <Button onClick={() => setCreateSheetOpen(true)}>
               <Plus className="size-4 mr-1.5" />
-              Generate Provider YAML
+              Generate Provider Manifest
             </Button>
           }
         />
-        <CreateProviderSheet
-          open={createSheetOpen}
-          onOpenChange={setCreateSheetOpen}
-        />
+        <CreateProviderSheet open={createSheetOpen} onOpenChange={setCreateSheetOpen} />
       </div>
     )
   }
@@ -84,14 +80,11 @@ export default function ProvidersPage() {
         </div>
         <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
           <Plus className="size-4" />
-          Generate Provider YAML
+          Generate Provider Manifest
         </Button>
       </div>
       <ProvidersTable providers={providers} searchFilter={search} />
-      <CreateProviderSheet
-        open={createSheetOpen}
-        onOpenChange={setCreateSheetOpen}
-      />
+      <CreateProviderSheet open={createSheetOpen} onOpenChange={setCreateSheetOpen} />
     </div>
   )
 }

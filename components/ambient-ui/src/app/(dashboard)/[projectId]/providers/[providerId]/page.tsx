@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/table'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useProvider } from '@/queries/use-providers'
-import { LifecycleBadge } from '../../agents/_components/lifecycle-badge'
+import { LifecycleBadge, getResourceLifecycle } from '../../agents/_components/lifecycle-badge'
 import { formatRelativeTime } from '@/lib/format-timestamp'
 import { ProviderManifestTab } from './_components/provider-manifest-tab'
 
@@ -70,7 +70,7 @@ export default function ProviderDetailPage() {
             <h1 className="text-2xl font-semibold tracking-tight">
               {provider.name}
             </h1>
-            <LifecycleBadge lifecycle="gitops" />
+            <LifecycleBadge lifecycle={getResourceLifecycle(provider.annotations)} />
           </div>
           <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
             {provider.type && (

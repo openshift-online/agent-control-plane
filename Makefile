@@ -7,7 +7,7 @@
 .PHONY: preflight-cluster preflight dev-env dev
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift test-gateway-e2e
 .PHONY: unleash-port-forward unleash-status
-.PHONY: kind-port-forward kind-port-forward-stop _kind-start-port-forward kind-acpctl-login
+.PHONY: kind-port-forward kind-port-forward-stop _kind-start-port-forward kind-acpctl-login kind-apply-examples
 .PHONY: setup-minio minio-console minio-logs minio-status
 .PHONY: validate-makefile lint-makefile check-shell makefile-health benchmark benchmark-ci
 .PHONY: _create-operator-config _auto-port-forward _show-access-info _kind-load-images
@@ -1057,6 +1057,38 @@ kind-acpctl-login: check-kubectl ## Configure acpctl CLI against the kind cluste
 		echo "  Then run manually:"; \
 		echo "  acpctl login --url http://localhost:$(KIND_FWD_BACKEND_PORT) --token $$TOKEN"; \
 	fi
+
+kind-apply-examples: ## Apply example resources (projects, providers, agents, credentials) to the cluster via acpctl
+	@ACPCTL=""; \
+	if command -v acpctl >/dev/null 2>&1; then \
+		ACPCTL=acpctl; \
+	elif [ -x components/ambient-cli/acpctl ]; then \
+		ACPCTL=components/ambient-cli/acpctl; \
+	elif [ -x ./acpctl ]; then \
+		ACPCTL=./acpctl; \
+	fi; \
+	if [ -z "$$ACPCTL" ]; then \
+		echo "$(COLOR_RED)\u2717$(COLOR_RESET) acpctl not found — run 'make build-cli' or 'make kind-acpctl-login' first"; \
+		exit 1; \
+	fi; \
+	FAILED=0; \
+	for overlay in examples/overlays/*/; do \
+		TENANT=$$(basename "$$overlay"); \
+		echo "$(COLOR_BLUE)\u25b6$(COLOR_RESET) Applying overlay: $$TENANT"; \
+		$$ACPCTL project "$$TENANT" 2>/dev/null || true; \
+		if $$ACPCTL apply -k "$$overlay"; then \
+			echo "$(COLOR_GREEN)\u2713$(COLOR_RESET) $$TENANT applied"; \
+		else \
+			echo "$(COLOR_RED)\u2717$(COLOR_RESET) $$TENANT failed"; \
+			FAILED=1; \
+		fi; \
+		echo ""; \
+	done; \
+	if [ "$$FAILED" -eq 1 ]; then \
+		echo "$(COLOR_RED)Some overlays failed to apply$(COLOR_RESET)"; \
+		exit 1; \
+	fi; \
+	echo "$(COLOR_GREEN)\u2713$(COLOR_RESET) All example overlays applied"
 
 KIND_PF_DIR := /tmp/ambient-code
 

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "upgrade-latest",
+    "prompt": "/upgrade-upstream",
+    "expected_behavior": "Resolves latest rh-trex-ai tag, compares with current version, bumps go.mod, runs go mod tidy, go build, go vet, golangci-lint run, and make test in ambient-api-server",
+    "passing_criteria": "go.mod updated to latest version, go build ./... succeeds, make test passes, lint clean"
+  },
+  {
+    "id": "upgrade-specific-version",
+    "prompt": "/upgrade-upstream v0.0.31",
+    "expected_behavior": "Bumps rh-trex-ai to v0.0.31, runs build and test cycle, reports results",
+    "passing_criteria": "go.mod shows v0.0.31, compilation succeeds, tests pass"
+  },
+  {
+    "id": "upgrade-commit-sha",
+    "prompt": "/upgrade-upstream abc1234",
+    "expected_behavior": "Resolves commit SHA to pseudo-version, bumps go.mod, runs verification",
+    "passing_criteria": "go.mod shows pseudo-version for the commit, compilation succeeds"
+  },
+  {
+    "id": "upgrade-dry-run",
+    "prompt": "/upgrade-upstream --dry-run",
+    "expected_behavior": "Analyzes upstream changes between current and latest without modifying any files, produces change summary with commit log and breaking risk assessment",
+    "passing_criteria": "No files modified, change summary displayed with commit count and risk level"
+  },
+  {
+    "id": "upgrade-already-current",
+    "prompt": "/upgrade-upstream v0.0.30",
+    "expected_behavior": "Detects current version equals target, reports already up to date, takes no action",
+    "passing_criteria": "Reports already at target version, no files modified"
+  },
+  {
+    "id": "upgrade-with-breaking-changes",
+    "prompt": "/upgrade-upstream v0.1.0",
+    "expected_behavior": "Detects compilation failures after bump, identifies the breaking upstream change, adapts API server code to new signatures, re-verifies build and tests",
+    "passing_criteria": "go build succeeds after fixes, adapted code follows existing conventions, no panic, proper error wrapping"
+  },
+  {
+    "id": "upgrade-rollback",
+    "prompt": "/upgrade-upstream v0.0.99-broken",
+    "expected_behavior": "Attempts upgrade, encounters unresolvable failure, rolls back to previous version, confirms go.mod is restored",
+    "passing_criteria": "go.mod restored to original version, go build succeeds, no half-upgraded state"
+  }
+]

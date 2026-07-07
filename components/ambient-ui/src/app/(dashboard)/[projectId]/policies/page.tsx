@@ -1,6 +1,5 @@
 'use client'
 
-// Feature-gated by NEXT_PUBLIC_OPENSHELL_USE_GATEWAY env var (sidebar nav only visible when enabled)
 import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Shield, Plus } from 'lucide-react'
@@ -48,24 +47,21 @@ export default function PoliciesPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Policies</h1>
           <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
             <Plus className="size-4" />
-            Generate Policy YAML
+            Generate Policy Manifest
           </Button>
         </div>
         <EmptyState
           icon={Shield}
           title="No policies"
-          description="No policies have been declared via GitOps yet."
+          description="No policies have been declared yet."
           action={
             <Button onClick={() => setCreateSheetOpen(true)}>
               <Plus className="size-4 mr-1.5" />
-              Generate Policy YAML
+              Generate Policy Manifest
             </Button>
           }
         />
-        <CreatePolicySheet
-          open={createSheetOpen}
-          onOpenChange={setCreateSheetOpen}
-        />
+        <CreatePolicySheet open={createSheetOpen} onOpenChange={setCreateSheetOpen} />
       </div>
     )
   }
@@ -84,14 +80,11 @@ export default function PoliciesPage() {
         </div>
         <Button size="sm" onClick={() => setCreateSheetOpen(true)}>
           <Plus className="size-4" />
-          Generate Policy YAML
+          Generate Policy Manifest
         </Button>
       </div>
       <PoliciesTable policies={policies} searchFilter={search} />
-      <CreatePolicySheet
-        open={createSheetOpen}
-        onOpenChange={setCreateSheetOpen}
-      />
+      <CreatePolicySheet open={createSheetOpen} onOpenChange={setCreateSheetOpen} />
     </div>
   )
 }

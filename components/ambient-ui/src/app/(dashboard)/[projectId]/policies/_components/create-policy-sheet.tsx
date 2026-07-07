@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useParams } from 'next/navigation'
 import {
   Sheet,
   SheetContent,
@@ -10,22 +9,41 @@ import {
   SheetDescription,
   SheetFooter,
 } from '@/components/ui/sheet'
+import { ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { ConfigMapYamlPreview } from '@/components/configmap-yaml-preview'
-import { policyToConfigMapYaml } from '@/lib/policy-yaml'
+import { YamlPreview } from '@/components/yaml-preview'
+import { policyToYaml } from '@/lib/policy-yaml'
 
-const POLICY_TEMPLATE = `filesystem:
-  read_write:
-    - /sandbox
-    - /tmp
-  read_only:
-    - /usr
-    - /etc
+const POLICY_TEMPLATE = `version: 1
+
+# Static: locked at sandbox creation. Paths the agent can read vs read/write.
+filesystem_policy:
+  read_only: [/usr, /lib, /etc]
+  read_write: [/sandbox, /tmp]
+
+# Static: Landlock LSM kernel enforcement. best_effort uses highest ABI the host supports.
+landlock:
+  compatibility: best_effort
+
+# Static: Unprivileged user/group the agent process runs as.
 process:
   run_as_user: sandbox
-  run_as_group: sandbox`
+  run_as_group: sandbox
+
+# Dynamic: hot-reloadable. Named blocks of endpoints + binaries allowed to reach them.
+network_policies:
+  my_api:
+    name: my-api
+    endpoints:
+      - host: api.example.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: full
+    binaries:
+      - path: /usr/bin/curl`
 
 export function CreatePolicySheet({
   open,
@@ -34,17 +52,13 @@ export function CreatePolicySheet({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const { projectId } = useParams<{ projectId: string }>()
-
   const [name, setName] = useState('')
-  const [namespace, setNamespace] = useState(projectId ?? '')
   const [specYaml, setSpecYaml] = useState(POLICY_TEMPLATE)
   const [generatedYaml, setGeneratedYaml] = useState<string | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
 
   function resetForm() {
     setName('')
-    setNamespace(projectId ?? '')
     setSpecYaml(POLICY_TEMPLATE)
     setGeneratedYaml(null)
     setParseError(null)
@@ -65,9 +79,14 @@ export function CreatePolicySheet({
       }
     }
 
-    const yaml = policyToConfigMapYaml({ name, namespace, spec })
+    const yaml = policyToYaml({
+      name,
+      spec,
+      annotations: {},
+      labels: {},
+    })
     setGeneratedYaml(yaml)
-  }, [name, namespace, specYaml])
+  }, [name, specYaml])
 
   const handleClose = useCallback(
     (isOpen: boolean) => {
@@ -81,14 +100,16 @@ export function CreatePolicySheet({
     <Sheet open={open} onOpenChange={handleClose}>
       <SheetContent className="sm:max-w-lg overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>Generate Policy YAML</SheetTitle>
+          <SheetTitle>Generate Policy Manifest</SheetTitle>
           <SheetDescription>
-            Generate a ConfigMap declaration for a sandbox policy. Apply it with
-            kubectl to register the policy.
+            Define a sandbox policy and generate its manifest.
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-4 py-4">
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleGenerate() }}
+          className="flex flex-col gap-4 px-4 pb-4"
+        >
           <div className="space-y-1.5">
             <label htmlFor="policy-name" className="text-sm font-medium">
               Name *
@@ -102,30 +123,28 @@ export function CreatePolicySheet({
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="policy-namespace" className="text-sm font-medium">
-              Namespace
-            </label>
-            <Input
-              id="policy-namespace"
-              value={namespace}
-              onChange={(e) => setNamespace(e.target.value)}
-              placeholder="tenant-a"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label htmlFor="policy-spec" className="text-sm font-medium">
-              Policy Spec (YAML)
-            </label>
+            <div className="flex items-center justify-between">
+              <label htmlFor="policy-spec" className="text-sm font-medium">
+                Policy Spec (YAML)
+              </label>
+              <a
+                href="https://docs.nvidia.com/openshell/sandboxes/policies"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                Docs <ExternalLink className="size-3" />
+              </a>
+            </div>
             <Textarea
               id="policy-spec"
               value={specYaml}
               onChange={(e) => setSpecYaml(e.target.value)}
-              placeholder="filesystem:&#10;  read_write:&#10;    - /sandbox"
-              className="min-h-48 font-mono text-sm"
+              placeholder="filesystem_policy:&#10;  read_write: [/sandbox, /tmp]"
+              className="min-h-64 font-mono text-sm"
             />
             <p className="text-xs text-muted-foreground">
-              The spec is included as-is in the ConfigMap data value.
+              The spec fields are included inline in the manifest.
             </p>
             {parseError && (
               <p className="text-xs text-destructive">{parseError}</p>
@@ -133,22 +152,26 @@ export function CreatePolicySheet({
           </div>
 
           {generatedYaml && (
-            <ConfigMapYamlPreview
+            <YamlPreview
               yaml={generatedYaml}
               name={name}
               kind="policy"
             />
           )}
-        </div>
 
-        <SheetFooter>
-          <Button
-            onClick={handleGenerate}
-            disabled={!name.trim()}
-          >
-            Generate YAML
-          </Button>
-        </SheetFooter>
+          <SheetFooter className="px-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => { resetForm(); onOpenChange(false) }}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!name.trim()}>
+              Generate Manifest
+            </Button>
+          </SheetFooter>
+        </form>
       </SheetContent>
     </Sheet>
   )

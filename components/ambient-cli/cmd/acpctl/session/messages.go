@@ -18,6 +18,7 @@ import (
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/output"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
+	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/spf13/cobra"
 )
 
@@ -432,15 +433,16 @@ func streamMessages(cmd *cobra.Command, client *sdkclient.Client, sessionID stri
 	ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
 	defer cancel()
 
-	stream, err := client.Sessions().StreamEvents(ctx, sessionID)
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "Streaming events for session %s (Ctrl+C to stop)...\n\n", sessionID)
+
+	msgs, stop, err := client.Sessions().WatchMessages(ctx, sessionID, msgArgs.afterSeq)
 	if err != nil {
 		return fmt.Errorf("stream events: %w", err)
 	}
-	defer stream.Close()
+	defer stop()
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Streaming events for session %s (Ctrl+C to stop)...\n\n", sessionID)
-
-	return renderSSEStream(stream, cmd.OutOrStdout(), msgArgs.followJSON, false)
+	return renderWatchStream(ctx, msgs, out, msgArgs.followJSON)
 }
 
 func streamMessagesContinuous(cmd *cobra.Command, client *sdkclient.Client, sessionID string) error {
@@ -450,41 +452,133 @@ func streamMessagesContinuous(cmd *cobra.Command, client *sdkclient.Client, sess
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "Continuously following session %s (Ctrl+C to stop)...\n\n", sessionID)
 
-	const reconnectDelay = 3 * time.Second
+	msgs, stop, err := client.Sessions().WatchMessages(ctx, sessionID, msgArgs.afterSeq)
+	if err != nil {
+		return fmt.Errorf("stream events: %w", err)
+	}
+	defer stop()
+
+	return renderWatchStream(ctx, msgs, out, msgArgs.followJSON)
+}
+
+func renderWatchStream(ctx context.Context, msgs <-chan *types.SessionMessage, out io.Writer, jsonMode bool) error {
+	colorEnabled := output.IsTerminalWriter(out)
+	w := out
+	width := output.TerminalWidthFor(w)
+	if width < 40 {
+		width = 80
+	}
 
 	for {
-		stream, err := client.Sessions().StreamEvents(ctx, sessionID)
-		if err != nil {
-			if ctx.Err() != nil {
+		select {
+		case <-ctx.Done():
+			return nil
+		case msg, ok := <-msgs:
+			if !ok {
 				return nil
 			}
-			fmt.Fprintf(out, "[reconnect] stream not available: %v — retrying in %s\n", err, reconnectDelay)
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-time.After(reconnectDelay):
+			if jsonMode {
+				raw, err := json.Marshal(msg)
+				if err != nil {
+					continue
+				}
+				fmt.Fprintln(w, string(raw))
 				continue
 			}
-		}
-
-		streamErr := renderSSEStream(stream, out, msgArgs.followJSON, false)
-		stream.Close()
-
-		if ctx.Err() != nil {
-			return nil
-		}
-
-		if streamErr != nil {
-			fmt.Fprintf(out, "\n[reconnect] stream ended: %v — reconnecting in %s\n", streamErr, reconnectDelay)
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-time.After(reconnectDelay):
-			}
-		} else {
-			fmt.Fprintf(out, "\n[reconnect] stream ended cleanly — reconnecting immediately\n")
+			renderWatchMessage(w, msg, width, colorEnabled)
 		}
 	}
+}
+
+func renderWatchMessage(w io.Writer, msg *types.SessionMessage, width int, colorEnabled bool) {
+	styled := func(s lipgloss.Style, text string) string {
+		if !colorEnabled {
+			return text
+		}
+		return s.Render(text)
+	}
+
+	switch msg.EventType {
+	case "assistant":
+		fmt.Fprint(w, msg.Payload)
+		fmt.Fprintln(w)
+	case "tool_use":
+		label := displayToolUsePayload(msg.Payload)
+		fmt.Fprintf(w, "%s %s\n", styled(sseToolTag, "[tool]"), label)
+	case "tool_result":
+		label := displayToolResultPayload(msg.Payload)
+		arrow := styled(sseArrow, "→")
+		body := styled(sseToolResult, label)
+		fmt.Fprintf(w, "  %s %s\n", arrow, body)
+	case "lifecycle":
+		var data struct {
+			Event string `json:"event"`
+		}
+		if json.Unmarshal([]byte(msg.Payload), &data) == nil {
+			switch data.Event {
+			case "run_started":
+				fmt.Fprintln(w, styled(sseRunTag, "▶ run started"))
+			case "run_finished":
+				fmt.Fprintln(w, styled(sseRunTag, "■ run finished"))
+			}
+		}
+	case "error":
+		fmt.Fprintf(w, "%s %s\n", styled(sseErrorTag, "✗ error:"), msg.Payload)
+	case "system":
+		fmt.Fprintf(w, "%s %s\n", styled(sseStepTag, "[system]"), msg.Payload)
+	case "user":
+		// skip user messages during streaming
+	}
+}
+
+func displayToolUsePayload(payload string) string {
+	var data struct {
+		Tool       string          `json:"tool"`
+		ToolCallID string          `json:"tool_call_id"`
+		Input      json.RawMessage `json:"input"`
+	}
+	if err := json.Unmarshal([]byte(payload), &data); err != nil || data.Tool == "" {
+		return payload
+	}
+	var inputMap map[string]any
+	if len(data.Input) > 0 && json.Unmarshal(data.Input, &inputMap) == nil {
+		var parts []string
+		for k, v := range inputMap {
+			s := fmt.Sprintf("%v", v)
+			if len(s) > 60 {
+				s = s[:57] + "..."
+			}
+			parts = append(parts, k+"="+s)
+		}
+		if len(parts) > 0 {
+			return data.Tool + "  " + strings.Join(parts, "  ")
+		}
+	}
+	return data.Tool
+}
+
+func displayToolResultPayload(payload string) string {
+	var data struct {
+		ToolCallID string `json:"tool_call_id"`
+		Result     string `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(payload), &data); err != nil || data.Result == "" {
+		return payload
+	}
+	result := strings.TrimSpace(data.Result)
+	var decoded string
+	if json.Unmarshal([]byte(result), &decoded) == nil {
+		result = decoded
+	}
+	lines := strings.SplitN(strings.TrimSpace(result), "\n", 4)
+	preview := strings.Join(lines, " | ")
+	if len(lines) >= 4 {
+		preview += " ..."
+	}
+	if len(preview) > 200 {
+		preview = preview[:197] + "..."
+	}
+	return preview
 }
 
 func renderSSEStream(stream io.Reader, out io.Writer, jsonMode, exitOnRunFinished bool) error {

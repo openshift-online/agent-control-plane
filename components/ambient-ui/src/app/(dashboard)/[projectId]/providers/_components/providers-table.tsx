@@ -25,7 +25,7 @@ import type { DomainProvider } from '@/domain/types'
 import { formatRelativeTime } from '@/lib/format-timestamp'
 import { useTableKeyboardNav } from '@/hooks/use-table-keyboard-nav'
 import { cn } from '@/lib/utils'
-import { LifecycleBadge } from '../../agents/_components/lifecycle-badge'
+import { LifecycleBadge, getResourceLifecycle } from '../../agents/_components/lifecycle-badge'
 
 const col = createColumnHelper<DomainProvider>()
 
@@ -37,7 +37,7 @@ const providerColumns = [
   col.display({
     id: 'source',
     header: 'Source',
-    cell: () => <LifecycleBadge lifecycle="gitops" />,
+    cell: ({ row }) => <LifecycleBadge lifecycle={getResourceLifecycle(row.original.annotations)} />,
   }),
   col.accessor('type', {
     header: 'Type',

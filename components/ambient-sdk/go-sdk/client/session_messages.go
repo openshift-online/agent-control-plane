@@ -3,9 +3,11 @@ package client
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -119,40 +121,70 @@ func (a *SessionAPI) consumeSSE(
 	msgs chan<- types.SessionMessage,
 	onMsg func(seq int),
 ) error {
-	rawURL := fmt.Sprintf("%s/api/ambient/v1/sessions/%s/%s?after_seq=%d",
-		strings.TrimRight(a.client.baseURL, "/"),
+	parsed, err := url.Parse(a.client.baseURL)
+	if err != nil {
+		return fmt.Errorf("parse base url: %w", err)
+	}
+
+	host := parsed.Hostname()
+	port := parsed.Port()
+	if port == "" {
+		if parsed.Scheme == "https" {
+			port = "443"
+		} else {
+			port = "80"
+		}
+	}
+
+	path := fmt.Sprintf("/api/ambient/v1/sessions/%s/%s?after_seq=%d",
 		url.PathEscape(sessionID),
 		endpoint,
 		afterSeq,
 	)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return fmt.Errorf("build request: %w", err)
+	var conn net.Conn
+	dialer := &net.Dialer{Timeout: 30 * time.Second}
+	if parsed.Scheme == "https" {
+		tlsConf := &tls.Config{MinVersion: tls.VersionTLS12}
+		if a.client.insecureSkipVerify {
+			tlsConf.InsecureSkipVerify = true //nolint:gosec
+		}
+		conn, err = tls.DialWithDialer(&net.Dialer{Timeout: 30 * time.Second}, "tcp", net.JoinHostPort(host, port), tlsConf)
+	} else {
+		conn, err = dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, port))
 	}
-	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Cache-Control", "no-cache")
-	req.Header.Set("Connection", "keep-alive")
+	if err != nil {
+		return fmt.Errorf("dial: %w", err)
+	}
+	defer conn.Close() //nolint:errcheck
+
+	go func() {
+		<-ctx.Done()
+		conn.Close() //nolint:errcheck
+	}()
+
+	var reqBuf strings.Builder
+	fmt.Fprintf(&reqBuf, "GET %s HTTP/1.1\r\n", path)
+	fmt.Fprintf(&reqBuf, "Host: %s\r\n", parsed.Host)
+	reqBuf.WriteString("Accept: text/event-stream\r\n")
+	reqBuf.WriteString("Cache-Control: no-cache\r\n")
+	reqBuf.WriteString("Connection: close\r\n")
 	if a.client.token != "" {
-		req.Header.Set("Authorization", "Bearer "+a.client.token)
+		fmt.Fprintf(&reqBuf, "Authorization: Bearer %s\r\n", a.client.token)
 	}
 	if a.client.project != "" {
-		req.Header.Set("X-Ambient-Project", a.client.project)
+		fmt.Fprintf(&reqBuf, "X-Ambient-Project: %s\r\n", a.client.project)
+	}
+	reqBuf.WriteString("\r\n")
+
+	if _, err := conn.Write([]byte(reqBuf.String())); err != nil {
+		return fmt.Errorf("write request: %w", err)
 	}
 
-	resp, err := a.client.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("connect: %w", err)
-	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status %d", resp.StatusCode)
-	}
-
-	scanner := bufio.NewScanner(resp.Body)
+	scanner := bufio.NewScanner(conn)
 	scanner.Buffer(make([]byte, sseScannerBufSize), sseScannerBufSize)
 
+	headersDone := false
 	var dataBuf strings.Builder
 
 	for scanner.Scan() {
@@ -162,14 +194,21 @@ func (a *SessionAPI) consumeSSE(
 
 		line := scanner.Text()
 
+		if !headersDone {
+			if line == "" || line == "\r" {
+				headersDone = true
+			}
+			continue
+		}
+
 		switch {
 		case strings.HasPrefix(line, "data: "):
 			if dataBuf.Len() > 0 {
 				dataBuf.WriteByte('\n')
 			}
-			dataBuf.WriteString(strings.TrimPrefix(line, "data: "))
+			dataBuf.WriteString(line[6:])
 
-		case line == "":
+		case line == "" || line == "\r":
 			if dataBuf.Len() == 0 {
 				continue
 			}
@@ -191,6 +230,9 @@ func (a *SessionAPI) consumeSSE(
 	}
 
 	if err := scanner.Err(); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
 		return fmt.Errorf("scanner: %w", err)
 	}
 	return nil

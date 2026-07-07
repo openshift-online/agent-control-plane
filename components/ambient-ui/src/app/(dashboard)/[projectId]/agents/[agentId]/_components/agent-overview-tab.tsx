@@ -19,7 +19,6 @@ import {
   Siren,
   Bot,
   AlertTriangle,
-  Info,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -133,23 +132,6 @@ export function AgentOverviewTab({
 
   return (
     <div className="space-y-6 pt-4">
-      {isManaged && (
-        <div className="flex items-start gap-3 rounded-md border border-muted bg-muted/50 p-4">
-          <Info className="size-5 shrink-0 text-muted-foreground mt-0.5" />
-          <div>
-            <p className="text-sm font-medium">GitOps-managed agent</p>
-            <p className="text-sm text-muted-foreground">
-              This agent is managed via GitOps
-              {agent.annotations["ambient.ai/source-namespace"]
-                ? ` in namespace ${agent.annotations["ambient.ai/source-namespace"]}`
-                : ""}
-              . This is viewable only. Edits to this resource should occur via
-              the ConfigMap declaration.
-            </p>
-          </div>
-        </div>
-      )}
-
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Agent Configuration</CardTitle>

@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useParams } from 'next/navigation'
 import {
   Sheet,
   SheetContent,
@@ -19,16 +18,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ConfigMapYamlPreview } from '@/components/configmap-yaml-preview'
-import { providerToConfigMapYaml } from '@/lib/provider-yaml'
+import { YamlPreview } from '@/components/yaml-preview'
+import { providerToYaml } from '@/lib/provider-yaml'
 
 const PROVIDER_TYPES = [
   'github',
-  'anthropic',
-  'jira',
-  'google',
-  'kubernetes',
-  'custom',
+  'vertex',
+  'generic',
 ]
 
 export function CreateProviderSheet({
@@ -38,31 +34,28 @@ export function CreateProviderSheet({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const { projectId } = useParams<{ projectId: string }>()
-
   const [name, setName] = useState('')
   const [type, setType] = useState('')
   const [secret, setSecret] = useState('')
-  const [namespace, setNamespace] = useState(projectId ?? '')
   const [generatedYaml, setGeneratedYaml] = useState<string | null>(null)
 
   function resetForm() {
     setName('')
     setType('')
     setSecret('')
-    setNamespace(projectId ?? '')
     setGeneratedYaml(null)
   }
 
   const handleGenerate = useCallback(() => {
-    const yaml = providerToConfigMapYaml({
+    const yaml = providerToYaml({
       name,
-      namespace,
-      type: type || undefined,
-      secret: secret || undefined,
+      type: type || '',
+      secret: secret || '',
+      annotations: {},
+      labels: {},
     })
     setGeneratedYaml(yaml)
-  }, [name, namespace, type, secret])
+  }, [name, type, secret])
 
   const handleClose = useCallback(
     (isOpen: boolean) => {
@@ -76,14 +69,16 @@ export function CreateProviderSheet({
     <Sheet open={open} onOpenChange={handleClose}>
       <SheetContent className="sm:max-w-lg overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>Generate Provider YAML</SheetTitle>
+          <SheetTitle>Generate Provider Manifest</SheetTitle>
           <SheetDescription>
-            Generate a ConfigMap declaration for a provider. Apply it with
-            kubectl to register the provider.
+            Define a provider and generate its manifest.
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-4 py-4">
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleGenerate() }}
+          className="flex flex-col gap-4 px-4 pb-4"
+        >
           <div className="space-y-1.5">
             <label htmlFor="provider-name" className="text-sm font-medium">
               Name *
@@ -129,38 +124,27 @@ export function CreateProviderSheet({
             </p>
           </div>
 
-          <div className="space-y-1.5">
-            <label
-              htmlFor="provider-namespace"
-              className="text-sm font-medium"
-            >
-              Namespace
-            </label>
-            <Input
-              id="provider-namespace"
-              value={namespace}
-              onChange={(e) => setNamespace(e.target.value)}
-              placeholder="tenant-a"
-            />
-          </div>
-
           {generatedYaml && (
-            <ConfigMapYamlPreview
+            <YamlPreview
               yaml={generatedYaml}
               name={name}
               kind="provider"
             />
           )}
-        </div>
 
-        <SheetFooter>
-          <Button
-            onClick={handleGenerate}
-            disabled={!name.trim()}
-          >
-            Generate YAML
-          </Button>
-        </SheetFooter>
+          <SheetFooter className="px-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => { resetForm(); onOpenChange(false) }}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!name.trim()}>
+              Generate Manifest
+            </Button>
+          </SheetFooter>
+        </form>
       </SheetContent>
     </Sheet>
   )

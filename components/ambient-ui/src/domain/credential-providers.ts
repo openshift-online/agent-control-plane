@@ -65,7 +65,6 @@ export const CREDENTIAL_CATEGORIES: readonly CredentialCategory[] = [
           hint: 'Paste the full JSON key file for a GCP service account with Vertex AI API enabled.',
           multiline: true,
         },
-        comingSoon: true,
       },
       { provider: 'kubeconfig', label: 'Kubernetes', icon: 'Server', fields: ['token'],
         namePlaceholder: 'my-cluster-kubeconfig',

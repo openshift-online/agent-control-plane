@@ -13,14 +13,11 @@ import {
   Settings,
   Moon,
   Sun,
-  GitBranch,
 } from 'lucide-react'
 import { useSessions } from '@/queries/use-sessions'
-import { useGatewayMode } from '@/lib/use-gateway-mode'
 import { getAttentionItems } from '@/app/(dashboard)/[projectId]/_components/dashboard-helpers'
 import { ProjectSelector } from '@/components/project-selector'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 import {
   Sidebar,
   SidebarContent,
@@ -48,17 +45,14 @@ const operateNavItems: readonly NavItem[] = [
   { label: 'Schedules', icon: CalendarClock, href: 'schedules' },
 ]
 
-const buildNavItems: readonly NavItem[] = [
+const configNavItems: readonly NavItem[] = [
   { label: 'Agents', icon: Bot, href: 'agents' },
+  { label: 'Providers', icon: KeyRound, href: 'providers' },
+  { label: 'Policies', icon: Shield, href: 'policies' },
 ]
 
 const projectNavItems: readonly NavItem[] = [
   { label: 'Settings', icon: Settings, href: 'settings' },
-]
-
-const configureNavItems: readonly NavItem[] = [
-  { label: 'Credentials', icon: KeyRound, href: '/credentials', global: true },
-  { label: 'Applications', icon: GitBranch, href: '/applications', global: true },
 ]
 
 function NavGroup({
@@ -126,21 +120,12 @@ export function AppSidebar({ projectId, effectiveProjectId }: AppSidebarProps) {
   const pathname = usePathname()
   const { theme, setTheme } = useTheme()
   const { data: sessionsData } = useSessions(effectiveProjectId ?? '', undefined)
-  const { enabled: gatewayMode } = useGatewayMode()
 
   const operateBadges = (() => {
     if (!sessionsData?.items) return undefined
     const count = getAttentionItems(sessionsData.items).length
     return count > 0 ? { Dashboard: count } : undefined
   })()
-
-  const effectiveBuildNavItems: readonly NavItem[] = gatewayMode
-    ? [
-        ...buildNavItems,
-        { label: 'Providers', icon: KeyRound, href: 'providers' },
-        { label: 'Policies', icon: Shield, href: 'policies' },
-      ]
-    : buildNavItems
 
   return (
     <Sidebar>
@@ -154,14 +139,8 @@ export function AppSidebar({ projectId, effectiveProjectId }: AppSidebarProps) {
 
       <SidebarContent>
         <NavGroup label="Operate" items={operateNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} badgeCounts={operateBadges} />
-        <NavGroup label={gatewayMode ? 'Config' : 'Build'} items={effectiveBuildNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
+        <NavGroup label="Config" items={configNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
         <NavGroup label="Project" items={projectNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
-        {!gatewayMode && (
-          <>
-            <Separator className="mx-2 my-1" />
-            <NavGroup label="Admin" items={configureNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
-          </>
-        )}
       </SidebarContent>
 
       <SidebarFooter>

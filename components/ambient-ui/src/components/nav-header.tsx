@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { LogOut, Search, UserPlus } from 'lucide-react'
+import { LogOut, Search, Settings, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Breadcrumb,
@@ -196,6 +196,13 @@ export function NavHeader({ projectId, effectiveProjectId, projectName, pageName
               </Button>
             }
           />
+        )}
+        {projectId && (
+          <Button variant="ghost" size="icon" className="h-8 w-8" asChild aria-label="Project settings" title="Settings">
+            <Link href={`/${projectId}/settings`}>
+              <Settings className="size-4" />
+            </Link>
+          </Button>
         )}
         <NotificationBell />
         <UserMenu />

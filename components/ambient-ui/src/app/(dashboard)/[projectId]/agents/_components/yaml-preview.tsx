@@ -1,8 +1,8 @@
 'use client'
 
-import { ConfigMapYamlPreview as SharedPreview } from '@/components/configmap-yaml-preview'
+import { YamlPreview as SharedPreview } from '@/components/yaml-preview'
 
-export function ConfigMapYamlPreview({
+export function YamlPreview({
   yaml,
   agentName,
 }: {
