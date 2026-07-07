@@ -67,6 +67,18 @@ Handles `session ADDED` and `session MODIFIED (phase=Pending)` events by provisi
 On `phase=Stopping` → calls `deprovisionSession` (deletes pods).
 On `DELETED` → calls `cleanupSession` (deletes pod, secret, service account, service, namespace).
 
+#### `internal/reconciler/project_reconciler.go` — ProjectReconciler
+
+Watches Project events via gRPC informer. Creates Kubernetes namespaces for each Project via `ensureNamespace()`, provisions runner secrets, and sets up control plane RBAC. Project = Namespace — the ProjectReconciler is the sole owner of namespace lifecycle.
+
+#### `internal/reconciler/gateway_reconciler.go` — GatewayReconciler
+
+Watches Gateway resource events via gRPC informer. Reconciles `kind: Gateway` API resources into Kubernetes gateway deployments (StatefulSet, Service, RBAC, certgen Job, NetworkPolicy) in the project namespace. Replaces the previous ConfigMap-based `internal/gateway/` package. Reuses manifest templating from `internal/gateway/manifests.go` and validation from `internal/gateway/validation.go`. See [gateway-provisioning.spec.md](./gateway-provisioning.spec.md) for the full specification.
+
+#### `internal/reconciler/application_reconciler.go` — ApplicationReconciler
+
+Git-based GitOps reconciler that syncs agent fleet definitions from git repositories. Uses the shared kustomize library (extracted from `acpctl apply`) to render manifests. Supports `kind: Gateway` documents in rendered manifests, applying them to the API server alongside Project, Agent, Credential, and RoleBinding resources.
+
 #### `internal/reconciler/shared.go` — SDKClientFactory
 
 Mints and caches per-project SDK clients. Each project uses the same bearer token but different project context. Also provides `namespaceForSession`, phase constants, and label helpers.
@@ -559,5 +571,8 @@ The `ambient-control-plane` ServiceAccount does not have `delete` on `namespaces
 | Runner SA token for CP auth | K8s SA tokens are already mounted in every pod, long-lived, and K8s-managed — no new secrets or out-of-band key distribution required |
 | CP is sole token source — no BOT_TOKEN Secret | CP creates the runner pod, so it is always reachable before the runner's first token request; retaining a Secret adds complexity and a second failure mode with the same blast radius |
 | `system:image-builder` bound to session SA at provision time | Agents need push access to the internal image registry to build and distribute images; OpenShift grants pull automatically via `system:image-pullers` at namespace init but push requires an explicit RoleBinding; co-locating it with the other session SA grants keeps all RBAC provisioning in one place |
+| Gateway as API resource, not ConfigMap | Gateway configuration lives in PostgreSQL as `kind: Gateway`, applied via `acpctl apply -k`. Eliminates the ConfigMap watcher, `initGatewayProvisioning()`, and the `internal/gateway/config.go` code path. The GatewayReconciler receives events via the same gRPC watch stream as all other resources — unified, testable, composable via kustomize |
+| ProjectReconciler owns namespace lifecycle | Project = Namespace. The ProjectReconciler creates namespaces; the GatewayReconciler deploys gateways into existing namespaces. No ConfigMap needed to declare which namespaces exist |
+| Shared kustomize library | The rendering engine from `acpctl apply` is extracted into a shared library consumed by both the CLI and the ApplicationReconciler, enabling unit testing without a running cluster |
 
 ---

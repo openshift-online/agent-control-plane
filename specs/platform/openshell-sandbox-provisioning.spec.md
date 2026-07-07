@@ -58,8 +58,8 @@ This installs the `agent-sandbox-system` namespace, the CRD, and the sandbox con
 This iteration is scoped to **scheduled agent runs** (single-run, short-lived sessions). The following are explicitly out of scope:
 
 - **Long-running / steerable sessions** — credential lifecycle concerns (token expiry mid-session, gateway-managed refresh via OAuth2/client-credentials flows) are deferred
-- **Gateway provisioning** — the OpenShell gateway is assumed to already be deployed in each project namespace; ACP will not create it. A future iteration should have the control plane provision and reconcile gateway lifecycle per project namespace (potentially adapting the [upstream Helm chart values](https://github.com/NVIDIA/OpenShell/blob/main/deploy/helm/openshell/values.yaml) into a managed resource)
-- **Namespace lifecycle (gateway mode)** — in gateway mode (`OPENSHELL_USE_GATEWAY=true`), project namespaces are created and managed externally to ACP (e.g., by the OpenShell gateway Helm install or cluster provisioning tooling). ACP verifies existence and fails with a clear error if a required namespace is missing. In pod mode, ACP continues to create and delete namespaces directly. See [Namespace Lifecycle](#requirement-namespace-lifecycle)
+- **Gateway provisioning** — ~~the OpenShell gateway is assumed to already be deployed in each project namespace~~ **Resolved:** Gateway provisioning is now specified in [gateway-provisioning.spec.md](./gateway-provisioning.spec.md). Gateways are declared as `kind: Gateway` API resources via `acpctl apply -k` and reconciled by the GatewayReconciler in `internal/reconciler/`
+- **Namespace lifecycle (gateway mode)** — ~~project namespaces are created and managed externally to ACP~~ **Resolved:** The ProjectReconciler now creates namespaces for all Projects (Project = Namespace). In gateway mode, the GatewayReconciler deploys gateways into namespaces that the ProjectReconciler has already created. No external namespace provisioning is required. See [Namespace Lifecycle](#requirement-namespace-lifecycle)
 - **Namespace-level credential storage** — credentials remain stored in ACP, not as Kubernetes Secrets in the project namespace. A future iteration should store credentials as Kubernetes Secrets in each project namespace, with ACP reading them from the Secret and passing them to the gateway when configuring providers. This indirection is necessary because the gateway does not yet support loading credentials directly from Kubernetes Secrets ([OpenShell#1882](https://github.com/NVIDIA/OpenShell/issues/1882))
 - **Network policy ownership** — OpenShell policies (including network egress rules allowing runner-to-control-plane gRPC) will be user-configurable via the Agent spec. Whether ACP auto-injects the control plane egress rule on top of the user-configured policy or requires users to include it explicitly is TBD
 
@@ -711,51 +711,33 @@ The control plane SHALL load client TLS credentials dynamically from a Kubernete
 
 ### Requirement: Namespace Lifecycle
 
-Namespace lifecycle is mode-dependent:
+Namespace lifecycle is unified across modes. The ProjectReconciler creates and manages namespaces for all Projects (Project = Namespace). There is no mode-dependent namespace provisioning.
 
-- **Pod mode** (`OPENSHELL_USE_GATEWAY=false`): The control plane manages namespace lifecycle directly. `StandardNamespaceProvisioner.ProvisionNamespace` creates the namespace if absent or updates its labels if it already exists. `DeprovisionNamespace` deletes the namespace on cleanup.
-- **Gateway mode** (`OPENSHELL_USE_GATEWAY=true`): Project namespaces are created and managed externally to ACP (e.g., by the OpenShell gateway Helm install or cluster provisioning tooling). The control plane verifies existence via a direct `GetNamespace` call and fails with a descriptive error if a required namespace is missing. It never creates or deletes namespaces. However, during gateway initialization (`initGatewayProvisioning`), the control plane SHALL apply managed labels (`ambient-code.io/managed=true`, `ambient-code.io/project-id`, `ambient-code.io/managed-by=ambient-control-plane`) to each namespace listed in `platform-config` via `ProvisionNamespace`. This labeling identifies ACP-managed namespaces for the `ApplicationReconciler` and general namespace discovery.
+- **All modes**: The ProjectReconciler watches Project events via gRPC and creates a Kubernetes namespace for each Project via `ensureNamespace()`. The namespace carries managed labels (`ambient-code.io/managed=true`, `ambient-code.io/project-id`, `ambient-code.io/managed-by=ambient-control-plane`). Gateway mode no longer requires externally-provisioned namespaces.
+- **Gateway mode** (`OPENSHELL_USE_GATEWAY=true`): The GatewayReconciler deploys OpenShell gateway resources into the namespace after the ProjectReconciler has created it. Gateway configuration is declared as a `kind: Gateway` API resource applied via `acpctl apply -k`. No `platform-config` ConfigMap or `initGatewayProvisioning()` startup path is needed.
 
-#### Scenario: Pod mode — namespace provisioning
+#### Scenario: Namespace created by ProjectReconciler
 
-- GIVEN `OPENSHELL_USE_GATEWAY` is `false`
-- WHEN the control plane provisions a session
-- THEN it SHALL call `StandardNamespaceProvisioner.ProvisionNamespace`
-- AND if the namespace does not exist, it SHALL create it
-- AND if the namespace already exists, it SHALL update its labels (update-or-create)
-- AND provisioning SHALL proceed with resource creation within the namespace
+- GIVEN a Project named `my-project` exists in the API server
+- WHEN the ProjectReconciler processes the Project event
+- THEN it SHALL create namespace `my-project` with managed labels
+- AND the namespace SHALL be available for both session provisioning and gateway deployment
 
-#### Scenario: Pod mode — namespace deprovisioning
-
-- GIVEN `OPENSHELL_USE_GATEWAY` is `false`
-- WHEN the control plane cleans up a session
-- THEN it SHALL call `StandardNamespaceProvisioner.DeprovisionNamespace`
-- AND it SHALL delete the namespace
-
-#### Scenario: Gateway mode — namespace does not exist
+#### Scenario: Gateway mode — namespace exists before gateway deployment
 
 - GIVEN `OPENSHELL_USE_GATEWAY` is `true`
-- AND namespace `my-project` does not exist on the cluster
-- WHEN the control plane attempts to provision resources
-- THEN it SHALL fail with an error: `namespace my-project does not exist; gateway-managed namespaces must be provisioned externally`
-- AND it SHALL NOT attempt to create the namespace
+- AND a `kind: Gateway` resource references project `my-project`
+- WHEN the GatewayReconciler processes the Gateway event
+- THEN the namespace `my-project` SHALL already exist (created by ProjectReconciler)
+- AND the GatewayReconciler SHALL deploy gateway K8s resources into it
 
-#### Scenario: Gateway mode — direct namespace verification during session provisioning
+#### Scenario: Gateway mode — namespace does not yet exist
 
 - GIVEN `OPENSHELL_USE_GATEWAY` is `true`
-- WHEN the control plane provisions a session
-- THEN it SHALL verify the target namespace exists via a direct `GetNamespace` API call
-- AND it SHALL NOT call the provisioner's `ProvisionNamespace` method during session provisioning — the provisioner is bypassed at session time to prevent any provisioner implementation (Standard, MPP) from attempting to create the namespace
-- AND if the namespace does not exist, the control plane SHALL fail with: `namespace <name> does not exist; gateway-managed namespaces must be provisioned externally`
-
-**Note:** The provisioner IS called during gateway initialization (`initGatewayProvisioning` / `ensureProject`) to apply managed labels to existing namespaces. This is distinct from session-time provisioning where the provisioner is bypassed.
-
-#### Scenario: Project deletion
-
-- GIVEN a project with name `my-project` and associated namespace `my-project`
-- WHEN the project is deleted from ACP
-- THEN the control plane SHALL NOT delete the namespace
-- AND ACP-managed resources within the namespace (secrets, service accounts, RBAC bindings) MAY become orphaned and should be cleaned up by external tooling or a future garbage collection mechanism
+- AND a Gateway event arrives before the corresponding Project has been reconciled
+- WHEN the GatewayReconciler attempts to deploy
+- THEN it SHALL log a warning and skip reconciliation
+- AND it SHALL retry when the namespace becomes available
 
 #### Scenario: Session cleanup (pod mode)
 
@@ -771,14 +753,14 @@ Namespace lifecycle is mode-dependent:
 - AND a session is being stopped or deleted
 - WHEN the control plane cleans up session resources
 - THEN it SHALL delete session-scoped resources (secrets, service accounts, services, sandboxes) within the namespace
-- AND it SHALL NOT delete the namespace
+- AND it SHALL NOT delete the namespace (the namespace is owned by the ProjectReconciler and may be used by other sessions and the gateway)
 
-#### Scenario: Gateway mode — no DeprovisionNamespace on cleanup
+#### Scenario: Project deletion
 
-- GIVEN `OPENSHELL_USE_GATEWAY` is `true`
-- WHEN the control plane cleans up a session
-- THEN it SHALL NOT call `DeprovisionNamespace` — the namespace is owned by external infrastructure (OpenShell gateway Helm install, cluster provisioning tooling) and must not be destroyed by ACP session lifecycle events
-- AND only session-scoped resources (sandbox, secrets, service accounts, services) SHALL be deleted
+- GIVEN a project with name `my-project` and associated namespace `my-project`
+- WHEN the project is deleted from ACP
+- THEN the ProjectReconciler SHALL handle namespace cleanup according to its lifecycle policy
+- AND gateway resources within the namespace SHALL be cleaned up by the GatewayReconciler when the corresponding Gateway resource is deleted
 
 ### Requirement: Configuration
 
