@@ -348,6 +348,22 @@ func (g *GatewayClient) UpdateConfig(ctx context.Context, namespace string, req 
 	return resp, err
 }
 
+func (g *GatewayClient) WatchSandbox(ctx context.Context, namespace string, req *pb.WatchSandboxRequest) (pb.OpenShell_WatchSandboxClient, error) {
+	ctx = g.authContext(ctx)
+	client, err := g.clientForNamespace(ctx, namespace)
+	if err != nil {
+		return nil, err
+	}
+	stream, err := client.WatchSandbox(ctx, req)
+	if err != nil {
+		if g.shouldEvict(err) {
+			g.evictConn(namespace)
+		}
+		return nil, err
+	}
+	return stream, nil
+}
+
 func (g *GatewayClient) Close() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()

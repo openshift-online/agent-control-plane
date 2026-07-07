@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Vendored from github.com/NVIDIA/OpenShell/proto/openshell.proto
-// Subset: sandbox lifecycle, exec, and provider management RPCs needed by the control plane.
+// Subset: sandbox lifecycle, exec, provider management, and log streaming RPCs needed by the control plane.
 
 syntax = "proto3";
 
@@ -27,6 +27,8 @@ service OpenShell {
   rpc UpdateConfig(UpdateConfigRequest) returns (UpdateConfigResponse);
   rpc ConfigureProviderRefresh(ConfigureProviderRefreshRequest) returns (ConfigureProviderRefreshResponse);
   rpc RotateProviderCredential(RotateProviderCredentialRequest) returns (RotateProviderCredentialResponse);
+  rpc WatchSandbox(WatchSandboxRequest) returns (stream SandboxStreamEvent);
+  rpc GetSandboxLogs(GetSandboxLogsRequest) returns (GetSandboxLogsResponse);
 }
 
 message Sandbox {
@@ -268,4 +270,66 @@ message SshRelayTarget {}
 message TcpRelayTarget {
   string host = 1;
   uint32 port = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Sandbox log streaming (vendored for sandbox observability)
+// ---------------------------------------------------------------------------
+
+message WatchSandboxRequest {
+  string id = 1;
+  bool follow_status = 2;
+  bool follow_logs = 3;
+  bool follow_events = 4;
+  uint32 log_tail_lines = 5;
+  uint32 event_tail = 6;
+  bool stop_on_terminal = 7;
+  int64 log_since_ms = 8;
+  repeated string log_sources = 9;
+  string log_min_level = 10;
+}
+
+message SandboxStreamEvent {
+  oneof payload {
+    Sandbox sandbox = 1;
+    SandboxLogLine log = 2;
+    PlatformEvent event = 3;
+    SandboxStreamWarning warning = 4;
+  }
+}
+
+message SandboxLogLine {
+  string sandbox_id = 1;
+  int64 timestamp_ms = 2;
+  string level = 3;
+  string target = 4;
+  string message = 5;
+  string source = 6;
+  map<string, string> fields = 7;
+}
+
+message PlatformEvent {
+  int64 timestamp_ms = 1;
+  string source = 2;
+  string type = 3;
+  string reason = 4;
+  string message = 5;
+  map<string, string> metadata = 6;
+}
+
+message SandboxStreamWarning {
+  string message = 1;
+}
+
+message GetSandboxLogsRequest {
+  string sandbox_id = 1;
+  uint32 lines = 2;
+  int64 since_ms = 3;
+  repeated string sources = 4;
+  string min_level = 5;
+}
+
+message GetSandboxLogsResponse {
+  repeated SandboxLogLine logs = 1;
+  uint32 buffer_total = 2;
 }

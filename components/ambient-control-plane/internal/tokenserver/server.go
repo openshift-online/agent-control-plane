@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/auth"
@@ -24,21 +25,59 @@ type Server struct {
 	logger zerolog.Logger
 }
 
+// Option configures optional server behavior.
+type Option func(*serverConfig)
+
+type serverConfig struct {
+	gateway SandboxGateway
+}
+
+// WithGateway injects an OpenShell gateway client for sandbox observability endpoints.
+func WithGateway(gw SandboxGateway) Option {
+	return func(c *serverConfig) { c.gateway = gw }
+}
+
 func New(
 	listenAddr string,
 	tokenProvider auth.TokenProvider,
 	privateKey *rsa.PrivateKey,
 	logger zerolog.Logger,
+	opts ...Option,
 ) (*Server, error) {
+	var cfg serverConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
+
+	componentLogger := logger.With().Str("component", "tokenserver").Logger()
+
 	h := &handler{
 		tokenProvider: tokenProvider,
 		privateKey:    privateKey,
-		logger:        logger.With().Str("component", "tokenserver").Logger(),
+		logger:        componentLogger,
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/token", h.handleToken)
 	mux.HandleFunc("/healthz", handleHealthz)
+
+	if cfg.gateway != nil {
+		sbx := &sandboxHandler{
+			gateway: cfg.gateway,
+			logger:  componentLogger,
+		}
+		mux.HandleFunc("/sandbox/", func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case strings.HasSuffix(r.URL.Path, "/policy"):
+				sbx.handlePolicy(w, r)
+			case strings.HasSuffix(r.URL.Path, "/logs"):
+				sbx.handleLogs(w, r)
+			default:
+				http.NotFound(w, r)
+			}
+		})
+		componentLogger.Info().Msg("sandbox observability endpoints registered")
+	}
 
 	return &Server{
 		srv: &http.Server{
@@ -48,7 +87,7 @@ func New(
 			WriteTimeout: writeTimeout,
 			IdleTimeout:  idleTimeout,
 		},
-		logger: logger.With().Str("component", "tokenserver").Logger(),
+		logger: componentLogger,
 	}, nil
 }
 

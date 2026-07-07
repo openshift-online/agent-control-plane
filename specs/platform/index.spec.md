@@ -28,6 +28,10 @@ Declarative agent YAML schema for ConfigMap-based agent definitions. Covers entr
 
 Configuration reuse patterns using Kustomize bases and overlays for agent, provider, and policy composition. Composition happens at apply time — the control plane only sees fully-resolved ConfigMaps. Extension to the Agent Sandbox Configuration spec.
 
+### [OpenShell Sandbox Observability](openshell-sandbox-observability.spec.md)
+
+Sandbox log streaming and policy display in the session detail UI. Surfaces OpenShell gateway logs (streaming SSE) and effective sandbox policy (filesystem, network, process controls) through the control plane's gateway gRPC channel.
+
 ### [MCP Server](mcp-server.spec.md)
 
 Model Context Protocol server that exposes platform resources as MCP tools. Covers tool definitions, transport, authentication, @mention resolution, and sidecar deployment.

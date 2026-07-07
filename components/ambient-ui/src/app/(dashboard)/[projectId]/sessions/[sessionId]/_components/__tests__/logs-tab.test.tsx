@@ -29,6 +29,7 @@ function makeSession(overrides: Partial<DomainSession> = {}): DomainSession {
     repos: [],
     reconciledRepos: [],
     conditions: [],
+    kubeNamespace: null,
     ...overrides,
   }
 }

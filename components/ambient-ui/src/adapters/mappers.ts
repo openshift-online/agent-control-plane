@@ -165,6 +165,7 @@ export function mapSdkSessionToDomain(sdk: Session): DomainSession {
     repos: parseRepos(sdk.repos),
     reconciledRepos: parseReconciledRepos(sdk.reconciled_repos),
     conditions: parseConditions(sdk.conditions),
+    kubeNamespace: emptyToNull(sdk.kube_namespace),
   }
 }
 

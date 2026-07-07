@@ -1,8 +1,8 @@
 # Gateway Provisioning Specification
 
-**Date:** 2026-06-26  
-**Status:** Design  
-**Related:** `openshell-sandbox-provisioning.spec.md` — gateway mode usage; `control-plane.spec.md` — CP reconciliation patterns  
+**Date:** 2026-06-26
+**Status:** Design
+**Related:** `openshell-sandbox-provisioning.spec.md` — gateway mode usage; `control-plane.spec.md` — CP reconciliation patterns
 **Skill:** `skills/build/full-stack-pipeline/` — wave-based implementation pipeline
 
 ---
@@ -431,7 +431,7 @@ No new environment variables are required. Gateway provisioning is enabled by th
 
 ### ConfigMap Schema
 
-**Name:** `platform-config`  
+**Name:** `platform-config`
 **Namespace:** Same namespace where ACP is deployed (e.g., `ambient-code`)
 
 **Required Keys:**
@@ -458,17 +458,17 @@ data:
           sandbox_namespace = "tenant-alpha"
           default_image = "ghcr.io/nvidia/openshell-community/sandboxes/base:latest"
           supervisor_image = "ghcr.io/nvidia/openshell/supervisor:0.0.63"
-          
+
           [openshell.gateway.auth]
           allow_unauthenticated_users = true
-    
+
     - name: tenant-beta
       gateway:
         image: ghcr.io/nvidia/openshell:v0.0.70
         serverDnsNames:
           - openshell-gateway.tenant-beta.svc.cluster.local
         # config field optional - uses defaults if omitted
-    
+
     - name: tenant-gamma
       gateway:
         image: ghcr.io/nvidia/openshell:v0.0.70
