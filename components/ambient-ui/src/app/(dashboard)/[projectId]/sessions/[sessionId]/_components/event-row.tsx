@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { deepUnwrapJson, tryFormatJson, tryParseToolPayload } from '@/components/chat-messages'
+import { tryFormatJson, tryParseToolPayload, tryParseToolResult } from '@/components/chat-messages'
 import type { DomainSessionMessage } from '@/domain/types'
 import { formatRelativeTime } from '@/lib/format-timestamp'
 import { cn } from '@/lib/utils'
@@ -38,15 +38,9 @@ function truncateToLines(text: string, maxLines: number): { text: string; trunca
 }
 
 function formatToolResultPayload(message: DomainSessionMessage): string {
-  try {
-    const parsed = JSON.parse(message.payload) as Record<string, unknown>
-    if (typeof parsed.result === 'string') {
-      return deepUnwrapJson(parsed.result)
-    }
-    return JSON.stringify(parsed, null, 2)
-  } catch {
-    return message.payload
-  }
+  const parsed = tryParseToolResult(message.payload)
+  if (parsed) return parsed.result
+  return tryFormatJson(message.payload)
 }
 
 // ---- Collapsible row: collapsed by default, shows a title label ----
@@ -59,7 +53,7 @@ function CollapsibleRow({
   label: string
 }) {
   const [expanded, setExpanded] = useState(false)
-  const formattedPayload = tryFormatJson(message.payload)
+  const formattedPayload = useMemo(() => tryFormatJson(message.payload), [message.payload])
   const relativeTime = message.createdAt ? formatRelativeTime(message.createdAt) : '--'
 
   return (
@@ -105,7 +99,7 @@ function ToolResultRow({
   isFollowingToolUse: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
-  const formattedPayload = formatToolResultPayload(message)
+  const formattedPayload = useMemo(() => formatToolResultPayload(message), [message.payload])
   const { text: truncatedText, truncated } = truncateToLines(formattedPayload, MAX_RESULT_LINES)
   const relativeTime = message.createdAt ? formatRelativeTime(message.createdAt) : '--'
 
@@ -146,7 +140,7 @@ function ToolResultRow({
 function GenericEventRow({ message }: { message: DomainSessionMessage }) {
   const [expanded, setExpanded] = useState(false)
   const isError = message.eventType === 'error'
-  const formattedPayload = tryFormatJson(message.payload)
+  const formattedPayload = useMemo(() => tryFormatJson(message.payload), [message.payload])
   const { text, truncated } = truncateContent(formattedPayload)
   const relativeTime = message.createdAt ? formatRelativeTime(message.createdAt) : '--'
   const ariaLabel = `${message.eventType} event, ${relativeTime}`

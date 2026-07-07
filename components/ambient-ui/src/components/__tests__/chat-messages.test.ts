@@ -66,6 +66,11 @@ describe('deepUnwrapJson', () => {
   it('unwraps a JSON-encoded string value', () => {
     expect(deepUnwrapJson('"just a string"')).toBe('just a string')
   })
+
+  it('pretty-prints a JSON array without unwrapping', () => {
+    const arr = [1, 2, 3]
+    expect(deepUnwrapJson(JSON.stringify(arr))).toBe(JSON.stringify(arr, null, 2))
+  })
 })
 
 // ---- tryParseToolPayload ----

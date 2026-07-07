@@ -25,8 +25,8 @@ export const CHAT_EVENT_TYPES: ReadonlySet<SessionEventType> = new Set([
 
 // ---- Payload Parsing Helpers ----
 
-function unwrapNestedJson(value: unknown): unknown {
-  if (typeof value !== 'string') return value
+function unwrapNestedJson(value: unknown, depth = 0): unknown {
+  if (depth > 5 || typeof value !== 'string') return value
 
   let current: unknown = value
   for (let i = 0; i < 10; i++) {
@@ -41,7 +41,7 @@ function unwrapNestedJson(value: unknown): unknown {
   if (typeof current === 'object' && current !== null && !Array.isArray(current)) {
     const obj = current as Record<string, unknown>
     if ('result' in obj && Object.keys(obj).every(k => k === 'result' || k === 'tool_call_id')) {
-      return unwrapNestedJson(obj.result)
+      return unwrapNestedJson(obj.result, depth + 1)
     }
   }
 

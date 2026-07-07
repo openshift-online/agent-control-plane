@@ -139,28 +139,37 @@ describe('LogsTab', () => {
 
   it('renders messages that match active filters', async () => {
     const messages = [
-      makeMessage({ id: 'msg-1', eventType: 'tool_use', payload: 'git status' }),
+      makeMessage({
+        id: 'msg-1',
+        eventType: 'tool_use',
+        payload: JSON.stringify({ tool: 'Bash', arguments: { command: 'git status' } }),
+      }),
       makeMessage({ id: 'msg-2', eventType: 'error', payload: 'Command failed' }),
     ]
     const LogsTab = await loadWithMessages(messages)
 
     render(<LogsTab session={makeSession()} />, { wrapper: createWrapper() })
 
-    expect(await screen.findByText('git status')).toBeInTheDocument()
+    // tool_use rows are collapsed by default — only the tool name label is visible
+    expect(await screen.findByText('Bash')).toBeInTheDocument()
     expect(screen.getByText('Command failed')).toBeInTheDocument()
   })
 
   it('hides messages when their filter is toggled off', async () => {
     const messages = [
-      makeMessage({ id: 'msg-1', eventType: 'tool_use', payload: 'git status' }),
+      makeMessage({
+        id: 'msg-1',
+        eventType: 'tool_use',
+        payload: JSON.stringify({ tool: 'Bash', arguments: { command: 'git status' } }),
+      }),
       makeMessage({ id: 'msg-2', eventType: 'error', payload: 'Command failed' }),
     ]
     const LogsTab = await loadWithMessages(messages)
 
     render(<LogsTab session={makeSession()} />, { wrapper: createWrapper() })
 
-    // Wait for messages to load
-    expect(await screen.findByText('git status')).toBeInTheDocument()
+    // Wait for messages to load — tool_use rows show tool name when collapsed
+    expect(await screen.findByText('Bash')).toBeInTheDocument()
 
     // Toggle off 'Tool Call' filter -- scope to filter group to avoid
     // matching EventTypeBadge elements in message rows
@@ -168,21 +177,25 @@ describe('LogsTab', () => {
     fireEvent.click(within(filterGroup).getByText('Tool Call'))
 
     // tool_use message should be hidden
-    expect(screen.queryByText('git status')).not.toBeInTheDocument()
+    expect(screen.queryByText('Bash')).not.toBeInTheDocument()
     // error message should still be visible
     expect(screen.getByText('Command failed')).toBeInTheDocument()
   })
 
   it('shows "No events match" when all filters toggled off', async () => {
     const messages = [
-      makeMessage({ id: 'msg-1', eventType: 'tool_use', payload: 'some command' }),
+      makeMessage({
+        id: 'msg-1',
+        eventType: 'tool_use',
+        payload: JSON.stringify({ tool: 'Read', arguments: { path: '/workspace' } }),
+      }),
     ]
     const LogsTab = await loadWithMessages(messages)
 
     render(<LogsTab session={makeSession()} />, { wrapper: createWrapper() })
 
-    // Wait for data to load
-    expect(await screen.findByText('some command')).toBeInTheDocument()
+    // Wait for data to load — tool_use rows show tool name when collapsed
+    expect(await screen.findByText('Read')).toBeInTheDocument()
 
     // Toggle off all filters using the filter group buttons.
     // We must scope to the filter group because EventTypeBadge also
