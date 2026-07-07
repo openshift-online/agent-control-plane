@@ -19,7 +19,7 @@ import { policyToYaml } from '@/lib/policy-yaml'
 const POLICY_TEMPLATE = `version: 1
 
 # Static: locked at sandbox creation. Paths the agent can read vs read/write.
-filesystem_policy:
+filesystem:
   read_only: [/usr, /lib, /etc]
   read_write: [/sandbox, /tmp]
 
@@ -140,7 +140,7 @@ export function CreatePolicySheet({
               id="policy-spec"
               value={specYaml}
               onChange={(e) => setSpecYaml(e.target.value)}
-              placeholder="filesystem_policy:&#10;  read_write: [/sandbox, /tmp]"
+              placeholder="filesystem:&#10;  read_write: [/sandbox, /tmp]"
               className="min-h-64 font-mono text-sm"
             />
             <p className="text-xs text-muted-foreground">

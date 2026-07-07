@@ -75,6 +75,8 @@ examples/
 │   │   └── jira-issue-categorizer.yaml
 │   ├── gateways/            # Base gateway template
 │   │   └── openshell-gateway.yaml
+│   ├── policies/            # Sandbox policies (applied before agents)
+│   │   └── permissive.yaml
 │   └── providers/           # Boilerplate provider integrations (shared by all tenants)
 │       ├── vertex.yaml
 │       ├── github.yaml
@@ -93,7 +95,7 @@ examples/
         └── credential-github.yaml
 ```
 
-`base/` contains resources shared across all tenants: agent definitions and boilerplate provider integrations (vertex, github, jira). `overlays/` contains the tenant-specific Project, Gateway, and Credentials.
+`base/` contains resources shared across all tenants: agent definitions, sandbox policies, and boilerplate provider integrations (vertex, github, jira). `overlays/` contains the tenant-specific Project, Gateway, and Credentials.
 
 ### Applying
 
@@ -150,6 +152,30 @@ Restricted sandbox policies matching production. Use this tenant to validate age
 **Providers configured:** `vertex`, `github`, `jira` (from base)
 **Credentials:** Vertex AI, GitHub (no Jira credential — agents requiring Jira will not run)
 **Gateway:** OpenShell gateway at `openshell-gateway.tenant-b.svc.cluster.local`
+
+### Policies
+
+#### `permissive`
+
+A wide-open sandbox policy that allows network access to most common services. Defines filesystem access (read-only system paths, read-write `/sandbox` and `/tmp`), Landlock LSM settings, process identity, and network policies for:
+
+- **Claude Code + Vertex AI** — Vertex AI inference, Google auth, Anthropic API
+- **gcloud** — OAuth and IAM token refresh
+- **GitHub** — Git Smart HTTP (read-only clone/fetch) and REST API (read-only)
+- **PyPI** — Python package installation
+- **VS Code / Cursor** — IDE remote server downloads
+- **OpenCode** — npm registry and inference
+- **Atlassian** — Jira and Confluence REST APIs
+
+> **Note:** ACP internal traffic (runner-to-control-plane and runner-to-API-server) is automatically injected by the control plane at sandbox creation time and does not need to be declared in user-facing policies.
+
+Agents reference the policy by name via `sandbox_policy: permissive`. Agents that omit `sandbox_policy` get the gateway's built-in locked-down default (no external network access beyond ACP internal traffic).
+
+To apply the policy independently:
+
+```bash
+acpctl apply -f examples/base/policies/permissive.yaml
+```
 
 ### Agents
 

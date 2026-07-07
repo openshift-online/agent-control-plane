@@ -1,5 +1,6 @@
 kind: Agent
 name: jira-issue-categorizer
+sandbox_policy: permissive
 prompt: |
   You are a Jira issue categorizer. The session prompt will tell you:
   - One or more Jira project keys or names to process (e.g. ROSA, OSD)

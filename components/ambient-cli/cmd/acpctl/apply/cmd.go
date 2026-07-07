@@ -21,13 +21,13 @@ import (
 
 var Cmd = &cobra.Command{
 	Use:   "apply",
-	Short: "Apply declarative Project, Agent, Credential, RoleBinding, and Gateway manifests",
-	Long: `Apply Projects, Agents, Credentials, RoleBindings, and Gateways from YAML files or a Kustomize directory.
+	Short: "Apply declarative Project, Agent, Credential, Policy, RoleBinding, and Gateway manifests",
+	Long: `Apply Projects, Agents, Credentials, Policies, RoleBindings, and Gateways from YAML files or a Kustomize directory.
 
 Mirrors kubectl apply semantics: resources are created if they do not exist,
 or patched if they do. Output reports created / configured / unchanged per resource.
 
-Supported kinds: Project, Agent, Credential, RoleBinding, Gateway
+Supported kinds: Project, Agent, Credential, Policy, RoleBinding, Gateway
 
 File format (one or more documents separated by ---):
 
@@ -166,6 +166,8 @@ func run(cmd *cobra.Command, _ []string) error {
 			result, err = applyProject(ctx, client, doc)
 		case "agent":
 			result, err = applyAgent(ctx, client, doc, projectName, factory)
+		case "policy":
+			result, err = applyPolicy(ctx, client, doc, projectName, factory)
 		case "credential":
 			result, err = applyCredential(ctx, client, doc)
 		case "provider":
@@ -663,6 +665,9 @@ func applyAgent(ctx context.Context, client *sdkclient.Client, doc kustomize.Res
 		if len(doc.Environment) > 0 {
 			builder = builder.Environment(doc.Environment)
 		}
+		if doc.SandboxPolicy != "" {
+			builder = builder.SandboxPolicy(doc.SandboxPolicy)
+		}
 		pa, buildErr := builder.Build()
 		if buildErr != nil {
 			return applyResult{}, buildErr
@@ -717,6 +722,9 @@ func buildAgentPatch(existing *sdktypes.Agent, doc kustomize.Resource) map[strin
 	if len(doc.Environment) > 0 {
 		patch["environment"] = doc.Environment
 	}
+	if doc.SandboxPolicy != "" && doc.SandboxPolicy != existing.SandboxPolicy {
+		patch["sandbox_policy"] = doc.SandboxPolicy
+	}
 	if len(doc.Labels) > 0 {
 		patch["labels"] = marshalStringMap(doc.Labels)
 	}
@@ -724,6 +732,99 @@ func buildAgentPatch(existing *sdktypes.Agent, doc kustomize.Resource) map[strin
 		patch["annotations"] = marshalStringMap(doc.Annotations)
 	}
 	return patch
+}
+
+// ── Policy ──────────────────────────────────────────────────────────────────
+
+func applyPolicy(ctx context.Context, client *sdkclient.Client, doc kustomize.Resource, projectName string, factory *connection.ClientFactory) (applyResult, error) {
+	projClient := client
+	if factory != nil {
+		if pc, err := factory.ForProject(projectName); err == nil {
+			projClient = pc
+		}
+	}
+
+	project, err := projClient.Projects().Get(ctx, projectName)
+	if err != nil {
+		return applyResult{}, fmt.Errorf("project %q not found: %w", projectName, err)
+	}
+
+	var specJSON string
+	if len(doc.Spec) > 0 {
+		b, marshalErr := json.Marshal(doc.Spec)
+		if marshalErr != nil {
+			return applyResult{}, fmt.Errorf("marshal policy spec: %w", marshalErr)
+		}
+		specJSON = string(b)
+	}
+
+	opts := sdktypes.NewListOptions().Size(100).
+		Search(fmt.Sprintf("name = '%s'", doc.Name)).Build()
+	existing, err := projClient.Policys().List(ctx, opts)
+	if err != nil {
+		return applyResult{}, fmt.Errorf("listing policies: %w", err)
+	}
+
+	var match *sdktypes.Policy
+	if existing != nil {
+		for i, p := range existing.Items {
+			if p.Name == doc.Name {
+				match = &existing.Items[i]
+				break
+			}
+		}
+	}
+
+	if match != nil {
+		patch := sdktypes.NewPolicyPatchBuilder()
+		changed := false
+		if specJSON != "" && specJSON != match.Spec {
+			patch = patch.Spec(specJSON)
+			changed = true
+		}
+		if len(doc.Labels) > 0 {
+			lbl := marshalStringMap(doc.Labels)
+			if lbl != match.Labels {
+				patch = patch.Labels(lbl)
+				changed = true
+			}
+		}
+		if len(doc.Annotations) > 0 {
+			ann := marshalStringMap(doc.Annotations)
+			if ann != match.Annotations {
+				patch = patch.Annotations(ann)
+				changed = true
+			}
+		}
+		if !changed {
+			return applyResult{Kind: "Policy", Name: doc.Name, Status: "unchanged"}, nil
+		}
+		if _, err := projClient.Policys().Update(ctx, match.ID, patch.Build()); err != nil {
+			return applyResult{}, err
+		}
+		return applyResult{Kind: "Policy", Name: doc.Name, Status: "configured"}, nil
+	}
+
+	builder := sdktypes.NewPolicyBuilder().
+		ProjectID(project.ID).
+		Name(doc.Name)
+	if specJSON != "" {
+		builder = builder.Spec(specJSON)
+	}
+	if len(doc.Labels) > 0 {
+		builder = builder.Labels(marshalStringMap(doc.Labels))
+	}
+	if len(doc.Annotations) > 0 {
+		builder = builder.Annotations(marshalStringMap(doc.Annotations))
+	}
+	policy, buildErr := builder.Build()
+	if buildErr != nil {
+		return applyResult{}, buildErr
+	}
+	if _, createErr := projClient.Policys().Create(ctx, policy); createErr != nil {
+		return applyResult{}, createErr
+	}
+	return applyResult{Kind: "Policy", Name: doc.Name, Status: "created"}, nil
 }
 
 func seedInbox(ctx context.Context, client *sdkclient.Client, projectID, agentID string, seeds []kustomize.InboxSeed) error {

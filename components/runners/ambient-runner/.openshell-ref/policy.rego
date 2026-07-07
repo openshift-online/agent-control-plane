@@ -7,7 +7,7 @@ default allow_network = false
 
 # --- Static policy data passthrough (queried at sandbox startup) ---
 
-filesystem_policy := data.filesystem_policy
+filesystem_policy := data.filesystem
 
 landlock_policy := data.landlock
 

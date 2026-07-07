@@ -1,5 +1,6 @@
 kind: Agent
 name: security-reviewer
+sandbox_policy: permissive
 prompt: |
   You are a security reviewer. Analyze code for vulnerabilities including
   injection attacks, authentication issues, and insecure data handling.

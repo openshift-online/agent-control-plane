@@ -32,9 +32,11 @@ type Resource struct {
 	Scope          string            `yaml:"scope"`
 	ScopeID        string            `yaml:"scope_id"`
 	UserID         string            `yaml:"user_id"`
-	ServerDnsNames []string          `yaml:"server_dns_names"`
-	Image          string            `yaml:"image"`
-	Config         string            `yaml:"config"`
+	ServerDnsNames []string                `yaml:"server_dns_names"`
+	Image          string                 `yaml:"image"`
+	Config         string                 `yaml:"config"`
+	SandboxPolicy  string                 `yaml:"sandbox_policy"`
+	Spec           map[string]any `yaml:"spec"`
 }
 
 type PayloadDecl struct {
@@ -272,6 +274,15 @@ func StrategicMerge(base, patch Resource) Resource {
 	}
 	if len(patch.ServerDnsNames) > 0 {
 		base.ServerDnsNames = patch.ServerDnsNames
+	}
+	if patch.SandboxPolicy != "" {
+		base.SandboxPolicy = patch.SandboxPolicy
+	}
+	for k, v := range patch.Spec {
+		if base.Spec == nil {
+			base.Spec = make(map[string]any)
+		}
+		base.Spec[k] = v
 	}
 	for k, v := range patch.Environment {
 		if base.Environment == nil {
