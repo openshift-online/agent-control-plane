@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-control-plane
+spec:
+  template:
+    spec:
+      containers:
+        - name: ambient-control-plane
+          env:
+            - name: AMBIENT_API_SERVER_URL
+              value: "http://ambient-api-server.ambient-dev.svc:8000"
+            - name: AMBIENT_GRPC_SERVER_ADDR
+              value: "ambient-api-server.ambient-dev.svc:9000"
+            - name: AMBIENT_GRPC_USE_TLS
+              value: "false"
+            - name: CP_TOKEN_URL
+              value: "http://ambient-control-plane.ambient-dev.svc:8080/token"
+            - name: OIDC_TOKEN_URL
+              value: "https://keycloak-ambient-keycloak.apps.rosa.hcmais01ue1.s9m2.p3.openshiftapps.com/realms/ambient-code/protocol/openid-connect/token"
+            - name: OIDC_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ambient-control-plane-oidc
+                  key: client-id
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ambient-control-plane-oidc
+                  key: client-secret
+            - name: PLATFORM_MODE
+              value: "standard"
+            - name: MCP_API_SERVER_URL
+              value: "http://ambient-api-server.ambient-dev.svc:8000"
+            - name: USE_VERTEX
+              value: "1"
+              valueFrom: null
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ambient-anthropic
+                  key: api-key
+                  optional: true
+            - name: ANTHROPIC_VERTEX_PROJECT_ID
+              value: "itpc-gcp-hcm-pe-eng-claude"
+              valueFrom: null
+            - name: CLOUD_ML_REGION
+              value: "global"
+              valueFrom: null
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: "/app/vertex/itpc-gcp-hcm-pe-eng.json"
+              valueFrom: null
+            - name: VERTEX_SECRET_NAME
+              value: "ambient-vertex"
+            - name: VERTEX_SECRET_NAMESPACE
+              value: "ambient-dev"
+            - name: OPENSHELL_USE_GATEWAY
+              value: "true"
+            - name: OPENSHELL_ENABLED
+              value: "true"
+            - name: CP_RUNTIME_NAMESPACE
+              value: "ambient-dev"
+              valueFrom: null

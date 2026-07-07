@@ -27,6 +27,9 @@ SESSION_READY_TIMEOUT="${SESSION_READY_TIMEOUT:-180}"
 LLM_RESPONSE_TIMEOUT="${LLM_RESPONSE_TIMEOUT:-180}"
 USE_EXISTING_PROJECT="${USE_EXISTING_PROJECT:-}"
 VERTEX_REGION="${VERTEX_REGION:-global}"
+SANDBOX_POLICY="${SANDBOX_POLICY:-}"
+AGENT_PROVIDERS="${AGENT_PROVIDERS:-}"
+SKIP_K8S_SECRET="${SKIP_K8S_SECRET:-}"
 
 GITOPS_SECRETS="${GITOPS_SECRETS:-$HOME/projects/src/gitlab.cee.redhat.com/ambient-code/ambient-code-gitops/.secrets}"
 OC_CONTEXT="${OC_CONTEXT:-ambient-code/api-hcmais01ue1-s9m2-p3-openshiftapps-com:443/mturansk}"
@@ -307,10 +310,25 @@ dim "  vertex region:  ${VERTEX_REGION}"
 
 MANIFEST_DIR=$(mktemp -d)
 
+if [[ -n "${AGENT_PROVIDERS}" ]]; then
+  VERTEX_K8S_SECRET="vertex-sa-key"
+  if [[ -n "${SKIP_K8S_SECRET}" ]]; then
+    pass "vertex K8s secret '${VERTEX_K8S_SECRET}' (skipped, using existing)"
+  else
+    TOKEN_KEY="token"
+    oc --context "$OC_CONTEXT" -n "$NAMESPACE" create secret generic "${VERTEX_K8S_SECRET}" \
+      --from-literal="${TOKEN_KEY}=${VERTEX_SA_KEY}" --dry-run=client -o yaml \
+      | oc --context "$OC_CONTEXT" -n "$NAMESPACE" apply -f - >/dev/null 2>&1 && \
+      pass "vertex K8s secret '${VERTEX_K8S_SECRET}' ensured" || \
+      fail "failed to create vertex K8s secret"
+  fi
+fi
+
 cat > "${MANIFEST_DIR}/provider-vertex.yaml" <<EOF
 kind: Provider
 name: ${PROVIDER_NAME}
 type: vertex
+$(if [[ -n "${AGENT_PROVIDERS}" ]]; then echo "secret: vertex-sa-key"; fi)
 EOF
 
 cat > "${MANIFEST_DIR}/credential-vertex.yaml" <<EOF
@@ -401,6 +419,28 @@ for a in items:
     pass "agent already exists: ${AGENT_NAME} (${AGENT_ID})"
   else
     die "could not create or find agent"
+  fi
+fi
+
+if [[ -n "${SANDBOX_POLICY}" || -n "${AGENT_PROVIDERS}" ]]; then
+  ensure_token
+  PATCH_BODY="{"
+  if [[ -n "${SANDBOX_POLICY}" ]]; then
+    PATCH_BODY+="\"sandbox_policy\": \"${SANDBOX_POLICY}\""
+    [[ -n "${AGENT_PROVIDERS}" ]] && PATCH_BODY+=","
+  fi
+  if [[ -n "${AGENT_PROVIDERS}" ]]; then
+    PATCH_BODY+="\"providers\": [\"${AGENT_PROVIDERS}\"]"
+  fi
+  PATCH_BODY+="}"
+  PATCH_RESP=$(api PATCH "/api/ambient/v1/projects/${PROJECT_ID}/agents/${AGENT_ID}" \
+    -d "${PATCH_BODY}" || echo "")
+  if [[ -n "${SANDBOX_POLICY}" ]]; then
+    PATCHED=$(echo "$PATCH_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('sandbox_policy',''))" 2>/dev/null || echo "")
+    [[ "${PATCHED}" == "${SANDBOX_POLICY}" ]] && pass "agent sandbox_policy set to '${SANDBOX_POLICY}'" || fail "failed to set sandbox_policy"
+  fi
+  if [[ -n "${AGENT_PROVIDERS}" ]]; then
+    pass "agent providers set to [${AGENT_PROVIDERS}]"
   fi
 fi
 
