@@ -176,12 +176,23 @@ jobs:
           exit 1
         }
 
-    - name: Run RBAC enforcement E2E tests
+    - name: Run Gateway E2E tests
       run: |
         kubectl port-forward -n ambient-code svc/ambient-api-server 13592:8000 &
         kubectl port-forward -n ambient-code svc/keycloak-service 18592:8080 &
         sleep 3
 
+        TEST_TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d) \
+        API_URL=http://localhost:13592 \
+        bash tests/e2e/gateway-e2e-test.sh || {
+          echo "Gateway E2E failed - showing debugging information..."
+          kubectl get pods -n tenant-a -o wide 2>&1 || true
+          kubectl logs -n ambient-code -l app=ambient-control-plane --tail=50 2>&1 || true
+          exit 1
+        }
+
+    - name: Run RBAC enforcement E2E tests
+      run: |
         API_URL=http://localhost:13592/api/ambient/v1 \
         KC_URL=http://localhost:18592 \
         bash tests/e2e/rbac_e2e_test.sh
@@ -191,17 +202,6 @@ jobs:
         API_URL=http://localhost:13592/api/ambient/v1 \
         KC_URL=http://localhost:18592 \
         bash tests/e2e/scheduled_sessions_e2e_test.sh
-
-    - name: Run Gateway E2E tests
-      run: |
-        TEST_TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d) \
-        API_URL=http://localhost:13592 \
-        bash tests/e2e/gateway-e2e-test.sh || {
-          echo "Gateway E2E failed - showing debugging information..."
-          kubectl get pods -n tenant-a -o wide 2>&1 || true
-          kubectl logs -n ambient-code -l app=ambient-control-plane --tail=50 2>&1 || true
-          exit 1
-        }
 
     - name: Show deployment status
       if: always()
