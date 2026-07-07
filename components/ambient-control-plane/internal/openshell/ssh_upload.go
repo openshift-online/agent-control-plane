@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -159,7 +160,25 @@ func writePayloadViaSSH(client *ssh.Client, p Payload) error {
 	return nil
 }
 
+func validateRepoURL(repoURL string) error {
+	parsed, err := url.Parse(repoURL)
+	if err != nil {
+		return fmt.Errorf("invalid repo URL: %w", err)
+	}
+	if parsed.Scheme != "https" {
+		return fmt.Errorf("repo URL must use https:// scheme, got %q", parsed.Scheme)
+	}
+	if parsed.Host == "" {
+		return fmt.Errorf("repo URL missing host")
+	}
+	return nil
+}
+
 func cloneRepo(ctx context.Context, repoURL, ref string) (string, error) {
+	if err := validateRepoURL(repoURL); err != nil {
+		return "", err
+	}
+
 	tmpDir, err := os.MkdirTemp("", "payload-clone-*")
 	if err != nil {
 		return "", fmt.Errorf("create temp dir: %w", err)
@@ -219,7 +238,6 @@ func cloneRepo(ctx context.Context, repoURL, ref string) (string, error) {
 		return "", fmt.Errorf("clone %q (ref=%q): %w", repoURL, ref, err)
 	}
 
-	_ = repo
 	return tmpDir, nil
 }
 
@@ -279,12 +297,7 @@ func tarDirectory(dir string) io.ReadCloser {
 			}
 
 			if !d.IsDir() && info.Mode().IsRegular() {
-				f, err := os.Open(path)
-				if err != nil {
-					return err
-				}
-				defer f.Close()
-				if _, err := io.Copy(tw, f); err != nil {
+				if err := copyFileToTar(tw, path); err != nil {
 					return err
 				}
 			}
@@ -294,6 +307,16 @@ func tarDirectory(dir string) io.ReadCloser {
 		pw.CloseWithError(err)
 	}()
 	return pr
+}
+
+func copyFileToTar(tw *tar.Writer, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = io.Copy(tw, f)
+	return err
 }
 
 func writeRepoPayloadViaSSH(client *ssh.Client, targetPath string, tarReader io.Reader) error {

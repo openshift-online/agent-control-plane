@@ -388,10 +388,12 @@ if [ -n "$REPO_AGENT_ID" ]; then
       pass "Repo sandbox pod '${REPO_SBX_NAME}' is running"
 
       # Poll for repo payload delivery (clone + tar transfer)
+      # Poll for repo payload delivery (clone + tar transfer).
+      # Uses octocat/Hello-World which contains a single README file.
       REPO_PAYLOADS_READY=false
       for i in $(seq 1 10); do
         if kubectl exec -n "$TENANT" "$REPO_SBX_NAME" -- \
-            test -f /sandbox/workspace/LICENSE 2>/dev/null; then
+            test -f /sandbox/workspace/README 2>/dev/null; then
           REPO_PAYLOADS_READY=true
           break
         fi
@@ -414,27 +416,17 @@ if [ -n "$REPO_AGENT_ID" ]; then
         echo "  Got: $(echo "$REPO_CLAUDE_MD" | head -c 200)"
       fi
 
-      # 10b. LICENSE file from cloned repo
-      REPO_LICENSE=$(kubectl exec -n "$TENANT" "$REPO_SBX_NAME" -- \
-        head -1 /sandbox/workspace/LICENSE 2>/dev/null || echo "")
-      if echo "$REPO_LICENSE" | grep -qi "License"; then
-        pass "Repo payload: LICENSE found at /sandbox/workspace/LICENSE"
+      # 10b. README from cloned repo (octocat/Hello-World)
+      REPO_README=$(kubectl exec -n "$TENANT" "$REPO_SBX_NAME" -- \
+        cat /sandbox/workspace/README 2>/dev/null || echo "")
+      if echo "$REPO_README" | grep -qi "Hello"; then
+        pass "Repo payload: README found at /sandbox/workspace/README"
       else
-        fail "Repo payload: LICENSE not found or unexpected content"
-        echo "  Got: '${REPO_LICENSE}'"
+        fail "Repo payload: README not found or unexpected content"
+        echo "  Got: '${REPO_README}'"
       fi
 
-      # 10c. go.mod from cloned repo
-      REPO_GOMOD=$(kubectl exec -n "$TENANT" "$REPO_SBX_NAME" -- \
-        head -1 /sandbox/workspace/go.mod 2>/dev/null || echo "")
-      if echo "$REPO_GOMOD" | grep -q "module"; then
-        pass "Repo payload: go.mod present with module declaration"
-      else
-        fail "Repo payload: go.mod not found or missing module line"
-        echo "  Got: '${REPO_GOMOD}'"
-      fi
-
-      # 10d. .git directory excluded from tar transfer
+      # 10c. .git directory excluded from tar transfer
       GIT_DIR_EXISTS=$(kubectl exec -n "$TENANT" "$REPO_SBX_NAME" -- \
         ls -d /sandbox/workspace/.git 2>/dev/null || echo "")
       if [ -z "$GIT_DIR_EXISTS" ]; then

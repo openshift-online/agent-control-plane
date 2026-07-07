@@ -166,3 +166,29 @@ func TestIsHexSHA(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateRepoURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		url     string
+		wantErr bool
+	}{
+		{"https github", "https://github.com/octocat/Hello-World.git", false},
+		{"https gitlab", "https://gitlab.com/org/repo.git", false},
+		{"http blocked", "http://github.com/org/repo.git", true},
+		{"file scheme blocked", "file:///etc/passwd", true},
+		{"git scheme blocked", "git://internal.corp/repo.git", true},
+		{"ssh scheme blocked", "ssh://git@github.com/org/repo.git", true},
+		{"no scheme", "github.com/org/repo.git", true},
+		{"empty", "", true},
+		{"internal endpoint", "https://", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateRepoURL(tt.url)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateRepoURL(%q) error = %v, wantErr %v", tt.url, err, tt.wantErr)
+			}
+		})
+	}
+}
