@@ -181,6 +181,7 @@ func init() {
 	}
 }
 
+// DNS is resolved here, not at clone time — susceptible to DNS rebinding (low risk given attack complexity).
 func validateRepoURL(repoURL string) error {
 	parsed, err := url.Parse(repoURL)
 	if err != nil {
@@ -248,32 +249,15 @@ func cloneRepoFS(ctx context.Context, repoURL, ref string) (billy.Filesystem, er
 	}
 
 	wt := memfs.New()
-	repo, err := git.CloneContext(ctx, memory.NewStorage(), wt, cloneOpts)
+	_, err := git.CloneContext(ctx, memory.NewStorage(), wt, cloneOpts)
 	if err != nil && ref != "" {
 		// Branch ref failed — retry as tag
 		wt = memfs.New()
 		cloneOpts.ReferenceName = plumbing.NewTagReferenceName(ref)
-		repo, err = git.CloneContext(ctx, memory.NewStorage(), wt, cloneOpts)
+		_, err = git.CloneContext(ctx, memory.NewStorage(), wt, cloneOpts)
 
 		if err != nil && isHexSHA(ref) {
-			// Tag ref also failed and ref looks like a SHA — full clone + checkout
-			wt = memfs.New()
-			cloneOpts.ReferenceName = ""
-			cloneOpts.SingleBranch = false
-			cloneOpts.Depth = 0
-			repo, err = git.CloneContext(ctx, memory.NewStorage(), wt, cloneOpts)
-			if err == nil {
-				w, wtErr := repo.Worktree()
-				if wtErr != nil {
-					return nil, fmt.Errorf("get worktree: %w", wtErr)
-				}
-				if checkoutErr := w.Checkout(&git.CheckoutOptions{
-					Hash: plumbing.NewHash(ref),
-				}); checkoutErr != nil {
-					return nil, fmt.Errorf("checkout ref %q: %w", ref, checkoutErr)
-				}
-				wt = w.Filesystem
-			}
+			return nil, fmt.Errorf("direct SHA refs are not supported; use a branch or tag name")
 		}
 	}
 
