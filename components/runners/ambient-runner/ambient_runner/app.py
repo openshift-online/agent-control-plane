@@ -422,33 +422,15 @@ async def _push_initial_prompt_via_grpc(prompt: str, session_id: str) -> None:
     The gRPC push is synchronous (blocking I/O) and is offloaded to a thread
     pool so it does not block the asyncio event loop.
     """
-    import json as _json
-
     from ambient_runner._grpc_client import AmbientGRPCClient
 
     def _do_push() -> None:
         client = AmbientGRPCClient.from_env()
         try:
-            payload = {
-                "threadId": session_id,
-                "runId": str(uuid.uuid4()),
-                "messages": [
-                    {
-                        "id": str(uuid.uuid4()),
-                        "role": "user",
-                        "content": prompt,
-                        "metadata": {
-                            "hidden": True,
-                            "autoSent": True,
-                            "source": "runner_initial_prompt",
-                        },
-                    }
-                ],
-            }
             result = client.session_messages.push(
                 session_id,
                 event_type="user",
-                payload=_json.dumps(payload),
+                payload=prompt,
             )
             if result is not None:
                 logger.info(

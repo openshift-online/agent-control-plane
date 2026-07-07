@@ -13,7 +13,6 @@ Coverage targets:
 """
 
 import asyncio
-import json
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -67,12 +66,7 @@ class TestPushInitialPromptViaGRPC:
         call = mock_client.session_messages.push.call_args
         assert call[0][0] == "sess-1"
         assert call[1]["event_type"] == "user"
-        payload = json.loads(call[1]["payload"])
-        assert payload["threadId"] == "sess-1"
-        assert "runId" in payload
-        assert len(payload["messages"]) == 1
-        assert payload["messages"][0]["role"] == "user"
-        assert payload["messages"][0]["content"] == "hello world"
+        assert call[1]["payload"] == "hello world"
 
     async def test_closes_client_after_push(self):
         mock_result = MagicMock()
