@@ -235,7 +235,7 @@ func isHexSHA(s string) bool {
 	return true
 }
 
-func tarDirectory(dir string) io.Reader {
+func tarDirectory(dir string) io.ReadCloser {
 	pr, pw := io.Pipe()
 	go func() {
 		tw := tar.NewWriter(pw)
@@ -344,6 +344,7 @@ func uploadRepoPayload(ctx context.Context, client *ssh.Client, p Payload) error
 	defer os.RemoveAll(tmpDir)
 
 	tarReader := tarDirectory(tmpDir)
+	defer tarReader.Close()
 	return writeRepoPayloadViaSSH(client, p.Path, tarReader)
 }
 
