@@ -542,7 +542,9 @@ The policy envelope is JSON-marshaled and included in the `UpdateStatus` patch a
 
 ### Log Fetch (every 15s)
 
-After policy extraction, the CP calls `GatewayClient.FetchSandboxLogs()` — a new method that wraps `WatchSandbox` with `FollowLogs: false, LogTailLines: 500`. This returns a bounded snapshot of the most recent log entries as a JSON array matching the SSE log format. The result is included in the same `UpdateStatus` patch as `sandbox_logs_snapshot`.
+After policy extraction, the CP calls `GatewayClient.FetchSandboxLogs()` — a method that wraps `WatchSandbox` with `FollowLogs: false, LogTailLines: openshell.LogTailLines` (500). This returns a bounded snapshot of the most recent log entries as a JSON array matching the SSE log format. The result is included in the same `UpdateStatus` patch as `sandbox_logs_snapshot`.
+
+The tail line count is defined as the exported constant `openshell.LogTailLines` to keep it consistent across the periodic syncer and pre-delete final snapshot.
 
 ### Pre-Delete Final Snapshot
 
@@ -563,13 +565,22 @@ For abnormal termination (sandbox crash without `deprovisionSessionSandbox`), th
 
 ### Error Handling
 
-All snapshot errors (gateway unreachable, gRPC timeout, marshal failure) are logged at WARN level and silently skipped. They never block the status sync or sandbox deletion. The periodic 15s snapshots provide redundancy — a failed final snapshot still has the recent periodic data as fallback.
+Snapshot errors (gateway unreachable, gRPC timeout, policy marshal failure) are logged at WARN/DEBUG level and never block the status sync or sandbox deletion. The periodic 15s snapshots provide redundancy — a failed final snapshot still has the recent periodic data as fallback.
+
+`FetchSandboxLogs` returns both partial data AND the error when the stream fails mid-read. Callers log the error and persist whatever entries were collected, so partial snapshots are never silently dropped. When the stream errors before any entries are received, only the error is returned.
 
 ### Shared Helpers
 
-`sandboxPhaseString()` and `policyToMap()` are extracted from `internal/tokenserver/sandbox_handler.go` to `internal/openshell/sandbox_helpers.go` as exported functions (`SandboxPhaseString`, `PolicyToMap`). Both `tokenserver` and `reconciler` import `openshell`, so no import cycles are introduced.
+`internal/openshell/sandbox_helpers.go` exports shared functions used by both the token server and the reconciler:
 
-Status: 🔲 planned
+- `SandboxPhaseString(phase)` — converts proto phase enum to human-readable string
+- `PolicyToMap(policy)` — converts proto policy to a JSON-serializable map
+- `BuildSnapshotPatch(sbx)` — builds the complete `UpdateStatus` patch map from a `*pb.Sandbox`, including the policy envelope with version, hash, status, source, config_revision, and policy fields. Returns `(patch, error)`. Both `snapshotSandboxData` (periodic sync) and `finalSandboxSnapshot` (pre-delete) call this shared helper to keep the envelope structure and field names in one place.
+- `LogTailLines` — exported constant (`500`) for the log tail line count
+
+Both `tokenserver` and `reconciler` import `openshell`, so no import cycles are introduced.
+
+Status: ✅ implemented
 
 ---
 
@@ -607,6 +618,6 @@ The `ambient-control-plane` ServiceAccount does not have `delete` on `namespaces
 | `system:image-builder` bound to session SA at provision time | Agents need push access to the internal image registry to build and distribute images; OpenShift grants pull automatically via `system:image-pullers` at namespace init but push requires an explicit RoleBinding; co-locating it with the other session SA grants keeps all RBAC provisioning in one place |
 | Sandbox snapshots in PostgreSQL, not a log store | Snapshots are bounded (500 lines), session-scoped, and low-frequency (15s writes). PostgreSQL handles this without a new dependency. A dedicated log store would be appropriate for unbounded historical search, not for session-scoped snapshots |
 | Pre-delete final snapshot before `DeleteSandbox` | Periodic 15s snapshots provide good coverage, but the final state is most valuable for post-mortem. Fetching before delete guarantees stored data matches the live stream |
-| Snapshot errors silently skipped | Snapshot collection must never block status sync or sandbox deletion — it is best-effort. Periodic snapshots provide redundancy for failed final snapshots |
+| Snapshot errors logged, partial data preserved | Snapshot collection must never block status sync or sandbox deletion — it is best-effort. `FetchSandboxLogs` returns partial data with the error so callers can persist whatever was collected. Periodic snapshots provide redundancy for failed final snapshots |
 
 ---

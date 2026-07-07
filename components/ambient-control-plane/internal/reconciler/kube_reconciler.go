@@ -1151,32 +1151,19 @@ func (r *SimpleKubeReconciler) finalSandboxSnapshot(ctx context.Context, session
 		return
 	}
 
-	policy := sbx.GetSpec().GetPolicy()
-	sbxStatus := sbx.GetStatus()
-	policyEnvelope := map[string]interface{}{
-		"version":         policy.GetVersion(),
-		"hash":            "",
-		"status":          openshell.SandboxPhaseString(sbxStatus.GetPhase()),
-		"source":          "gateway",
-		"config_revision": fmt.Sprintf("%d", sbxStatus.GetCurrentPolicyVersion()),
-		"policy":          openshell.PolicyToMap(policy),
-	}
-	policyJSON, marshalErr := json.Marshal(policyEnvelope)
-	if marshalErr != nil {
-		r.logger.Warn().Err(marshalErr).Str("session_id", session.ID).Msg("final snapshot: failed to marshal policy")
+	patch, patchErr := openshell.BuildSnapshotPatch(sbx)
+	if patchErr != nil {
+		r.logger.Warn().Err(patchErr).Str("session_id", session.ID).Msg("final snapshot: failed to build patch")
 		return
-	}
-
-	patch := map[string]interface{}{
-		"sandbox_policy_snapshot": string(policyJSON),
 	}
 
 	sandboxID := sbx.GetMetadata().GetId()
 	if sandboxID != "" {
-		logs, logErr := r.gateway.FetchSandboxLogs(ctx, namespace, sandboxID, 500)
+		logs, logErr := r.gateway.FetchSandboxLogs(ctx, namespace, sandboxID, openshell.LogTailLines)
 		if logErr != nil {
 			r.logger.Debug().Err(logErr).Str("session_id", session.ID).Msg("final snapshot: failed to fetch logs")
-		} else if len(logs) > 0 {
+		}
+		if len(logs) > 0 {
 			logsJSON, err := json.Marshal(logs)
 			if err == nil {
 				patch["sandbox_logs_snapshot"] = string(logsJSON)

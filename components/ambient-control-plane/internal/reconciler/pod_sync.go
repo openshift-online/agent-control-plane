@@ -200,33 +200,19 @@ func (s *PodStatusSyncer) snapshotSandboxData(ctx context.Context, sdk *sdkclien
 		return
 	}
 
-	policy := sbx.GetSpec().GetPolicy()
-	status := sbx.GetStatus()
-
-	policyEnvelope := map[string]interface{}{
-		"version":         policy.GetVersion(),
-		"hash":            "",
-		"status":          openshell.SandboxPhaseString(status.GetPhase()),
-		"source":          "gateway",
-		"config_revision": fmt.Sprintf("%d", status.GetCurrentPolicyVersion()),
-		"policy":          openshell.PolicyToMap(policy),
-	}
-	policyJSON, err := json.Marshal(policyEnvelope)
-	if err != nil {
-		s.logger.Warn().Err(err).Str("session_id", session.ID).Msg("snapshot: failed to marshal policy")
+	patch, patchErr := openshell.BuildSnapshotPatch(sbx)
+	if patchErr != nil {
+		s.logger.Warn().Err(patchErr).Str("session_id", session.ID).Msg("snapshot: failed to build patch")
 		return
-	}
-
-	patch := map[string]interface{}{
-		"sandbox_policy_snapshot": string(policyJSON),
 	}
 
 	sandboxID := sbx.GetMetadata().GetId()
 	if sandboxID != "" {
-		logs, logErr := s.gateway.FetchSandboxLogs(ctx, namespace, sandboxID, 500)
+		logs, logErr := s.gateway.FetchSandboxLogs(ctx, namespace, sandboxID, openshell.LogTailLines)
 		if logErr != nil {
 			s.logger.Debug().Err(logErr).Str("session_id", session.ID).Msg("snapshot: failed to fetch logs")
-		} else if len(logs) > 0 {
+		}
+		if len(logs) > 0 {
 			logsJSON, marshalErr := json.Marshal(logs)
 			if marshalErr == nil {
 				patch["sandbox_logs_snapshot"] = string(logsJSON)

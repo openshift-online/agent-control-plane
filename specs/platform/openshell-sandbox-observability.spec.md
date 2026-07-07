@@ -102,8 +102,25 @@ Log entry fields:
 
 - GIVEN an active sandbox log stream
 - WHEN the SSE connection drops (network error, CP restart)
-- THEN the UI reconnects automatically after a brief delay
+- THEN the UI reconnects automatically after 3 seconds
 - AND displays a reconnection indicator
+- AND reconnect attempts are capped at 5 (`MAX_RECONNECTS`)
+- AND the reconnect counter resets to 0 on each successful connection
+
+#### Scenario: Sandbox log entry memory management
+
+- GIVEN a long-running sandbox log stream accumulating entries in the browser
+- WHEN the entry count exceeds 5000 (`MAX_LOG_ENTRIES`)
+- THEN the oldest entries are evicted (sliding window) to cap browser memory usage
+- AND the UI retains the most recent 5000 entries
+
+#### Scenario: Sandbox log entry type validation
+
+- GIVEN an SSE event arrives from the log stream
+- WHEN the event data is parsed
+- THEN a type guard (`parseSandboxLogEntry`) validates and constructs each field with defaults for missing optional fields
+- AND events missing required fields (`timestamp`, `message`) are silently dropped
+- AND no unsafe type casts (`as unknown as T`) are used
 
 #### Scenario: Session without OpenShell sandbox
 
@@ -158,6 +175,14 @@ The control plane host is discovered from the `CONTROL_PLANE_URL` environment va
 - WHEN the UI requests `GET /api/ambient/v1/sessions/{id}/sandbox/logs`
 - THEN the API server opens an SSE connection to the CP's `/sandbox/{name}/logs` endpoint
 - AND pipes the SSE stream to the client using the existing streaming passthrough pattern (`text/event-stream`, `X-Accel-Buffering: no`)
+
+#### Scenario: API server proxies policy request with header filtering
+
+- GIVEN a valid session with `kube_cr_name` and `kube_namespace` set
+- WHEN the UI requests `GET /api/ambient/v1/sessions/{id}/sandbox/policy`
+- THEN the API server proxies to the CP's `/sandbox/{name}/policy` endpoint
+- AND only `Content-Type` and `Content-Length` response headers are forwarded to the client
+- AND internal upstream headers (e.g., `Server`, `X-Powered-By`, tracing headers) are NOT forwarded — the API server is the trust boundary
 
 #### Scenario: Session not in gateway mode
 

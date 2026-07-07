@@ -1247,9 +1247,9 @@ func (h sessionHandler) SandboxPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	for k, vals := range resp.Header {
-		for _, v := range vals {
-			w.Header().Add(k, v)
+	for _, k := range []string{"Content-Type", "Content-Length"} {
+		if v := resp.Header.Get(k); v != "" {
+			w.Header().Set(k, v)
 		}
 	}
 	w.WriteHeader(resp.StatusCode)

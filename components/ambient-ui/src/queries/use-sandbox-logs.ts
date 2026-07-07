@@ -23,6 +23,21 @@ type SandboxLogsState = {
 }
 
 const SSE_EVENT_TYPES = ['log', 'platform_event', 'warning', 'status'] as const
+const MAX_LOG_ENTRIES = 5000
+const MAX_RECONNECTS = 5
+
+function parseSandboxLogEntry(raw: Record<string, unknown>): SandboxLogEntry | null {
+  if (typeof raw.timestamp !== 'number' || typeof raw.message !== 'string') return null
+  return {
+    timestamp: raw.timestamp,
+    message: raw.message,
+    source: raw.source === 'gateway' || raw.source === 'sandbox' ? raw.source : 'gateway',
+    level: typeof raw.level === 'string' ? raw.level : 'INFO',
+    module: typeof raw.module === 'string' ? raw.module : '',
+    category: typeof raw.category === 'string' ? raw.category : undefined,
+    denied: typeof raw.denied === 'boolean' ? raw.denied : undefined,
+  }
+}
 
 export function useSandboxLogs(
   sessionId: string,
@@ -36,6 +51,7 @@ export function useSandboxLogs(
   const [error, setError] = useState<string | null>(null)
   const eventSourceRef = useRef<EventSource | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const reconnectCountRef = useRef(0)
 
   const clear = useCallback(() => {
     setEntries([])
@@ -53,13 +69,18 @@ export function useSandboxLogs(
         setIsConnected(true)
         setIsReconnecting(false)
         setError(null)
+        reconnectCountRef.current = 0
       }
 
       const handleEvent = (event: MessageEvent) => {
         try {
           const raw = JSON.parse(event.data) as Record<string, unknown>
-          if (typeof raw.timestamp !== 'number' || typeof raw.message !== 'string') return
-          setEntries(prev => [...prev, raw as unknown as SandboxLogEntry])
+          const entry = parseSandboxLogEntry(raw)
+          if (!entry) return
+          setEntries(prev => {
+            const next = [...prev, entry]
+            return next.length > MAX_LOG_ENTRIES ? next.slice(-MAX_LOG_ENTRIES) : next
+          })
         } catch {
           // skip unparseable entries
         }
@@ -74,7 +95,8 @@ export function useSandboxLogs(
         es.close()
         setIsConnected(false)
 
-        if (enabled) {
+        if (enabled && reconnectCountRef.current < MAX_RECONNECTS) {
+          reconnectCountRef.current++
           setIsReconnecting(true)
           reconnectTimeoutRef.current = setTimeout(connect, 3000)
         }
