@@ -308,10 +308,6 @@ func (h *sessionGRPCHandler) PushSessionMessage(ctx context.Context, req *pb.Pus
 	if req.GetEventType() == "" {
 		return nil, status.Error(codes.InvalidArgument, "event_type is required")
 	}
-	if middleware.IsServiceCaller(ctx) && req.GetEventType() == "user" {
-		return nil, status.Error(codes.PermissionDenied, "service token may not push event_type=user")
-	}
-
 	if !middleware.IsServiceCaller(ctx) {
 		session, svcErr := h.service.Get(ctx, req.GetSessionId())
 		if svcErr != nil {

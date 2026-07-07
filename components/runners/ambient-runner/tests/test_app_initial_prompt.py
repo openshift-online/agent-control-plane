@@ -1,6 +1,7 @@
 """Unit tests for app.py initial prompt dispatch functions.
 
 Coverage targets:
+- _read_initial_prompt_file: file exists, file missing
 - _push_initial_prompt_via_grpc: happy path, push raises (client still closed),
   None result, from_env error, offloaded to executor (non-blocking)
 - _push_initial_prompt_via_http: happy path, missing env vars bail, bot token,
@@ -22,7 +23,23 @@ from ambient_runner.app import (
     _auto_execute_initial_prompt,
     _push_initial_prompt_via_grpc,
     _push_initial_prompt_via_http,
+    _read_initial_prompt_file,
 )
+
+
+# ---------------------------------------------------------------------------
+# _read_initial_prompt_file
+# ---------------------------------------------------------------------------
+
+
+class TestReadInitialPromptFile:
+    def test_reads_existing_file(self, tmp_path):
+        f = tmp_path / "prompt.txt"
+        f.write_text("  hello world  \n")
+        assert _read_initial_prompt_file(str(f)) == "hello world"
+
+    def test_returns_empty_when_missing(self):
+        assert _read_initial_prompt_file("/nonexistent/path.txt") == ""
 
 
 # ---------------------------------------------------------------------------
@@ -338,7 +355,7 @@ class TestPushInitialPromptViaHTTP:
 
 @pytest.mark.asyncio
 class TestAutoExecuteInitialPrompt:
-    async def test_skips_push_when_grpc_url_set(self):
+    async def test_pushes_via_grpc_when_grpc_url_set(self):
         with (
             patch(
                 "ambient_runner.app._push_initial_prompt_via_grpc",
@@ -354,7 +371,7 @@ class TestAutoExecuteInitialPrompt:
                 "hello", "sess-1", grpc_url="localhost:9000"
             )
 
-        mock_grpc.assert_not_awaited()
+        mock_grpc.assert_awaited_once_with("hello", "sess-1")
         mock_http.assert_not_awaited()
 
     async def test_routes_to_http_when_no_grpc_url(self):

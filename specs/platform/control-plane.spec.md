@@ -92,7 +92,7 @@ The CP binds the `system:image-builder` ClusterRole to `session-{id}-sa` via a n
 
 ### Start Context Assembly
 
-`assembleInitialPrompt` builds `INITIAL_PROMPT` from four sources in order:
+`assembleInitialPrompt` builds the initial prompt from four sources in order:
 
 ```
 1. Project.prompt        — workspace-level context (shared by all agents in this project)
@@ -101,7 +101,11 @@ The CP binds the `system:image-builder` ClusterRole to `session-{id}-sa` via a n
 4. Session.prompt        — what this specific run should do
 ```
 
-Each section is joined with `\n\n`. Empty sections are omitted. If all four are empty, `INITIAL_PROMPT` is not set and the runner waits for a user message via gRPC.
+Each section is joined with `\n\n`. Empty sections are omitted. If all four are empty, the prompt is not delivered and the runner waits for a user message via gRPC.
+
+**Delivery mechanism varies by runtime:**
+- **Gateway (OpenShell) sandboxes:** The assembled prompt is written to `/tmp/initial_prompt.txt` via SSH payload upload before the runner entrypoint executes. The `INITIAL_PROMPT` env var is NOT set — OpenShell strips env vars containing newlines, which the assembled prompt always contains.
+- **Operator (Job) pods:** The assembled prompt is set as the `INITIAL_PROMPT` env var on the Job container spec.
 
 ### Environment Variables Injected into Runner Pod
 
@@ -115,7 +119,7 @@ Each section is joined with `\n\n`. Empty sections are omitted. If all four are 
 | `AMBIENT_GRPC_URL` | CP config | api-server gRPC address |
 | `AMBIENT_GRPC_USE_TLS` | CP config | TLS flag for gRPC |
 | `AMBIENT_CP_TOKEN_URL` | CP config | CP token endpoint URL (e.g. `http://ambient-control-plane.{ns}.svc:8080/token`) |
-| `INITIAL_PROMPT` | assembled prompt | Auto-execute on startup |
+| `INITIAL_PROMPT` | assembled prompt | Auto-execute on startup (operator Job path only; gateway sandboxes receive the prompt via `/tmp/initial_prompt.txt` file upload) |
 | `IS_RESUME` | `"true"` | Set when `session.StartTime != nil` (session has been started before); tells the runner to skip `INITIAL_PROMPT` auto-execute |
 | `RESUME_AFTER_SEQ` | max `seq` from session_messages | Set alongside `IS_RESUME` when messages exist; runner's gRPC listener starts watching from this seq to prevent replay of historical messages |
 | `USE_VERTEX` / `ANTHROPIC_VERTEX_PROJECT_ID` / `CLOUD_ML_REGION` | CP config | Vertex AI config (when enabled) |
@@ -205,7 +209,10 @@ When `AMBIENT_GRPC_URL` is set (standard deployment):
        → listener.ready asyncio.Event set
 5. await bridge._grpc_listener.ready.wait()
    (blocks until WatchSessionMessages stream is confirmed open)
-6. If INITIAL_PROMPT set and not IS_RESUME:
+6. If not IS_RESUME, read initial prompt:
+     a. Try /tmp/initial_prompt.txt (gateway file upload)
+     b. Fall back to INITIAL_PROMPT env var (operator Job path)
+   If prompt found:
      _auto_execute_initial_prompt(prompt, session_id, grpc_url)
      → _push_initial_prompt_via_grpc()
        → PushSessionMessage(event_type="user", payload=prompt)

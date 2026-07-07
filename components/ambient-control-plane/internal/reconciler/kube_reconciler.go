@@ -348,12 +348,14 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 			r.logger.Warn().Err(err).Str("sandbox", sbxName).Msg("failed to patch sandbox dnsConfig; DNS resolution for external FQDNs may fail")
 		}
 		execEnv := r.inferenceExecEnv()
-		execEntrypoint := r.appendPromptToEntrypoint(ctx, entrypoint, session, sdk)
 		var payloads []types.Payload
 		if agent != nil {
 			payloads = agent.Payloads
 		}
-		go r.execAfterReady(namespace, sbxName, session.ID, execEntrypoint, sdk, execEnv, payloads)
+		if prompt := r.assembleInitialPrompt(ctx, session, sdk); prompt != "" {
+			payloads = append(payloads, types.Payload{SandboxPath: "/tmp/initial_prompt.txt", Content: prompt})
+		}
+		go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads)
 		r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 		return nil
 	}
@@ -409,12 +411,14 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		Msg("sandbox created via gateway")
 
 	execEnv := r.inferenceExecEnv()
-	execEntrypoint := r.appendPromptToEntrypoint(ctx, entrypoint, session, sdk)
 	var payloads []types.Payload
 	if agent != nil {
 		payloads = agent.Payloads
 	}
-	go r.execAfterReady(namespace, sbxName, session.ID, execEntrypoint, sdk, execEnv, payloads)
+	if prompt := r.assembleInitialPrompt(ctx, session, sdk); prompt != "" {
+		payloads = append(payloads, types.Payload{SandboxPath: "/tmp/initial_prompt.txt", Content: prompt})
+	}
+	go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads)
 
 	r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 	return nil
@@ -1013,9 +1017,6 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 		env["GCE_METADATA_TIMEOUT"] = "1"
 	}
 
-	if prompt := r.assembleInitialPrompt(ctx, session, sdk); prompt != "" {
-		env["INITIAL_PROMPT"] = prompt
-	}
 	if session.LlmModel != "" {
 		env["LLM_MODEL"] = session.LlmModel
 	}

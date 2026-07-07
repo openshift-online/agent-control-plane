@@ -306,10 +306,11 @@ The control plane SHALL pass session configuration to the sandbox as environment
 
 #### Scenario: Environment variable translation
 
-- GIVEN a session with LLM model, prompt, repo URL, and proxy settings
+- GIVEN a session with LLM model, repo URL, and proxy settings
 - WHEN the sandbox is created
-- THEN all environment variables from `buildEnv()` that have literal string values SHALL be included
+- THEN all environment variables from `buildSandboxEnv()` that have literal string values SHALL be included
 - AND Kubernetes-specific `valueFrom` / `fieldRef` entries (e.g., `POD_IP`) SHALL be omitted
+- AND `INITIAL_PROMPT` SHALL NOT be included in the gateway environment — the assembled prompt contains newlines which OpenShell strips; the prompt is delivered via file upload instead (see [Payload Upload via SSH](#requirement-payload-upload-via-ssh))
 
 #### Scenario: Provider-injected environment variable protection
 
@@ -593,9 +594,17 @@ The control plane SHALL upload payload files into the sandbox filesystem via SSH
 - AND `sandbox_path` SHALL be validated: must be an absolute path, must not contain `..` traversal, must match `^/[a-zA-Z0-9/_.\-]+$`
 - AND invalid paths SHALL be rejected before the SSH command is executed
 
+#### Scenario: Initial prompt delivered as file payload
+
+- GIVEN a session with a non-empty assembled prompt (from project, agent, inbox, or session prompt)
+- WHEN the control plane prepares payloads for the sandbox
+- THEN it SHALL append a synthetic payload with `SandboxPath="/tmp/initial_prompt.txt"` and `Content=<assembled prompt>` to the payload list
+- AND this payload SHALL be uploaded via SSH alongside any agent-defined payloads before `ExecSandbox`
+- AND the runner SHALL read this file on startup and push it as a `PushSessionMessage(event_type="user")` via gRPC so the prompt is visible in the UI chat history
+
 #### Scenario: No payloads — upload skipped
 
-- GIVEN an agent with no inline content payloads (or no agent associated with the session)
+- GIVEN an agent with no inline content payloads (or no agent associated with the session) AND no initial prompt
 - WHEN the sandbox reaches `SANDBOX_PHASE_READY`
 - THEN the control plane SHALL skip the SSH upload step entirely
 - AND proceed directly to `ExecSandbox`
