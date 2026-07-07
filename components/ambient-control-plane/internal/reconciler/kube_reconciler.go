@@ -1030,6 +1030,8 @@ func (r *SimpleKubeReconciler) ensureCredentialSecret(ctx context.Context, sandb
 		return nil, fmt.Errorf("credential secret %s/%s has no data field", r.cfg.CPRuntimeNamespace, credentialType)
 	}
 
+	// No OwnerReference: cross-namespace owner refs are unsupported in K8s.
+	// Cleanup relies on sandbox namespace deletion by the gateway.
 	dst := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "v1",

@@ -97,15 +97,6 @@ func ProviderCredentials(ambientProvider, token string) map[string]string {
 	return map[string]string{"token": token}
 }
 
-// ProviderCredentialsFromSecret builds the credential map for an OpenShell
-// provider. For known types (vertex, github, anthropic), it reads the "token"
-// key from the secret and maps it to the standard credential name. For unknown
-// types, all secret keys are passed through as-is — the secret key names become
-// the env var names in the sandbox.
-//
-// Vertex is special: SA keys are set as GOOGLE_SERVICE_ACCOUNT_KEY (the gateway
-// strips the raw key after configuring refresh). ADC credentials are NOT set as
-// initial credentials — the refresh flow mints the first access token.
 // mlflowSandboxEnvKeys are MLflow secret keys that the control plane sets
 // as plain sandbox environment variables (not provider credentials). This
 // ensures they are present in the env map for network policy construction.
@@ -141,6 +132,15 @@ func MLflowProviderCredentials(secretData map[string]string) map[string]string {
 	return creds
 }
 
+// ProviderCredentialsFromSecret builds the credential map for an OpenShell
+// provider. For known types (vertex, github, anthropic), it reads the "token"
+// key from the secret and maps it to the standard credential name. For unknown
+// types, all secret keys are passed through as-is — the secret key names become
+// the env var names in the sandbox.
+//
+// Vertex is special: SA keys are set as GOOGLE_SERVICE_ACCOUNT_KEY (the gateway
+// strips the raw key after configuring refresh). ADC credentials are NOT set as
+// initial credentials — the refresh flow mints the first access token.
 func ProviderCredentialsFromSecret(ambientProvider string, secretData map[string]string) map[string]string {
 	if ambientProvider == "mlflow" {
 		return MLflowProviderCredentials(secretData)
