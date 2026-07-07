@@ -149,6 +149,15 @@ else
   exit 1
 fi
 
+REPO_AGENT_ID=$(echo "$AGENTS_RESP" \
+  | jq -r '.items[] | select(.name == "repo-clone-workspace") | .id' 2>/dev/null | head -1 || echo "")
+
+if [ -n "$REPO_AGENT_ID" ]; then
+  pass "Agent 'repo-clone-workspace' exists (id: ${REPO_AGENT_ID})"
+else
+  skip "Agent 'repo-clone-workspace'" "not found — repo payload tests will be skipped"
+fi
+
 section "5. Verify provider and credential"
 
 PROVIDERS_RESP=$(api GET "/api/ambient/v1/providers?size=50" || echo "")
@@ -340,11 +349,108 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     else
       fail "Sandbox policy.yaml not found at /etc/openshell/policy.yaml"
     fi
+
   else
     skip "Sandbox configuration verification" "sandbox pod not ready (phase: ${POD_PHASE:-unknown})"
   fi
 else
   skip "Sandbox configuration verification" "session not created"
+fi
+
+section "10. Repository payload verification"
+
+REPO_SESSION_ID=""
+if [ -n "$REPO_AGENT_ID" ]; then
+  REPO_START_RESP=$(api POST "/api/ambient/v1/projects/${PROJECT_ID}/agents/${REPO_AGENT_ID}/start" \
+    -d '{"prompt": "gateway-e2e-test: repo payload"}' || echo "")
+
+  REPO_SESSION_ID=$(echo "$REPO_START_RESP" \
+    | jq -r '.session.id // empty' 2>/dev/null || echo "")
+
+  if [ -n "$REPO_SESSION_ID" ]; then
+    pass "Repo agent session started (id: ${REPO_SESSION_ID})"
+
+    REPO_SBX_NAME="session-$(echo "${REPO_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
+
+    # Wait for sandbox pod to be running
+    REPO_POD_READY=false
+    for i in $(seq 1 30); do
+      REPO_POD_PHASE=$(kubectl get pod "$REPO_SBX_NAME" -n "$TENANT" \
+        -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+      if [ "$REPO_POD_PHASE" = "Running" ]; then
+        REPO_POD_READY=true
+        break
+      fi
+      sleep 2
+    done
+
+    if [ "$REPO_POD_READY" = "true" ]; then
+      pass "Repo sandbox pod '${REPO_SBX_NAME}' is running"
+
+      # Poll for repo payload delivery (clone + tar transfer)
+      REPO_PAYLOADS_READY=false
+      for i in $(seq 1 10); do
+        if kubectl exec -n "$TENANT" "$REPO_SBX_NAME" -- \
+            test -f /sandbox/workspace/LICENSE 2>/dev/null; then
+          REPO_PAYLOADS_READY=true
+          break
+        fi
+        sleep 3
+      done
+
+      if [ "$REPO_PAYLOADS_READY" = "true" ]; then
+        pass "Repo payload delivered (clone landed in $(( i * 3 ))s)"
+      else
+        fail "Repo payload not delivered within 30s — clone may have failed"
+      fi
+
+      # 10a. Inline content payload present alongside repo payload
+      REPO_CLAUDE_MD=$(kubectl exec -n "$TENANT" "$REPO_SBX_NAME" -- \
+        cat /sandbox/CLAUDE.md 2>/dev/null || echo "")
+      if echo "$REPO_CLAUDE_MD" | grep -q "workspace"; then
+        pass "Mixed payload: inline CLAUDE.md delivered alongside repo"
+      else
+        fail "Mixed payload: inline CLAUDE.md not found or content mismatch"
+        echo "  Got: $(echo "$REPO_CLAUDE_MD" | head -c 200)"
+      fi
+
+      # 10b. LICENSE file from cloned repo
+      REPO_LICENSE=$(kubectl exec -n "$TENANT" "$REPO_SBX_NAME" -- \
+        head -1 /sandbox/workspace/LICENSE 2>/dev/null || echo "")
+      if echo "$REPO_LICENSE" | grep -qi "License"; then
+        pass "Repo payload: LICENSE found at /sandbox/workspace/LICENSE"
+      else
+        fail "Repo payload: LICENSE not found or unexpected content"
+        echo "  Got: '${REPO_LICENSE}'"
+      fi
+
+      # 10c. go.mod from cloned repo
+      REPO_GOMOD=$(kubectl exec -n "$TENANT" "$REPO_SBX_NAME" -- \
+        head -1 /sandbox/workspace/go.mod 2>/dev/null || echo "")
+      if echo "$REPO_GOMOD" | grep -q "module"; then
+        pass "Repo payload: go.mod present with module declaration"
+      else
+        fail "Repo payload: go.mod not found or missing module line"
+        echo "  Got: '${REPO_GOMOD}'"
+      fi
+
+      # 10d. .git directory excluded from tar transfer
+      GIT_DIR_EXISTS=$(kubectl exec -n "$TENANT" "$REPO_SBX_NAME" -- \
+        ls -d /sandbox/workspace/.git 2>/dev/null || echo "")
+      if [ -z "$GIT_DIR_EXISTS" ]; then
+        pass "Repo payload: .git directory correctly excluded"
+      else
+        fail "Repo payload: .git directory should not exist at /sandbox/workspace/.git"
+      fi
+    else
+      skip "Repo payload verification" "sandbox pod not ready (phase: ${REPO_POD_PHASE:-unknown})"
+    fi
+  else
+    fail "Failed to start session for agent 'repo-clone-workspace'"
+    echo "  Response: $(echo "$REPO_START_RESP" | head -c 200)"
+  fi
+else
+  skip "Repo payload verification" "agent 'repo-clone-workspace' not found"
 fi
 
 section "Cleanup"
@@ -353,6 +459,11 @@ if [ -n "$CREATED_SESSION_ID" ]; then
   api DELETE "/api/ambient/v1/sessions/${CREATED_SESSION_ID}" >/dev/null 2>&1 && \
     echo "  Deleted session ${CREATED_SESSION_ID}" || \
     echo "  Could not delete session (non-fatal)"
+fi
+if [ -n "$REPO_SESSION_ID" ]; then
+  api DELETE "/api/ambient/v1/sessions/${REPO_SESSION_ID}" >/dev/null 2>&1 && \
+    echo "  Deleted repo session ${REPO_SESSION_ID}" || \
+    echo "  Could not delete repo session (non-fatal)"
 fi
 
 echo ""

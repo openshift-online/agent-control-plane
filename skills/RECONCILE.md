@@ -58,11 +58,11 @@ skills/
 
 | Domain | Specs | Requirements | Present | Partial | Missing | Coverage |
 |--------|-------|-------------|---------|---------|---------|----------|
-| Platform | 12 | 110 | 105 | 2 | 3 | 95.5% |
+| Platform | 12 | 113 | 107 | 3 | 3 | 94.7% |
 | Security | 6 | 55 | 45 | 5 | 5 | 81.8% |
 | UI | 7 | 70 | 62 | 6 | 2 | 88.6% |
 | CLI | 1 | 13 | 13 | 0 | 0 | 100% |
-| **TOTAL** | **29** | **248** | **225** | **13** | **10** | **90.7%** |
+| **TOTAL** | **29** | **251** | **225** | **16** | **10** | **89.6%** |
 
 ### Spec Dependency Order
 
@@ -121,6 +121,9 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | P8 | control-plane | RESUME_AFTER_SEQ env var | CP | **done** | minor | CP queries max seq via `SessionMessages().List()` on resume. Sets `RESUME_AFTER_SEQ` env var. Runner uses seq-based filtering with time-based fallback. |
 | P9 | mcp-server | MCP HTTP endpoint in api-server | BE | partial | minor | Blocked: needs new api-server plugin, process spawning, `openapi.mcp.yaml`. Token exchange client exists in ambient-mcp. |
 | P10 | scheduled-session | Idempotency UNIQUE constraint | BE | **done** | minor | Verified: UNIQUE index `idx_sessions_schedule_idempotency` exists in migration 202606230002. |
+| P11 | agent-sandbox-config | Git repo payload clone + SSH delivery | CP | **done** | major | `cloneRepo()` via go-git, `tarDirectory()` streams tar excluding `.git`, `writeRepoPayloadViaSSH()` extracts via SSH. `convertPayloads()` dispatches content vs repo. 5min timeout for repo payloads. |
+| P12 | agent-sandbox-config | Payload mutual exclusivity validation | CP | partial | minor | `convertPayloads()` warns and skips payloads with both `content` and `repo_url`. API-level OpenAPI `oneOf` validation not yet enforced. |
+| P13 | gateway-provisioning | failSession condition format for UI visibility | CP+FE | **done** | major | Conditions now include `status: "False"`, `reason: "SetupFailed"`, `message: <detail>`. `SandboxFailure` added to UI `CONDITION_TITLES` map. Users now see clone/upload failures in session detail. |
 
 ### UI Gaps
 
@@ -207,3 +210,4 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-05 | (pending) | E2E validation: Kind deploy + LLM round-trip | 90.3% | All 3 components rebuilt and deployed to Kind. LLM round-trip confirmed: Hello world + 2+2=4. |
 | 2026-07-06 | 2213d3cc | Wave 8 executed: U7, U8 + OpenShell cleanup | 90.7% | Sidebar label → "Config". Gear icon in nav header. Removed non-OpenShell dual-mode paths, GitOps info boxes, "Generate YAML" button labels. |
 | 2026-07-06 | 1fbebf75 | Wave 9: FE consistency + type safety | 90.7% | Dynamic lifecycle badges for providers/policies (was hardcoded GitOps). Narrow YAML input types (AgentYamlInput, ProviderYamlInput, PolicyYamlInput). Removed namespace fields from all create sheets (inherited from project). Renamed configmap-yaml-preview → yaml-preview. Provider types narrowed to github/vertex/generic. Image field disabled (coming soon). All buttons → "Generate X Manifest". |
+| 2026-07-07 | 8d5903d3 | Git repo payload support: P11,P13 done, P12 partial | 89.6% | go-git clone + tar SSH delivery, failSession condition fix, UI SandboxFailure title. 3 new reqs tracked (251 total). |
