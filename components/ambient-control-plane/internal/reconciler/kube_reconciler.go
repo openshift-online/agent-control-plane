@@ -533,7 +533,7 @@ func (r *SimpleKubeReconciler) mergeAgentEnvironment(env map[string]string, agen
 }
 
 func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string, sdk *sdkclient.Client, execEnv map[string]string, payloads []types.Payload) {
-	pollCtx, pollCancel := context.WithTimeout(context.Background(), 120*time.Second)
+	pollCtx, pollCancel := context.WithTimeout(context.Background(), 600*time.Second)
 	defer pollCancel()
 
 	failSession := func(reason string) {
@@ -561,7 +561,7 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				Str("sandbox", sbxName).
 				Str("session_id", sessionID).
 				Msg("timed out waiting for sandbox to become ready")
-			failSession("sandbox did not become ready within 120s")
+			failSession("sandbox did not become ready within 600s")
 			return
 		case <-ticker.C:
 			resp, err := r.gateway.GetSandbox(pollCtx, namespace, sbxName)

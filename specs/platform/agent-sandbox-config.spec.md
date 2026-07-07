@@ -610,7 +610,7 @@ The control plane SHALL start the runner process inside the sandbox by calling t
 
 - GIVEN a sandbox was just created
 - WHEN the control plane polls `GetSandbox` for readiness
-- THEN it SHALL poll every 2 seconds with a 120-second timeout
+- THEN it SHALL poll every 2 seconds with a 600-second timeout
 - AND if the sandbox enters `SANDBOX_PHASE_ERROR`, the control plane SHALL log an error, stop polling, and transition the session to `Failed`
 - AND if the timeout expires before `SANDBOX_PHASE_READY`, the control plane SHALL log an error and transition the session to `Failed`
 
