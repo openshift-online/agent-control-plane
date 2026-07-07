@@ -163,6 +163,24 @@ func writePayloadViaSSH(client *ssh.Client, p Payload) error {
 	return nil
 }
 
+var privateNetworks []*net.IPNet
+
+func init() {
+	for _, cidr := range []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"169.254.0.0/16",
+		"127.0.0.0/8",
+		"::1/128",
+		"fc00::/7",
+		"fe80::/10",
+	} {
+		_, network, _ := net.ParseCIDR(cidr)
+		privateNetworks = append(privateNetworks, network)
+	}
+}
+
 func validateRepoURL(repoURL string) error {
 	parsed, err := url.Parse(repoURL)
 	if err != nil {
@@ -174,7 +192,44 @@ func validateRepoURL(repoURL string) error {
 	if parsed.Host == "" {
 		return fmt.Errorf("repo URL missing host")
 	}
+	hostname := parsed.Hostname()
+	if isBlockedHost(hostname) {
+		return fmt.Errorf("repo URL host %q is not allowed (internal/private address)", hostname)
+	}
+	addrs, err := net.LookupHost(hostname)
+	if err != nil {
+		return fmt.Errorf("resolve repo URL host %q: %w", hostname, err)
+	}
+	for _, addr := range addrs {
+		ip := net.ParseIP(addr)
+		if ip != nil && isPrivateIP(ip) {
+			return fmt.Errorf("repo URL host %q resolves to private address %s", hostname, addr)
+		}
+	}
 	return nil
+}
+
+func isBlockedHost(host string) bool {
+	blocked := []string{
+		"kubernetes.default",
+		"metadata.google.internal",
+	}
+	lower := strings.ToLower(host)
+	for _, b := range blocked {
+		if lower == b || strings.HasPrefix(lower, b+".") {
+			return true
+		}
+	}
+	return false
+}
+
+func isPrivateIP(ip net.IP) bool {
+	for _, network := range privateNetworks {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 func cloneRepoFS(ctx context.Context, repoURL, ref string) (billy.Filesystem, error) {
@@ -241,11 +296,16 @@ func isHexSHA(s string) bool {
 	return true
 }
 
-func tarFilesystem(bfs billy.Filesystem) io.ReadCloser {
+func tarFilesystem(ctx context.Context, bfs billy.Filesystem) io.ReadCloser {
 	pr, pw := io.Pipe()
 	go func() {
 		tw := tar.NewWriter(pw)
 		err := billyutil.Walk(bfs, "/", func(path string, info os.FileInfo, walkErr error) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
 			if walkErr != nil {
 				return walkErr
 			}
@@ -339,7 +399,7 @@ func uploadRepoPayload(ctx context.Context, client *ssh.Client, p Payload) error
 	if err != nil {
 		return err
 	}
-	tarReader := tarFilesystem(repoFS)
+	tarReader := tarFilesystem(ctx, repoFS)
 	defer tarReader.Close()
 	return writeRepoPayloadViaSSH(client, p.Path, tarReader)
 }

@@ -49,15 +49,30 @@ elif [ -n "${1:-}" ]; then
   API_URL="${1}"
 else
   API_URL="http://localhost:${PF_PORT}"
-  kubectl port-forward -n "$NAMESPACE" svc/ambient-api-server "${PF_PORT}:8000" \
-    >/dev/null 2>&1 &
-  PF_PID=$!
-  for i in $(seq 1 10); do
-    sleep 1
-    if curl -sf "${API_URL}/healthcheck" >/dev/null 2>&1; then break; fi
-  done
 fi
 trap 'kill "${PF_PID}" 2>/dev/null || true' EXIT
+
+_ensure_port_forward() {
+  local port
+  port=$(echo "$API_URL" | sed -n 's|.*localhost:\([0-9]*\).*|\1|p' | head -1)
+  [[ -z "$port" ]] && return 0
+  if command -v lsof &>/dev/null; then
+    lsof -ti :"$port" 2>/dev/null | xargs -r kill 2>/dev/null || true
+  elif command -v fuser &>/dev/null; then
+    fuser -k "${port}/tcp" 2>/dev/null || true
+  fi
+  sleep 1
+  kubectl port-forward -n "${NAMESPACE}" svc/ambient-api-server "${port}:8000" &>/dev/null &
+  PF_PID=$!
+  for _i in $(seq 1 10); do
+    local _s
+    _s=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "http://localhost:${port}/healthcheck" 2>/dev/null || true)
+    [[ "$_s" != "000" && -n "$_s" ]] && return 0
+    sleep 1
+  done
+}
+
+_ensure_port_forward
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

@@ -2,7 +2,10 @@ package openshell
 
 import (
 	"archive/tar"
+	"context"
+	"fmt"
 	"io"
+	"net"
 	"sort"
 	"strings"
 	"testing"
@@ -88,7 +91,7 @@ func TestTarFilesystem(t *testing.T) {
 	// Empty subdirectory
 	fs.MkdirAll("/empty", 0o755)
 
-	reader := tarFilesystem(fs)
+	reader := tarFilesystem(context.Background(), fs)
 	defer reader.Close()
 	tr := tar.NewReader(reader)
 
@@ -183,6 +186,13 @@ func TestValidateRepoURL(t *testing.T) {
 		{"no scheme", "github.com/org/repo.git", true},
 		{"empty", "", true},
 		{"internal endpoint", "https://", true},
+		{"SSRF k8s API", "https://kubernetes.default.svc/api/v1", true},
+		{"SSRF metadata endpoint", "https://metadata.google.internal/v1", true},
+		{"SSRF localhost", "https://127.0.0.1/repo.git", true},
+		{"SSRF link-local", "https://169.254.169.254/latest/meta-data", true},
+		{"SSRF RFC1918 10.x", "https://10.0.0.1/repo.git", true},
+		{"SSRF RFC1918 172.16.x", "https://172.16.0.1/repo.git", true},
+		{"SSRF RFC1918 192.168.x", "https://192.168.1.1/repo.git", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -191,5 +201,67 @@ func TestValidateRepoURL(t *testing.T) {
 				t.Errorf("validateRepoURL(%q) error = %v, wantErr %v", tt.url, err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestIsBlockedHost(t *testing.T) {
+	tests := []struct {
+		host    string
+		blocked bool
+	}{
+		{"kubernetes.default", true},
+		{"kubernetes.default.svc", true},
+		{"metadata.google.internal", true},
+		{"github.com", false},
+		{"gitlab.com", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.host, func(t *testing.T) {
+			if got := isBlockedHost(tt.host); got != tt.blocked {
+				t.Errorf("isBlockedHost(%q) = %v, want %v", tt.host, got, tt.blocked)
+			}
+		})
+	}
+}
+
+func TestIsPrivateIP(t *testing.T) {
+	tests := []struct {
+		ip      string
+		private bool
+	}{
+		{"10.0.0.1", true},
+		{"172.16.0.1", true},
+		{"192.168.1.1", true},
+		{"169.254.169.254", true},
+		{"127.0.0.1", true},
+		{"::1", true},
+		{"8.8.8.8", false},
+		{"140.82.121.4", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.ip, func(t *testing.T) {
+			ip := net.ParseIP(tt.ip)
+			if got := isPrivateIP(ip); got != tt.private {
+				t.Errorf("isPrivateIP(%q) = %v, want %v", tt.ip, got, tt.private)
+			}
+		})
+	}
+}
+
+func TestTarFilesystemCancellation(t *testing.T) {
+	fs := memfs.New()
+	for i := range 100 {
+		billyutil.WriteFile(fs, fmt.Sprintf("/file%d.txt", i), []byte("data"), 0o644)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	reader := tarFilesystem(ctx, fs)
+	defer reader.Close()
+
+	_, err := io.ReadAll(reader)
+	if err == nil {
+		t.Error("expected error from cancelled context, got nil")
 	}
 }
