@@ -332,15 +332,21 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		return fmt.Errorf("enabling providers_v2: %w", err)
 	}
 
-	providerNames, inferenceProviders, err := r.resolveAgentProviders(ctx, sdk, namespace, project.Name, session, agent)
+	providerNames, inferenceProviders, mlflowEnv, err := r.resolveAgentProviders(ctx, sdk, namespace, project.Name, session, agent)
 	if err != nil {
 		return fmt.Errorf("resolving agent providers: %w", err)
 	}
 
 	// Resolve global/project credential bindings and create gateway providers
 	// for credential types not already covered by agent provider declarations.
-	credProviders := r.resolveCredentialBasedProviders(ctx, sdk, namespace, project.Name, session, providerNames)
+	credProviders, credMLflowEnv := r.resolveCredentialBasedProviders(ctx, sdk, namespace, project.Name, session, providerNames)
 	providerNames = append(providerNames, credProviders...)
+	for k, v := range credMLflowEnv {
+		if mlflowEnv == nil {
+			mlflowEnv = map[string]string{}
+		}
+		mlflowEnv[k] = v
+	}
 
 	if err := r.configureInferenceFromProviders(ctx, namespace, session.LlmModel, inferenceProviders); err != nil {
 		return fmt.Errorf("configuring inference: %w", err)
@@ -365,6 +371,9 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 
 	env := r.buildSandboxEnv(ctx, session, project.Name, sdk, providerNames)
 	r.mergeAgentEnvironment(env, agent)
+	for k, v := range mlflowEnv {
+		env[k] = v
+	}
 
 	for k, v := range env {
 		if strings.ContainsAny(v, "\n\r") {
@@ -399,11 +408,13 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	}
 
 	if mlflowRule := openshell.MLflowNetworkPolicy(env["MLFLOW_TRACKING_URI"]); mlflowRule != nil {
-		req.Spec.Policy = &sandboxpb.SandboxPolicy{
-			NetworkPolicies: map[string]*sandboxpb.NetworkPolicyRule{
-				"mlflow_tracking": mlflowRule,
-			},
+		if req.Spec.Policy == nil {
+			req.Spec.Policy = &sandboxpb.SandboxPolicy{}
 		}
+		if req.Spec.Policy.NetworkPolicies == nil {
+			req.Spec.Policy.NetworkPolicies = map[string]*sandboxpb.NetworkPolicyRule{}
+		}
+		req.Spec.Policy.NetworkPolicies["mlflow_tracking"] = mlflowRule
 	}
 
 	if _, err := r.gateway.CreateSandbox(ctx, namespace, req); err != nil {
@@ -768,12 +779,12 @@ func (r *SimpleKubeReconciler) resolveAgentProviders(
 	namespace, projectName string,
 	session types.Session,
 	agent *types.Agent,
-) (providerNames []string, inferenceProviders map[string]string, err error) {
+) (providerNames []string, inferenceProviders map[string]string, mlflowEnv map[string]string, err error) {
 	if agent == nil || len(agent.Providers) == 0 {
 		r.logger.Info().
 			Str("session_id", session.ID).
 			Msg("agent has no provider declarations; sandbox will have no providers")
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	inferenceProviders = map[string]string{}
@@ -810,7 +821,7 @@ func (r *SimpleKubeReconciler) resolveAgentProviders(
 
 		secretCreds, readErr := r.readProviderSecretCredentials(ctx, namespace, provDecl.Secret)
 		if readErr != nil {
-			return nil, nil, fmt.Errorf("reading secret %s for provider %s: %w", provDecl.Secret, declName, readErr)
+			return nil, nil, nil, fmt.Errorf("reading secret %s for provider %s: %w", provDecl.Secret, declName, readErr)
 		}
 
 		osType := openshell.OpenShellProviderType(provType)
@@ -830,11 +841,11 @@ func (r *SimpleKubeReconciler) resolveAgentProviders(
 			r.logger.Info().Str("provider", osName).Str("type", osType).Msg("gateway provider updated from declaration")
 		} else if st, ok := status.FromError(updErr); ok && st.Code() == codes.NotFound {
 			if _, crErr := r.gateway.CreateProvider(ctx, namespace, &openshellpb.CreateProviderRequest{Provider: providerData}); crErr != nil {
-				return nil, nil, fmt.Errorf("creating provider %s: %w", osName, crErr)
+				return nil, nil, nil, fmt.Errorf("creating provider %s: %w", osName, crErr)
 			}
 			r.logger.Info().Str("provider", osName).Str("type", osType).Msg("gateway provider created from declaration")
 		} else {
-			return nil, nil, fmt.Errorf("updating provider %s: %w", osName, updErr)
+			return nil, nil, nil, fmt.Errorf("updating provider %s: %w", osName, updErr)
 		}
 
 		// Vertex uses short-lived access tokens; configure the gateway to auto-rotate
@@ -842,11 +853,15 @@ func (r *SimpleKubeReconciler) resolveAgentProviders(
 		if provType == "vertex" {
 			credJSON := secretCreds["token"]
 			if credJSON == "" {
-				return nil, nil, fmt.Errorf("vertex provider %s: secret %s must have a 'token' key with the credential JSON", declName, provDecl.Secret)
+				return nil, nil, nil, fmt.Errorf("vertex provider %s: secret %s must have a 'token' key with the credential JSON", declName, provDecl.Secret)
 			}
 			if refreshErr := r.ensureVertexCredentialRefresh(ctx, namespace, osName, credJSON); refreshErr != nil {
-				return nil, nil, fmt.Errorf("configuring credential refresh for provider %s: %w", osName, refreshErr)
+				return nil, nil, nil, fmt.Errorf("configuring credential refresh for provider %s: %w", osName, refreshErr)
 			}
+		}
+
+		if provType == "mlflow" || declName == "mlflow" {
+			mlflowEnv = openshell.MLflowSandboxEnvVars(secretCreds)
 		}
 
 		providerNames = append(providerNames, osName)
@@ -860,7 +875,7 @@ func (r *SimpleKubeReconciler) resolveAgentProviders(
 		Strs("providers", providerNames).
 		Msg("resolved providers from agent declarations")
 
-	return providerNames, inferenceProviders, nil
+	return providerNames, inferenceProviders, mlflowEnv, nil
 }
 
 func (r *SimpleKubeReconciler) readProviderSecretCredentials(ctx context.Context, namespace, secretName string) (map[string]string, error) {
@@ -906,14 +921,14 @@ func (r *SimpleKubeReconciler) resolveCredentialBasedProviders(
 	namespace, projectName string,
 	session types.Session,
 	existingProviders []string,
-) (additionalProviders []string) {
+) (additionalProviders []string, mlflowEnv map[string]string) {
 	credentialIDs, err := r.resolveCredentialIDs(ctx, sdk, session.ProjectID, session.AgentID)
 	if err != nil {
 		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("credential binding resolution failed; skipping credential-based providers")
-		return nil
+		return nil, nil
 	}
 	if len(credentialIDs) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	existingSet := map[string]bool{}
@@ -957,6 +972,10 @@ func (r *SimpleKubeReconciler) resolveCredentialBasedProviders(
 		}
 
 		additionalProviders = append(additionalProviders, osName)
+
+		if credType == "mlflow" {
+			mlflowEnv = openshell.MLflowSandboxEnvVars(secretData)
+		}
 	}
 
 	if len(additionalProviders) > 0 {
@@ -966,7 +985,7 @@ func (r *SimpleKubeReconciler) resolveCredentialBasedProviders(
 			Msg("resolved additional providers from credential bindings")
 	}
 
-	return additionalProviders
+	return additionalProviders, mlflowEnv
 }
 
 // ensureCredentialSecret copies a K8s secret from the control plane namespace

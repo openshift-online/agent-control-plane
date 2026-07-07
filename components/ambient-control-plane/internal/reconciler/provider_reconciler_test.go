@@ -615,7 +615,7 @@ func TestResolveAgentProviders(t *testing.T) {
 				ObjectReference: types.ObjectReference{ID: "sess-1"},
 				ProjectID:       "test-project",
 			}
-			names, infProv, err := r.resolveAgentProviders(
+			names, infProv, _, err := r.resolveAgentProviders(
 				context.Background(), sdk, "test-ns", "proj", session, tt.agent,
 			)
 
