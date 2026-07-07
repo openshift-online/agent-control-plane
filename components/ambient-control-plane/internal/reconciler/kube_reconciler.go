@@ -348,6 +348,16 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		mlflowEnv[k] = v
 	}
 
+	if defaultMLflowName, defaultMLflowEnv, created := r.ensureDefaultMLflowProvider(ctx, namespace, project.Name, providerNames); created {
+		providerNames = append(providerNames, defaultMLflowName)
+		for k, v := range defaultMLflowEnv {
+			if mlflowEnv == nil {
+				mlflowEnv = map[string]string{}
+			}
+			mlflowEnv[k] = v
+		}
+	}
+
 	if err := r.configureInferenceFromProviders(ctx, namespace, session.LlmModel, inferenceProviders); err != nil {
 		return fmt.Errorf("configuring inference: %w", err)
 	}
@@ -1029,6 +1039,53 @@ func (r *SimpleKubeReconciler) ensureCredentialSecret(ctx context.Context, sandb
 	r.logger.Debug().Str("namespace", sandboxNamespace).Str("secret", credentialType).Msg("credential secret synced")
 
 	return r.readProviderSecretCredentials(ctx, sandboxNamespace, credentialType)
+}
+
+// ensureDefaultMLflowProvider creates an MLflow gateway provider from the
+// default 'mlflow' secret in CPRuntimeNamespace when no MLflow provider was
+// resolved via agent declarations or credential bindings. This allows
+// platform-wide MLflow tracing without per-tenant configuration.
+func (r *SimpleKubeReconciler) ensureDefaultMLflowProvider(
+	ctx context.Context,
+	namespace, projectName string,
+	existingProviders []string,
+) (providerName string, mlflowEnv map[string]string, ok bool) {
+	osName := openshell.ProviderName(projectName, "mlflow")
+	for _, p := range existingProviders {
+		if p == osName {
+			return "", nil, false
+		}
+	}
+
+	secretData, err := r.ensureCredentialSecret(ctx, namespace, "mlflow")
+	if err != nil {
+		r.logger.Debug().Err(err).Msg("no default mlflow secret in CP namespace; skipping default MLflow provider")
+		return "", nil, false
+	}
+
+	credentials := openshell.MLflowProviderCredentials(secretData)
+	providerData := &datapb.Provider{
+		Metadata:    &datapb.ObjectMeta{Name: osName},
+		Type:        "generic",
+		Credentials: credentials,
+	}
+
+	_, updErr := r.gateway.UpdateProvider(ctx, namespace, &openshellpb.UpdateProviderRequest{Provider: providerData})
+	if updErr == nil {
+		r.logger.Info().Str("provider", osName).Msg("default MLflow gateway provider updated from CP namespace secret")
+	} else if st, okSt := status.FromError(updErr); okSt && st.Code() == codes.NotFound {
+		if _, crErr := r.gateway.CreateProvider(ctx, namespace, &openshellpb.CreateProviderRequest{Provider: providerData}); crErr != nil {
+			r.logger.Warn().Err(crErr).Str("provider", osName).Msg("failed to create default MLflow gateway provider; skipping")
+			return "", nil, false
+		}
+		r.logger.Info().Str("provider", osName).Msg("default MLflow gateway provider created from CP namespace secret")
+	} else {
+		r.logger.Warn().Err(updErr).Str("provider", osName).Msg("failed to update default MLflow gateway provider; skipping")
+		return "", nil, false
+	}
+
+	mlflowEnv = openshell.MLflowSandboxEnvVars(secretData)
+	return osName, mlflowEnv, true
 }
 
 func (r *SimpleKubeReconciler) configureInferenceFromProviders(ctx context.Context, namespace, sessionModel string, inferenceProviders map[string]string) error {
