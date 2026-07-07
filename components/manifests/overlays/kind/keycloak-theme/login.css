@@ -9,7 +9,9 @@ html.pf-v5-theme-dark .pf-v5-c-login {
   background-color: #151515 !important;
   background-image: radial-gradient(circle, #1f1f1f 1px, transparent 1px) !important;
   background-size: 24px 24px !important;
-  min-height: 100vh !important;
+  height: 100vh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
 }
 
 /* Kill the PatternFly grid at ALL breakpoints — force centered single-column */
@@ -18,10 +20,11 @@ html.pf-v5-theme-dark .pf-v5-c-login {
   flex-direction: column !important;
   align-items: center !important;
   justify-content: center !important;
-  min-height: 100vh !important;
+  height: 100vh !important;
+  min-height: 0 !important;
   width: 100% !important;
   max-width: 100% !important;
-  padding: 2rem !important;
+  padding: 1rem !important;
   box-sizing: border-box !important;
   grid-template-columns: none !important;
   grid-template-areas: none !important;
@@ -44,7 +47,7 @@ html.pf-v5-theme-dark .pf-v5-c-login {
   align-items: center !important;
   text-align: center !important;
   width: auto !important;
-  margin-bottom: 2.5rem !important;
+  margin-bottom: 1.5rem !important;
   padding: 0 !important;
   grid-area: unset !important;
   order: -1 !important;
@@ -269,6 +272,6 @@ h1.pf-v5-c-title.pf-m-3xl,
 .pf-v5-c-login__footer {
   text-align: center;
   color: #a3a3a3;
-  margin-top: 1.5rem;
+  margin-top: 0.75rem;
   grid-area: unset !important;
 }
