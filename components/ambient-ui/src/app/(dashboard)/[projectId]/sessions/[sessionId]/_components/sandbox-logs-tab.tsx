@@ -8,7 +8,7 @@ import { useLiveTail, LiveIndicator, JumpToLatestPill } from './live-tail-indica
 import { cn } from '@/lib/utils'
 
 function formatTimestamp(ts: number): string {
-  const date = new Date(ts * 1000)
+  const date = new Date(ts)
   return date.toLocaleTimeString('en-US', {
     hour12: false,
     hour: '2-digit',
@@ -18,7 +18,7 @@ function formatTimestamp(ts: number): string {
 }
 
 function formatFullTimestamp(ts: number): string {
-  return new Date(ts * 1000).toISOString()
+  return new Date(ts).toISOString()
 }
 
 type SourceBadgeProps = { source: SandboxLogEntry['source'] }
@@ -89,7 +89,8 @@ function LogEntryRow({ entry }: LogEntryRowProps) {
 }
 
 export function SandboxLogsTab({ session }: { session: DomainSession }) {
-  const isActive = session.phase === 'Running' || session.phase === 'Creating'
+  const isActive = session.phase === 'Running'
+  const isSandboxPending = session.phase === 'Pending' || session.phase === 'Creating'
   const { entries, isConnected, isReconnecting } = useSandboxLogs(
     session.id,
     isActive,
@@ -101,16 +102,19 @@ export function SandboxLogsTab({ session }: { session: DomainSession }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        {isSandboxPending && (
+          <span>Sandbox is not yet running. Logs will stream once the sandbox starts.</span>
+        )}
         {isConnected && (
           <span className="flex items-center gap-1.5">
             <LiveIndicator />
             <span>{entries.length} entries</span>
           </span>
         )}
-        {isReconnecting && (
+        {isReconnecting && entries.length > 0 && (
           <span className="text-amber-600">Reconnecting...</span>
         )}
-        {!isActive && !isConnected && entries.length === 0 && (
+        {!isActive && !isSandboxPending && !isConnected && entries.length === 0 && (
           <span>Session is not running. Logs stream while the sandbox is active.</span>
         )}
       </div>

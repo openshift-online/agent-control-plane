@@ -16,13 +16,15 @@ function getDefaultPort(): SandboxObservabilityPort {
 
 export function useSandboxPolicy(
   sessionId: string,
+  enabled = true,
   port?: SandboxObservabilityPort,
 ) {
   const adapter = port ?? getDefaultPort()
   return useQuery({
     queryKey: queryKeys.sandboxPolicy.detail(sessionId),
     queryFn: () => adapter.getPolicy(sessionId),
-    enabled: !!sessionId,
+    enabled: !!sessionId && enabled,
     staleTime: 30_000,
+    retry: 2,
   })
 }

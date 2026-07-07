@@ -93,14 +93,30 @@ func (h *sandboxHandler) handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// WatchSandbox requires the sandbox UUID, not the name. Resolve it first.
+	sbxResp, err := h.gateway.GetSandbox(r.Context(), namespace, name)
+	if err != nil {
+		h.logger.Warn().Err(err).Str("sandbox", name).Str("namespace", namespace).Msg("sandbox logs: failed to resolve sandbox")
+		http.Error(w, "failed to resolve sandbox", http.StatusBadGateway)
+		return
+	}
+	sbx := sbxResp.GetSandbox()
+	if sbx == nil {
+		http.Error(w, "sandbox not found", http.StatusNotFound)
+		return
+	}
+	sandboxID := sbx.GetMetadata().GetId()
+
 	req := &pb.WatchSandboxRequest{
-		Id:         name,
-		FollowLogs: true,
+		Id:           sandboxID,
+		FollowLogs:   true,
+		FollowEvents: true,
+		LogTailLines: 1000,
 	}
 
 	stream, err := h.gateway.WatchSandbox(r.Context(), namespace, req)
 	if err != nil {
-		h.logger.Warn().Err(err).Str("sandbox", name).Str("namespace", namespace).Msg("sandbox logs: gateway error")
+		h.logger.Warn().Err(err).Str("sandbox", name).Str("id", sandboxID).Str("namespace", namespace).Msg("sandbox logs: gateway error")
 		http.Error(w, "failed to open log stream", http.StatusBadGateway)
 		return
 	}

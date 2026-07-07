@@ -55,7 +55,11 @@ function toYaml(value: unknown, indent = 0): string {
 }
 
 export function SandboxPolicyTab({ session }: { session: DomainSession }) {
-  const { data: policyResponse, isLoading, error } = useSandboxPolicy(session.id)
+  const isActive = session.phase === 'Running'
+  const { data: policyResponse, isLoading, error } = useSandboxPolicy(
+    session.id,
+    isActive,
+  )
   const [copied, setCopied] = useState(false)
 
   const policyYaml = useMemo(
@@ -69,6 +73,16 @@ export function SandboxPolicyTab({ session }: { session: DomainSession }) {
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }, [policyYaml])
+
+  if (!isActive && !policyResponse) {
+    return (
+      <div className="pt-4">
+        <p className="text-sm text-muted-foreground">
+          Sandbox is not running. Policy is available while the sandbox is active.
+        </p>
+      </div>
+    )
+  }
 
   if (error) {
     return (

@@ -22,6 +22,8 @@ type SandboxLogsState = {
   clear: () => void
 }
 
+const SSE_EVENT_TYPES = ['log', 'platform_event', 'warning', 'status'] as const
+
 export function useSandboxLogs(
   sessionId: string,
   enabled: boolean,
@@ -53,13 +55,19 @@ export function useSandboxLogs(
         setError(null)
       }
 
-      es.onmessage = (event) => {
+      const handleEvent = (event: MessageEvent) => {
         try {
-          const entry = JSON.parse(event.data) as SandboxLogEntry
-          setEntries(prev => [...prev, entry])
+          const raw = JSON.parse(event.data) as Record<string, unknown>
+          if (typeof raw.timestamp !== 'number' || typeof raw.message !== 'string') return
+          setEntries(prev => [...prev, raw as unknown as SandboxLogEntry])
         } catch {
           // skip unparseable entries
         }
+      }
+
+      es.onmessage = handleEvent
+      for (const eventType of SSE_EVENT_TYPES) {
+        es.addEventListener(eventType, handleEvent as EventListener)
       }
 
       es.onerror = () => {
