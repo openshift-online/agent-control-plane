@@ -30,7 +30,7 @@ Configuration reuse patterns using Kustomize bases and overlays for agent, provi
 
 ### [MLflow Tracing](mlflow-tracing.spec.md)
 
-Opt-in MLflow tracing of Claude SDK interactions. Covers the `mlflow` credential provider, runner image CA trust, conditional autologging activation, and OPA network policy for gateway mode.
+MLflow tracing of Claude SDK interactions, enabled by default when credentials are present. Covers the `mlflow` credential provider, global credential fallback, runner image CA trust, conditional autologging activation, and OPA network policy for gateway mode.
 
 ### [MCP Server](mcp-server.spec.md)
 
