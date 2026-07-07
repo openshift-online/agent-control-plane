@@ -451,8 +451,16 @@ section "Cleanup"
 
 if [ "$SKIP_CLEANUP" = "true" ]; then
   echo -e "  ${YELLOW}Skipping cleanup (--skip-cleanup)${NC}"
-  [ -n "$CREATED_SESSION_ID" ] && echo "  Retained session: ${CREATED_SESSION_ID}"
-  [ -n "$REPO_SESSION_ID" ]    && echo "  Retained repo session: ${REPO_SESSION_ID}"
+  for _sid in "$CREATED_SESSION_ID" "$REPO_SESSION_ID"; do
+    [ -z "$_sid" ] && continue
+    _pod="session-$(echo "${_sid:0:40}" | tr '[:upper:]' '[:lower:]')"
+    _phase=$(kubectl get pod "$_pod" -n "$TENANT" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+    if [ -n "$_phase" ]; then
+      echo -e "  Retained session ${_sid}  pod=${_pod}  phase=${_phase}"
+    else
+      echo -e "  ${YELLOW}Session ${_sid} has no sandbox pod (${_pod} not found)${NC}"
+    fi
+  done
 else
   if [ -n "$CREATED_SESSION_ID" ]; then
     api DELETE "/api/ambient/v1/sessions/${CREATED_SESSION_ID}" >/dev/null 2>&1 && \

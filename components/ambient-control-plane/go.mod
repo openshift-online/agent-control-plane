@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/ambient-code/platform/components/ambient-api-server v0.0.0
 	github.com/ambient-code/platform/components/ambient-sdk/go-sdk v0.0.0
+	github.com/go-git/go-billy/v5 v5.9.0
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/rs/zerolog v1.34.0
 	golang.org/x/crypto v0.53.0
@@ -28,7 +29,6 @@ require (
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
-	github.com/go-git/go-billy/v5 v5.9.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-openapi/jsonpointer v0.23.2 // indirect
 	github.com/go-openapi/jsonreference v0.21.6 // indirect
