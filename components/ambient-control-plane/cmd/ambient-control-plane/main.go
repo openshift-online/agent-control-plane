@@ -171,9 +171,8 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		OpenShellPolicyName:      cfg.OpenShellPolicyName,
 		ServiceIdentity:          cfg.ServiceIdentity,
 		CACertFile:               cfg.CACertFile,
-		AllowedSandboxRegistries: cfg.AllowedSandboxRegistries,
-		MLflowTrackingURI:        cfg.MLflowTrackingURI,
-		MLflowExperimentName:     cfg.MLflowExperimentName,
+		AllowedSandboxRegistries:       cfg.AllowedSandboxRegistries,
+		SandboxReadinessTimeoutSeconds: cfg.SandboxReadinessTimeoutSeconds,
 	}
 
 	conn, err := grpc.NewClient(cfg.GRPCServerAddr, grpc.WithTransportCredentials(grpcCredentials(cfg.GRPCUseTLS)))
@@ -249,7 +248,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 
 	tsErrCh := make(chan error, 1)
 	go func() {
-		tsErrCh <- startTokenServer(ctx, cfg, tokenProvider, kp, gateway)
+		tsErrCh <- startTokenServer(ctx, cfg, tokenProvider, kp)
 	}()
 
 	infErrCh := make(chan error, 1)
@@ -289,16 +288,12 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	}
 }
 
-func startTokenServer(ctx context.Context, cfg *config.ControlPlaneConfig, tokenProvider auth.TokenProvider, kp *keypair.KeyPair, gateway *openshell.GatewayClient) error {
+func startTokenServer(ctx context.Context, cfg *config.ControlPlaneConfig, tokenProvider auth.TokenProvider, kp *keypair.KeyPair) error {
 	privKey, err := keypair.ParsePrivateKey(kp.PrivateKeyPEM)
 	if err != nil {
 		return fmt.Errorf("parsing CP token private key: %w", err)
 	}
-	var opts []tokenserver.Option
-	if gateway != nil {
-		opts = append(opts, tokenserver.WithGateway(gateway))
-	}
-	ts, err := tokenserver.New(cfg.CPTokenListenAddr, tokenProvider, privKey, log.Logger, opts...)
+	ts, err := tokenserver.New(cfg.CPTokenListenAddr, tokenProvider, privKey, log.Logger)
 	if err != nil {
 		return fmt.Errorf("creating token server: %w", err)
 	}
@@ -376,7 +371,7 @@ func initGatewayProvisioning(ctx context.Context, kubeconfig string, namespace s
 
 	// Start ConfigMap watcher (blocks until context cancelled)
 	return gateway.WatchPlatformConfig(ctx, clientset, namespace, func(newConfigs []gateway.NamespaceConfig, cm *v1.ConfigMap) {
-		log.Info().Int("namespaces", len(newConfigs)).Msg("platform-config updated, reconciling gateways")
+		log.Debug().Int("namespaces", len(newConfigs)).Msg("reconciling gateways")
 		if err := gateway.ReconcileGateways(ctx, dynamicClient, clientset, newConfigs, manifests, cm); err != nil {
 			log.Error().Err(err).Msg("gateway reconciliation after config update failed")
 		}

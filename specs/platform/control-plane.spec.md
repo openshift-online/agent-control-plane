@@ -67,6 +67,18 @@ Handles `session ADDED` and `session MODIFIED (phase=Pending)` events by provisi
 On `phase=Stopping` → calls `deprovisionSession` (deletes pods).
 On `DELETED` → calls `cleanupSession` (deletes pod, secret, service account, service, namespace).
 
+#### `internal/reconciler/project_reconciler.go` — ProjectReconciler
+
+Watches Project events via gRPC informer. Creates Kubernetes namespaces for each Project via `ensureNamespace()`, provisions runner secrets, and sets up control plane RBAC. Project = Namespace — the ProjectReconciler is the sole owner of namespace lifecycle.
+
+#### `internal/reconciler/gateway_reconciler.go` — GatewayReconciler
+
+Watches Gateway resource events via gRPC informer. Reconciles `kind: Gateway` API resources into Kubernetes gateway deployments (StatefulSet, Service, RBAC, certgen Job, NetworkPolicy) in the project namespace. Replaces the previous ConfigMap-based `internal/gateway/` package. Reuses manifest templating from `internal/gateway/manifests.go` and validation from `internal/gateway/validation.go`. See [gateway-provisioning.spec.md](./gateway-provisioning.spec.md) for the full specification.
+
+#### `internal/reconciler/application_reconciler.go` — ApplicationReconciler
+
+Git-based GitOps reconciler that syncs agent fleet definitions from git repositories. Uses the shared kustomize library (extracted from `acpctl apply`) to render manifests. Supports `kind: Gateway` documents in rendered manifests, applying them to the API server alongside Project, Agent, Credential, and RoleBinding resources.
+
 #### `internal/reconciler/shared.go` — SDKClientFactory
 
 Mints and caches per-project SDK clients. Each project uses the same bearer token but different project context. Also provides `namespaceForSession`, phase constants, and label helpers.
@@ -92,7 +104,7 @@ The CP binds the `system:image-builder` ClusterRole to `session-{id}-sa` via a n
 
 ### Start Context Assembly
 
-`assembleInitialPrompt` builds `INITIAL_PROMPT` from four sources in order:
+`assembleInitialPrompt` builds the initial prompt from four sources in order:
 
 ```
 1. Project.prompt        — workspace-level context (shared by all agents in this project)
@@ -101,7 +113,11 @@ The CP binds the `system:image-builder` ClusterRole to `session-{id}-sa` via a n
 4. Session.prompt        — what this specific run should do
 ```
 
-Each section is joined with `\n\n`. Empty sections are omitted. If all four are empty, `INITIAL_PROMPT` is not set and the runner waits for a user message via gRPC.
+Each section is joined with `\n\n`. Empty sections are omitted. If all four are empty, the prompt is not delivered and the runner waits for a user message via gRPC.
+
+**Delivery mechanism varies by runtime:**
+- **Gateway (OpenShell) sandboxes:** The assembled prompt is written to `/tmp/initial_prompt.txt` via SSH payload upload before the runner entrypoint executes. The `INITIAL_PROMPT` env var is NOT set — OpenShell strips env vars containing newlines, which the assembled prompt always contains.
+- **Operator (Job) pods:** The assembled prompt is set as the `INITIAL_PROMPT` env var on the Job container spec.
 
 ### Environment Variables Injected into Runner Pod
 
@@ -115,7 +131,7 @@ Each section is joined with `\n\n`. Empty sections are omitted. If all four are 
 | `AMBIENT_GRPC_URL` | CP config | api-server gRPC address |
 | `AMBIENT_GRPC_USE_TLS` | CP config | TLS flag for gRPC |
 | `AMBIENT_CP_TOKEN_URL` | CP config | CP token endpoint URL (e.g. `http://ambient-control-plane.{ns}.svc:8080/token`) |
-| `INITIAL_PROMPT` | assembled prompt | Auto-execute on startup |
+| `INITIAL_PROMPT` | assembled prompt | Auto-execute on startup (operator Job path only; gateway sandboxes receive the prompt via `/tmp/initial_prompt.txt` file upload) |
 | `IS_RESUME` | `"true"` | Set when `session.StartTime != nil` (session has been started before); tells the runner to skip `INITIAL_PROMPT` auto-execute |
 | `RESUME_AFTER_SEQ` | max `seq` from session_messages | Set alongside `IS_RESUME` when messages exist; runner's gRPC listener starts watching from this seq to prevent replay of historical messages |
 | `USE_VERTEX` / `ANTHROPIC_VERTEX_PROJECT_ID` / `CLOUD_ML_REGION` | CP config | Vertex AI config (when enabled) |
@@ -205,7 +221,10 @@ When `AMBIENT_GRPC_URL` is set (standard deployment):
        → listener.ready asyncio.Event set
 5. await bridge._grpc_listener.ready.wait()
    (blocks until WatchSessionMessages stream is confirmed open)
-6. If INITIAL_PROMPT set and not IS_RESUME:
+6. If not IS_RESUME, read initial prompt:
+     a. Try /tmp/initial_prompt.txt (gateway file upload)
+     b. Fall back to INITIAL_PROMPT env var (operator Job path)
+   If prompt found:
      _auto_execute_initial_prompt(prompt, session_id, grpc_url)
      → _push_initial_prompt_via_grpc()
        → PushSessionMessage(event_type="user", payload=prompt)
@@ -559,5 +578,8 @@ The `ambient-control-plane` ServiceAccount does not have `delete` on `namespaces
 | Runner SA token for CP auth | K8s SA tokens are already mounted in every pod, long-lived, and K8s-managed — no new secrets or out-of-band key distribution required |
 | CP is sole token source — no BOT_TOKEN Secret | CP creates the runner pod, so it is always reachable before the runner's first token request; retaining a Secret adds complexity and a second failure mode with the same blast radius |
 | `system:image-builder` bound to session SA at provision time | Agents need push access to the internal image registry to build and distribute images; OpenShift grants pull automatically via `system:image-pullers` at namespace init but push requires an explicit RoleBinding; co-locating it with the other session SA grants keeps all RBAC provisioning in one place |
+| Gateway as API resource, not ConfigMap | Gateway configuration lives in PostgreSQL as `kind: Gateway`, applied via `acpctl apply -k`. Eliminates the ConfigMap watcher, `initGatewayProvisioning()`, and the `internal/gateway/config.go` code path. The GatewayReconciler receives events via the same gRPC watch stream as all other resources — unified, testable, composable via kustomize |
+| ProjectReconciler owns namespace lifecycle | Project = Namespace. The ProjectReconciler creates namespaces; the GatewayReconciler deploys gateways into existing namespaces. No ConfigMap needed to declare which namespaces exist |
+| Shared kustomize library | The rendering engine from `acpctl apply` is extracted into a shared library consumed by both the CLI and the ApplicationReconciler, enabling unit testing without a running cluster |
 
 ---

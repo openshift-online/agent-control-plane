@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
@@ -69,7 +70,7 @@ func WatchPlatformConfig(ctx context.Context, clientset *kubernetes.Clientset, n
 	// Create SharedInformerFactory filtered to specific ConfigMap
 	factory := informers.NewSharedInformerFactoryWithOptions(
 		clientset,
-		0, // resyncPeriod: 0 means no periodic resync (only watch events)
+		30*time.Second,
 		informers.WithNamespace(namespace),
 		informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
 			opts.FieldSelector = "metadata.name=platform-config"
@@ -90,9 +91,9 @@ func WatchPlatformConfig(ctx context.Context, clientset *kubernetes.Clientset, n
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			cm := newObj.(*v1.ConfigMap)
-			log.Info().
+			log.Debug().
 				Str("configmap", cm.Name).
-				Msg("platform-config updated, triggering reconciliation")
+				Msg("platform-config reconcile triggered")
 			configs := parseConfigMap(cm)
 			onChange(configs, cm)
 		},
@@ -120,7 +121,7 @@ func WatchPlatformConfig(ctx context.Context, clientset *kubernetes.Clientset, n
 	log.Info().
 		Str("configmap", "platform-config").
 		Str("namespace", namespace).
-		Msg("starting platform-config Informer (event-driven)")
+		Msg("starting platform-config Informer (resync every 30s)")
 
 	// Start informer and block until context is cancelled
 	factory.Start(ctx.Done())
@@ -157,7 +158,7 @@ func parseConfigMap(cm *v1.ConfigMap) []NamespaceConfig {
 		return []NamespaceConfig{}
 	}
 
-	log.Info().
+	log.Debug().
 		Str("configmap", cm.Name).
 		Int("namespace_count", len(namespaces)).
 		Msg("parsed platform-config")

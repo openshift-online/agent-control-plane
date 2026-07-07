@@ -1,0 +1,84 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ambient-dev
+
+resources:
+- ../../base
+- ambient-ui-route.yaml
+- api-server-route.yaml
+- platform-config.yaml
+
+components:
+- ../../components/postgresql-rhel
+- ../../components/ambient-api-server-db
+
+patches:
+# --- Delete unwanted deployments ---
+- target: { group: apps, version: v1, kind: Deployment, name: minio }
+  patch: |
+    $patch: delete
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: { name: minio }
+# --- Delete unwanted services ---
+- target: { version: v1, kind: Service, name: minio }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: Service
+    metadata: { name: minio }
+# --- Delete unwanted PVCs ---
+- target: { version: v1, kind: PersistentVolumeClaim, name: minio-data }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata: { name: minio-data }
+# --- Delete unwanted PostgreSQL (shared instance, not used) ---
+- target: { group: apps, version: v1, kind: Deployment, name: postgresql }
+  patch: |
+    $patch: delete
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: { name: postgresql }
+- target: { version: v1, kind: Service, name: postgresql }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: Service
+    metadata: { name: postgresql }
+- target: { version: v1, kind: PersistentVolumeClaim, name: postgresql-data }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata: { name: postgresql-data }
+# --- Delete unwanted misc ---
+- target: { version: v1, kind: LimitRange, name: ambient-default-limits }
+  patch: |
+    $patch: delete
+    apiVersion: v1
+    kind: LimitRange
+    metadata: { name: ambient-default-limits }
+- target: { group: networking.k8s.io, version: v1, kind: NetworkPolicy, name: allow-from-runner-namespaces }
+  patch: |
+    $patch: delete
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: { name: allow-from-runner-namespaces }
+# --- Env patches for retained components ---
+- path: ambient-api-server-env-patch.yaml
+  target: { group: apps, version: v1, kind: Deployment, name: ambient-api-server }
+- path: control-plane-env-patch.yaml
+  target: { group: apps, version: v1, kind: Deployment, name: ambient-control-plane }
+- path: ambient-ui-env-patch.yaml
+  target: { group: apps, version: v1, kind: Deployment, name: ambient-ui }
+
+images:
+- name: quay.io/ambient_code/acp_api_server
+  newTag: latest
+- name: quay.io/ambient_code/acp_control_plane
+  newTag: latest
+- name: quay.io/ambient_code/acp_ambient_ui
+  newTag: latest

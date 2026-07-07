@@ -49,6 +49,8 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+_INITIAL_PROMPT_FILE = "/tmp/initial_prompt.txt"
+
 
 def _log_auto_exec_failure(task: asyncio.Task) -> None:
     """Callback for the auto-execution task — logs unhandled exceptions."""
@@ -161,7 +163,9 @@ def create_ambient_app(
         if not is_resume:
             # Fetch workflow startupPrompt independently
             workflow_startup_prompt = _get_workflow_startup_prompt()
-            user_initial_prompt = os.getenv("INITIAL_PROMPT", "").strip()
+            user_initial_prompt = _read_initial_prompt_file(_INITIAL_PROMPT_FILE)
+            if not user_initial_prompt:
+                user_initial_prompt = os.getenv("INITIAL_PROMPT", "").strip()
 
             # Combine prompts: workflow first, then user initial prompt
             combined_prompt = ""
@@ -194,9 +198,11 @@ def create_ambient_app(
                 )
                 task.add_done_callback(_log_auto_exec_failure)
         else:
-            # Log but don't execute on resume (avoid filesystem I/O, just check env vars)
             has_workflow = bool(os.getenv("ACTIVE_WORKFLOW_GIT_URL", "").strip())
-            has_user_prompt = bool(os.getenv("INITIAL_PROMPT", "").strip())
+            has_user_prompt = bool(
+                _read_initial_prompt_file(_INITIAL_PROMPT_FILE)
+                or os.getenv("INITIAL_PROMPT", "").strip()
+            )
             if has_workflow or has_user_prompt:
                 logger.info("Prompts detected but not auto-executing (resumed session)")
 
@@ -385,6 +391,17 @@ def _get_workflow_startup_prompt() -> str:
 # ------------------------------------------------------------------
 
 
+def _read_initial_prompt_file(path: str) -> str:
+    try:
+        with open(path, "r") as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return ""
+    except OSError:
+        logger.warning("Failed to read initial prompt file %s, falling back to env var", path, exc_info=True)
+        return ""
+
+
 _AUTO_PROMPT_MAX_RETRIES = 8
 _AUTO_PROMPT_INITIAL_DELAY = 2.0
 _AUTO_PROMPT_MAX_DELAY = 30.0
@@ -393,30 +410,13 @@ _AUTO_PROMPT_MAX_DELAY = 30.0
 async def _auto_execute_initial_prompt(
     prompt: str, session_id: str, grpc_url: str = ""
 ) -> None:
-    """Auto-execute INITIAL_PROMPT on session startup.
-
-    When AMBIENT_GRPC_URL is set, pushes the initial prompt as a DB Message
-    via PushSessionMessage so the GRPCSessionListener picks it up and triggers
-    the run directly. The prompt is then observable to API consumers and
-    visible in the frontend session history.
-
-    When AMBIENT_GRPC_URL is not set, falls back to the original HTTP POST
-    path with exponential-backoff retry (for DNS propagation races).
-    """
+    """Push the initial prompt as a user message and trigger the run."""
     delay_seconds = float(os.getenv("INITIAL_PROMPT_DELAY_SECONDS", "2"))
     logger.info(f"Waiting {delay_seconds}s before auto-executing INITIAL_PROMPT...")
     await asyncio.sleep(delay_seconds)
 
     if grpc_url:
-        # gRPC mode: the initial prompt was already stored in the DB when the session
-        # was created via the HTTP API (acpctl create session). The GRPCSessionListener's
-        # WatchSessionMessages stream will deliver it to the runner automatically.
-        # Pushing here would use the SA token which cannot push event_type=user,
-        # causing a harmless but noisy PERMISSION_DENIED warning. Skip it.
-        logger.debug(
-            "gRPC mode: skipping INITIAL_PROMPT push — message already in DB via session creation: session=%s",
-            session_id,
-        )
+        await _push_initial_prompt_via_grpc(prompt, session_id)
     else:
         await _push_initial_prompt_via_http(prompt, session_id)
 
@@ -427,33 +427,15 @@ async def _push_initial_prompt_via_grpc(prompt: str, session_id: str) -> None:
     The gRPC push is synchronous (blocking I/O) and is offloaded to a thread
     pool so it does not block the asyncio event loop.
     """
-    import json as _json
-
     from ambient_runner._grpc_client import AmbientGRPCClient
 
     def _do_push() -> None:
         client = AmbientGRPCClient.from_env()
         try:
-            payload = {
-                "threadId": session_id,
-                "runId": str(uuid.uuid4()),
-                "messages": [
-                    {
-                        "id": str(uuid.uuid4()),
-                        "role": "user",
-                        "content": prompt,
-                        "metadata": {
-                            "hidden": True,
-                            "autoSent": True,
-                            "source": "runner_initial_prompt",
-                        },
-                    }
-                ],
-            }
             result = client.session_messages.push(
                 session_id,
                 event_type="user",
-                payload=_json.dumps(payload),
+                payload=prompt,
             )
             if result is not None:
                 logger.info(

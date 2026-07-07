@@ -148,7 +148,10 @@ ambient_runner/
      c. await listener.ready.wait()  ← blocks until stream confirmed open
      d. Pre-register SSE queue for SESSION_ID (prevents race with backend)
 
-6. If INITIAL_PROMPT set and not IS_RESUME:
+6. If not IS_RESUME, read initial prompt:
+     a. Try /tmp/initial_prompt.txt (gateway file upload path); on any OS-level read error (permissions, I/O), log a warning and fall back
+     b. Fall back to INITIAL_PROMPT env var (operator Job path)
+   If prompt found:
      _auto_execute_initial_prompt(prompt, session_id, grpc_url)
        In gRPC mode: push via PushSessionMessage("user", prompt)
          → listener receives its own push → triggers bridge.run()
