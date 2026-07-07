@@ -888,7 +888,7 @@ func (r *SimpleKubeReconciler) resolveAgentProviders(
 			}
 		}
 
-		if provType == "mlflow" || declName == "mlflow" {
+		if provType == "mlflow" {
 			mlflowEnv = openshell.MLflowSandboxEnvVars(secretCreds)
 		}
 
