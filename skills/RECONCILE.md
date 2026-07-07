@@ -40,7 +40,8 @@ skills/
 │   └── pr-test/           # Deploy PR images to OpenShift for integration testing
 └── tooling/
     ├── align/             # Convention compliance scoring
-    └── memory/            # Project memory management
+    ├── memory/            # Project memory management
+    └── upgrade-upstream/  # rh-trex-ai framework dependency upgrades
 ```
 
 **SDLC flow**: `/reconcile` → `/spec` → `/full-stack-pipeline` → `/dev-cluster` → `/pr-test` → `/deploy-cluster`
