@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/fs"
 	"net"
 	"net/url"
 	"os"
@@ -16,8 +15,12 @@ import (
 	"time"
 
 	pb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
+	"github.com/go-git/go-billy/v5"
+	"github.com/go-git/go-billy/v5/memfs"
+	billyutil "github.com/go-git/go-billy/v5/util"
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/storage/memory"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -174,14 +177,9 @@ func validateRepoURL(repoURL string) error {
 	return nil
 }
 
-func cloneRepo(ctx context.Context, repoURL, ref string) (string, error) {
+func cloneRepoFS(ctx context.Context, repoURL, ref string) (billy.Filesystem, error) {
 	if err := validateRepoURL(repoURL); err != nil {
-		return "", err
-	}
-
-	tmpDir, err := os.MkdirTemp("", "payload-clone-*")
-	if err != nil {
-		return "", fmt.Errorf("create temp dir: %w", err)
+		return nil, err
 	}
 
 	cloneOpts := &git.CloneOptions{
@@ -194,51 +192,41 @@ func cloneRepo(ctx context.Context, repoURL, ref string) (string, error) {
 		cloneOpts.SingleBranch = true
 	}
 
-	var mkErr error
-	repo, err := git.PlainCloneContext(ctx, tmpDir, false, cloneOpts)
+	wt := memfs.New()
+	repo, err := git.CloneContext(ctx, memory.NewStorage(), wt, cloneOpts)
 	if err != nil && ref != "" {
-		// Branch ref failed — clean up and retry as tag
-		os.RemoveAll(tmpDir)
-		tmpDir, mkErr = os.MkdirTemp("", "payload-clone-*")
-		if mkErr != nil {
-			return "", fmt.Errorf("create temp dir for tag retry: %w", mkErr)
-		}
+		// Branch ref failed — retry as tag
+		wt = memfs.New()
 		cloneOpts.ReferenceName = plumbing.NewTagReferenceName(ref)
-		repo, err = git.PlainCloneContext(ctx, tmpDir, false, cloneOpts)
+		repo, err = git.CloneContext(ctx, memory.NewStorage(), wt, cloneOpts)
 
 		if err != nil && isHexSHA(ref) {
 			// Tag ref also failed and ref looks like a SHA — full clone + checkout
-			os.RemoveAll(tmpDir)
-			tmpDir, mkErr = os.MkdirTemp("", "payload-clone-*")
-			if mkErr != nil {
-				return "", fmt.Errorf("create temp dir for SHA retry: %w", mkErr)
-			}
+			wt = memfs.New()
 			cloneOpts.ReferenceName = ""
 			cloneOpts.SingleBranch = false
 			cloneOpts.Depth = 0
-			repo, err = git.PlainCloneContext(ctx, tmpDir, false, cloneOpts)
+			repo, err = git.CloneContext(ctx, memory.NewStorage(), wt, cloneOpts)
 			if err == nil {
-				wt, wtErr := repo.Worktree()
+				w, wtErr := repo.Worktree()
 				if wtErr != nil {
-					os.RemoveAll(tmpDir)
-					return "", fmt.Errorf("get worktree: %w", wtErr)
+					return nil, fmt.Errorf("get worktree: %w", wtErr)
 				}
-				if checkoutErr := wt.Checkout(&git.CheckoutOptions{
+				if checkoutErr := w.Checkout(&git.CheckoutOptions{
 					Hash: plumbing.NewHash(ref),
 				}); checkoutErr != nil {
-					os.RemoveAll(tmpDir)
-					return "", fmt.Errorf("checkout ref %q: %w", ref, checkoutErr)
+					return nil, fmt.Errorf("checkout ref %q: %w", ref, checkoutErr)
 				}
+				wt = w.Filesystem
 			}
 		}
 	}
 
 	if err != nil {
-		os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("clone %q (ref=%q): %w", repoURL, ref, err)
+		return nil, fmt.Errorf("clone %q (ref=%q): %w", repoURL, ref, err)
 	}
 
-	return tmpDir, nil
+	return wt, nil
 }
 
 func isHexSHA(s string) bool {
@@ -253,29 +241,20 @@ func isHexSHA(s string) bool {
 	return true
 }
 
-func tarDirectory(dir string) io.ReadCloser {
+func tarFilesystem(bfs billy.Filesystem) io.ReadCloser {
 	pr, pw := io.Pipe()
 	go func() {
 		tw := tar.NewWriter(pw)
-		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, walkErr error) error {
+		err := billyutil.Walk(bfs, "/", func(path string, info os.FileInfo, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
 			}
-			relPath, err := filepath.Rel(dir, path)
-			if err != nil {
-				return err
-			}
-			if relPath == "." {
+			relPath := strings.TrimPrefix(path, "/")
+			if relPath == "" {
 				return nil
 			}
-			// Skip .git directory
-			if d.IsDir() && d.Name() == ".git" {
+			if info.IsDir() && info.Name() == ".git" {
 				return filepath.SkipDir
-			}
-
-			info, err := d.Info()
-			if err != nil {
-				return err
 			}
 
 			header, err := tar.FileInfoHeader(info, "")
@@ -284,8 +263,8 @@ func tarDirectory(dir string) io.ReadCloser {
 			}
 			header.Name = relPath
 
-			if info.Mode()&fs.ModeSymlink != 0 {
-				target, err := os.Readlink(path)
+			if info.Mode()&os.ModeSymlink != 0 {
+				target, err := bfs.Readlink(path)
 				if err != nil {
 					return err
 				}
@@ -296,8 +275,14 @@ func tarDirectory(dir string) io.ReadCloser {
 				return err
 			}
 
-			if !d.IsDir() && info.Mode().IsRegular() {
-				if err := copyFileToTar(tw, path); err != nil {
+			if !info.IsDir() && info.Mode().IsRegular() {
+				f, err := bfs.Open(path)
+				if err != nil {
+					return err
+				}
+				_, err = io.Copy(tw, f)
+				f.Close()
+				if err != nil {
 					return err
 				}
 			}
@@ -307,16 +292,6 @@ func tarDirectory(dir string) io.ReadCloser {
 		pw.CloseWithError(err)
 	}()
 	return pr
-}
-
-func copyFileToTar(tw *tar.Writer, path string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	_, err = io.Copy(tw, f)
-	return err
 }
 
 func writeRepoPayloadViaSSH(client *ssh.Client, targetPath string, tarReader io.Reader) error {
@@ -360,13 +335,11 @@ func writeRepoPayloadViaSSH(client *ssh.Client, targetPath string, tarReader io.
 }
 
 func uploadRepoPayload(ctx context.Context, client *ssh.Client, p Payload) error {
-	tmpDir, err := cloneRepo(ctx, p.RepoURL, p.Ref)
+	repoFS, err := cloneRepoFS(ctx, p.RepoURL, p.Ref)
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tmpDir)
-
-	tarReader := tarDirectory(tmpDir)
+	tarReader := tarFilesystem(repoFS)
 	defer tarReader.Close()
 	return writeRepoPayloadViaSSH(client, p.Path, tarReader)
 }

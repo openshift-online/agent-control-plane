@@ -3,11 +3,12 @@ package openshell
 import (
 	"archive/tar"
 	"io"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/go-git/go-billy/v5/memfs"
+	billyutil "github.com/go-git/go-billy/v5/util"
 )
 
 func TestValidatePayloadPath(t *testing.T) {
@@ -73,21 +74,21 @@ func TestGrpcConnBuffering(t *testing.T) {
 	})
 }
 
-func TestTarDirectory(t *testing.T) {
-	dir := t.TempDir()
+func TestTarFilesystem(t *testing.T) {
+	fs := memfs.New()
 
-	os.MkdirAll(filepath.Join(dir, "src"), 0o755)
-	os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello"), 0o644)
-	os.WriteFile(filepath.Join(dir, "src", "main.go"), []byte("package main"), 0o644)
+	fs.MkdirAll("/src", 0o755)
+	billyutil.WriteFile(fs, "/README.md", []byte("hello"), 0o644)
+	billyutil.WriteFile(fs, "/src/main.go", []byte("package main"), 0o644)
 
 	// .git directory should be excluded
-	os.MkdirAll(filepath.Join(dir, ".git", "objects"), 0o755)
-	os.WriteFile(filepath.Join(dir, ".git", "HEAD"), []byte("ref: refs/heads/main"), 0o644)
+	fs.MkdirAll("/.git/objects", 0o755)
+	billyutil.WriteFile(fs, "/.git/HEAD", []byte("ref: refs/heads/main"), 0o644)
 
 	// Empty subdirectory
-	os.MkdirAll(filepath.Join(dir, "empty"), 0o755)
+	fs.MkdirAll("/empty", 0o755)
 
-	reader := tarDirectory(dir)
+	reader := tarFilesystem(fs)
 	defer reader.Close()
 	tr := tar.NewReader(reader)
 
@@ -112,7 +113,7 @@ func TestTarDirectory(t *testing.T) {
 
 	// Verify .git is excluded
 	for _, f := range files {
-		if f == ".git" || strings.HasPrefix(f, ".git/") || strings.HasPrefix(f, ".git"+string(filepath.Separator)) {
+		if f == ".git" || strings.HasPrefix(f, ".git/") {
 			t.Errorf("tar contains .git entry: %s", f)
 		}
 	}
