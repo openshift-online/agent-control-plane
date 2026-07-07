@@ -492,7 +492,9 @@ test-openshell-dual-tenant: ## Test dual-tenant OpenShell gateway provisioning (
 
 test-gateway-e2e: check-kubectl _kind-require-cluster ## Run full gateway e2e test (agent start → inference → response)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running gateway e2e test..."
-	@API_URL="http://localhost:$(KIND_FWD_API_SERVER_PORT)" ./tests/e2e/gateway-e2e-test.sh
+	@TEST_TOKEN=$$(kubectl get secret test-user-token -n $(NAMESPACE) -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null) \
+		API_URL="http://localhost:$(KIND_FWD_API_SERVER_PORT)" ./tests/e2e/gateway-e2e-test.sh \
+		$(if $(filter true 1,$(SKIP_CLEANUP)),--skip-cleanup)
 
 local-test-quick: check-kubectl ## Quick smoke test of local environment
 	@echo "$(COLOR_BOLD)🧪 Quick Smoke Test$(COLOR_RESET)"
@@ -630,6 +632,8 @@ define kind-reload-component
 		ctr --namespace=k8s.io images import - && \
 	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Updating $(2) to localhost/$$_IMG:$$_TAG..." && \
 	kubectl set image deployment/$(2) -n $(NAMESPACE) $(4)=localhost/$$_IMG:$$_TAG $(QUIET_REDIRECT) && \
+	kubectl patch deployment/$(2) -n $(NAMESPACE) --type=strategic \
+		-p '{"spec":{"template":{"spec":{"containers":[{"name":"$(4)","imagePullPolicy":"IfNotPresent"}]}}}}' $(QUIET_REDIRECT) && \
 	kubectl rollout status deployment/$(2) -n $(NAMESPACE) --timeout=60s && \
 	echo "$(COLOR_GREEN)✓$(COLOR_RESET) $(3) reloaded (tag: $$_TAG)"
 endef
@@ -1267,6 +1271,8 @@ kind-reload-ambient-api-server: check-kind check-kubectl check-local-context ## 
 	$(call kind-reload-component,$(API_SERVER_IMAGE),ambient-api-server,Ambient API server,api-server)
 	@_IMG=$$(kubectl get deployment ambient-api-server -n $(NAMESPACE) -o jsonpath='{.spec.template.spec.containers[0].image}') && \
 		kubectl set image deployment/ambient-api-server -n $(NAMESPACE) migration=$$_IMG $(QUIET_REDIRECT) && \
+		kubectl patch deployment/ambient-api-server -n $(NAMESPACE) --type=strategic \
+			-p '{"spec":{"template":{"spec":{"initContainers":[{"name":"migration","imagePullPolicy":"IfNotPresent"}]}}}}' $(QUIET_REDIRECT) && \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Migration init container updated to $$_IMG"
 
 kind-reload-runner-openshell: check-kind check-kubectl check-local-context ## Rebuild and reload OpenShell runner only (kind)

@@ -14,8 +14,9 @@
 #   - TEST_TOKEN set or tests/cypress/.env.test present
 #
 # Usage:
-#   ./tests/e2e/gateway-e2e-test.sh [API_URL]
+#   ./tests/e2e/gateway-e2e-test.sh [--skip-cleanup] [API_URL]
 #   API_URL defaults to http://localhost:13000
+#   --skip-cleanup  Retain created sessions for manual inspection
 
 set -euo pipefail
 
@@ -24,6 +25,15 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 NAMESPACE="${NAMESPACE:-ambient-code}"
 TENANT="tenant-a"
+SKIP_CLEANUP=false
+
+# Parse flags
+while [[ "${1:-}" == --* ]]; do
+  case "$1" in
+    --skip-cleanup) SKIP_CLEANUP=true; shift ;;
+    *) echo "Unknown flag: $1"; exit 1 ;;
+  esac
+done
 
 if [ -z "${TEST_TOKEN:-}" ] && [ -f "$SCRIPT_DIR/../cypress/.env.test" ]; then
   # shellcheck disable=SC1091
@@ -102,21 +112,13 @@ else
   exit 1
 fi
 
-HEALTH=$(curl -sf --max-time 5 "${API_URL}/healthcheck" 2>/dev/null || echo "")
-if [ -n "$HEALTH" ]; then
-  pass "API server healthy at ${API_URL}"
-else
-  fail "API server not responding at ${API_URL}"
-  echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
-  exit 1
-fi
-
 section "2. Login acpctl"
 
-if $ACPCTL login --url "$API_URL" --token "$TOKEN" >/dev/null 2>&1; then
-  pass "acpctl login succeeded"
+if $ACPCTL login --url "$API_URL" --token "$TOKEN" >/dev/null 2>&1 && \
+   $ACPCTL whoami >/dev/null 2>&1; then
+  pass "acpctl login succeeded (${API_URL})"
 else
-  fail "acpctl login failed"
+  fail "acpctl login failed — is the API server reachable at ${API_URL}?"
   echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
   exit 1
 fi
@@ -447,15 +449,21 @@ fi
 
 section "Cleanup"
 
-if [ -n "$CREATED_SESSION_ID" ]; then
-  api DELETE "/api/ambient/v1/sessions/${CREATED_SESSION_ID}" >/dev/null 2>&1 && \
-    echo "  Deleted session ${CREATED_SESSION_ID}" || \
-    echo "  Could not delete session (non-fatal)"
-fi
-if [ -n "$REPO_SESSION_ID" ]; then
-  api DELETE "/api/ambient/v1/sessions/${REPO_SESSION_ID}" >/dev/null 2>&1 && \
-    echo "  Deleted repo session ${REPO_SESSION_ID}" || \
-    echo "  Could not delete repo session (non-fatal)"
+if [ "$SKIP_CLEANUP" = "true" ]; then
+  echo -e "  ${YELLOW}Skipping cleanup (--skip-cleanup)${NC}"
+  [ -n "$CREATED_SESSION_ID" ] && echo "  Retained session: ${CREATED_SESSION_ID}"
+  [ -n "$REPO_SESSION_ID" ]    && echo "  Retained repo session: ${REPO_SESSION_ID}"
+else
+  if [ -n "$CREATED_SESSION_ID" ]; then
+    api DELETE "/api/ambient/v1/sessions/${CREATED_SESSION_ID}" >/dev/null 2>&1 && \
+      echo "  Deleted session ${CREATED_SESSION_ID}" || \
+      echo "  Could not delete session (non-fatal)"
+  fi
+  if [ -n "$REPO_SESSION_ID" ]; then
+    api DELETE "/api/ambient/v1/sessions/${REPO_SESSION_ID}" >/dev/null 2>&1 && \
+      echo "  Deleted repo session ${REPO_SESSION_ID}" || \
+      echo "  Could not delete repo session (non-fatal)"
+  fi
 fi
 
 echo ""
