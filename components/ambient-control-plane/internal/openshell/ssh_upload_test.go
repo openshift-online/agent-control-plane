@@ -88,6 +88,7 @@ func TestTarDirectory(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, "empty"), 0o755)
 
 	reader := tarDirectory(dir)
+	defer reader.Close()
 	tr := tar.NewReader(reader)
 
 	var files []string
