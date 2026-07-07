@@ -370,7 +370,7 @@ func initGatewayProvisioning(ctx context.Context, kubeconfig string, namespace s
 
 	// Start ConfigMap watcher (blocks until context cancelled)
 	return gateway.WatchPlatformConfig(ctx, clientset, namespace, func(newConfigs []gateway.NamespaceConfig, cm *v1.ConfigMap) {
-		log.Info().Int("namespaces", len(newConfigs)).Msg("platform-config updated, reconciling gateways")
+		log.Debug().Int("namespaces", len(newConfigs)).Msg("reconciling gateways")
 		if err := gateway.ReconcileGateways(ctx, dynamicClient, clientset, newConfigs, manifests, cm); err != nil {
 			log.Error().Err(err).Msg("gateway reconciliation after config update failed")
 		}
