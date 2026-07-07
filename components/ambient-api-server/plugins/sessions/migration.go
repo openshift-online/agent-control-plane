@@ -165,6 +165,36 @@ func scheduledSessionLinkMigration() *gormigrate.Migration {
 	}
 }
 
+func sandboxSnapshotMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202607070001",
+		Migrate: func(tx *gorm.DB) error {
+			stmts := []string{
+				`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS sandbox_logs_snapshot TEXT`,
+				`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS sandbox_policy_snapshot TEXT`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			stmts := []string{
+				`ALTER TABLE sessions DROP COLUMN IF EXISTS sandbox_logs_snapshot`,
+				`ALTER TABLE sessions DROP COLUMN IF EXISTS sandbox_policy_snapshot`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+}
+
 func sessionEventsMigration() *gormigrate.Migration {
 	migrateStatements := []string{
 		`CREATE TABLE IF NOT EXISTS session_events (

@@ -43,7 +43,9 @@ type Session struct {
 	KubeCrName         *string    `json:"kube_cr_name"`
 	KubeCrUid          *string    `json:"kube_cr_uid"`
 	KubeNamespace      *string    `json:"kube_namespace"`
-	LastActivityAt     *time.Time `json:"last_activity_at"`
+	LastActivityAt        *time.Time `json:"last_activity_at"`
+	SandboxLogsSnapshot   *string    `json:"sandbox_logs_snapshot"`
+	SandboxPolicySnapshot *string    `json:"sandbox_policy_snapshot"`
 }
 
 type SessionList []*Session
@@ -106,5 +108,7 @@ type SessionStatusPatchRequest struct {
 	ReconciledRepos    *string    `json:"reconciled_repos,omitempty"`
 	ReconciledWorkflow *string    `json:"reconciled_workflow,omitempty"`
 	KubeCrUid          *string    `json:"kube_cr_uid,omitempty"`
-	KubeNamespace      *string    `json:"kube_namespace,omitempty"`
+	KubeNamespace         *string `json:"kube_namespace,omitempty"`
+	SandboxLogsSnapshot   *string `json:"sandbox_logs_snapshot,omitempty"`
+	SandboxPolicySnapshot *string `json:"sandbox_policy_snapshot,omitempty"`
 }

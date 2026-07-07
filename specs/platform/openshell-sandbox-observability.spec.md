@@ -27,7 +27,6 @@ This iteration covers:
 
 Out of scope:
 
-- **Log persistence** — logs are streamed live and not stored in PostgreSQL; historical logs after sandbox termination are not available
 - **Policy editing** — the policy tab is read-only; mutations happen via the agent sandbox config
 - **Log filtering/search** — future iteration; the initial implementation shows the raw log stream
 
@@ -224,6 +223,70 @@ The session domain model SHALL include a field indicating whether the session ha
 - THEN `hasGatewaySandbox` is `true` when the session has both `kube_namespace` set AND the platform is running in gateway mode
 - AND the OpenShell tab renders conditionally based on this field
 
+### Requirement: Sandbox Log and Policy Persistence
+
+Sandbox logs and policy SHALL be persisted to the sessions table so they survive sandbox shutdown. Operators see historical sandbox data for stopped sessions, matching the pattern used for chat message history.
+
+#### Data Model
+
+Two TEXT columns on the `sessions` table:
+
+| Column | Type | Content |
+|--------|------|---------|
+| `sandbox_logs_snapshot` | TEXT (nullable) | JSON array of `SandboxLogEntry` objects — the last 500 log lines |
+| `sandbox_policy_snapshot` | TEXT (nullable) | JSON `SandboxPolicyResponse` envelope — the full effective policy |
+
+Both fields are write-only from the CP's perspective (set via `UpdateStatus` patch) and read-only from the API/UI perspective (never set by users). See `data-model.spec.md` for field details.
+
+#### Collection Strategy
+
+The CP's `PodStatusSyncer` (15s tick) collects both snapshots on every sync cycle:
+
+| Data | Source | Cadence | Cost |
+|------|--------|---------|------|
+| Policy | Extracted from existing `GetSandbox` response | Every 15s | Zero — response already fetched |
+| Logs | `WatchSandbox` with `FollowLogs: false, LogTailLines: 500` | Every 15s | One additional gRPC call per running session |
+
+A **final snapshot** is taken in `deprovisionSessionSandbox()` before `DeleteSandbox` is called. This guarantees the stored data matches the live SSE stream for normal stop flows. For abnormal termination (sandbox crash), the most recent periodic snapshot (at most 15s stale) serves as fallback.
+
+See `control-plane.spec.md` § Sandbox Snapshot Collection for implementation details.
+
+#### Scenario: Periodic snapshot during running session
+
+- GIVEN a session in Running phase with an OpenShell sandbox
+- WHEN the `PodStatusSyncer` runs its 15s sync cycle
+- THEN the CP extracts the policy from the `GetSandbox` response
+- AND fetches the last 500 log lines via `WatchSandbox` with `FollowLogs: false`
+- AND pushes both as `sandbox_policy_snapshot` and `sandbox_logs_snapshot` in the `UpdateStatus` patch
+
+#### Scenario: Pre-delete final snapshot
+
+- GIVEN a session transitioning to Stopping phase
+- WHEN `deprovisionSessionSandbox()` runs (before `DeleteSandbox`)
+- THEN the CP fetches a complete log and policy snapshot
+- AND pushes both to the API server via `UpdateStatus`
+- AND only then proceeds to `DeleteSandbox`
+
+#### Scenario: Historical fallback in UI
+
+- GIVEN a session in a terminal phase (Stopped, Completed, Failed) with persisted snapshot data
+- WHEN the user opens the OpenShell tab → Sandbox Logs sub-tab
+- THEN the UI displays the stored `sandbox_logs_snapshot` data with a "Historical" indicator
+- AND the Sandbox Policy sub-tab displays the stored `sandbox_policy_snapshot` data with a "Historical" indicator
+
+#### Scenario: Session without snapshot data
+
+- GIVEN a session in a terminal phase with NULL snapshot fields (created before this feature, or snapshot collection failed)
+- WHEN the user opens the OpenShell tab
+- THEN the Sandbox Logs sub-tab displays "No sandbox logs available for this session."
+- AND the Sandbox Policy sub-tab displays "No sandbox policy available for this session."
+
+#### Scenario: Abnormal termination fallback
+
+- GIVEN a running session whose sandbox crashes unexpectedly (no `deprovisionSessionSandbox` call)
+- WHEN the session reaches a terminal phase
+- THEN the most recent periodic snapshot (at most 15s stale) is available as historical data
+
 ---
 
 ## Data Model
@@ -311,7 +374,9 @@ type NetworkBinary = {
 
 ### Backward compatibility
 
-Sessions created before this feature will not have gateway-mode metadata. The OpenShell tab will not appear for these sessions. No database migration is required — the feature reads existing session fields (`kube_namespace`, `kube_cr_name`) to determine gateway-mode status.
+Sessions created before this feature will not have gateway-mode metadata. The OpenShell tab will not appear for these sessions.
+
+A database migration adds two nullable TEXT columns (`sandbox_logs_snapshot`, `sandbox_policy_snapshot`) to the sessions table. Sessions created before this migration will have NULL values — the UI shows "No data available." for these sessions. The migration is additive and safe to run against existing data.
 
 The control plane HTTP endpoints are additive. The token server mux gains new routes without affecting the existing `/token` and `/healthz` endpoints.
 
@@ -327,6 +392,10 @@ The CP already manages per-namespace mTLS connections to the gateway. Routing sa
 
 SSE is unidirectional (server-to-client), matches the log-tailing use case, and is already supported by the BFF proxy passthrough. The existing runner event streaming uses the same SSE pattern.
 
-### Why not store logs in PostgreSQL?
+### Why snapshot to PostgreSQL instead of a dedicated log store?
 
-Sandbox logs are high-volume operational telemetry (network events, policy evaluations, process launches). Storing them would significantly increase database write load and storage. Live streaming provides the observability operators need without storage overhead. If historical log search is needed in the future, a dedicated log aggregation system (e.g., Loki) would be more appropriate than PostgreSQL.
+Sandbox log snapshots are bounded (last 500 lines) and scoped to individual sessions — they are not unbounded telemetry streams. Storing them as TEXT columns on the sessions table reuses the existing data model and avoids introducing a new storage dependency (Loki, Elasticsearch). The write pattern (one update per 15s sync cycle) is well within PostgreSQL's capabilities. If full historical log search is needed in the future, a dedicated log aggregation system would complement (not replace) these snapshots.
+
+### Why pre-delete final snapshot?
+
+The periodic 15s snapshots provide good coverage, but the final state of the sandbox (last log entries, final policy) is the most valuable for post-mortem analysis. By fetching a complete snapshot in `deprovisionSessionSandbox()` before `DeleteSandbox`, the stored data is guaranteed to match what the live SSE stream showed — no 15s gap. For abnormal termination, the periodic snapshot serves as a fallback.

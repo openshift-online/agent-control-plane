@@ -527,6 +527,52 @@ Status: ✅ implemented — Credential Kind live (PR #1110); CP integration pend
 
 ---
 
+## Sandbox Snapshot Collection
+
+The CP persists sandbox logs and policy to the API server's sessions table so they survive sandbox shutdown. This enables the UI to display historical sandbox data for stopped sessions, matching the pattern used for chat message history.
+
+### Policy Extraction (every 15s — zero additional cost)
+
+`PodStatusSyncer.syncSandboxStatus()` already calls `GetSandbox` on each 15s sync cycle. Policy is extracted from the existing response using exported helpers in `internal/openshell/sandbox_helpers.go`:
+
+- `SandboxPhaseString(phase)` — converts proto phase enum to human-readable string
+- `PolicyToMap(policy)` — converts proto policy to a JSON-serializable map
+
+The policy envelope is JSON-marshaled and included in the `UpdateStatus` patch as `sandbox_policy_snapshot`. No additional network calls.
+
+### Log Fetch (every 15s)
+
+After policy extraction, the CP calls `GatewayClient.FetchSandboxLogs()` — a new method that wraps `WatchSandbox` with `FollowLogs: false, LogTailLines: 500`. This returns a bounded snapshot of the most recent log entries as a JSON array matching the SSE log format. The result is included in the same `UpdateStatus` patch as `sandbox_logs_snapshot`.
+
+### Pre-Delete Final Snapshot
+
+In `deprovisionSessionSandbox()`, a final snapshot of both logs and policy is taken **before** `DeleteSandbox` is called. This guarantees the stored data matches the live SSE stream for normal stop flows:
+
+```
+deprovisionSessionSandbox():
+    1. Resolve gateway namespace
+    2. Compute sandbox name
+    3. GetSandbox → extract policy snapshot     ← NEW
+    4. FetchSandboxLogs → extract log snapshot   ← NEW
+    5. UpdateStatus with both snapshots          ← NEW
+    6. DeleteSandbox                             (existing)
+    7. UpdateSessionPhase                        (existing)
+```
+
+For abnormal termination (sandbox crash without `deprovisionSessionSandbox`), the most recent periodic snapshot (at most 15s stale) serves as fallback.
+
+### Error Handling
+
+All snapshot errors (gateway unreachable, gRPC timeout, marshal failure) are logged at WARN level and silently skipped. They never block the status sync or sandbox deletion. The periodic 15s snapshots provide redundancy — a failed final snapshot still has the recent periodic data as fallback.
+
+### Shared Helpers
+
+`sandboxPhaseString()` and `policyToMap()` are extracted from `internal/tokenserver/sandbox_handler.go` to `internal/openshell/sandbox_helpers.go` as exported functions (`SandboxPhaseString`, `PolicyToMap`). Both `tokenserver` and `reconciler` import `openshell`, so no import cycles are introduced.
+
+Status: 🔲 planned
+
+---
+
 ## Namespace Deletion RBAC Gap
 
 The CP's `cleanupSession` calls `kube.DeleteNamespace()`. This currently fails in kind with:
@@ -559,5 +605,8 @@ The `ambient-control-plane` ServiceAccount does not have `delete` on `namespaces
 | Runner SA token for CP auth | K8s SA tokens are already mounted in every pod, long-lived, and K8s-managed — no new secrets or out-of-band key distribution required |
 | CP is sole token source — no BOT_TOKEN Secret | CP creates the runner pod, so it is always reachable before the runner's first token request; retaining a Secret adds complexity and a second failure mode with the same blast radius |
 | `system:image-builder` bound to session SA at provision time | Agents need push access to the internal image registry to build and distribute images; OpenShift grants pull automatically via `system:image-pullers` at namespace init but push requires an explicit RoleBinding; co-locating it with the other session SA grants keeps all RBAC provisioning in one place |
+| Sandbox snapshots in PostgreSQL, not a log store | Snapshots are bounded (500 lines), session-scoped, and low-frequency (15s writes). PostgreSQL handles this without a new dependency. A dedicated log store would be appropriate for unbounded historical search, not for session-scoped snapshots |
+| Pre-delete final snapshot before `DeleteSandbox` | Periodic 15s snapshots provide good coverage, but the final state is most valuable for post-mortem. Fetching before delete guarantees stored data matches the live stream |
+| Snapshot errors silently skipped | Snapshot collection must never block status sync or sandbox deletion — it is best-effort. Periodic snapshots provide redundancy for failed final snapshots |
 
 ---

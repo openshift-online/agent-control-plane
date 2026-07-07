@@ -21,16 +21,18 @@ var _ MappedNullable = &SessionStatusPatchRequest{}
 
 // SessionStatusPatchRequest struct for SessionStatusPatchRequest
 type SessionStatusPatchRequest struct {
-	Phase              *string    `json:"phase,omitempty"`
-	StartTime          *time.Time `json:"start_time,omitempty"`
-	CompletionTime     *time.Time `json:"completion_time,omitempty"`
-	SdkSessionId       *string    `json:"sdk_session_id,omitempty"`
-	SdkRestartCount    *int32     `json:"sdk_restart_count,omitempty"`
-	Conditions         *string    `json:"conditions,omitempty"`
-	ReconciledRepos    *string    `json:"reconciled_repos,omitempty"`
-	ReconciledWorkflow *string    `json:"reconciled_workflow,omitempty"`
-	KubeCrUid          *string    `json:"kube_cr_uid,omitempty"`
-	KubeNamespace      *string    `json:"kube_namespace,omitempty"`
+	Phase                 *string    `json:"phase,omitempty"`
+	StartTime             *time.Time `json:"start_time,omitempty"`
+	CompletionTime        *time.Time `json:"completion_time,omitempty"`
+	SdkSessionId          *string    `json:"sdk_session_id,omitempty"`
+	SdkRestartCount       *int32     `json:"sdk_restart_count,omitempty"`
+	Conditions            *string    `json:"conditions,omitempty"`
+	ReconciledRepos       *string    `json:"reconciled_repos,omitempty"`
+	ReconciledWorkflow    *string    `json:"reconciled_workflow,omitempty"`
+	KubeCrUid             *string    `json:"kube_cr_uid,omitempty"`
+	KubeNamespace         *string    `json:"kube_namespace,omitempty"`
+	SandboxLogsSnapshot   *string    `json:"sandbox_logs_snapshot,omitempty"`
+	SandboxPolicySnapshot *string    `json:"sandbox_policy_snapshot,omitempty"`
 }
 
 // NewSessionStatusPatchRequest instantiates a new SessionStatusPatchRequest object
@@ -370,6 +372,70 @@ func (o *SessionStatusPatchRequest) SetKubeNamespace(v string) {
 	o.KubeNamespace = &v
 }
 
+// GetSandboxLogsSnapshot returns the SandboxLogsSnapshot field value if set, zero value otherwise.
+func (o *SessionStatusPatchRequest) GetSandboxLogsSnapshot() string {
+	if o == nil || IsNil(o.SandboxLogsSnapshot) {
+		var ret string
+		return ret
+	}
+	return *o.SandboxLogsSnapshot
+}
+
+// GetSandboxLogsSnapshotOk returns a tuple with the SandboxLogsSnapshot field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SessionStatusPatchRequest) GetSandboxLogsSnapshotOk() (*string, bool) {
+	if o == nil || IsNil(o.SandboxLogsSnapshot) {
+		return nil, false
+	}
+	return o.SandboxLogsSnapshot, true
+}
+
+// HasSandboxLogsSnapshot returns a boolean if a field has been set.
+func (o *SessionStatusPatchRequest) HasSandboxLogsSnapshot() bool {
+	if o != nil && !IsNil(o.SandboxLogsSnapshot) {
+		return true
+	}
+
+	return false
+}
+
+// SetSandboxLogsSnapshot gets a reference to the given string and assigns it to the SandboxLogsSnapshot field.
+func (o *SessionStatusPatchRequest) SetSandboxLogsSnapshot(v string) {
+	o.SandboxLogsSnapshot = &v
+}
+
+// GetSandboxPolicySnapshot returns the SandboxPolicySnapshot field value if set, zero value otherwise.
+func (o *SessionStatusPatchRequest) GetSandboxPolicySnapshot() string {
+	if o == nil || IsNil(o.SandboxPolicySnapshot) {
+		var ret string
+		return ret
+	}
+	return *o.SandboxPolicySnapshot
+}
+
+// GetSandboxPolicySnapshotOk returns a tuple with the SandboxPolicySnapshot field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SessionStatusPatchRequest) GetSandboxPolicySnapshotOk() (*string, bool) {
+	if o == nil || IsNil(o.SandboxPolicySnapshot) {
+		return nil, false
+	}
+	return o.SandboxPolicySnapshot, true
+}
+
+// HasSandboxPolicySnapshot returns a boolean if a field has been set.
+func (o *SessionStatusPatchRequest) HasSandboxPolicySnapshot() bool {
+	if o != nil && !IsNil(o.SandboxPolicySnapshot) {
+		return true
+	}
+
+	return false
+}
+
+// SetSandboxPolicySnapshot gets a reference to the given string and assigns it to the SandboxPolicySnapshot field.
+func (o *SessionStatusPatchRequest) SetSandboxPolicySnapshot(v string) {
+	o.SandboxPolicySnapshot = &v
+}
+
 func (o SessionStatusPatchRequest) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -409,6 +475,12 @@ func (o SessionStatusPatchRequest) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.KubeNamespace) {
 		toSerialize["kube_namespace"] = o.KubeNamespace
+	}
+	if !IsNil(o.SandboxLogsSnapshot) {
+		toSerialize["sandbox_logs_snapshot"] = o.SandboxLogsSnapshot
+	}
+	if !IsNil(o.SandboxPolicySnapshot) {
+		toSerialize["sandbox_policy_snapshot"] = o.SandboxPolicySnapshot
 	}
 	return toSerialize, nil
 }

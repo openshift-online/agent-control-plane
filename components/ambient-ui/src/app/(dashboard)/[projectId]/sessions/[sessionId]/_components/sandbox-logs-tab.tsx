@@ -96,8 +96,11 @@ export function SandboxLogsTab({ session }: { session: DomainSession }) {
     isActive,
   )
 
+  const isHistorical = !isActive && !isSandboxPending && entries.length === 0 && session.sandboxLogsSnapshot !== null
+  const displayEntries = isHistorical ? (session.sandboxLogsSnapshot ?? []) : entries
+
   const { scrollRef, sentinelRef, isAtBottom, newEventCount, scrollToBottom } =
-    useLiveTail(entries.length)
+    useLiveTail(displayEntries.length)
 
   return (
     <div className="space-y-3">
@@ -105,29 +108,35 @@ export function SandboxLogsTab({ session }: { session: DomainSession }) {
         {isSandboxPending && (
           <span>Sandbox is not yet running. Logs will stream once the sandbox starts.</span>
         )}
-        {isConnected && (
+        {isHistorical && (
+          <span className="flex items-center gap-1.5">
+            <Badge variant="secondary" className="text-[10px]">Historical</Badge>
+            <span>{displayEntries.length} entries</span>
+          </span>
+        )}
+        {isConnected && !isHistorical && (
           <span className="flex items-center gap-1.5">
             <LiveIndicator />
-            <span>{entries.length} entries</span>
+            <span>{displayEntries.length} entries</span>
           </span>
         )}
         {isReconnecting && entries.length > 0 && (
           <span className="text-amber-600">Reconnecting...</span>
         )}
-        {!isActive && !isSandboxPending && !isConnected && entries.length === 0 && (
+        {!isActive && !isSandboxPending && !isConnected && !isHistorical && entries.length === 0 && (
           <span>Session is not running. Logs stream while the sandbox is active.</span>
         )}
       </div>
 
       <Card className="relative">
-        {isAtBottom && entries.length > 0 && isConnected && (
+        {isAtBottom && displayEntries.length > 0 && isConnected && !isHistorical && (
           <div className="absolute top-2 right-3 z-10">
             <LiveIndicator />
           </div>
         )}
 
         <CardContent className="p-0">
-          {entries.length === 0 ? (
+          {displayEntries.length === 0 ? (
             <p className="p-6 text-center text-sm text-muted-foreground">
               {isActive
                 ? 'Waiting for sandbox logs...'
@@ -141,7 +150,7 @@ export function SandboxLogsTab({ session }: { session: DomainSession }) {
               aria-label="Sandbox logs"
             >
               <div className="divide-y divide-border/50">
-                {entries.map((entry, index) => (
+                {displayEntries.map((entry, index) => (
                   <LogEntryRow key={index} entry={entry} />
                 ))}
               </div>

@@ -1117,6 +1117,8 @@ func (r *SimpleKubeReconciler) deprovisionSessionSandbox(ctx context.Context, se
 		Str("sandbox", sbxName).
 		Msg("deprovisioning session via gateway")
 
+	r.finalSandboxSnapshot(ctx, session, namespace, sbxName)
+
 	if err := r.gateway.DeleteSandbox(ctx, namespace, sbxName); err != nil {
 		if st, ok := status.FromError(err); !ok || st.Code() != codes.NotFound {
 			r.logger.Warn().Err(err).Str("sandbox", sbxName).Msg("deleting sandbox")
@@ -1125,6 +1127,68 @@ func (r *SimpleKubeReconciler) deprovisionSessionSandbox(ctx context.Context, se
 
 	r.updateSessionPhase(ctx, session, nextPhase)
 	return nil
+}
+
+func (r *SimpleKubeReconciler) finalSandboxSnapshot(ctx context.Context, session types.Session, namespace, sbxName string) {
+	if session.ProjectID == "" {
+		return
+	}
+
+	sdk, err := r.factory.ForProject(ctx, session.ProjectID)
+	if err != nil {
+		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("final snapshot: failed to get SDK client")
+		return
+	}
+
+	resp, err := r.gateway.GetSandbox(ctx, namespace, sbxName)
+	if err != nil {
+		r.logger.Debug().Err(err).Str("session_id", session.ID).Msg("final snapshot: sandbox already gone")
+		return
+	}
+
+	sbx := resp.GetSandbox()
+	if sbx == nil {
+		return
+	}
+
+	policy := sbx.GetSpec().GetPolicy()
+	sbxStatus := sbx.GetStatus()
+	policyEnvelope := map[string]interface{}{
+		"version":         policy.GetVersion(),
+		"hash":            "",
+		"status":          openshell.SandboxPhaseString(sbxStatus.GetPhase()),
+		"source":          "gateway",
+		"config_revision": fmt.Sprintf("%d", sbxStatus.GetCurrentPolicyVersion()),
+		"policy":          openshell.PolicyToMap(policy),
+	}
+	policyJSON, marshalErr := json.Marshal(policyEnvelope)
+	if marshalErr != nil {
+		r.logger.Warn().Err(marshalErr).Str("session_id", session.ID).Msg("final snapshot: failed to marshal policy")
+		return
+	}
+
+	patch := map[string]interface{}{
+		"sandbox_policy_snapshot": string(policyJSON),
+	}
+
+	sandboxID := sbx.GetMetadata().GetId()
+	if sandboxID != "" {
+		logs, logErr := r.gateway.FetchSandboxLogs(ctx, namespace, sandboxID, 500)
+		if logErr != nil {
+			r.logger.Debug().Err(logErr).Str("session_id", session.ID).Msg("final snapshot: failed to fetch logs")
+		} else if len(logs) > 0 {
+			logsJSON, err := json.Marshal(logs)
+			if err == nil {
+				patch["sandbox_logs_snapshot"] = string(logsJSON)
+			}
+		}
+	}
+
+	if _, err := sdk.Sessions().UpdateStatus(ctx, session.ID, patch); err != nil {
+		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("final snapshot: failed to persist")
+	} else {
+		r.logger.Info().Str("session_id", session.ID).Msg("final sandbox snapshot persisted")
+	}
 }
 
 func (r *SimpleKubeReconciler) cleanupSession(ctx context.Context, session types.Session) error {

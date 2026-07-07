@@ -215,4 +215,5 @@ func init() {
 	db.RegisterMigration(lastActivityAtMigration())
 	db.RegisterMigration(scheduledSessionLinkMigration())
 	db.RegisterMigration(sessionEventsMigration())
+	db.RegisterMigration(sandboxSnapshotMigration())
 }

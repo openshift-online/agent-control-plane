@@ -176,6 +176,8 @@ func (s *PodStatusSyncer) syncSandboxStatus(ctx context.Context, sdk *sdkclient.
 		return
 	}
 
+	s.snapshotSandboxData(ctx, sdk, namespace, session, resp)
+
 	desiredPhase := mapSandboxPhaseToSessionPhase(resp.Sandbox.Status.Phase)
 	if desiredPhase == "" {
 		return
@@ -190,6 +192,51 @@ func (s *PodStatusSyncer) syncSandboxStatus(ctx context.Context, sdk *sdkclient.
 	}
 
 	s.updateSessionPhase(ctx, sdk, session, desiredPhase, nil)
+}
+
+func (s *PodStatusSyncer) snapshotSandboxData(ctx context.Context, sdk *sdkclient.Client, namespace string, session *types.Session, resp *openshellpb.SandboxResponse) {
+	sbx := resp.GetSandbox()
+	if sbx == nil {
+		return
+	}
+
+	policy := sbx.GetSpec().GetPolicy()
+	status := sbx.GetStatus()
+
+	policyEnvelope := map[string]interface{}{
+		"version":         policy.GetVersion(),
+		"hash":            "",
+		"status":          openshell.SandboxPhaseString(status.GetPhase()),
+		"source":          "gateway",
+		"config_revision": fmt.Sprintf("%d", status.GetCurrentPolicyVersion()),
+		"policy":          openshell.PolicyToMap(policy),
+	}
+	policyJSON, err := json.Marshal(policyEnvelope)
+	if err != nil {
+		s.logger.Warn().Err(err).Str("session_id", session.ID).Msg("snapshot: failed to marshal policy")
+		return
+	}
+
+	patch := map[string]interface{}{
+		"sandbox_policy_snapshot": string(policyJSON),
+	}
+
+	sandboxID := sbx.GetMetadata().GetId()
+	if sandboxID != "" {
+		logs, logErr := s.gateway.FetchSandboxLogs(ctx, namespace, sandboxID, 500)
+		if logErr != nil {
+			s.logger.Debug().Err(logErr).Str("session_id", session.ID).Msg("snapshot: failed to fetch logs")
+		} else if len(logs) > 0 {
+			logsJSON, marshalErr := json.Marshal(logs)
+			if marshalErr == nil {
+				patch["sandbox_logs_snapshot"] = string(logsJSON)
+			}
+		}
+	}
+
+	if _, err := sdk.Sessions().UpdateStatus(ctx, session.ID, patch); err != nil {
+		s.logger.Warn().Err(err).Str("session_id", session.ID).Msg("snapshot: failed to persist sandbox data")
+	}
 }
 
 func mapSandboxPhaseToSessionPhase(phase openshellpb.SandboxPhase) string {

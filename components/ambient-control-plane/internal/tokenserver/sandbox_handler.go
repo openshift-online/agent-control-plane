@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell"
 	pb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 	"github.com/rs/zerolog"
 )
@@ -62,10 +63,10 @@ func (h *sandboxHandler) handlePolicy(w http.ResponseWriter, r *http.Request) {
 	result := map[string]interface{}{
 		"version":         policy.GetVersion(),
 		"hash":            "",
-		"status":          sandboxPhaseString(status.GetPhase()),
+		"status":          openshell.SandboxPhaseString(status.GetPhase()),
 		"source":          "gateway",
 		"config_revision": fmt.Sprintf("%d", status.GetCurrentPolicyVersion()),
-		"policy":          policyToMap(policy),
+		"policy":          openshell.PolicyToMap(policy),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -173,7 +174,7 @@ func (h *sandboxHandler) handleLogs(w http.ResponseWriter, r *http.Request) {
 		case *pb.SandboxStreamEvent_Sandbox:
 			eventType = "status"
 			sseData = map[string]interface{}{
-				"phase": sandboxPhaseString(p.Sandbox.GetStatus().GetPhase()),
+				"phase": openshell.SandboxPhaseString(p.Sandbox.GetStatus().GetPhase()),
 				"name":  p.Sandbox.GetStatus().GetSandboxName(),
 			}
 		default:
@@ -195,33 +196,6 @@ func (h *sandboxHandler) handleLogs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-}
-
-func sandboxPhaseString(phase pb.SandboxPhase) string {
-	switch phase {
-	case pb.SandboxPhase_SANDBOX_PHASE_READY:
-		return "active"
-	case pb.SandboxPhase_SANDBOX_PHASE_PROVISIONING:
-		return "provisioning"
-	case pb.SandboxPhase_SANDBOX_PHASE_ERROR:
-		return "error"
-	case pb.SandboxPhase_SANDBOX_PHASE_DELETING:
-		return "deleting"
-	default:
-		return "unknown"
-	}
-}
-
-func policyToMap(p interface{ GetVersion() uint32 }) map[string]interface{} {
-	raw, err := json.Marshal(p)
-	if err != nil {
-		return map[string]interface{}{"version": p.GetVersion()}
-	}
-	var m map[string]interface{}
-	if unmarshalErr := json.Unmarshal(raw, &m); unmarshalErr != nil {
-		return map[string]interface{}{"version": p.GetVersion()}
-	}
-	return m
 }
 
 // parseSandboxPath extracts sandbox name from a URL path like /sandbox/{name}/{suffix}.

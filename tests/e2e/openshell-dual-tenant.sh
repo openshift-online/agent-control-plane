@@ -341,6 +341,94 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Section 7: Sandbox log and policy persistence after stop
+# ---------------------------------------------------------------------------
+
+section "7. Sandbox snapshot persistence"
+
+if ! $SANDBOX_READY; then
+  skip "Sandbox persistence" "session never reached Running phase (see section 6)"
+else
+  # Stop the session so the CP takes a final snapshot before sandbox deletion
+  api_post "/api/ambient/v1/sessions/${OBS_SESSION_ID}/stop" "{}" >/dev/null 2>&1 || true
+
+  # Wait for the session to reach a terminal phase
+  STOPPED=false
+  for i in $(seq 1 30); do
+    PHASE=$(api_get "/api/ambient/v1/sessions/${OBS_SESSION_ID}" \
+      | jq -r '.phase // empty' 2>/dev/null || echo "")
+    if [ "$PHASE" = "Stopped" ] || [ "$PHASE" = "Completed" ] || [ "$PHASE" = "Failed" ]; then
+      STOPPED=true
+      break
+    fi
+    sleep 2
+  done
+
+  if ! $STOPPED; then
+    skip "Sandbox persistence" "session did not reach terminal phase (phase: ${PHASE:-unknown})"
+  else
+    pass "Session ${OBS_SESSION_ID} reached terminal phase ($PHASE)"
+
+    # Fetch the full session and check snapshot fields
+    SESSION_JSON=$(api_get "/api/ambient/v1/sessions/${OBS_SESSION_ID}" || echo "")
+
+    # 7a. sandbox_logs_snapshot should be a non-null JSON array
+    LOGS_SNAPSHOT=$(echo "$SESSION_JSON" | jq -r '.sandbox_logs_snapshot // empty' 2>/dev/null || echo "")
+    if [ -n "$LOGS_SNAPSHOT" ] && echo "$LOGS_SNAPSHOT" | jq -e 'type == "array"' >/dev/null 2>&1; then
+      LOG_COUNT=$(echo "$LOGS_SNAPSHOT" | jq 'length' 2>/dev/null || echo "0")
+      if [ "$LOG_COUNT" -gt 0 ]; then
+        pass "sandbox_logs_snapshot persisted ($LOG_COUNT log entries)"
+      else
+        fail "sandbox_logs_snapshot is an empty array"
+      fi
+    elif [ -n "$LOGS_SNAPSHOT" ]; then
+      # The field is a JSON string that needs to be parsed
+      PARSED_LOGS=$(echo "$LOGS_SNAPSHOT" | jq -r '.' 2>/dev/null || echo "")
+      if echo "$PARSED_LOGS" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
+        LOG_COUNT=$(echo "$PARSED_LOGS" | jq 'length' 2>/dev/null || echo "0")
+        pass "sandbox_logs_snapshot persisted ($LOG_COUNT log entries)"
+      else
+        fail "sandbox_logs_snapshot present but not a valid JSON array"
+      fi
+    else
+      fail "sandbox_logs_snapshot is null or missing after session stop"
+    fi
+
+    # 7b. sandbox_policy_snapshot should be a non-null JSON object with version, status, policy
+    POLICY_SNAPSHOT=$(echo "$SESSION_JSON" | jq -r '.sandbox_policy_snapshot // empty' 2>/dev/null || echo "")
+    if [ -n "$POLICY_SNAPSHOT" ]; then
+      # Parse (may be a JSON string or already an object)
+      PARSED_POLICY="$POLICY_SNAPSHOT"
+      if ! echo "$PARSED_POLICY" | jq -e '.policy' >/dev/null 2>&1; then
+        PARSED_POLICY=$(echo "$POLICY_SNAPSHOT" | jq -r '.' 2>/dev/null || echo "")
+      fi
+
+      if echo "$PARSED_POLICY" | jq -e '.policy' >/dev/null 2>&1; then
+        pass "sandbox_policy_snapshot persisted with policy object"
+      else
+        fail "sandbox_policy_snapshot missing 'policy' field"
+      fi
+
+      SNAP_VERSION=$(echo "$PARSED_POLICY" | jq -r '.version // empty' 2>/dev/null || echo "")
+      if [ -n "$SNAP_VERSION" ]; then
+        pass "sandbox_policy_snapshot includes version ($SNAP_VERSION)"
+      else
+        fail "sandbox_policy_snapshot missing version field"
+      fi
+
+      SNAP_STATUS=$(echo "$PARSED_POLICY" | jq -r '.status // empty' 2>/dev/null || echo "")
+      if [ -n "$SNAP_STATUS" ]; then
+        pass "sandbox_policy_snapshot includes status ($SNAP_STATUS)"
+      else
+        fail "sandbox_policy_snapshot missing status field"
+      fi
+    else
+      fail "sandbox_policy_snapshot is null or missing after session stop"
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # Cleanup: delete test sessions
 # ---------------------------------------------------------------------------
 

@@ -62,9 +62,12 @@ export function SandboxPolicyTab({ session }: { session: DomainSession }) {
   )
   const [copied, setCopied] = useState(false)
 
+  const effectivePolicy = policyResponse ?? session.sandboxPolicySnapshot
+  const isHistorical = !isActive && !policyResponse && session.sandboxPolicySnapshot !== null
+
   const policyYaml = useMemo(
-    () => (policyResponse ? toYaml(policyResponse.policy) : ''),
-    [policyResponse],
+    () => (effectivePolicy ? toYaml(effectivePolicy.policy) : ''),
+    [effectivePolicy],
   )
 
   const handleCopy = useCallback(async () => {
@@ -74,7 +77,7 @@ export function SandboxPolicyTab({ session }: { session: DomainSession }) {
     setTimeout(() => setCopied(false), 2000)
   }, [policyYaml])
 
-  if (!isActive && !policyResponse) {
+  if (!isActive && !effectivePolicy) {
     return (
       <div className="pt-4">
         <p className="text-sm text-muted-foreground">
@@ -103,7 +106,7 @@ export function SandboxPolicyTab({ session }: { session: DomainSession }) {
     )
   }
 
-  if (!policyResponse) {
+  if (!effectivePolicy) {
     return (
       <div className="pt-4">
         <p className="text-sm text-muted-foreground">
@@ -119,31 +122,36 @@ export function SandboxPolicyTab({ session }: { session: DomainSession }) {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-medium">Policy Metadata</CardTitle>
-            <Badge variant="outline" className="text-xs">
-              {policyResponse.status}
-            </Badge>
+            <div className="flex items-center gap-2">
+              {isHistorical && (
+                <Badge variant="secondary" className="text-xs">Historical</Badge>
+              )}
+              <Badge variant="outline" className="text-xs">
+                {effectivePolicy.status}
+              </Badge>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
             <div>
               <dt className="text-muted-foreground text-xs">Version</dt>
-              <dd className="font-mono">{policyResponse.version}</dd>
+              <dd className="font-mono">{effectivePolicy.version}</dd>
             </div>
             <div>
               <dt className="text-muted-foreground text-xs">Source</dt>
-              <dd className="font-mono">{policyResponse.source}</dd>
+              <dd className="font-mono">{effectivePolicy.source}</dd>
             </div>
             <div>
               <dt className="text-muted-foreground text-xs">Hash</dt>
-              <dd className="font-mono truncate" title={policyResponse.hash}>
-                {policyResponse.hash.slice(0, 16)}...
+              <dd className="font-mono truncate" title={effectivePolicy.hash}>
+                {effectivePolicy.hash.slice(0, 16)}...
               </dd>
             </div>
             <div>
               <dt className="text-muted-foreground text-xs">Config Revision</dt>
-              <dd className="font-mono truncate" title={policyResponse.config_revision}>
-                {policyResponse.config_revision.slice(0, 16)}...
+              <dd className="font-mono truncate" title={effectivePolicy.config_revision}>
+                {effectivePolicy.config_revision.slice(0, 16)}...
               </dd>
             </div>
           </dl>

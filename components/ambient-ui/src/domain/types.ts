@@ -60,6 +60,8 @@ export type DomainSession = {
   reconciledRepos: DomainReconciledRepo[]
   conditions: DomainCondition[]
   kubeNamespace: string | null
+  sandboxLogsSnapshot: SandboxLogEntry[] | null
+  sandboxPolicySnapshot: SandboxPolicyResponse | null
 }
 
 export type DomainProject = {

@@ -5267,6 +5267,16 @@ components:
             format: date-time
             readOnly: true
             type: string
+          sandbox_logs_snapshot:
+            description: JSON array of sandbox log entries; last snapshot before sandbox
+              stop.
+            readOnly: true
+            type: string
+          sandbox_policy_snapshot:
+            description: JSON sandbox policy response; last snapshot before sandbox
+              stop.
+            readOnly: true
+            type: string
         required:
         - name
         type: object
@@ -5278,7 +5288,9 @@ components:
         source_scheduled_session_id: source_scheduled_session_id
         scheduled_for: 2000-01-23T04:56:07.000+00:00
         annotations: annotations
+        sandbox_logs_snapshot: sandbox_logs_snapshot
         reconciled_workflow: reconciled_workflow
+        sandbox_policy_snapshot: sandbox_policy_snapshot
         timeout: 5
         environment_variables: environment_variables
         kube_cr_uid: kube_cr_uid
@@ -5331,7 +5343,9 @@ components:
           source_scheduled_session_id: source_scheduled_session_id
           scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
+          sandbox_logs_snapshot: sandbox_logs_snapshot
           reconciled_workflow: reconciled_workflow
+          sandbox_policy_snapshot: sandbox_policy_snapshot
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
@@ -5369,7 +5383,9 @@ components:
           source_scheduled_session_id: source_scheduled_session_id
           scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
+          sandbox_logs_snapshot: sandbox_logs_snapshot
           reconciled_workflow: reconciled_workflow
+          sandbox_policy_snapshot: sandbox_policy_snapshot
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
@@ -5461,9 +5477,11 @@ components:
         completion_time: 2000-01-23T04:56:07.000+00:00
         sdk_restart_count: 0
         sdk_session_id: sdk_session_id
+        sandbox_logs_snapshot: sandbox_logs_snapshot
         conditions: conditions
         kube_namespace: kube_namespace
         reconciled_workflow: reconciled_workflow
+        sandbox_policy_snapshot: sandbox_policy_snapshot
         reconciled_repos: reconciled_repos
       properties:
         phase:
@@ -5487,6 +5505,10 @@ components:
         kube_cr_uid:
           type: string
         kube_namespace:
+          type: string
+        sandbox_logs_snapshot:
+          type: string
+        sandbox_policy_snapshot:
           type: string
       type: object
     Project:
@@ -6353,7 +6375,9 @@ components:
           source_scheduled_session_id: source_scheduled_session_id
           scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
+          sandbox_logs_snapshot: sandbox_logs_snapshot
           reconciled_workflow: reconciled_workflow
+          sandbox_policy_snapshot: sandbox_policy_snapshot
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
@@ -6391,7 +6415,9 @@ components:
           source_scheduled_session_id: source_scheduled_session_id
           scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
+          sandbox_logs_snapshot: sandbox_logs_snapshot
           reconciled_workflow: reconciled_workflow
+          sandbox_policy_snapshot: sandbox_policy_snapshot
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
@@ -6440,7 +6466,9 @@ components:
           source_scheduled_session_id: source_scheduled_session_id
           scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
+          sandbox_logs_snapshot: sandbox_logs_snapshot
           reconciled_workflow: reconciled_workflow
+          sandbox_policy_snapshot: sandbox_policy_snapshot
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid

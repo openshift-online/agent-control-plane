@@ -150,6 +150,8 @@ erDiagram
         string  conditions
         string  reconciled_repos
         string  reconciled_workflow
+        string  sandbox_logs_snapshot "nullable — JSON array of SandboxLogEntry; last snapshot before stop"
+        string  sandbox_policy_snapshot "nullable — JSON SandboxPolicyResponse; last snapshot before stop"
         time    created_at
         time    updated_at
         time    deleted_at
@@ -527,6 +529,15 @@ Session.prompt  → "Implement the session messages handler. Repo: github.com/..
 ```
 
 All four are assembled into the start context in that order. Pokes roll downhill.
+
+### Sandbox Snapshot Fields
+
+| Field | Type | Written by | Purpose |
+|-------|------|-----------|---------|
+| `sandbox_logs_snapshot` | TEXT (nullable) | CP `PodStatusSyncer` + pre-delete snapshot | JSON array of `SandboxLogEntry` — the last 500 log lines from the OpenShell gateway |
+| `sandbox_policy_snapshot` | TEXT (nullable) | CP `PodStatusSyncer` + pre-delete snapshot | JSON `SandboxPolicyResponse` envelope — the full effective sandbox policy |
+
+Both fields are **read-only from the API perspective** — they are set exclusively by the control plane via `UpdateStatus` patches. The CP writes them on every 15s sync cycle and as a final snapshot before sandbox deletion. The UI reads them to display historical sandbox data for terminal sessions (Stopped, Completed, Failed). See `openshell-sandbox-observability.spec.md` § Sandbox Log and Policy Persistence for full requirements.
 
 ---
 
