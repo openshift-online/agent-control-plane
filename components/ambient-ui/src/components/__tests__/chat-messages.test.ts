@@ -71,6 +71,19 @@ describe('deepUnwrapJson', () => {
     const arr = [1, 2, 3]
     expect(deepUnwrapJson(JSON.stringify(arr))).toBe(JSON.stringify(arr, null, 2))
   })
+
+  it('stops recursing at depth > 5 to prevent runaway unwrapping', () => {
+    // Build 7 levels of {result: ...} nesting — deeper than the depth=5 guard
+    let payload: unknown = 'inner value'
+    for (let i = 0; i < 7; i++) {
+      payload = JSON.stringify({ result: typeof payload === 'string' ? payload : JSON.stringify(payload) })
+    }
+    const result = deepUnwrapJson(payload as string)
+    // Should NOT reach "inner value" — the depth guard stops recursion early,
+    // leaving a partially-unwrapped {result} wrapper as pretty-printed JSON.
+    expect(result).not.toBe('inner value')
+    expect(result).toContain('result')
+  })
 })
 
 // ---- tryParseToolPayload ----

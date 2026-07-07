@@ -182,6 +182,75 @@ describe('LogsTab', () => {
     expect(screen.getByText('Command failed')).toBeInTheDocument()
   })
 
+  it('expands and collapses tool_use rows when clicked', async () => {
+    const messages = [
+      makeMessage({
+        id: 'msg-collapse',
+        eventType: 'tool_use',
+        payload: JSON.stringify({
+          tool: 'Bash',
+          arguments: { command: 'git status' },
+          tool_call_id: 'tc-collapse',
+        }),
+      }),
+    ]
+    const LogsTab = await loadWithMessages(messages)
+
+    render(<LogsTab session={makeSession()} />, { wrapper: createWrapper() })
+
+    // Collapsed by default — tool name visible, arguments hidden
+    const toolLabel = await screen.findByText('Bash')
+    expect(toolLabel).toBeInTheDocument()
+    expect(screen.queryByText('git status')).not.toBeInTheDocument()
+
+    // Expand
+    fireEvent.click(toolLabel)
+    expect(screen.getByText(/git status/)).toBeInTheDocument()
+
+    // Collapse again
+    fireEvent.click(toolLabel)
+    expect(screen.queryByText('git status')).not.toBeInTheDocument()
+  })
+
+  it('truncates tool_result to 4 lines with a Show more button', async () => {
+    const longResult = 'line 1\nline 2\nline 3\nline 4\nline 5\nline 6'
+    const messages = [
+      makeMessage({
+        id: 'msg-long-result',
+        eventType: 'tool_result',
+        payload: JSON.stringify({
+          tool_call_id: 'tc-long',
+          result: longResult,
+        }),
+      }),
+    ]
+    const LogsTab = await loadWithMessages(messages)
+
+    render(<LogsTab session={makeSession()} />, { wrapper: createWrapper() })
+
+    // Should show first 4 lines but not line 5/6
+    expect(await screen.findByText(/line 1/)).toBeInTheDocument()
+    expect(screen.getByText(/line 4/)).toBeInTheDocument()
+    expect(screen.queryByText(/line 5/)).not.toBeInTheDocument()
+
+    // "Show more" button should be present
+    const showMore = screen.getByText('Show more')
+    expect(showMore).toBeInTheDocument()
+
+    // Click to expand
+    fireEvent.click(showMore)
+    expect(screen.getByText(/line 5/)).toBeInTheDocument()
+    expect(screen.getByText(/line 6/)).toBeInTheDocument()
+
+    // "Show less" button should now be present
+    const showLess = screen.getByText('Show less')
+    expect(showLess).toBeInTheDocument()
+
+    // Collapse back
+    fireEvent.click(showLess)
+    expect(screen.queryByText(/line 5/)).not.toBeInTheDocument()
+  })
+
   it('shows "No events match" when all filters toggled off', async () => {
     const messages = [
       makeMessage({

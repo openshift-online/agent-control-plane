@@ -25,6 +25,8 @@ export const CHAT_EVENT_TYPES: ReadonlySet<SessionEventType> = new Set([
 
 // ---- Payload Parsing Helpers ----
 
+// Bounded unwrapping: max 5 recursive {result} wrappers × 10 iterative JSON.parse
+// layers = 50 parse calls worst-case. Both limits are well above real-world nesting.
 function unwrapNestedJson(value: unknown, depth = 0): unknown {
   if (depth > 5 || typeof value !== 'string') return value
 

@@ -37,10 +37,10 @@ function truncateToLines(text: string, maxLines: number): { text: string; trunca
   }
 }
 
-function formatToolResultPayload(message: DomainSessionMessage): string {
-  const parsed = tryParseToolResult(message.payload)
+function formatToolResultPayload(payload: string): string {
+  const parsed = tryParseToolResult(payload)
   if (parsed) return parsed.result
-  return tryFormatJson(message.payload)
+  return tryFormatJson(payload)
 }
 
 // ---- Collapsible row: collapsed by default, shows a title label ----
@@ -99,7 +99,7 @@ function ToolResultRow({
   isFollowingToolUse: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
-  const formattedPayload = useMemo(() => formatToolResultPayload(message), [message.payload])
+  const formattedPayload = useMemo(() => formatToolResultPayload(message.payload), [message.payload])
   const { text: truncatedText, truncated } = truncateToLines(formattedPayload, MAX_RESULT_LINES)
   const relativeTime = message.createdAt ? formatRelativeTime(message.createdAt) : '--'
 
