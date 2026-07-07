@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -246,6 +247,46 @@ func TestIsPrivateIP(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLimitedFS(t *testing.T) {
+	t.Run("under limit", func(t *testing.T) {
+		fs := newLimitedFS(memfs.New(), 1024)
+		err := billyutil.WriteFile(fs, "/small.txt", []byte("hello"), 0o644)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("exceeds limit", func(t *testing.T) {
+		fs := newLimitedFS(memfs.New(), 100)
+		data := make([]byte, 200)
+		f, err := fs.OpenFile("/big.txt", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+		if err != nil {
+			t.Fatalf("open: %v", err)
+		}
+		_, err = f.Write(data)
+		f.Close()
+		if err == nil {
+			t.Fatal("expected error when exceeding limit, got nil")
+		}
+		if err.Error() != errCloneTooLarge.Error() {
+			t.Errorf("got error %q, want %q", err, errCloneTooLarge)
+		}
+	})
+
+	t.Run("cumulative across files", func(t *testing.T) {
+		fs := newLimitedFS(memfs.New(), 100)
+		f1, _ := fs.Create("/a.txt")
+		f1.Write(make([]byte, 60))
+		f1.Close()
+		f2, _ := fs.Create("/b.txt")
+		_, err := f2.Write(make([]byte, 60))
+		f2.Close()
+		if err == nil {
+			t.Fatal("expected error when cumulative writes exceed limit, got nil")
+		}
+	})
 }
 
 func TestTarFilesystemCancellation(t *testing.T) {

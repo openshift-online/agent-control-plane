@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	pb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
@@ -233,6 +234,48 @@ func isPrivateIP(ip net.IP) bool {
 	return false
 }
 
+const maxCloneBytes = 1 << 30 // 1 GiB working tree limit
+
+type limitedFS struct {
+	billy.Filesystem
+	used  atomic.Int64
+	limit int64
+}
+
+func newLimitedFS(fs billy.Filesystem, limit int64) *limitedFS {
+	return &limitedFS{Filesystem: fs, limit: limit}
+}
+
+func (l *limitedFS) Create(filename string) (billy.File, error) {
+	f, err := l.Filesystem.Create(filename)
+	if err != nil {
+		return nil, err
+	}
+	return &limitedFile{File: f, fs: l}, nil
+}
+
+func (l *limitedFS) OpenFile(filename string, flag int, perm os.FileMode) (billy.File, error) {
+	f, err := l.Filesystem.OpenFile(filename, flag, perm)
+	if err != nil {
+		return nil, err
+	}
+	return &limitedFile{File: f, fs: l}, nil
+}
+
+var errCloneTooLarge = fmt.Errorf("repository working tree exceeds %d bytes", maxCloneBytes)
+
+type limitedFile struct {
+	billy.File
+	fs *limitedFS
+}
+
+func (f *limitedFile) Write(p []byte) (int, error) {
+	if f.fs.used.Add(int64(len(p))) > f.fs.limit {
+		return 0, errCloneTooLarge
+	}
+	return f.File.Write(p)
+}
+
 func cloneRepoFS(ctx context.Context, repoURL, ref string) (billy.Filesystem, error) {
 	if err := validateRepoURL(repoURL); err != nil {
 		return nil, err
@@ -248,17 +291,34 @@ func cloneRepoFS(ctx context.Context, repoURL, ref string) (billy.Filesystem, er
 		cloneOpts.SingleBranch = true
 	}
 
-	wt := memfs.New()
+	wt := newLimitedFS(memfs.New(), maxCloneBytes)
 	_, err := git.CloneContext(ctx, memory.NewStorage(), wt, cloneOpts)
 	if err != nil && ref != "" {
 		// Branch ref failed — retry as tag
-		wt = memfs.New()
+		wt = newLimitedFS(memfs.New(), maxCloneBytes)
 		cloneOpts.ReferenceName = plumbing.NewTagReferenceName(ref)
-		_, err = git.CloneContext(ctx, memory.NewStorage(), wt, cloneOpts)
+		repo, tagErr := git.CloneContext(ctx, memory.NewStorage(), wt, cloneOpts)
 
-		if err != nil && isHexSHA(ref) {
-			return nil, fmt.Errorf("direct SHA refs are not supported; use a branch or tag name")
+		if tagErr != nil && isHexSHA(ref) {
+			// Tag ref also failed and ref looks like a SHA — full clone + checkout
+			wt = newLimitedFS(memfs.New(), maxCloneBytes)
+			cloneOpts.ReferenceName = ""
+			cloneOpts.SingleBranch = false
+			cloneOpts.Depth = 0
+			repo, tagErr = git.CloneContext(ctx, memory.NewStorage(), wt, cloneOpts)
+			if tagErr == nil {
+				w, wtErr := repo.Worktree()
+				if wtErr != nil {
+					return nil, fmt.Errorf("get worktree: %w", wtErr)
+				}
+				if checkoutErr := w.Checkout(&git.CheckoutOptions{
+					Hash: plumbing.NewHash(ref),
+				}); checkoutErr != nil {
+					return nil, fmt.Errorf("checkout ref %q: %w", ref, checkoutErr)
+				}
+			}
 		}
+		err = tagErr
 	}
 
 	if err != nil {
