@@ -6,7 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell"
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	"github.com/rs/zerolog"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -417,5 +419,136 @@ func TestUseMCPSidecar_GatewayModeDisablesMCP(t *testing.T) {
 				t.Errorf("useMCPSidecar = %v, want %v", useMCPSidecar, tt.expectedUseMCP)
 			}
 		})
+	}
+}
+
+func TestConvertPayloads(t *testing.T) {
+	logger := zerolog.Nop()
+
+	tests := []struct {
+		name        string
+		payloads    []types.Payload
+		wantCount   int
+		wantHasRepo bool
+		wantPaths   []string
+	}{
+		{
+			name: "inline content only",
+			payloads: []types.Payload{
+				{SandboxPath: "/sandbox/file.txt", Content: "hello"},
+			},
+			wantCount:   1,
+			wantHasRepo: false,
+			wantPaths:   []string{"/sandbox/file.txt"},
+		},
+		{
+			name: "repo url only",
+			payloads: []types.Payload{
+				{SandboxPath: "/sandbox/workspace", RepoURL: "https://github.com/foo/bar.git", Ref: "main"},
+			},
+			wantCount:   1,
+			wantHasRepo: true,
+			wantPaths:   []string{"/sandbox/workspace"},
+		},
+		{
+			name: "mixed content and repo payloads",
+			payloads: []types.Payload{
+				{SandboxPath: "/sandbox/config.yaml", Content: "key: value"},
+				{SandboxPath: "/sandbox/src", RepoURL: "https://github.com/foo/bar.git"},
+			},
+			wantCount:   2,
+			wantHasRepo: true,
+			wantPaths:   []string{"/sandbox/config.yaml", "/sandbox/src"},
+		},
+		{
+			name: "both content and repo_url set — skipped",
+			payloads: []types.Payload{
+				{SandboxPath: "/sandbox/bad", Content: "inline", RepoURL: "https://github.com/foo/bar.git"},
+			},
+			wantCount:   0,
+			wantHasRepo: false,
+			wantPaths:   nil,
+		},
+		{
+			name: "empty sandbox_path — skipped",
+			payloads: []types.Payload{
+				{Content: "orphan"},
+			},
+			wantCount:   0,
+			wantHasRepo: false,
+			wantPaths:   nil,
+		},
+		{
+			name: "neither content nor repo_url — skipped",
+			payloads: []types.Payload{
+				{SandboxPath: "/sandbox/empty"},
+			},
+			wantCount:   0,
+			wantHasRepo: false,
+			wantPaths:   nil,
+		},
+		{
+			name:        "empty list",
+			payloads:    nil,
+			wantCount:   0,
+			wantHasRepo: false,
+			wantPaths:   nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, hasRepo := convertPayloads(tt.payloads, logger, "test-sandbox")
+			if len(result) != tt.wantCount {
+				t.Errorf("got %d payloads, want %d", len(result), tt.wantCount)
+			}
+			if hasRepo != tt.wantHasRepo {
+				t.Errorf("hasRepo = %v, want %v", hasRepo, tt.wantHasRepo)
+			}
+			for i, p := range result {
+				if i < len(tt.wantPaths) && p.Path != tt.wantPaths[i] {
+					t.Errorf("payload[%d].Path = %q, want %q", i, p.Path, tt.wantPaths[i])
+				}
+			}
+		})
+	}
+}
+
+func TestConvertPayloads_RepoFieldsPreserved(t *testing.T) {
+	logger := zerolog.Nop()
+	payloads := []types.Payload{
+		{SandboxPath: "/sandbox/code", RepoURL: "https://github.com/org/repo.git", Ref: "v1.2.3"},
+	}
+	result, _ := convertPayloads(payloads, logger, "test-sandbox")
+	if len(result) != 1 {
+		t.Fatalf("expected 1 payload, got %d", len(result))
+	}
+	p := result[0]
+	if p.RepoURL != "https://github.com/org/repo.git" {
+		t.Errorf("RepoURL = %q, want %q", p.RepoURL, "https://github.com/org/repo.git")
+	}
+	if p.Ref != "v1.2.3" {
+		t.Errorf("Ref = %q, want %q", p.Ref, "v1.2.3")
+	}
+	if p.Content != "" {
+		t.Errorf("Content should be empty for repo payload, got %q", p.Content)
+	}
+}
+
+// Verify the Payload struct fields are properly available
+func TestPayloadStructFields(t *testing.T) {
+	p := openshell.Payload{
+		Path:    "/sandbox/workspace",
+		RepoURL: "https://github.com/test/repo.git",
+		Ref:     "main",
+	}
+	if p.Path != "/sandbox/workspace" {
+		t.Error("Path field not set")
+	}
+	if p.RepoURL != "https://github.com/test/repo.git" {
+		t.Error("RepoURL field not set")
+	}
+	if p.Ref != "main" {
+		t.Error("Ref field not set")
 	}
 }

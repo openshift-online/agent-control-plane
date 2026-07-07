@@ -1,10 +1,13 @@
 package openshell
 
 import (
+	"archive/tar"
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -12,6 +15,8 @@ import (
 	"time"
 
 	pb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
+	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -20,6 +25,8 @@ var validPayloadPath = regexp.MustCompile(`^/[a-zA-Z0-9/_.\-]+$`)
 type Payload struct {
 	Path    string
 	Content string
+	RepoURL string
+	Ref     string
 }
 
 func (g *GatewayClient) UploadPayloads(ctx context.Context, namespace string, sandboxID string, payloads []Payload) error {
@@ -85,8 +92,14 @@ func (g *GatewayClient) UploadPayloads(ctx context.Context, namespace string, sa
 	defer sshClient.Close()
 
 	for _, p := range payloads {
-		if err := writePayloadViaSSH(sshClient, p); err != nil {
-			return fmt.Errorf("write payload %s: %w", p.Path, err)
+		if p.RepoURL != "" {
+			if err := uploadRepoPayload(ctx, sshClient, p); err != nil {
+				return fmt.Errorf("upload repo payload %s: %w", p.Path, err)
+			}
+		} else {
+			if err := writePayloadViaSSH(sshClient, p); err != nil {
+				return fmt.Errorf("write payload %s: %w", p.Path, err)
+			}
 		}
 	}
 	return nil
@@ -144,6 +157,194 @@ func writePayloadViaSSH(client *ssh.Client, p Payload) error {
 		return fmt.Errorf("command failed: %w", err)
 	}
 	return nil
+}
+
+func cloneRepo(ctx context.Context, repoURL, ref string) (string, error) {
+	tmpDir, err := os.MkdirTemp("", "payload-clone-*")
+	if err != nil {
+		return "", fmt.Errorf("create temp dir: %w", err)
+	}
+
+	cloneOpts := &git.CloneOptions{
+		URL:   repoURL,
+		Depth: 1,
+	}
+
+	if ref != "" {
+		cloneOpts.ReferenceName = plumbing.NewBranchReferenceName(ref)
+		cloneOpts.SingleBranch = true
+	}
+
+	var mkErr error
+	repo, err := git.PlainCloneContext(ctx, tmpDir, false, cloneOpts)
+	if err != nil && ref != "" {
+		// Branch ref failed — clean up and retry as tag
+		os.RemoveAll(tmpDir)
+		tmpDir, mkErr = os.MkdirTemp("", "payload-clone-*")
+		if mkErr != nil {
+			return "", fmt.Errorf("create temp dir for tag retry: %w", mkErr)
+		}
+		cloneOpts.ReferenceName = plumbing.NewTagReferenceName(ref)
+		repo, err = git.PlainCloneContext(ctx, tmpDir, false, cloneOpts)
+
+		if err != nil && isHexSHA(ref) {
+			// Tag ref also failed and ref looks like a SHA — full clone + checkout
+			os.RemoveAll(tmpDir)
+			tmpDir, mkErr = os.MkdirTemp("", "payload-clone-*")
+			if mkErr != nil {
+				return "", fmt.Errorf("create temp dir for SHA retry: %w", mkErr)
+			}
+			cloneOpts.ReferenceName = ""
+			cloneOpts.SingleBranch = false
+			cloneOpts.Depth = 0
+			repo, err = git.PlainCloneContext(ctx, tmpDir, false, cloneOpts)
+			if err == nil {
+				wt, wtErr := repo.Worktree()
+				if wtErr != nil {
+					os.RemoveAll(tmpDir)
+					return "", fmt.Errorf("get worktree: %w", wtErr)
+				}
+				if checkoutErr := wt.Checkout(&git.CheckoutOptions{
+					Hash: plumbing.NewHash(ref),
+				}); checkoutErr != nil {
+					os.RemoveAll(tmpDir)
+					return "", fmt.Errorf("checkout ref %q: %w", ref, checkoutErr)
+				}
+			}
+		}
+	}
+
+	if err != nil {
+		os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("clone %q (ref=%q): %w", repoURL, ref, err)
+	}
+
+	_ = repo
+	return tmpDir, nil
+}
+
+func isHexSHA(s string) bool {
+	if len(s) != 40 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+func tarDirectory(dir string) io.Reader {
+	pr, pw := io.Pipe()
+	go func() {
+		tw := tar.NewWriter(pw)
+		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			relPath, err := filepath.Rel(dir, path)
+			if err != nil {
+				return err
+			}
+			if relPath == "." {
+				return nil
+			}
+			// Skip .git directory
+			if d.IsDir() && d.Name() == ".git" {
+				return filepath.SkipDir
+			}
+
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
+
+			header, err := tar.FileInfoHeader(info, "")
+			if err != nil {
+				return err
+			}
+			header.Name = relPath
+
+			if info.Mode()&fs.ModeSymlink != 0 {
+				target, err := os.Readlink(path)
+				if err != nil {
+					return err
+				}
+				header.Linkname = target
+			}
+
+			if err := tw.WriteHeader(header); err != nil {
+				return err
+			}
+
+			if !d.IsDir() && info.Mode().IsRegular() {
+				f, err := os.Open(path)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+				if _, err := io.Copy(tw, f); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		tw.Close()
+		pw.CloseWithError(err)
+	}()
+	return pr
+}
+
+func writeRepoPayloadViaSSH(client *ssh.Client, targetPath string, tarReader io.Reader) error {
+	if err := validatePayloadPath(targetPath); err != nil {
+		return fmt.Errorf("invalid payload path: %w", err)
+	}
+
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("open SSH session: %w", err)
+	}
+	defer session.Close()
+
+	cmd := fmt.Sprintf("mkdir -p '%s' && tar xf - -C '%s'", targetPath, targetPath)
+
+	stdin, err := session.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("stdin pipe: %w", err)
+	}
+
+	var stderrBuf strings.Builder
+	session.Stderr = &stderrBuf
+
+	if err := session.Start(cmd); err != nil {
+		return fmt.Errorf("start command: %w", err)
+	}
+
+	if _, err := io.Copy(stdin, tarReader); err != nil {
+		return fmt.Errorf("stream tar content: %w", err)
+	}
+	stdin.Close()
+
+	if err := session.Wait(); err != nil {
+		stderr := strings.TrimSpace(stderrBuf.String())
+		if stderr != "" {
+			return fmt.Errorf("tar extraction failed (stderr: %s): %w", stderr, err)
+		}
+		return fmt.Errorf("tar extraction failed: %w", err)
+	}
+	return nil
+}
+
+func uploadRepoPayload(ctx context.Context, client *ssh.Client, p Payload) error {
+	tmpDir, err := cloneRepo(ctx, p.RepoURL, p.Ref)
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	tarReader := tarDirectory(tmpDir)
+	return writeRepoPayloadViaSSH(client, p.Path, tarReader)
 }
 
 type grpcConn struct {

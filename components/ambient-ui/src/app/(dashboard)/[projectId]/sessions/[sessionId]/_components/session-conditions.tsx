@@ -8,6 +8,7 @@ import type { DomainCondition } from '@/domain/types'
 const CONDITION_TITLES: Record<string, string> = {
   SetupFailed: 'Setup Failed',
   StartupFailed: 'Startup Failed',
+  SandboxFailure: 'Sandbox Failed',
   Error: 'Error',
   OOMKilled: 'Out of Memory',
 }
