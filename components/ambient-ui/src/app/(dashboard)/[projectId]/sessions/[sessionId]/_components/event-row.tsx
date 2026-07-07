@@ -55,6 +55,7 @@ function CollapsibleRow({
   const [expanded, setExpanded] = useState(false)
   const formattedPayload = useMemo(() => tryFormatJson(message.payload), [message.payload])
   const relativeTime = message.createdAt ? formatRelativeTime(message.createdAt) : '--'
+  const contentId = `collapsible-${message.id}`
 
   return (
     <article
@@ -71,6 +72,7 @@ function CollapsibleRow({
           className="flex items-center gap-1 text-xs font-mono font-medium text-foreground hover:text-primary transition-colors"
           onClick={() => setExpanded(prev => !prev)}
           aria-expanded={expanded}
+          aria-controls={contentId}
         >
           {expanded ? (
             <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -80,7 +82,7 @@ function CollapsibleRow({
           {label}
         </button>
         {expanded && (
-          <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs text-foreground">
+          <pre id={contentId} className="mt-1 whitespace-pre-wrap break-words font-mono text-xs text-foreground">
             {formattedPayload}
           </pre>
         )}
@@ -188,9 +190,15 @@ type EventRowProps = {
 }
 
 export function EventRow({ message, isToolResultFollowingToolUse }: EventRowProps) {
+  const toolLabel = useMemo(
+    () => message.eventType === 'tool_use'
+      ? tryParseToolPayload(message.payload)?.name ?? 'Unknown Tool'
+      : null,
+    [message.eventType, message.payload],
+  )
+
   if (message.eventType === 'tool_use') {
-    const toolPayload = tryParseToolPayload(message.payload)
-    return <CollapsibleRow message={message} label={toolPayload?.name ?? 'Unknown Tool'} />
+    return <CollapsibleRow message={message} label={toolLabel ?? 'Unknown Tool'} />
   }
   if (message.eventType === 'system') {
     return <CollapsibleRow message={message} label="System" />

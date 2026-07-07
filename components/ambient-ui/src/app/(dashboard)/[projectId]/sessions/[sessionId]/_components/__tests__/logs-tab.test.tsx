@@ -251,6 +251,21 @@ describe('LogsTab', () => {
     expect(screen.queryByText(/line 5/)).not.toBeInTheDocument()
   })
 
+  it('shows "Unknown Tool" when tool_use payload is not parseable', async () => {
+    const messages = [
+      makeMessage({
+        id: 'msg-bad-tool',
+        eventType: 'tool_use',
+        payload: 'not valid json',
+      }),
+    ]
+    const LogsTab = await loadWithMessages(messages)
+
+    render(<LogsTab session={makeSession()} />, { wrapper: createWrapper() })
+
+    expect(await screen.findByText('Unknown Tool')).toBeInTheDocument()
+  })
+
   it('shows "No events match" when all filters toggled off', async () => {
     const messages = [
       makeMessage({
