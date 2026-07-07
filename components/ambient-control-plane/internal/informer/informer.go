@@ -132,14 +132,14 @@ func (inf *Informer) RegisterHandler(resource string, handler EventHandler) {
 }
 
 func (inf *Informer) Run(ctx context.Context) error {
+	go inf.dispatchLoop(ctx)
+	go inf.retryLoop(ctx)
+
 	inf.logger.Info().Msg("performing initial list sync")
 
 	if err := inf.initialSync(ctx); err != nil {
 		inf.logger.Warn().Err(err).Msg("initial sync failed, will rely on watch events")
 	}
-
-	go inf.dispatchLoop(ctx)
-	go inf.retryLoop(ctx)
 
 	inf.wireWatchHandlers()
 
