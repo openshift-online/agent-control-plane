@@ -94,3 +94,11 @@ configMapGenerator:
   - ambient-code-realm.json=keycloak-realm.json
   options:
     disableNameSuffixHash: true
+- name: keycloak-acp-theme
+  files:
+  - theme.properties=keycloak-theme/theme.properties
+  - login.css=keycloak-theme/login.css
+  - acp-logo.svg=keycloak-theme/acp-logo.svg
+  - messages_en.properties=keycloak-theme/messages_en.properties
+  options:
+    disableNameSuffixHash: true
