@@ -393,6 +393,14 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		},
 	}
 
+	if mlflowRule := openshell.MLflowNetworkPolicy(env["MLFLOW_TRACKING_URI"]); mlflowRule != nil {
+		req.Spec.Policy = &sandboxpb.SandboxPolicy{
+			NetworkPolicies: map[string]*sandboxpb.NetworkPolicyRule{
+				"mlflow_tracking": mlflowRule,
+			},
+		}
+	}
+
 	if _, err := r.gateway.CreateSandbox(ctx, namespace, req); err != nil {
 		return fmt.Errorf("creating sandbox %s: %w", sbxName, err)
 	}

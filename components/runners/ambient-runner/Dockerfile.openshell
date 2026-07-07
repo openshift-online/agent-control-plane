@@ -32,6 +32,15 @@ RUN dnf install -y --allowerasing --nodocs \
         procps-ng \
     && dnf clean all
 
+# Red Hat IT Root CA (internal builds only — required for MLflow tracking servers
+# on Red Hat infrastructure that use certificates signed by this CA)
+ARG INTERNAL_BUILD=false
+RUN if [ "$INTERNAL_BUILD" = "true" ]; then \
+        curl -fsSL -o /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem \
+            https://certs.corp.redhat.com/certs/2022-IT-Root-CA.pem \
+        && update-ca-trust; \
+    fi
+
 # Create supervisor and sandbox users/groups
 RUN groupadd -r supervisor && useradd -r -g supervisor -s /usr/sbin/nologin supervisor && \
     groupadd -r sandbox && useradd -r -g sandbox -d /sandbox -s /bin/bash sandbox

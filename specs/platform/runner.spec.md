@@ -169,6 +169,10 @@ bridge._setup_platform():
   4. resolve_workspace_paths(context)        ← CWD: workflow / multi-repo / artifacts
   5. setup_workspace(context)                ← log workspace state
   6. ObservabilityManager init               ← Langfuse (best-effort, no-op on failure)
+  6a. MLflow autologging activation           ← if MLFLOW_TRACKING_URI + MLFLOW_TRACKING_TOKEN + MLFLOW_EXPERIMENT_NAME all set:
+                                                 mlflow.set_tracking_uri(), mlflow.set_experiment(), mlflow.anthropic.autolog()
+                                                 Best-effort: log warning on failure, continue without tracing
+                                                 If MLFLOW_REQUIRED=true and any env var missing: fail startup
   7. build_mcp_servers(context, cwd_path)    ← external + platform MCP servers
   8. build_sdk_system_prompt(...)            ← preset + workspace context string
 ```
@@ -476,6 +480,10 @@ All env vars are injected by the CP at pod creation time.
 | `AGUI_TOKEN` | Session-scoped bearer token; when set, all non-health endpoints require `X-Ambient-Session-Token` header (constant-time comparison) |
 | `PAYLOAD_MCP_CONFIG_FILE` | Path to payload `.mcp.json` (default `/sandbox/.mcp.json`); merged on top of baked-in MCP config |
 | `SDK_OPTIONS` | JSON string of additional Claude SDK options |
+| `MLFLOW_TRACKING_URI` | MLflow tracking server URL (HTTPS); injected via `mlflow` credential provider |
+| `MLFLOW_TRACKING_TOKEN` | MLflow tracking server auth token (secret — must not appear in logs) |
+| `MLFLOW_EXPERIMENT_NAME` | MLflow experiment name for trace logging |
+| `MLFLOW_REQUIRED` | When `true`, sandbox fails to start if any MLflow env var is missing |
 
 ---
 

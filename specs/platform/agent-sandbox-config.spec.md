@@ -185,6 +185,7 @@ When the control plane creates OpenShell providers on the gateway, it maps ACP c
 | `google` | `generic` |
 | `vertex` | `google-vertex-ai` |
 | `kubeconfig` | `generic` |
+| `mlflow` | `generic` |
 
 Credential types not in this table are mapped to `generic`. The mapping may be extended as new credential types are added.
 

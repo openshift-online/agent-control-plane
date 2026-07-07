@@ -1,7 +1,7 @@
 # MLflow Tracing
 
 **Date:** 2026-07-01
-**Status:** Proposed
+**Status:** Partially Implemented
 **Related:** `runner.spec.md` — runner lifecycle and observability; `credential-binding.spec.md` — credential resolution hierarchy; `openshell-sandbox-provisioning.spec.md` — gateway credential providers and provider type mapping; `agent-sandbox-config.spec.md` — agent sandbox provider declarations
 
 ---
@@ -256,3 +256,10 @@ When operating in gateway mode with MLflow tracing enabled, the sandbox OPA netw
 | `openshell-sandbox-provisioning.spec.md` | Add `mlflow` → `generic` to the provider type mapping table |
 | `agent-sandbox-config.spec.md` | Add `mlflow` → `generic` to the provider type mapping table |
 | `runner.spec.md` | Add `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_TOKEN`, `MLFLOW_EXPERIMENT_NAME` to the environment variables table; document autologging activation in the startup sequence |
+
+### TODO — not yet implemented
+
+| Requirement | Reason |
+|-------------|--------|
+| Domain allowlist for `MLFLOW_TRACKING_URI` validation (§ Malformed MLFLOW_TRACKING_URI rejected at bind time, § MLFLOW_TRACKING_URI validated against domain allowlist) | Net-new API server capability — requires a configurable allowlist mechanism and HTTP 400 validation at credential-bind time; no existing pattern to extend |
+| Token regex redaction for `MLFLOW_TRACKING_TOKEN` (§ Tracing Token Security) | Requires a runner-wide regex redaction filter capable of matching arbitrary multi-part/base64-encoded JWT tokens in logs, error messages, and API responses; no existing redaction infrastructure to extend |

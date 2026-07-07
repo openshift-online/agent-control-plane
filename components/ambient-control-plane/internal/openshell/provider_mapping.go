@@ -3,6 +3,10 @@ package openshell
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strconv"
+
+	sandboxpb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/sandbox/v1"
 )
 
 var providerTypeMapping = map[string]string{
@@ -25,6 +29,7 @@ var providerTypeMapping = map[string]string{
 	"jira":       "generic",
 	"google":     "generic",
 	"kubeconfig": "generic",
+	"mlflow":     "generic",
 }
 
 func KnownAmbientProviderTypes() []string {
@@ -215,6 +220,36 @@ func ExtractOAuth2RefreshMaterial(credJSON string) (*OAuth2RefreshMaterial, erro
 		TokenURI:     tokenURI,
 		Account:      parsed.Account,
 	}, nil
+}
+
+// MLflowNetworkPolicy builds a NetworkPolicyRule for the MLflow tracking
+// server, parsed from trackingURI. Returns nil if the URI is empty or invalid.
+func MLflowNetworkPolicy(trackingURI string) *sandboxpb.NetworkPolicyRule {
+	if trackingURI == "" {
+		return nil
+	}
+	u, err := url.Parse(trackingURI)
+	if err != nil || u.Host == "" {
+		return nil
+	}
+	host := u.Hostname()
+	port := uint32(443)
+	if p := u.Port(); p != "" {
+		if n, err := strconv.ParseUint(p, 10, 32); err == nil {
+			port = uint32(n)
+		}
+	}
+	return &sandboxpb.NetworkPolicyRule{
+		Name: "mlflow-tracking",
+		Endpoints: []*sandboxpb.NetworkEndpoint{
+			{Host: host, Port: port},
+		},
+		Binaries: []*sandboxpb.NetworkBinary{
+			{Path: "/sandbox/.venv/bin/python"},
+			{Path: "/sandbox/.venv/bin/python3"},
+			{Path: "/sandbox/.venv/bin/uvicorn"},
+		},
+	}
 }
 
 func ProviderConfig(ambientProvider, vertexProjectID, vertexRegion string) map[string]string {

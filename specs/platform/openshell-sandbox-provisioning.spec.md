@@ -245,6 +245,7 @@ The `google-vertex-ai` provider type requires gateway-managed token refresh so t
 | `google` | `generic` |
 | `vertex` | `google-vertex-ai` |
 | `kubeconfig` | `generic` |
+| `mlflow` | `generic` |
 | (unknown) | `generic` |
 
 ### Requirement: Providers V2 Enablement
