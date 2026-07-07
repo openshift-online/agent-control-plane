@@ -1,6 +1,6 @@
 /* ACP Keycloak Login Theme — matches ambient-ui dark palette */
 
-/* Import Red Hat Text to match the main UI */
+/* Red Hat Text from Google Fonts — requires network access; falls back to system-ui offline */
 @import url('https://fonts.googleapis.com/css2?family=Red+Hat+Text:wght@400;500;600;700&display=swap');
 
 /* Page background — true gray with subtle dot texture */
@@ -27,7 +27,7 @@ html.pf-v5-theme-dark .pf-v5-c-login {
   grid-template-areas: none !important;
 }
 
-/* Header — hide raw text from kc-header-wrapper, use pseudo-elements */
+/* Header — hide raw text from kc-header-wrapper (Keycloak 26.0 / PF5 DOM) */
 #kc-header-wrapper {
   font-size: 0 !important;
   line-height: 0 !important;
@@ -51,25 +51,26 @@ html.pf-v5-theme-dark .pf-v5-c-login {
 }
 
 .pf-v5-c-login__header::before {
-  content: "" !important;
-  display: block !important;
-  width: 88px !important;
-  height: 88px !important;
-  background-image: url("../img/acp-logo.svg") !important;
-  background-size: contain !important;
-  background-repeat: no-repeat !important;
-  background-position: center !important;
-  margin-bottom: 0.5rem !important;
+  content: "";
+  display: block;
+  width: 88px;
+  height: 88px;
+  background-image: url("../img/acp-logo.svg");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  margin-bottom: 0.5rem;
 }
 
+/* Title must match messages_en.properties:loginTitleHtml */
 .pf-v5-c-login__header::after {
-  content: "Agent Control Plane" !important;
-  display: block !important;
-  color: #f2f2f2 !important;
-  font-size: 1.75rem !important;
-  font-weight: 600 !important;
-  font-family: 'Red Hat Text', system-ui, -apple-system, sans-serif !important;
-  letter-spacing: 0.01em !important;
+  content: "Agent Control Plane";
+  display: block;
+  color: #f2f2f2;
+  font-size: 1.75rem;
+  font-weight: 600;
+  font-family: 'Red Hat Text', system-ui, -apple-system, sans-serif;
+  letter-spacing: 0.01em;
 }
 
 /* Login card — centered with explicit margin auto */
@@ -87,11 +88,11 @@ html.pf-v5-theme-dark .pf-v5-c-login {
 }
 
 .pf-v5-c-login__main-body {
-  background-color: transparent !important;
+  background-color: transparent;
 }
 
 .pf-v5-c-login__main-header {
-  background-color: transparent !important;
+  background-color: transparent;
 }
 
 /* "Sign in to your account" heading */
@@ -111,21 +112,21 @@ h1.pf-v5-c-title.pf-m-3xl,
   font-family: 'Red Hat Text', system-ui, -apple-system, sans-serif !important;
 }
 
-/* Form inputs */
+/* Form inputs — CSS custom properties cascade naturally on same selector */
 .pf-v5-c-form-control {
-  --pf-v5-c-form-control--BorderTopColor: #383838 !important;
-  --pf-v5-c-form-control--BorderRightColor: #383838 !important;
-  --pf-v5-c-form-control--BorderBottomColor: #383838 !important;
-  --pf-v5-c-form-control--BorderLeftColor: #383838 !important;
-  --pf-v5-c-form-control--hover--BorderBottomColor: #f56e6e !important;
-  --pf-v5-c-form-control--focus--BorderBottomColor: #f56e6e !important;
-  --pf-v5-c-form-control--m-expanded--BorderBottomColor: #f56e6e !important;
-  --pf-v5-c-form-control--BackgroundColor: #292929 !important;
-  --pf-v5-c-form-control--Color: #f2f2f2 !important;
-  --pf-v5-c-form-control--OutlineOffset: 0 !important;
-  --pf-v5-c-form-control--after--BorderBottomColor: #383838 !important;
-  --pf-v5-c-form-control--hover__after--BorderBottomColor: #f56e6e !important;
-  --pf-v5-c-form-control--focus__after--BorderBottomColor: #f56e6e !important;
+  --pf-v5-c-form-control--BorderTopColor: #383838;
+  --pf-v5-c-form-control--BorderRightColor: #383838;
+  --pf-v5-c-form-control--BorderBottomColor: #383838;
+  --pf-v5-c-form-control--BorderLeftColor: #383838;
+  --pf-v5-c-form-control--hover--BorderBottomColor: #f56e6e;
+  --pf-v5-c-form-control--focus--BorderBottomColor: #f56e6e;
+  --pf-v5-c-form-control--m-expanded--BorderBottomColor: #f56e6e;
+  --pf-v5-c-form-control--BackgroundColor: #292929;
+  --pf-v5-c-form-control--Color: #f2f2f2;
+  --pf-v5-c-form-control--OutlineOffset: 0;
+  --pf-v5-c-form-control--after--BorderBottomColor: #383838;
+  --pf-v5-c-form-control--hover__after--BorderBottomColor: #f56e6e;
+  --pf-v5-c-form-control--focus__after--BorderBottomColor: #f56e6e;
   background-color: #292929 !important;
   border-color: #383838 !important;
   color: #f2f2f2 !important;
@@ -138,7 +139,7 @@ h1.pf-v5-c-title.pf-m-3xl,
 
 .pf-v5-c-form-control::after {
   border-bottom-color: #383838 !important;
-  transition: border-bottom-color 0.2s ease !important;
+  transition: border-bottom-color 0.2s ease;
 }
 
 .pf-v5-c-form-control:hover::after,
@@ -160,10 +161,10 @@ h1.pf-v5-c-title.pf-m-3xl,
 
 /* Primary button — ACP dark primary (orange-red) */
 .pf-v5-c-button.pf-m-primary {
-  --pf-v5-c-button--m-primary--BackgroundColor: #f56e6e !important;
-  --pf-v5-c-button--m-primary--hover--BackgroundColor: #e05555 !important;
-  --pf-v5-c-button--m-primary--focus--BackgroundColor: #e05555 !important;
-  --pf-v5-c-button--m-primary--active--BackgroundColor: #e05555 !important;
+  --pf-v5-c-button--m-primary--BackgroundColor: #f56e6e;
+  --pf-v5-c-button--m-primary--hover--BackgroundColor: #e05555;
+  --pf-v5-c-button--m-primary--focus--BackgroundColor: #e05555;
+  --pf-v5-c-button--m-primary--active--BackgroundColor: #e05555;
   background-color: #f56e6e !important;
   border-color: #f56e6e !important;
   color: #151515 !important;
@@ -179,24 +180,24 @@ h1.pf-v5-c-title.pf-m-3xl,
 
 /* Password visibility toggle — orange-red on hover */
 .pf-v5-c-button.pf-m-control {
-  --pf-v5-c-button--m-control--BackgroundColor: #292929 !important;
-  --pf-v5-c-button--m-control--hover--BackgroundColor: #292929 !important;
-  --pf-v5-c-button--m-control--focus--BackgroundColor: #292929 !important;
-  --pf-v5-c-button--m-control--active--BackgroundColor: #292929 !important;
-  --pf-v5-c-button--m-control--BorderColor: #383838 !important;
-  --pf-v5-c-button--m-control--after--BorderBottomColor: #383838 !important;
-  --pf-v5-c-button--m-control--hover--after--BorderBottomColor: #f56e6e !important;
-  --pf-v5-c-button--m-control--focus--after--BorderBottomColor: #f56e6e !important;
-  --pf-v5-c-button--m-control--active--after--BorderBottomColor: #f56e6e !important;
+  --pf-v5-c-button--m-control--BackgroundColor: #292929;
+  --pf-v5-c-button--m-control--hover--BackgroundColor: #292929;
+  --pf-v5-c-button--m-control--focus--BackgroundColor: #292929;
+  --pf-v5-c-button--m-control--active--BackgroundColor: #292929;
+  --pf-v5-c-button--m-control--BorderColor: #383838;
+  --pf-v5-c-button--m-control--after--BorderBottomColor: #383838;
+  --pf-v5-c-button--m-control--hover--after--BorderBottomColor: #f56e6e;
+  --pf-v5-c-button--m-control--focus--after--BorderBottomColor: #f56e6e;
+  --pf-v5-c-button--m-control--active--after--BorderBottomColor: #f56e6e;
   background-color: #292929 !important;
   border-color: #383838 !important;
   color: #a3a3a3 !important;
-  transition: color 0.2s ease, border-color 0.2s ease !important;
+  transition: color 0.2s ease, border-color 0.2s ease;
 }
 
 .pf-v5-c-button.pf-m-control::after {
   border-bottom-color: #383838 !important;
-  transition: border-bottom-color 0.2s ease !important;
+  transition: border-bottom-color 0.2s ease;
 }
 
 .pf-v5-c-button.pf-m-control:hover::after,
@@ -222,7 +223,7 @@ h1.pf-v5-c-title.pf-m-3xl,
 .pf-v5-c-button.pf-m-control i,
 .pf-v5-c-button[data-password-toggle] i {
   color: #a3a3a3 !important;
-  transition: color 0.2s ease !important;
+  transition: color 0.2s ease;
 }
 
 .pf-v5-c-button.pf-m-control:hover i.fa-eye,
@@ -246,7 +247,7 @@ h1.pf-v5-c-title.pf-m-3xl,
 
 /* Footer */
 .pf-v5-c-login__main-footer {
-  background-color: transparent !important;
+  background-color: transparent;
 }
 
 /* Alert styling */
@@ -266,8 +267,8 @@ h1.pf-v5-c-title.pf-m-3xl,
 
 /* Page footer */
 .pf-v5-c-login__footer {
-  text-align: center !important;
-  color: #a3a3a3 !important;
-  margin-top: 1.5rem !important;
+  text-align: center;
+  color: #a3a3a3;
+  margin-top: 1.5rem;
   grid-area: unset !important;
 }
