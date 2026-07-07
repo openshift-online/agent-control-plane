@@ -652,6 +652,7 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			// Transition session from Creating → Running now that the
 			// sandbox is ready and we are about to exec the entrypoint.
 			runCtx, runCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer runCancel()
 			now := time.Now()
 			if _, phaseErr := sdk.Sessions().UpdateStatus(runCtx, sessionID, map[string]interface{}{
 				"phase":      PhaseRunning,
@@ -661,7 +662,6 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			} else {
 				r.logger.Info().Str("session_id", sessionID).Str("new_phase", PhaseRunning).Msg("session phase updated")
 			}
-			runCancel()
 
 			execCtx := context.Background()
 
