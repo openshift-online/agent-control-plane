@@ -3,6 +3,7 @@ import type { DomainSessionMessage } from '@/domain/types'
 import {
   tryParseToolPayload,
   tryParseToolResult,
+  deepUnwrapJson,
   filterEmptyMessages,
   groupChatItems,
   buildChatItems,
@@ -24,6 +25,48 @@ function makeMsg(
     ...overrides,
   }
 }
+
+// ---- deepUnwrapJson ----
+
+describe('deepUnwrapJson', () => {
+  it('returns plain text as-is', () => {
+    expect(deepUnwrapJson('hello world')).toBe('hello world')
+  })
+
+  it('pretty-prints a simple JSON object', () => {
+    const obj = { key: 'value' }
+    expect(deepUnwrapJson(JSON.stringify(obj))).toBe(JSON.stringify(obj, null, 2))
+  })
+
+  it('unwraps a double-stringified JSON object', () => {
+    const obj = { total: 5 }
+    const doubleEncoded = JSON.stringify(JSON.stringify(obj))
+    expect(deepUnwrapJson(doubleEncoded)).toBe(JSON.stringify(obj, null, 2))
+  })
+
+  it('unwraps a {result: "..."} wrapper from MCP tool responses', () => {
+    const innerData = { total: -1, issues: [{ id: '123', key: 'PROJ-1' }] }
+    const wrapped = JSON.stringify({ result: JSON.stringify(innerData) })
+    expect(deepUnwrapJson(wrapped)).toBe(JSON.stringify(innerData, null, 2))
+  })
+
+  it('unwraps multiply-encoded results with nested {result} wrappers', () => {
+    const innerData = { total: -1, start_at: 0 }
+    const level1 = JSON.stringify(innerData)
+    const level2 = JSON.stringify({ result: level1 })
+    const level3 = JSON.stringify(level2)
+    expect(deepUnwrapJson(level3)).toBe(JSON.stringify(innerData, null, 2))
+  })
+
+  it('preserves {result} objects that have extra keys beyond tool_call_id', () => {
+    const obj = { result: 'data', extra: 'field' }
+    expect(deepUnwrapJson(JSON.stringify(obj))).toBe(JSON.stringify(obj, null, 2))
+  })
+
+  it('unwraps a JSON-encoded string value', () => {
+    expect(deepUnwrapJson('"just a string"')).toBe('just a string')
+  })
+})
 
 // ---- tryParseToolPayload ----
 
@@ -87,12 +130,25 @@ describe('tryParseToolResult', () => {
     expect(result!.toolCallId).toBe('tc-1')
   })
 
-  it('strips wrapping double-quotes from result', () => {
+  it('unwraps a double-quoted result string', () => {
     const result = tryParseToolResult(
       JSON.stringify({ tool_call_id: 'tc-2', result: '"wrapped value"' }),
     )
     expect(result).not.toBeNull()
     expect(result!.result).toBe('wrapped value')
+  })
+
+  it('unwraps multiply-encoded JSON in the result field', () => {
+    const innerData = { total: -1, issues: [{ id: '123', key: 'PROJ-1' }] }
+    const level1 = JSON.stringify(innerData)
+    const level2 = JSON.stringify({ result: level1 })
+    const level3 = JSON.stringify(level2)
+    const result = tryParseToolResult(
+      JSON.stringify({ tool_call_id: 'tc-deep', result: level3 }),
+    )
+    expect(result).not.toBeNull()
+    expect(result!.toolCallId).toBe('tc-deep')
+    expect(result!.result).toBe(JSON.stringify(innerData, null, 2))
   })
 
   it('returns empty string toolCallId when tool_call_id is missing', () => {
