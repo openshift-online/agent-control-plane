@@ -1,0 +1,168 @@
+kind: Policy
+name: permissive
+spec:
+  version: 1
+
+  filesystem:
+    include_workdir: true
+    read_only:
+      - /usr
+      - /lib
+      - /opt
+      - /proc
+      - /dev/urandom
+      - /app
+      - /runner
+      - /etc
+      - /var/log
+    read_write:
+      - /sandbox
+      - /tmp
+      - /dev/null
+
+  landlock:
+    compatibility: best_effort
+
+  process:
+    run_as_user: sandbox
+    run_as_group: sandbox
+
+  network_policies:
+    claude_code_vertex:
+      name: claude-code-vertex
+      endpoints:
+        - { host: "*-aiplatform.googleapis.com", port: 443, protocol: rest, enforcement: enforce, access: full, tls: terminate }
+        - { host: oauth2.googleapis.com, port: 443 }
+        - { host: iamcredentials.googleapis.com, port: 443 }
+        - { host: api.anthropic.com, port: 443, protocol: rest, enforcement: enforce, access: full, tls: terminate }
+        - { host: statsig.anthropic.com, port: 443 }
+        - { host: sentry.io, port: 443 }
+        - { host: raw.githubusercontent.com, port: 443 }
+        - { host: platform.claude.com, port: 443 }
+      binaries:
+        - { path: /usr/local/bin/claude }
+        - { path: /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe }
+        - { path: "/sandbox/.venv/lib/python*/site-packages/claude_agent_sdk/_bundled/claude" }
+        - { path: /usr/bin/node }
+
+    gcloud:
+      name: gcloud
+      endpoints:
+        - { host: oauth2.googleapis.com, port: 443 }
+        - { host: accounts.google.com, port: 443 }
+        - { host: iamcredentials.googleapis.com, port: 443 }
+      binaries:
+        - { path: /usr/local/bin/gcloud }
+        - { path: /opt/google-cloud-sdk/bin/gcloud }
+        - { path: "/opt/google-cloud-sdk/platform/bundledpythonunix/bin/**" }
+
+    github_ssh_over_https:
+      name: github-ssh-over-https
+      endpoints:
+        - host: github.com
+          port: 443
+          protocol: rest
+          tls: terminate
+          enforcement: enforce
+          rules:
+            - allow:
+                method: GET
+                path: "/**/info/refs*"
+            - allow:
+                method: POST
+                path: "/**/git-upload-pack"
+      binaries:
+        - { path: /usr/bin/git }
+
+    nvidia_inference:
+      name: nvidia-inference
+      endpoints:
+        - { host: integrate.api.nvidia.com, port: 443 }
+      binaries:
+        - { path: /usr/bin/curl }
+        - { path: /bin/bash }
+        - { path: /usr/local/bin/opencode }
+
+    github_rest_api:
+      name: github-rest-api
+      endpoints:
+        - host: api.github.com
+          port: 443
+          protocol: rest
+          tls: terminate
+          enforcement: enforce
+          access: read-only
+      binaries:
+        - { path: /usr/local/bin/claude }
+        - { path: /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe }
+        - { path: "/sandbox/.venv/lib/python*/site-packages/claude_agent_sdk/_bundled/claude" }
+        - { path: /usr/bin/gh }
+
+    pypi:
+      name: pypi
+      endpoints:
+        - { host: pypi.org, port: 443 }
+        - { host: files.pythonhosted.org, port: 443 }
+        - { host: github.com, port: 443 }
+        - { host: objects.githubusercontent.com, port: 443 }
+        - { host: api.github.com, port: 443 }
+        - { host: downloads.python.org, port: 443 }
+      binaries:
+        - { path: /sandbox/.venv/bin/python }
+        - { path: /sandbox/.venv/bin/python3 }
+        - { path: /sandbox/.venv/bin/pip }
+        - { path: /app/.venv/bin/python }
+        - { path: /app/.venv/bin/python3 }
+        - { path: /app/.venv/bin/pip }
+        - { path: /usr/local/bin/uv }
+        - { path: "/sandbox/.uv/python/**" }
+
+    vscode:
+      name: vscode
+      endpoints:
+        - { host: update.code.visualstudio.com, port: 443 }
+        - { host: az764295.vo.msecnd.net, port: 443 }
+        - { host: vscode.download.prss.microsoft.com, port: 443 }
+        - { host: marketplace.visualstudio.com, port: 443 }
+        - { host: gallerycdn.vsassets.io, port: 443 }
+      binaries:
+        - { path: /usr/bin/curl }
+        - { path: /usr/bin/wget }
+        - { path: "/sandbox/.vscode-server/**" }
+        - { path: "/sandbox/.vscode-remote-containers/**" }
+
+    cursor:
+      name: cursor
+      endpoints:
+        - { host: cursor.blob.core.windows.net, port: 443 }
+        - { host: api2.cursor.sh, port: 443 }
+        - { host: repo.cursor.sh, port: 443 }
+        - { host: download.cursor.sh, port: 443 }
+        - { host: cursor.download.prss.microsoft.com, port: 443 }
+      binaries:
+        - { path: /usr/bin/curl }
+        - { path: /usr/bin/wget }
+        - { path: "/sandbox/.cursor-server/**" }
+
+    opencode:
+      name: opencode
+      endpoints:
+        - { host: registry.npmjs.org, port: 443 }
+        - { host: opencode.ai, port: 443 }
+        - { host: integrate.api.nvidia.com, port: 443 }
+      binaries:
+        - { path: /usr/lib/node_modules/opencode-ai/bin/.opencode }
+        - { path: /usr/bin/node }
+        - { path: /usr/local/bin/opencode }
+
+    atlassian:
+      name: atlassian
+      endpoints:
+        - { host: "*.atlassian.net", port: 443, protocol: rest, enforcement: enforce, access: full, tls: terminate }
+        - { host: "*.atlassian.com", port: 443 }
+        - { host: "auth.atlassian.com", port: 443 }
+        - { host: "api.atlassian.com", port: 443 }
+      binaries:
+        - { path: /sandbox/.venv/bin/python }
+        - { path: /sandbox/.venv/bin/python3 }
+        - { path: "/sandbox/.uv/python/cpython-*/bin/python*" }

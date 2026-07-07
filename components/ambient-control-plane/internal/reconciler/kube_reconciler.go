@@ -374,6 +374,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	if policyErr != nil {
 		return fmt.Errorf("resolving sandbox policy: %w", policyErr)
 	}
+	sandboxPolicy = r.injectACPInternalPolicy(sandboxPolicy)
 
 	req := &openshellpb.CreateSandboxRequest{
 		Name: sbxName,
@@ -935,6 +936,39 @@ func (r *SimpleKubeReconciler) resolveAgentSandboxPolicy(ctx context.Context, sd
 
 	r.logger.Info().Str("policy", policyName).Msg("resolved sandbox policy from agent config")
 	return &sbxPolicy, nil
+}
+
+func (r *SimpleKubeReconciler) injectACPInternalPolicy(policy *sandboxpb.SandboxPolicy) *sandboxpb.SandboxPolicy {
+	ns := r.cfg.CPRuntimeNamespace
+	acpInternal := &sandboxpb.NetworkPolicyRule{
+		Name: "acp-internal",
+		Endpoints: []*sandboxpb.NetworkEndpoint{
+			{Host: fmt.Sprintf("ambient-control-plane.%s.svc", ns), Port: 8080},
+			{Host: fmt.Sprintf("ambient-control-plane.%s.svc.cluster.local", ns), Port: 8080},
+			{Host: fmt.Sprintf("ambient-api-server.%s.svc", ns), Port: 8000},
+			{Host: fmt.Sprintf("ambient-api-server.%s.svc.cluster.local", ns), Port: 8000},
+			{Host: fmt.Sprintf("ambient-api-server.%s.svc", ns), Port: 9000},
+			{Host: fmt.Sprintf("ambient-api-server.%s.svc.cluster.local", ns), Port: 9000},
+		},
+		Binaries: []*sandboxpb.NetworkBinary{
+			{Path: "/sandbox/.venv/bin/python"},
+			{Path: "/sandbox/.venv/bin/python3"},
+			{Path: "/sandbox/.venv/bin/uvicorn"},
+			{Path: "/sandbox/.uv/python/cpython-*/bin/python*"},
+		},
+	}
+
+	if policy == nil {
+		policy = &sandboxpb.SandboxPolicy{}
+	}
+	if policy.NetworkPolicies == nil {
+		policy.NetworkPolicies = make(map[string]*sandboxpb.NetworkPolicyRule)
+	}
+	if _, exists := policy.NetworkPolicies["acp_internal"]; exists {
+		r.logger.Warn().Msg("overwriting user-defined acp_internal network policy with system policy")
+	}
+	policy.NetworkPolicies["acp_internal"] = acpInternal
+	return policy
 }
 
 func (r *SimpleKubeReconciler) resolveMaxSeq(ctx context.Context, sdk *sdkclient.Client, sessionID string) string {

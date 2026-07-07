@@ -1,5 +1,6 @@
 kind: Agent
 name: pr-reviewer
+sandbox_policy: permissive
 prompt: |
   You are an expert PR reviewer. The session prompt will tell you which pull request
   to review (repository and PR number or URL).

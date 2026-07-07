@@ -1,5 +1,6 @@
 kind: Kustomization
 resources:
+  - policies/permissive.yaml
   - agents/hello-world.yaml
   - agents/security-reviewer.yaml
   - agents/jira-simple-whoami.yaml

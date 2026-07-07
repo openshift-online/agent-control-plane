@@ -5,7 +5,7 @@ version: 1
 
 # --- Sandbox setup configuration (queried once at startup) ---
 
-filesystem_policy:
+filesystem:
   include_workdir: true
   read_only:
     - /usr

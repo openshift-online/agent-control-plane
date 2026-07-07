@@ -7,6 +7,8 @@ This directory contains example Agent definitions and tenant overlays for the Am
 ```
 examples/
 ├── base/
+│   ├── policies/        # Sandbox policies (applied before agents)
+│   │   └── permissive.yaml
 │   └── agents/          # Agent definitions (provider-agnostic)
 │       ├── hello-world.yaml
 │       ├── security-reviewer.yaml
@@ -19,7 +21,7 @@ examples/
     └── tenant-b/        # Staging tenant
 ```
 
-`base/` contains the agent definitions shared across all tenants. `overlays/` contains the tenant-specific Projects, Providers, and Credentials that bind agents to a cluster namespace.
+`base/` contains the policies and agent definitions shared across all tenants. `overlays/` contains the tenant-specific Projects, Providers, and Credentials that bind agents to a cluster namespace.
 
 ## Applying Examples
 
@@ -83,6 +85,32 @@ kubectl create secret generic jira \
 Store your API token in `~/jira-token.txt` before running the command. Generate one at: https://id.atlassian.com/manage-profile/security/api-tokens
 
 > Repeat for `tenant-b` by replacing `-n tenant-a` with `-n tenant-b`.
+
+---
+
+## Policies
+
+### `permissive`
+
+A wide-open sandbox policy that allows network access to most common services. Defines filesystem access (read-only system paths, read-write `/sandbox` and `/tmp`), Landlock LSM settings, process identity, and network policies for:
+
+- **Claude Code + Vertex AI** — Vertex AI inference, Google auth, Anthropic API
+- **gcloud** — OAuth and IAM token refresh
+- **GitHub** — Git Smart HTTP (read-only clone/fetch) and REST API (read-only)
+- **PyPI** — Python package installation
+- **VS Code / Cursor** — IDE remote server downloads
+- **OpenCode** — npm registry and inference
+- **Atlassian** — Jira and Confluence REST APIs
+
+> **Note:** ACP internal traffic (runner-to-control-plane and runner-to-API-server) is automatically injected by the control plane at sandbox creation time and does not need to be declared in user-facing policies.
+
+Agents reference the policy by name via `sandbox_policy: permissive`. Agents that omit `sandbox_policy` get the gateway's built-in locked-down default (no external network access beyond ACP internal traffic).
+
+To apply the policy independently:
+
+```bash
+acpctl apply -f examples/base/policies/permissive.yaml
+```
 
 ---
 

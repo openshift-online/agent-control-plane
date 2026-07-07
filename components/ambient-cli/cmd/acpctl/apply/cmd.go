@@ -23,13 +23,13 @@ import (
 
 var Cmd = &cobra.Command{
 	Use:   "apply",
-	Short: "Apply declarative Project, Agent, Credential, and RoleBinding manifests",
-	Long: `Apply Projects, Agents, Credentials, and RoleBindings from YAML files or a Kustomize directory.
+	Short: "Apply declarative Project, Agent, Credential, Policy, and RoleBinding manifests",
+	Long: `Apply Projects, Agents, Credentials, Policies, and RoleBindings from YAML files or a Kustomize directory.
 
 Mirrors kubectl apply semantics: resources are created if they do not exist,
 or patched if they do. Output reports created / configured / unchanged per resource.
 
-Supported kinds: Project, Agent, Credential, RoleBinding
+Supported kinds: Project, Agent, Credential, Policy, RoleBinding
 
 File format (one or more documents separated by ---):
 
@@ -109,26 +109,28 @@ func init() {
 
 // resource is a parsed YAML document from a manifest file.
 type resource struct {
-	Kind        string            `yaml:"kind"`
-	Name        string            `yaml:"name"`
-	Description string            `yaml:"description"`
-	Prompt      string            `yaml:"prompt"`
-	Labels      map[string]string `yaml:"labels"`
-	Annotations map[string]string `yaml:"annotations"`
-	Inbox       []inboxSeed       `yaml:"inbox"`
-	Providers   []string          `yaml:"providers"`
-	Payloads    []payloadDecl     `yaml:"payloads"`
-	Environment map[string]string `yaml:"environment"`
-	Provider    string            `yaml:"provider"`
-	Token       string            `yaml:"token"`
-	URL         string            `yaml:"url"`
-	Email       string            `yaml:"email"`
-	Secret      string            `yaml:"secret"`
-	Type        string            `yaml:"type"`
-	Role        string            `yaml:"role"`
-	Scope       string            `yaml:"scope"`
-	ScopeID     string            `yaml:"scope_id"`
-	UserID      string            `yaml:"user_id"`
+	Kind          string                 `yaml:"kind"`
+	Name          string                 `yaml:"name"`
+	Description   string                 `yaml:"description"`
+	Prompt        string                 `yaml:"prompt"`
+	Labels        map[string]string      `yaml:"labels"`
+	Annotations   map[string]string      `yaml:"annotations"`
+	Inbox         []inboxSeed            `yaml:"inbox"`
+	Providers     []string               `yaml:"providers"`
+	Payloads      []payloadDecl          `yaml:"payloads"`
+	Environment   map[string]string      `yaml:"environment"`
+	SandboxPolicy string                 `yaml:"sandbox_policy"`
+	Spec          map[string]interface{} `yaml:"spec"`
+	Provider      string                 `yaml:"provider"`
+	Token         string                 `yaml:"token"`
+	URL           string                 `yaml:"url"`
+	Email         string                 `yaml:"email"`
+	Secret        string                 `yaml:"secret"`
+	Type          string                 `yaml:"type"`
+	Role          string                 `yaml:"role"`
+	Scope         string                 `yaml:"scope"`
+	ScopeID       string                 `yaml:"scope_id"`
+	UserID        string                 `yaml:"user_id"`
 }
 
 type payloadDecl struct {
@@ -204,6 +206,8 @@ func run(cmd *cobra.Command, _ []string) error {
 			result, err = applyProject(ctx, client, doc)
 		case "agent":
 			result, err = applyAgent(ctx, client, doc, projectName, factory)
+		case "policy":
+			result, err = applyPolicy(ctx, client, doc, projectName, factory)
 		case "credential":
 			result, err = applyCredential(ctx, client, doc)
 		case "provider":
@@ -699,6 +703,9 @@ func applyAgent(ctx context.Context, client *sdkclient.Client, doc resource, pro
 		if len(doc.Environment) > 0 {
 			builder = builder.Environment(doc.Environment)
 		}
+		if doc.SandboxPolicy != "" {
+			builder = builder.SandboxPolicy(doc.SandboxPolicy)
+		}
 		pa, buildErr := builder.Build()
 		if buildErr != nil {
 			return applyResult{}, buildErr
@@ -753,6 +760,9 @@ func buildAgentPatch(existing *sdktypes.Agent, doc resource) map[string]any {
 	if len(doc.Environment) > 0 {
 		patch["environment"] = doc.Environment
 	}
+	if doc.SandboxPolicy != "" && doc.SandboxPolicy != existing.SandboxPolicy {
+		patch["sandbox_policy"] = doc.SandboxPolicy
+	}
 	if len(doc.Labels) > 0 {
 		patch["labels"] = marshalStringMap(doc.Labels)
 	}
@@ -760,6 +770,99 @@ func buildAgentPatch(existing *sdktypes.Agent, doc resource) map[string]any {
 		patch["annotations"] = marshalStringMap(doc.Annotations)
 	}
 	return patch
+}
+
+// ── Policy ──────────────────────────────────────────────────────────────────
+
+func applyPolicy(ctx context.Context, client *sdkclient.Client, doc resource, projectName string, factory *connection.ClientFactory) (applyResult, error) {
+	projClient := client
+	if factory != nil {
+		if pc, err := factory.ForProject(projectName); err == nil {
+			projClient = pc
+		}
+	}
+
+	project, err := projClient.Projects().Get(ctx, projectName)
+	if err != nil {
+		return applyResult{}, fmt.Errorf("project %q not found: %w", projectName, err)
+	}
+
+	var specJSON string
+	if len(doc.Spec) > 0 {
+		b, marshalErr := json.Marshal(doc.Spec)
+		if marshalErr != nil {
+			return applyResult{}, fmt.Errorf("marshal policy spec: %w", marshalErr)
+		}
+		specJSON = string(b)
+	}
+
+	opts := sdktypes.NewListOptions().Size(100).
+		Search(fmt.Sprintf("name = '%s'", doc.Name)).Build()
+	existing, err := projClient.Policys().List(ctx, opts)
+	if err != nil {
+		return applyResult{}, fmt.Errorf("listing policies: %w", err)
+	}
+
+	var match *sdktypes.Policy
+	if existing != nil {
+		for i, p := range existing.Items {
+			if p.Name == doc.Name {
+				match = &existing.Items[i]
+				break
+			}
+		}
+	}
+
+	if match != nil {
+		patch := sdktypes.NewPolicyPatchBuilder()
+		changed := false
+		if specJSON != "" && specJSON != match.Spec {
+			patch = patch.Spec(specJSON)
+			changed = true
+		}
+		if len(doc.Labels) > 0 {
+			lbl := marshalStringMap(doc.Labels)
+			if lbl != match.Labels {
+				patch = patch.Labels(lbl)
+				changed = true
+			}
+		}
+		if len(doc.Annotations) > 0 {
+			ann := marshalStringMap(doc.Annotations)
+			if ann != match.Annotations {
+				patch = patch.Annotations(ann)
+				changed = true
+			}
+		}
+		if !changed {
+			return applyResult{Kind: "Policy", Name: doc.Name, Status: "unchanged"}, nil
+		}
+		if _, err := projClient.Policys().Update(ctx, match.ID, patch.Build()); err != nil {
+			return applyResult{}, err
+		}
+		return applyResult{Kind: "Policy", Name: doc.Name, Status: "configured"}, nil
+	}
+
+	builder := sdktypes.NewPolicyBuilder().
+		ProjectID(project.ID).
+		Name(doc.Name)
+	if specJSON != "" {
+		builder = builder.Spec(specJSON)
+	}
+	if len(doc.Labels) > 0 {
+		builder = builder.Labels(marshalStringMap(doc.Labels))
+	}
+	if len(doc.Annotations) > 0 {
+		builder = builder.Annotations(marshalStringMap(doc.Annotations))
+	}
+	policy, buildErr := builder.Build()
+	if buildErr != nil {
+		return applyResult{}, buildErr
+	}
+	if _, createErr := projClient.Policys().Create(ctx, policy); createErr != nil {
+		return applyResult{}, createErr
+	}
+	return applyResult{Kind: "Policy", Name: doc.Name, Status: "created"}, nil
 }
 
 func seedInbox(ctx context.Context, client *sdkclient.Client, projectID, agentID string, seeds []inboxSeed) error {
@@ -1004,6 +1107,15 @@ func strategicMerge(base, patch resource) resource {
 	}
 	if patch.Email != "" {
 		base.Email = patch.Email
+	}
+	if patch.SandboxPolicy != "" {
+		base.SandboxPolicy = patch.SandboxPolicy
+	}
+	for k, v := range patch.Spec {
+		if base.Spec == nil {
+			base.Spec = make(map[string]interface{})
+		}
+		base.Spec[k] = v
 	}
 	if len(patch.Payloads) > 0 {
 		base.Payloads = patch.Payloads

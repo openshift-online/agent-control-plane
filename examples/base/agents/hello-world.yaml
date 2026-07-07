@@ -1,5 +1,6 @@
 kind: Agent
 name: hello-world
+sandbox_policy: permissive
 prompt: "Say hello world"
 providers:
   - vertex
