@@ -135,7 +135,21 @@ jobs:
 
     - name: Create dummy Vertex credentials
       run: |
-        echo '{"type":"service_account","project_id":"test","private_key_id":"dummy","private_key":"-----BEGIN RSA PRIVATE KEY-----\nMIIBogIBAAJBALRiMLAH\n-----END RSA PRIVATE KEY-----\n","client_email":"test@test.iam.gserviceaccount.com","client_id":"0","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token"}' > /tmp/vertex.json
+        RSA_KEY=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 2>/dev/null)
+        python3 -c "
+        import json, sys
+        key = sys.stdin.read()
+        json.dump({
+          'type': 'service_account',
+          'project_id': 'test',
+          'private_key_id': 'dummy',
+          'private_key': key,
+          'client_email': 'test@test.iam.gserviceaccount.com',
+          'client_id': '0',
+          'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
+          'token_uri': 'https://oauth2.googleapis.com/token'
+        }, open('/tmp/vertex.json', 'w'))
+        " <<< "$RSA_KEY"
 
     - name: Deploy using Makefile
       env:

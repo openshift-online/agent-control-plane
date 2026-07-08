@@ -887,7 +887,11 @@ func (r *SimpleKubeReconciler) ensureVertexCredentialRefresh(ctx context.Context
 		CredentialKey: credKey,
 	})
 	if err != nil {
-		return fmt.Errorf("rotating credential: %w", err)
+		r.logger.Warn().Err(err).
+			Str("provider", provName).
+			Str("credential_key", credKey).
+			Msg("initial credential rotation failed; gateway will retry on demand")
+		return nil
 	}
 
 	r.logger.Info().
