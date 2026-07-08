@@ -83,6 +83,19 @@ ctx := context.TODO()
 
 Same as backend: return `fmt.Errorf` with context instead. A panic crashes the entire control plane, affecting all sessions.
 
+### Shared Kustomize Library
+
+The kustomize rendering engine is extracted from `acpctl apply` into a shared library (e.g., `ambient-sdk/go-sdk/kustomize/`). Both the CLI and the ApplicationReconciler consume this library. Key conventions:
+
+- The library SHALL be fully unit-testable without a running cluster or API server
+- The library handles: kustomization loading, base resolution, resource merging, strategic-merge patching, and flat manifest production
+- Supported kinds: `Project`, `Agent`, `Credential`, `RoleBinding`, `Gateway`
+- The ApplicationReconciler SHALL NOT duplicate kustomize rendering logic — it SHALL use the shared library
+
+### Reconciler Registration
+
+All reconcilers (`KubeReconciler`, `ProjectReconciler`, `GatewayReconciler`, `ApplicationReconciler`) implement the `Reconciler` interface from `internal/reconciler/shared.go` and are registered with the Informer. Gateway provisioning is driven by `kind: Gateway` API resources received via gRPC watch events, not by ConfigMaps.
+
 ## Pre-Commit Checklist
 
 - [ ] OwnerReferences set on all child resources

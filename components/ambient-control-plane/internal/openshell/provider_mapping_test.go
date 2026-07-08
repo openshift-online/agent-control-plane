@@ -59,6 +59,18 @@ func TestProviderCredentialsFromSecret(t *testing.T) {
 			secret:   map[string]string{"API_KEY": "abc", "API_SECRET": "xyz"},
 			want:     map[string]string{"API_KEY": "abc", "API_SECRET": "xyz"},
 		},
+		{
+			name:     "mlflow passes all secret keys through as credentials",
+			provider: "mlflow",
+			secret:   map[string]string{"MLFLOW_TRACKING_TOKEN": "tok", "MLFLOW_TRACKING_AUTH": "kubernetes"},
+			want:     map[string]string{"MLFLOW_TRACKING_TOKEN": "tok", "MLFLOW_TRACKING_AUTH": "kubernetes"},
+		},
+		{
+			name:     "mlflow with only token",
+			provider: "mlflow",
+			secret:   map[string]string{"MLFLOW_TRACKING_TOKEN": "tok"},
+			want:     map[string]string{"MLFLOW_TRACKING_TOKEN": "tok"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -159,5 +171,11 @@ func TestDetectGoogleCredentialType(t *testing.T) {
 				t.Errorf("got %d, want %d", got, tt.wantType)
 			}
 		})
+	}
+}
+
+func TestOpenShellProviderType_MLflow(t *testing.T) {
+	if got := OpenShellProviderType("mlflow"); got != "generic" {
+		t.Errorf("OpenShellProviderType(mlflow) = %q, want %q", got, "generic")
 	}
 }

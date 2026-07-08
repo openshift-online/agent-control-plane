@@ -274,11 +274,21 @@ class PlatformBridge(ABC):
 async def setup_bridge_observability(
     context: RunnerContext, configured_model: str
 ) -> Any:
-    """Initialise Langfuse observability for a bridge (best-effort).
+    """Initialise observability for a bridge (best-effort).
+
+    Activates MLflow autologging (if credential env vars are present) before
+    creating the ObservabilityManager, so the SDK is patched before any
+    ClaudeSDKClient instantiation.
 
     Shared by all bridge implementations. Returns an
     ``ObservabilityManager`` instance on success, or ``None`` on failure.
     """
+    from ambient_runner.mlflow_autolog import activate_mlflow_autologging
+
+    # MLflowRequiredError (raised when MLFLOW_REQUIRED=true and env vars are
+    # missing) must propagate uncaught — it means the sandbox cannot start.
+    activate_mlflow_autologging()
+
     try:
         from ambient_runner.observability import ObservabilityManager
         from ambient_runner.platform.auth import sanitize_user_context

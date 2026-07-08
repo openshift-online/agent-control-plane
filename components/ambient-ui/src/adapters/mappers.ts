@@ -3,6 +3,7 @@ import type {
   DomainSession, DomainProject, DomainSessionMessage, DomainSessionEvent, DomainAgent, DomainApplication, SessionPhase, SessionEventType,
   DomainRepo, DomainReconciledRepo, DomainCondition, ReconciledRepoStatus, ConditionStatus,
   DomainCredential, DomainRoleBinding, DomainPayload, DomainSandboxTemplate,
+  SandboxLogEntry, SandboxPolicyResponse,
 } from '@/domain/types'
 
 const VALID_PHASES: ReadonlySet<string> = new Set<string>([
@@ -135,6 +136,11 @@ function numberOrNull(value: number | null | undefined): number | null {
   return value === undefined || value === null ? null : value
 }
 
+function parseJsonSnapshot<T>(raw: string | undefined | null): T | null {
+  if (!raw) return null
+  try { return JSON.parse(raw) as T } catch { return null }
+}
+
 function positiveNumberOrNull(value: number | null | undefined): number | null {
   return value === undefined || value === null || value === 0 ? null : value
 }
@@ -165,6 +171,9 @@ export function mapSdkSessionToDomain(sdk: Session): DomainSession {
     repos: parseRepos(sdk.repos),
     reconciledRepos: parseReconciledRepos(sdk.reconciled_repos),
     conditions: parseConditions(sdk.conditions),
+    kubeNamespace: emptyToNull(sdk.kube_namespace),
+    sandboxLogsSnapshot: parseJsonSnapshot<SandboxLogEntry[]>(sdk.sandbox_logs_snapshot),
+    sandboxPolicySnapshot: parseJsonSnapshot<SandboxPolicyResponse>(sdk.sandbox_policy_snapshot),
   }
 }
 

@@ -2,13 +2,13 @@
 
 **Date:** 2026-07-05
 **Status:** Active
-**Related:** `specs/security/rbac-enforcement.spec.md` (base RBAC model), `specs/platform/agent-sandbox-config.spec.md` (ConfigMap agent schema), `specs/platform/gateway-provisioning.spec.md` (gateway deployment), `specs/platform/openshell-sandbox-provisioning.spec.md` (sandbox provisioning flow)
+**Related:** `specs/security/rbac-enforcement.spec.md` (base RBAC model), `specs/platform/agent-sandbox-config.spec.md` (agent schema), `specs/platform/gateway-provisioning.spec.md` (API-driven gateway provisioning), `specs/platform/openshell-sandbox-provisioning.spec.md` (sandbox provisioning flow)
 
 ---
 
 ## Purpose
 
-OpenShell is the default and only sandbox runtime. The platform enforces a tiered RBAC policy that constrains human users to three effective tiers: Admin, Editor, and Viewer. Agent definitions MAY be managed through both the API (full CRUD) and GitOps ConfigMaps applied to tenant namespaces (schema defined in `agent-sandbox-config.spec.md`). Policy and provider declarations (ConfigMaps with labels `ambient.ai/kind: policy` and `ambient.ai/kind: provider`) are GitOps-only by design — no API endpoints exist for them. A user's effective ACP tier SHALL be derived from their Kubernetes RoleBindings on the tenant namespace — if a user has `view` access on the namespace, they are a viewer in ACP for that project. Standard RBAC from `rbac-enforcement.spec.md` governs all agent CRUD operations.
+OpenShell is the default and only sandbox runtime. The platform enforces a tiered RBAC policy that constrains human users to three effective tiers: Admin, Editor, and Viewer. Agent definitions MAY be managed through both the API (full CRUD) and GitOps workflows via `acpctl apply -k` (schema defined in `agent-sandbox-config.spec.md`). Policy and provider declarations are GitOps-only by design — no API endpoints exist for them. Gateway configuration is declared as `kind: Gateway` API resources applied via `acpctl apply -k` and reconciled by the GatewayReconciler (see `gateway-provisioning.spec.md`). A user's effective ACP tier SHALL be derived from their Kubernetes RoleBindings on the tenant namespace — if a user has `view` access on the namespace, they are a viewer in ACP for that project. Standard RBAC from `rbac-enforcement.spec.md` governs all agent CRUD operations.
 
 ---
 
@@ -18,10 +18,10 @@ OpenShell is the default and only sandbox runtime. The platform enforces a tiere
 - **Admin tier** — users with `admin` or `cluster-admin` access on the tenant namespace, or holding `platform:admin` or `project:owner` ACP internal roles. Full management access including agent CRUD, session creation, schedule management, and role binding grants.
 - **Editor tier** — users with `edit` access on the tenant namespace, or holding `project:editor` or `agent:operator` ACP internal roles. Can create/update agents, start agent sessions, and manage schedules, but cannot manage project membership or roles.
 - **Viewer tier** — users with `view` access on the tenant namespace, or holding `project:viewer`, `agent:observer`, `platform:viewer`, or any project-scoped binding not in the Admin or Editor tier. Read-only access to agents, sessions, and schedules.
-- **GitOps-managed agent** — an Agent record reconciled from a ConfigMap with label `ambient.ai/kind: agent` in a tenant namespace. Distinguished from API-created agents by the annotation `ambient.ai/managed-by: configmap`.
+- **GitOps-managed agent** — an Agent record applied via `acpctl apply -k` or reconciled by the ApplicationReconciler from a git repository. Distinguished from interactively-created agents by the annotation `ambient.ai/managed-by: gitops`.
 - **API-managed agent** — an Agent record created or modified via the REST API. Full CRUD is permitted for users with appropriate RBAC bindings.
-- **Policy declaration** — a ConfigMap entry with label `ambient.ai/kind: policy` containing an OpenShell `SandboxPolicy` YAML definition. Namespace-scoped, referenced by agents by name. No API endpoints exist for policies; they are GitOps-only by design (see `agent-sandbox-config.spec.md`).
-- **Provider declaration** — a ConfigMap entry with label `ambient.ai/kind: provider` defining a named credential provider with its type and Secret reference. Namespace-scoped, referenced by agents by name. No API endpoints exist for providers; they are GitOps-only by design (see `agent-sandbox-config.spec.md`).
+- **Policy declaration** — a YAML definition containing an OpenShell `SandboxPolicy`. Namespace-scoped, referenced by agents by name. No API endpoints exist for policies; they are GitOps-only by design (see `agent-sandbox-config.spec.md`).
+- **Provider declaration** — a YAML definition defining a named credential provider with its type and Secret reference. Namespace-scoped, referenced by agents by name. No API endpoints exist for providers; they are GitOps-only by design (see `agent-sandbox-config.spec.md`).
 
 ---
 

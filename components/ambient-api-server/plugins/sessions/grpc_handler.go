@@ -308,10 +308,9 @@ func (h *sessionGRPCHandler) PushSessionMessage(ctx context.Context, req *pb.Pus
 	if req.GetEventType() == "" {
 		return nil, status.Error(codes.InvalidArgument, "event_type is required")
 	}
-	if middleware.IsServiceCaller(ctx) && req.GetEventType() == "user" {
-		return nil, status.Error(codes.PermissionDenied, "service token may not push event_type=user")
-	}
-
+	// Service callers (runner, control plane) are trusted components authenticated
+	// via SA tokens scoped to the session namespace. They need to push event_type=user
+	// for the initial prompt so it appears in the UI chat history.
 	if !middleware.IsServiceCaller(ctx) {
 		session, svcErr := h.service.Get(ctx, req.GetSessionId())
 		if svcErr != nil {

@@ -18,6 +18,7 @@ import (
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/agents"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/applications"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/credentials"
+	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/gateways"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/inbox"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/platformInfo"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/policies"

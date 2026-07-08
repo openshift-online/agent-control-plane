@@ -200,7 +200,7 @@ network_policies:
   # ACP internal traffic — runner connects to the control plane token
   # endpoint and the API server gRPC stream from inside the sandbox
   # network namespace, where all traffic routes through the proxy.
-  acp_internal:
+  _acp_internal:
     name: acp-internal
     endpoints:
       - { host: "ambient-control-plane.ambient-code.svc", port: 8080 }
@@ -214,3 +214,14 @@ network_policies:
       - { path: /sandbox/.venv/bin/python3 }
       - { path: /sandbox/.venv/bin/uvicorn }
       - { path: "/sandbox/.uv/python/cpython-*/bin/python*" }
+
+  # RH mlflow instance
+  _mlflow_rh:
+    name: mlflow-tracking
+    endpoints:
+      - host: mlflow.apps.int.spoke.prod.us-west-2.aws.paas.redhat.com
+        port: 443
+    binaries:
+      - path: /sandbox/.venv/bin/python
+      - path: /sandbox/.venv/bin/python3
+      - path: /sandbox/.venv/bin/uvicorn

@@ -8,28 +8,26 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
+	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/kustomize"
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
 var Cmd = &cobra.Command{
 	Use:   "apply",
-	Short: "Apply declarative Project, Agent, Credential, and RoleBinding manifests",
-	Long: `Apply Projects, Agents, Credentials, and RoleBindings from YAML files or a Kustomize directory.
+	Short: "Apply declarative Project, Agent, Credential, RoleBinding, and Gateway manifests",
+	Long: `Apply Projects, Agents, Credentials, RoleBindings, and Gateways from YAML files or a Kustomize directory.
 
 Mirrors kubectl apply semantics: resources are created if they do not exist,
 or patched if they do. Output reports created / configured / unchanged per resource.
 
-Supported kinds: Project, Agent, Credential, RoleBinding
+Supported kinds: Project, Agent, Credential, RoleBinding, Gateway
 
 File format (one or more documents separated by ---):
 
@@ -107,42 +105,6 @@ func init() {
 	Cmd.Flags().StringVar(&applyArgs.project, "project", "", "Override project context for Agent resources")
 }
 
-// resource is a parsed YAML document from a manifest file.
-type resource struct {
-	Kind        string            `yaml:"kind"`
-	Name        string            `yaml:"name"`
-	Description string            `yaml:"description"`
-	Prompt      string            `yaml:"prompt"`
-	Labels      map[string]string `yaml:"labels"`
-	Annotations map[string]string `yaml:"annotations"`
-	Inbox       []inboxSeed       `yaml:"inbox"`
-	Providers   []string          `yaml:"providers"`
-	Payloads    []payloadDecl     `yaml:"payloads"`
-	Environment map[string]string `yaml:"environment"`
-	Provider    string            `yaml:"provider"`
-	Token       string            `yaml:"token"`
-	URL         string            `yaml:"url"`
-	Email       string            `yaml:"email"`
-	Secret      string            `yaml:"secret"`
-	Type        string            `yaml:"type"`
-	Role        string            `yaml:"role"`
-	Scope       string            `yaml:"scope"`
-	ScopeID     string            `yaml:"scope_id"`
-	UserID      string            `yaml:"user_id"`
-}
-
-type payloadDecl struct {
-	SandboxPath string `yaml:"sandbox_path"`
-	Content     string `yaml:"content,omitempty"`
-	RepoURL     string `yaml:"repo_url,omitempty"`
-	Ref         string `yaml:"ref,omitempty"`
-}
-
-type inboxSeed struct {
-	FromName string `yaml:"from_name"`
-	Body     string `yaml:"body"`
-}
-
 type applyResult struct {
 	Kind   string `json:"kind"`
 	Name   string `json:"name"`
@@ -157,13 +119,13 @@ func run(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("-f and -k are mutually exclusive")
 	}
 
-	var docs []resource
+	var docs []kustomize.Resource
 	var err error
 
 	if applyArgs.kustomize != "" {
-		docs, err = loadKustomize(applyArgs.kustomize)
+		docs, err = kustomize.LoadKustomize(applyArgs.kustomize)
 	} else {
-		docs, err = loadFile(applyArgs.file)
+		docs, err = kustomize.LoadFile(applyArgs.file)
 	}
 	if err != nil {
 		return err
@@ -210,6 +172,8 @@ func run(cmd *cobra.Command, _ []string) error {
 			result, err = applyProvider(ctx, client, doc)
 		case "rolebinding":
 			result, err = applyRoleBinding(ctx, client, doc)
+		case "gateway":
+			result, err = applyGateway(ctx, client, doc)
 		default:
 			fmt.Fprintf(cmd.ErrOrStderr(), "warning: unknown kind %q — skipping\n", doc.Kind)
 			continue
@@ -237,7 +201,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func applyProject(ctx context.Context, client *sdkclient.Client, doc resource) (applyResult, error) {
+func applyProject(ctx context.Context, client *sdkclient.Client, doc kustomize.Resource) (applyResult, error) {
 	existing, err := client.Projects().Get(ctx, doc.Name)
 	if err != nil {
 		builder := sdktypes.NewProjectBuilder().Name(doc.Name)
@@ -279,7 +243,7 @@ func applyProject(ctx context.Context, client *sdkclient.Client, doc resource) (
 	return applyResult{Kind: "Project", Name: doc.Name, Status: "configured"}, nil
 }
 
-func applyCredential(ctx context.Context, client *sdkclient.Client, doc resource) (applyResult, error) {
+func applyCredential(ctx context.Context, client *sdkclient.Client, doc kustomize.Resource) (applyResult, error) {
 	existing, err := client.Credentials().Get(ctx, doc.Name)
 	if err != nil {
 		token := os.ExpandEnv(doc.Token)
@@ -324,7 +288,7 @@ func applyCredential(ctx context.Context, client *sdkclient.Client, doc resource
 	return applyResult{Kind: "Credential", Name: doc.Name, Status: "configured"}, nil
 }
 
-func buildCredentialPatch(existing *sdktypes.Credential, doc resource) (map[string]any, bool) {
+func buildCredentialPatch(existing *sdktypes.Credential, doc kustomize.Resource) (map[string]any, bool) {
 	changed := false
 	patch := sdktypes.NewCredentialPatchBuilder()
 	if doc.Description != "" && doc.Description != existing.Description {
@@ -357,7 +321,7 @@ func buildCredentialPatch(existing *sdktypes.Credential, doc resource) (map[stri
 
 // ── Provider ─────────────────────────────────────────────────────────────────
 
-func applyProvider(ctx context.Context, client *sdkclient.Client, doc resource) (applyResult, error) {
+func applyProvider(ctx context.Context, client *sdkclient.Client, doc kustomize.Resource) (applyResult, error) {
 	existing, err := client.Providers().List(ctx, &sdktypes.ListOptions{
 		Search: fmt.Sprintf("name = '%s'", doc.Name),
 		Size:   1,
@@ -418,7 +382,7 @@ func applyProvider(ctx context.Context, client *sdkclient.Client, doc resource) 
 
 // ── RoleBinding ──────────────────────────────────────────────────────────────
 
-func applyRoleBinding(ctx context.Context, client *sdkclient.Client, doc resource) (applyResult, error) {
+func applyRoleBinding(ctx context.Context, client *sdkclient.Client, doc kustomize.Resource) (applyResult, error) {
 	displayName := roleBindingDisplayName(doc)
 
 	if doc.Role == "" {
@@ -617,11 +581,11 @@ func ptrEquals(p *string, v string) bool {
 	return p != nil && *p == v
 }
 
-func roleBindingDisplayName(doc resource) string {
+func roleBindingDisplayName(doc kustomize.Resource) string {
 	return doc.UserID + "\u2192" + doc.ScopeID
 }
 
-func docDisplayName(d resource) string {
+func docDisplayName(d kustomize.Resource) string {
 	if d.Name != "" {
 		return d.Name
 	}
@@ -631,7 +595,7 @@ func docDisplayName(d resource) string {
 	return d.Kind
 }
 
-func toSDKPayloads(decls []payloadDecl) []sdktypes.Payload {
+func toSDKPayloads(decls []kustomize.PayloadDecl) []sdktypes.Payload {
 	out := make([]sdktypes.Payload, len(decls))
 	for i, d := range decls {
 		out[i] = sdktypes.Payload{
@@ -652,7 +616,7 @@ func marshalStringMap(m map[string]string) string {
 	return string(b)
 }
 
-func buildProjectPatch(existing *sdktypes.Project, doc resource) map[string]any {
+func buildProjectPatch(existing *sdktypes.Project, doc kustomize.Resource) map[string]any {
 	patch := map[string]any{}
 	if doc.Description != "" && doc.Description != existing.Description {
 		patch["description"] = doc.Description
@@ -669,7 +633,7 @@ func buildProjectPatch(existing *sdktypes.Project, doc resource) map[string]any 
 	return patch
 }
 
-func applyAgent(ctx context.Context, client *sdkclient.Client, doc resource, projectName string, factory *connection.ClientFactory) (applyResult, error) {
+func applyAgent(ctx context.Context, client *sdkclient.Client, doc kustomize.Resource, projectName string, factory *connection.ClientFactory) (applyResult, error) {
 	projClient := client
 	if factory != nil {
 		if pc, err := factory.ForProject(projectName); err == nil {
@@ -739,7 +703,7 @@ func applyAgent(ctx context.Context, client *sdkclient.Client, doc resource, pro
 	return applyResult{Kind: "Agent", Name: doc.Name, Status: status}, nil
 }
 
-func buildAgentPatch(existing *sdktypes.Agent, doc resource) map[string]any {
+func buildAgentPatch(existing *sdktypes.Agent, doc kustomize.Resource) map[string]any {
 	patch := map[string]any{}
 	if doc.Prompt != "" && doc.Prompt != existing.Prompt {
 		patch["prompt"] = doc.Prompt
@@ -762,7 +726,7 @@ func buildAgentPatch(existing *sdktypes.Agent, doc resource) map[string]any {
 	return patch
 }
 
-func seedInbox(ctx context.Context, client *sdkclient.Client, projectID, agentID string, seeds []inboxSeed) error {
+func seedInbox(ctx context.Context, client *sdkclient.Client, projectID, agentID string, seeds []kustomize.InboxSeed) error {
 	if len(seeds) == 0 {
 		return nil
 	}
@@ -786,252 +750,100 @@ func seedInbox(ctx context.Context, client *sdkclient.Client, projectID, agentID
 	return nil
 }
 
-// ── YAML loading ──────────────────────────────────────────────────────────────
+// ── Gateway ─────────────────────────────────────────────────────────────────
 
-func loadFile(path string) ([]resource, error) {
-	if path == "-" {
-		return parseManifests(os.Stdin)
-	}
-	info, err := os.Stat(path)
+func applyGateway(ctx context.Context, client *sdkclient.Client, doc kustomize.Resource) (applyResult, error) {
+	existing, err := client.Gateways().List(ctx, &sdktypes.ListOptions{
+		Search: fmt.Sprintf("name = '%s'", doc.Name),
+		Size:   1,
+	})
 	if err != nil {
-		return nil, err
+		return applyResult{}, fmt.Errorf("listing gateways: %w", err)
 	}
-	if info.IsDir() {
-		return loadDir(path)
+	if existing != nil && len(existing.Items) > 0 {
+		gw := existing.Items[0]
+		patch := buildGatewayPatch(gw, doc)
+		if len(patch) == 0 {
+			return applyResult{Kind: "Gateway", Name: doc.Name, Status: "unchanged"}, nil
+		}
+		if _, err = client.Gateways().Update(ctx, gw.ID, patch); err != nil {
+			return applyResult{}, err
+		}
+		return applyResult{Kind: "Gateway", Name: doc.Name, Status: "configured"}, nil
 	}
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
+
+	builder := sdktypes.NewGatewayBuilder().
+		Name(doc.Name).
+		ProjectID(client.Project())
+	if len(doc.ServerDnsNames) > 0 {
+		builder = builder.ServerDnsNames(doc.ServerDnsNames)
 	}
-	defer f.Close()
-	return parseManifests(f)
+	if doc.Image != "" {
+		builder = builder.Image(doc.Image)
+	}
+	if doc.Config != "" {
+		builder = builder.Config(doc.Config)
+	}
+	if len(doc.Labels) > 0 {
+		builder = builder.Labels(marshalStringMap(doc.Labels))
+	}
+	if len(doc.Annotations) > 0 {
+		builder = builder.Annotations(marshalStringMap(doc.Annotations))
+	}
+	gw, buildErr := builder.Build()
+	if buildErr != nil {
+		return applyResult{}, buildErr
+	}
+	if _, createErr := client.Gateways().Create(ctx, gw); createErr != nil {
+		return applyResult{}, createErr
+	}
+	return applyResult{Kind: "Gateway", Name: doc.Name, Status: "created"}, nil
 }
 
-func loadDir(dir string) ([]resource, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
+func buildGatewayPatch(existing sdktypes.Gateway, doc kustomize.Resource) map[string]any {
+	patch := sdktypes.NewGatewayPatchBuilder()
+	changed := false
+	if doc.Image != "" && doc.Image != existing.Image {
+		patch = patch.Image(doc.Image)
+		changed = true
 	}
-	var all []resource
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
-			continue
-		}
-		if name == "kustomization.yaml" || name == "kustomization.yml" {
-			continue
-		}
-		docs, err := loadFile(filepath.Join(dir, name))
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", name, err)
-		}
-		all = append(all, docs...)
+	if doc.Config != "" && doc.Config != existing.Config {
+		patch = patch.Config(doc.Config)
+		changed = true
 	}
-	return all, nil
+	if len(doc.ServerDnsNames) > 0 && !stringSliceEqual(doc.ServerDnsNames, existing.ServerDnsNames) {
+		patch = patch.ServerDnsNames(doc.ServerDnsNames)
+		changed = true
+	}
+	if len(doc.Labels) > 0 && marshalStringMap(doc.Labels) != existing.Labels {
+		patch = patch.Labels(marshalStringMap(doc.Labels))
+		changed = true
+	}
+	if len(doc.Annotations) > 0 && marshalStringMap(doc.Annotations) != existing.Annotations {
+		patch = patch.Annotations(marshalStringMap(doc.Annotations))
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return patch.Build()
 }
 
-func parseManifests(r io.Reader) ([]resource, error) {
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
-	var docs []resource
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	for {
-		var doc resource
-		if err := dec.Decode(&doc); err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, fmt.Errorf("parse YAML: %w", err)
-		}
-		if doc.Kind == "" {
-			continue
-		}
-		docs = append(docs, doc)
-	}
-	return docs, nil
-}
-
-// ── Kustomize ─────────────────────────────────────────────────────────────────
-
-type kustomization struct {
-	Kind      string      `yaml:"kind"`
-	Resources []string    `yaml:"resources"`
-	Bases     []string    `yaml:"bases"`
-	Patches   []kustPatch `yaml:"patches"`
-}
-
-type kustPatch struct {
-	Path   string     `yaml:"path"`
-	Target kustTarget `yaml:"target"`
-}
-
-type kustTarget struct {
-	Kind string `yaml:"kind"`
-	Name string `yaml:"name"`
-}
-
-func loadKustomize(dir string) ([]resource, error) {
-	kustFile := ""
-	for _, name := range []string{"kustomization.yaml", "kustomization.yml"} {
-		p := filepath.Join(dir, name)
-		if _, err := os.Stat(p); err == nil {
-			kustFile = p
-			break
-		}
-	}
-	if kustFile == "" {
-		return nil, fmt.Errorf("no kustomization.yaml found in %s", dir)
-	}
-
-	data, err := os.ReadFile(kustFile)
-	if err != nil {
-		return nil, err
-	}
-	var kust kustomization
-	if err := yaml.Unmarshal(data, &kust); err != nil {
-		return nil, fmt.Errorf("parse kustomization: %w", err)
-	}
-
-	var docs []resource
-
-	for _, base := range kust.Bases {
-		basePath := filepath.Join(dir, base)
-		baseDocs, err := loadKustomize(basePath)
-		if err != nil {
-			return nil, fmt.Errorf("base %s: %w", base, err)
-		}
-		docs = append(docs, baseDocs...)
-	}
-
-	for _, res := range kust.Resources {
-		resPath := filepath.Join(dir, res)
-		info, err := os.Stat(resPath)
-		if err != nil {
-			return nil, fmt.Errorf("resource %s: %w", res, err)
-		}
-		var resDocs []resource
-		if info.IsDir() {
-			resDocs, err = loadKustomize(resPath)
-		} else {
-			resDocs, err = loadFile(resPath)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("resource %s: %w", res, err)
-		}
-		docs = mergeResources(docs, resDocs)
-	}
-
-	for _, patch := range kust.Patches {
-		patchDocs, err := loadFile(filepath.Join(dir, patch.Path))
-		if err != nil {
-			return nil, fmt.Errorf("patch %s: %w", patch.Path, err)
-		}
-		for _, p := range patchDocs {
-			docs = applyPatch(docs, p, patch.Target)
-		}
-	}
-
-	return docs, nil
-}
-
-// mergeResources adds resDocs into docs, deduplicating by kind+name (later wins).
-func mergeResources(docs, incoming []resource) []resource {
-	idx := make(map[string]int, len(docs))
-	for i, d := range docs {
-		idx[resourceKey(d)] = i
-	}
-	for _, inc := range incoming {
-		key := resourceKey(inc)
-		if i, exists := idx[key]; exists {
-			docs[i] = inc
-		} else {
-			idx[key] = len(docs)
-			docs = append(docs, inc)
-		}
-	}
-	return docs
-}
-
-func resourceKey(r resource) string {
-	return strings.ToLower(r.Kind) + "/" + r.Name
-}
-
-// applyPatch merges patch into all matching resources (strategic merge).
-func applyPatch(docs []resource, patch resource, target kustTarget) []resource {
-	for i := range docs {
-		if !matchesTarget(docs[i], target) {
-			continue
-		}
-		docs[i] = strategicMerge(docs[i], patch)
-	}
-	return docs
-}
-
-func matchesTarget(doc resource, target kustTarget) bool {
-	if target.Kind != "" && !strings.EqualFold(doc.Kind, target.Kind) {
+func stringSliceEqual(a, b []string) bool {
+	if len(a) != len(b) {
 		return false
 	}
-	if target.Name != "" && doc.Name != target.Name {
-		return false
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
 	}
 	return true
 }
 
-// strategicMerge applies patch onto base: scalars overwrite, maps merge.
-func strategicMerge(base, patch resource) resource {
-	if patch.Name != "" {
-		base.Name = patch.Name
-	}
-	if patch.Description != "" {
-		base.Description = patch.Description
-	}
-	if patch.Prompt != "" {
-		base.Prompt = patch.Prompt
-	}
-	if patch.Provider != "" {
-		base.Provider = patch.Provider
-	}
-	if patch.Token != "" {
-		base.Token = patch.Token
-	}
-	if patch.URL != "" {
-		base.URL = patch.URL
-	}
-	if patch.Email != "" {
-		base.Email = patch.Email
-	}
-	if len(patch.Payloads) > 0 {
-		base.Payloads = patch.Payloads
-	}
-	for k, v := range patch.Environment {
-		if base.Environment == nil {
-			base.Environment = make(map[string]string)
-		}
-		base.Environment[k] = v
-	}
-	for k, v := range patch.Labels {
-		if base.Labels == nil {
-			base.Labels = make(map[string]string)
-		}
-		base.Labels[k] = v
-	}
-	for k, v := range patch.Annotations {
-		if base.Annotations == nil {
-			base.Annotations = make(map[string]string)
-		}
-		base.Annotations[k] = v
-	}
-	return base
-}
-
 // ── Dry-run ───────────────────────────────────────────────────────────────────
 
-func printDryRun(cmd *cobra.Command, docs []resource) error {
+func printDryRun(cmd *cobra.Command, docs []kustomize.Resource) error {
 	if applyArgs.outputFormat == "json" {
 		results := make([]applyResult, 0, len(docs))
 		for _, d := range docs {

@@ -42,6 +42,8 @@ Name | Type | Description | Notes
 **KubeCrUid** | Pointer to **string** |  | [optional] [readonly] 
 **KubeNamespace** | Pointer to **string** |  | [optional] [readonly] 
 **LastActivityAt** | Pointer to **time.Time** | Timestamp of the last agent activity (message push) for staleness detection. | [optional] [readonly] 
+**SandboxLogsSnapshot** | Pointer to **string** | JSON array of sandbox log entries; last snapshot before sandbox stop. | [optional] [readonly] 
+**SandboxPolicySnapshot** | Pointer to **string** | JSON sandbox policy response; last snapshot before sandbox stop. | [optional] [readonly] 
 
 ## Methods
 
@@ -1006,6 +1008,56 @@ SetLastActivityAt sets LastActivityAt field to given value.
 `func (o *Session) HasLastActivityAt() bool`
 
 HasLastActivityAt returns a boolean if a field has been set.
+
+### GetSandboxLogsSnapshot
+
+`func (o *Session) GetSandboxLogsSnapshot() string`
+
+GetSandboxLogsSnapshot returns the SandboxLogsSnapshot field if non-nil, zero value otherwise.
+
+### GetSandboxLogsSnapshotOk
+
+`func (o *Session) GetSandboxLogsSnapshotOk() (*string, bool)`
+
+GetSandboxLogsSnapshotOk returns a tuple with the SandboxLogsSnapshot field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetSandboxLogsSnapshot
+
+`func (o *Session) SetSandboxLogsSnapshot(v string)`
+
+SetSandboxLogsSnapshot sets SandboxLogsSnapshot field to given value.
+
+### HasSandboxLogsSnapshot
+
+`func (o *Session) HasSandboxLogsSnapshot() bool`
+
+HasSandboxLogsSnapshot returns a boolean if a field has been set.
+
+### GetSandboxPolicySnapshot
+
+`func (o *Session) GetSandboxPolicySnapshot() string`
+
+GetSandboxPolicySnapshot returns the SandboxPolicySnapshot field if non-nil, zero value otherwise.
+
+### GetSandboxPolicySnapshotOk
+
+`func (o *Session) GetSandboxPolicySnapshotOk() (*string, bool)`
+
+GetSandboxPolicySnapshotOk returns a tuple with the SandboxPolicySnapshot field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetSandboxPolicySnapshot
+
+`func (o *Session) SetSandboxPolicySnapshot(v string)`
+
+SetSandboxPolicySnapshot sets SandboxPolicySnapshot field to given value.
+
+### HasSandboxPolicySnapshot
+
+`func (o *Session) HasSandboxPolicySnapshot() bool`
+
+HasSandboxPolicySnapshot returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

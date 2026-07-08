@@ -22,6 +22,7 @@ The Ambient API server provides a coordination layer for orchestrating fleets of
 - **Credential** — a global secret. Stores a Personal Access Token or equivalent for an external provider (GitHub, GitLab, Jira, Google, Vertex AI, Kubeconfig). Consumed by runners at session start. Bound to Projects via RoleBindings — a single Credential can be shared across multiple Projects without duplication.
 - **RoleBinding** — binds a Role to a subject (user or project) at a given scope. Ownership and access for all Kinds is expressed through RoleBindings. The subject and scope are each represented as typed nullable FKs — exactly one FK is non-null, determined by `scope`.
 - **Application** — a GitOps binding that continuously syncs agent fleet definitions from a git repository to an Ambient instance. The Ambient equivalent of an Argo CD Application.
+- **Gateway** — a project-scoped declaration that an OpenShell gateway should be deployed in the project’s namespace. Specifies the gateway image, TLS DNS names, and TOML configuration. Applied via `acpctl apply -k` and reconciled by the GatewayReconciler into Kubernetes resources (StatefulSet, Service, RBAC, certgen Job). See [gateway-provisioning.spec.md](./gateway-provisioning.spec.md).
 
 The stable address of an agent is `{project_name}/{agent_name}`. It holds the inbox and links to the active session.
 
@@ -150,6 +151,8 @@ erDiagram
         string  conditions
         string  reconciled_repos
         string  reconciled_workflow
+        string  sandbox_logs_snapshot "nullable — JSON array of SandboxLogEntry; last snapshot before stop"
+        string  sandbox_policy_snapshot "nullable — JSON SandboxPolicyResponse; last snapshot before stop"
         time    created_at
         time    updated_at
         time    deleted_at
@@ -249,6 +252,22 @@ erDiagram
         time   deleted_at
     }
 
+    %% ── Gateway (project-scoped OpenShell gateway declaration) ──────────
+
+    Gateway {
+        string ID PK "KSUID"
+        string project_id FK "target project (= namespace)"
+        string name "resource name; typically openshell-gateway"
+        string image "nullable — gateway container image; defaults to OPENSHELL_GATEWAY_IMAGE"
+        jsonb  server_dns_names "DNS names for TLS certificate generation"
+        string config "nullable — OpenShell gateway TOML configuration"
+        jsonb  labels
+        jsonb  annotations
+        time   created_at
+        time   updated_at
+        time   deleted_at
+    }
+
     %% ── Application (GitOps sync — Argo CD for Ambient) ──────────────
 
     Application {
@@ -300,6 +319,8 @@ erDiagram
 
     Inbox           }o--o| Agent            : "sent_from"
 
+    Project         ||--o{ Gateway          : "owns"
+
     Application }o--o| Project        : "syncs_to"
     Application }o--o| Credential     : "credential_id"
 
@@ -342,6 +363,7 @@ An Application syncs **project-scoped fleet definitions** — a subset of resour
 | `Agent` | Created or patched within the destination project; prompt, providers, payloads, labels, annotations updated |
 | `Credential` | Created if not present; idempotent by name |
 | `RoleBinding` | Created if not present; idempotent by user+role+scope key. **Escalation-bound:** the sync engine can only create RoleBindings at or below the level of the service credential it uses (see Design Decisions). |
+| `Gateway` | Created or patched within the destination project; image, serverDnsNames, config updated. Reconciled into K8s gateway resources by the GatewayReconciler. |
 | `Inbox` (seed messages) | Idempotent delivery — only new messages (by `from_agent_id` + `body` content hash dedup) are posted. Uses immutable `from_agent_id` FK, not mutable `from_name`. |
 
 ### What Does NOT Get Synced
@@ -527,6 +549,15 @@ Session.prompt  → "Implement the session messages handler. Repo: github.com/..
 ```
 
 All four are assembled into the start context in that order. Pokes roll downhill.
+
+### Sandbox Snapshot Fields
+
+| Field | Type | Written by | Purpose |
+|-------|------|-----------|---------|
+| `sandbox_logs_snapshot` | TEXT (nullable) | CP `PodStatusSyncer` + pre-delete snapshot | JSON array of `SandboxLogEntry` — the last 500 log lines from the OpenShell gateway |
+| `sandbox_policy_snapshot` | TEXT (nullable) | CP `PodStatusSyncer` + pre-delete snapshot | JSON `SandboxPolicyResponse` envelope — the full effective sandbox policy |
+
+Both fields are **read-only from the API perspective** — they are set exclusively by the control plane via `UpdateStatus` patches. The CP writes them on every 15s sync cycle and as a final snapshot before sandbox deletion. The UI reads them to display historical sandbox data for terminal sessions (Stopped, Completed, Failed). See `openshell-sandbox-observability.spec.md` § Sandbox Log and Policy Persistence for full requirements.
 
 ---
 
@@ -766,7 +797,7 @@ The `completed_at` index supports time-range queries that filter on the end-time
        event_count  INT DEFAULT 1,
        UNIQUE(session_id, seq)
    );
-   
+
    CREATE INDEX idx_session_events_session_id ON session_events(session_id);
    CREATE INDEX idx_session_events_event_type ON session_events(event_type);
    CREATE INDEX idx_session_events_created_at ON session_events(created_at);
@@ -1093,6 +1124,7 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `Project` | `name`, `description`, `prompt`, `labels`, `annotations` |
 | `Agent` | `name`, `prompt`, `providers`, `payloads`, `labels`, `annotations`, `inbox` (seed messages) |
 | `Credential` | `name`, `description`, `provider`, `token` (env var reference), `url`, `email`, `labels`, `annotations` — global resource; use `credential bind` to grant project access |
+| `Gateway` | `name`, `project`, `image`, `serverDnsNames`, `config`, `labels`, `annotations` — project-scoped; declares an OpenShell gateway deployment in the project namespace |
 
 `Agent` resources in `.ambient/teams/` files also carry an `inbox` list of seed messages. On apply, any message in the list is posted to the agent's inbox if an identical message (same `from_name` + `body`) does not already exist there.
 

@@ -26,12 +26,12 @@ Machine-readable index for autonomous reconciliation (`/reconcile` skill).
 
 | Path | Domain | Primary Entities | Components | Depends On |
 |------|--------|-----------------|------------|------------|
-| `platform/data-model.spec.md` | platform | User, Project, Agent, Inbox, Session, SessionMessage, SessionEvent, Role, RoleBinding, Credential, ScheduledSession, Application, ProjectSettings | API, SDK, BE, CLI, CP, FE | - |
+| `platform/data-model.spec.md` | platform | User, Project, Agent, Inbox, Session, SessionMessage, SessionEvent, Role, RoleBinding, Credential, ScheduledSession, Application, Gateway, ProjectSettings | API, SDK, BE, CLI, CP, FE | - |
 | `platform/control-plane.spec.md` | platform | WatchManager, Informer, KubeReconciler | CP, Runner | data-model |
 | `platform/runner.spec.md` | platform | PlatformBridge, GRPCSessionListener, GRPCMessageWriter | Runner, CP | data-model, control-plane |
 | `platform/mcp-server.spec.md` | platform | MCP tools (16) | MCP, CLI, SDK | data-model |
 | `platform/agent-sandbox-config.spec.md` | platform | Agent (sandbox fields), Provider, Policy | CP, BE, API | data-model |
-| `platform/gateway-provisioning.spec.md` | platform | Gateway, PlatformConfig | CP | control-plane |
+| `platform/gateway-provisioning.spec.md` | platform | Gateway, GatewayReconciler, SharedKustomizeLibrary | CP, CLI | control-plane, data-model |
 | `platform/openshell-sandbox-provisioning.spec.md` | platform | Sandbox | CP | gateway-provisioning, agent-sandbox-config |
 | `platform/scheduled-session-execution.spec.md` | platform | ScheduledSession | BE, API, CP | data-model |
 | `platform/session-activity-tracking.spec.md` | platform | Session (last_activity_at) | BE, API | data-model |

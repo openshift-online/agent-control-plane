@@ -185,6 +185,7 @@ When the control plane creates OpenShell providers on the gateway, it maps ACP c
 | `google` | `generic` |
 | `vertex` | `google-vertex-ai` |
 | `kubeconfig` | `generic` |
+| `mlflow` | `generic` |
 
 Credential types not in this table are mapped to `generic`. The mapping may be extended as new credential types are added.
 
@@ -610,7 +611,8 @@ The control plane SHALL start the runner process inside the sandbox by calling t
 
 - GIVEN a sandbox was just created
 - WHEN the control plane polls `GetSandbox` for readiness
-- THEN it SHALL poll every 2 seconds with a 120-second timeout
+- THEN it SHALL poll every 2 seconds with a configurable timeout (default 600 seconds, set via `SANDBOX_READINESS_TIMEOUT_SECONDS` env var)
+- AND the control plane SHALL log a progress message every 30 seconds during polling, including sandbox name, session ID, and elapsed time
 - AND if the sandbox enters `SANDBOX_PHASE_ERROR`, the control plane SHALL log an error, stop polling, and transition the session to `Failed`
 - AND if the timeout expires before `SANDBOX_PHASE_READY`, the control plane SHALL log an error and transition the session to `Failed`
 

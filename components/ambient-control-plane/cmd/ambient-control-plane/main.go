@@ -14,7 +14,6 @@ import (
 
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/auth"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/config"
-	"github.com/ambient-code/platform/components/ambient-control-plane/internal/gateway"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/informer"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/keypair"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
@@ -29,7 +28,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -138,40 +136,43 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 
 	factory := reconciler.NewSDKClientFactory(cfg.APIServerURL, tokenProvider, log.Logger)
 	kubeReconcilerCfg := reconciler.KubeReconcilerConfig{
-		RunnerImage:              cfg.RunnerImage,
-		RunnerGRPCURL:            cfg.GRPCServerAddr,
-		RunnerGRPCUseTLS:         cfg.RunnerGRPCUseTLS,
-		AnthropicAPIKey:          cfg.AnthropicAPIKey,
-		VertexEnabled:            cfg.VertexEnabled,
-		VertexProjectID:          cfg.VertexProjectID,
-		VertexRegion:             cfg.VertexRegion,
-		VertexCredentialsPath:    cfg.VertexCredentialsPath,
-		VertexSecretName:         cfg.VertexSecretName,
-		VertexSecretNamespace:    cfg.VertexSecretNamespace,
-		RunnerImageNamespace:     cfg.RunnerImageNamespace,
-		MCPImage:                 cfg.MCPImage,
-		MCPAPIServerURL:          cfg.MCPAPIServerURL,
-		GitHubMCPImage:           cfg.GitHubMCPImage,
-		JiraMCPImage:             cfg.JiraMCPImage,
-		K8sMCPImage:              cfg.K8sMCPImage,
-		GoogleMCPImage:           cfg.GoogleMCPImage,
-		RunnerLogLevel:           cfg.RunnerLogLevel,
-		CPRuntimeNamespace:       cfg.CPRuntimeNamespace,
-		CPTokenURL:               cfg.CPTokenURL,
-		CPTokenPublicKey:         string(kp.PublicKeyPEM),
-		HTTPProxy:                cfg.HTTPProxy,
-		HTTPSProxy:               cfg.HTTPSProxy,
-		NoProxy:                  cfg.NoProxy,
-		ImagePullSecret:          cfg.ImagePullSecret,
-		PlatformMode:             cfg.PlatformMode,
-		MPPConfigNamespace:       cfg.MPPConfigNamespace,
-		OpenShellEnabled:         cfg.OpenShellEnabled,
-		OpenShellUseGateway:      cfg.OpenShellUseGateway,
-		OpenShellRunnerImage:     cfg.OpenShellRunnerImage,
-		OpenShellPolicyName:      cfg.OpenShellPolicyName,
-		ServiceIdentity:          cfg.ServiceIdentity,
-		CACertFile:               cfg.CACertFile,
-		AllowedSandboxRegistries: cfg.AllowedSandboxRegistries,
+		RunnerImage:                    cfg.RunnerImage,
+		RunnerGRPCURL:                  cfg.GRPCServerAddr,
+		RunnerGRPCUseTLS:               cfg.RunnerGRPCUseTLS,
+		AnthropicAPIKey:                cfg.AnthropicAPIKey,
+		VertexEnabled:                  cfg.VertexEnabled,
+		VertexProjectID:                cfg.VertexProjectID,
+		VertexRegion:                   cfg.VertexRegion,
+		VertexCredentialsPath:          cfg.VertexCredentialsPath,
+		VertexSecretName:               cfg.VertexSecretName,
+		VertexSecretNamespace:          cfg.VertexSecretNamespace,
+		RunnerImageNamespace:           cfg.RunnerImageNamespace,
+		MCPImage:                       cfg.MCPImage,
+		MCPAPIServerURL:                cfg.MCPAPIServerURL,
+		GitHubMCPImage:                 cfg.GitHubMCPImage,
+		JiraMCPImage:                   cfg.JiraMCPImage,
+		K8sMCPImage:                    cfg.K8sMCPImage,
+		GoogleMCPImage:                 cfg.GoogleMCPImage,
+		RunnerLogLevel:                 cfg.RunnerLogLevel,
+		CPRuntimeNamespace:             cfg.CPRuntimeNamespace,
+		CPTokenURL:                     cfg.CPTokenURL,
+		CPTokenPublicKey:               string(kp.PublicKeyPEM),
+		HTTPProxy:                      cfg.HTTPProxy,
+		HTTPSProxy:                     cfg.HTTPSProxy,
+		NoProxy:                        cfg.NoProxy,
+		ImagePullSecret:                cfg.ImagePullSecret,
+		PlatformMode:                   cfg.PlatformMode,
+		MPPConfigNamespace:             cfg.MPPConfigNamespace,
+		OpenShellEnabled:               cfg.OpenShellEnabled,
+		OpenShellUseGateway:            cfg.OpenShellUseGateway,
+		OpenShellRunnerImage:           cfg.OpenShellRunnerImage,
+		OpenShellPolicyName:            cfg.OpenShellPolicyName,
+		ServiceIdentity:                cfg.ServiceIdentity,
+		CACertFile:                     cfg.CACertFile,
+		AllowedSandboxRegistries:       cfg.AllowedSandboxRegistries,
+		SandboxReadinessTimeoutSeconds: cfg.SandboxReadinessTimeoutSeconds,
+		MLflowTrackingURI:              cfg.MLflowTrackingURI,
+		MLflowExperimentName:           cfg.MLflowExperimentName,
 	}
 
 	conn, err := grpc.NewClient(cfg.GRPCServerAddr, grpc.WithTransportCredentials(grpcCredentials(cfg.GRPCUseTLS)))
@@ -207,14 +208,27 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	inf.RegisterHandler("projects", projectReconciler.Reconcile)
 	inf.RegisterHandler("project_settings", projectSettingsReconciler.Reconcile)
 
-	// Initialize gateway provisioning (if enabled)
+	// Initialize API-driven gateway reconciler (if enabled)
 	gatewayErrCh := make(chan error, 1)
 	if cfg.OpenShellUseGateway {
+		kubeCfg, kubeErr := buildKubeConfig(cfg.Kubeconfig)
+		if kubeErr != nil {
+			return fmt.Errorf("build kubeconfig for gateway reconciler: %w", kubeErr)
+		}
+		gwClientset, csErr := kubernetes.NewForConfig(kubeCfg)
+		if csErr != nil {
+			return fmt.Errorf("create kubernetes clientset for gateway reconciler: %w", csErr)
+		}
+		gwDynamic, dynErr := dynamic.NewForConfig(kubeCfg)
+		if dynErr != nil {
+			return fmt.Errorf("create dynamic client for gateway reconciler: %w", dynErr)
+		}
+		gwReconciler := reconciler.NewGatewayReconciler(factory, gwDynamic, gwClientset, log.Logger)
 		go func() {
-			gatewayErrCh <- initGatewayProvisioning(ctx, cfg.Kubeconfig, cfg.CPRuntimeNamespace)
+			gatewayErrCh <- gwReconciler.Run(ctx)
 		}()
+		log.Info().Msg("gateway reconciler enabled")
 	} else {
-		// Close channel immediately so it's never selected
 		close(gatewayErrCh)
 	}
 
@@ -247,7 +261,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 
 	tsErrCh := make(chan error, 1)
 	go func() {
-		tsErrCh <- startTokenServer(ctx, cfg, tokenProvider, kp)
+		tsErrCh <- startTokenServer(ctx, cfg, tokenProvider, kp, gateway)
 	}()
 
 	infErrCh := make(chan error, 1)
@@ -287,12 +301,16 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	}
 }
 
-func startTokenServer(ctx context.Context, cfg *config.ControlPlaneConfig, tokenProvider auth.TokenProvider, kp *keypair.KeyPair) error {
+func startTokenServer(ctx context.Context, cfg *config.ControlPlaneConfig, tokenProvider auth.TokenProvider, kp *keypair.KeyPair, gateway *openshell.GatewayClient) error {
 	privKey, err := keypair.ParsePrivateKey(kp.PrivateKeyPEM)
 	if err != nil {
 		return fmt.Errorf("parsing CP token private key: %w", err)
 	}
-	ts, err := tokenserver.New(cfg.CPTokenListenAddr, tokenProvider, privKey, log.Logger)
+	var opts []tokenserver.Option
+	if gateway != nil {
+		opts = append(opts, tokenserver.WithGateway(gateway))
+	}
+	ts, err := tokenserver.New(cfg.CPTokenListenAddr, tokenProvider, privKey, log.Logger, opts...)
 	if err != nil {
 		return fmt.Errorf("creating token server: %w", err)
 	}
@@ -326,55 +344,6 @@ func createSessionReconcilers(reconcilerTypes []string, factory *reconciler.SDKC
 
 	log.Info().Int("count", len(reconcilers)).Strs("types", reconcilerTypes).Msg("configured session reconcilers")
 	return reconcilers
-}
-
-func initGatewayProvisioning(ctx context.Context, kubeconfig string, namespace string) error {
-	log.Info().Msg("initializing gateway provisioning")
-
-	// Build REST config
-	cfg, err := buildKubeConfig(kubeconfig)
-	if err != nil {
-		return fmt.Errorf("build kubeconfig: %w", err)
-	}
-
-	// Create Kubernetes clientset
-	clientset, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return fmt.Errorf("create kubernetes clientset: %w", err)
-	}
-
-	// Create dynamic client
-	dynamicClient, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return fmt.Errorf("create dynamic client: %w", err)
-	}
-
-	// Load platform config
-	nsConfigs, platformConfigCM, err := gateway.LoadPlatformConfig(ctx, clientset, namespace)
-	if err != nil {
-		log.Error().Err(err).Msg("failed to load platform config, gateway provisioning disabled")
-		nsConfigs = []gateway.NamespaceConfig{} // Continue without gateway provisioning
-		platformConfigCM = nil
-	}
-
-	// Load gateway manifests
-	manifests, err := gateway.LoadGatewayManifests("/manifests/gateway")
-	if err != nil {
-		return fmt.Errorf("load gateway manifests: %w", err)
-	}
-
-	// Initial reconciliation
-	if err := gateway.ReconcileGateways(ctx, dynamicClient, clientset, nsConfigs, manifests, platformConfigCM); err != nil {
-		log.Error().Err(err).Msg("initial gateway reconciliation failed")
-	}
-
-	// Start ConfigMap watcher (blocks until context cancelled)
-	return gateway.WatchPlatformConfig(ctx, clientset, namespace, func(newConfigs []gateway.NamespaceConfig, cm *v1.ConfigMap) {
-		log.Debug().Int("namespaces", len(newConfigs)).Msg("reconciling gateways")
-		if err := gateway.ReconcileGateways(ctx, dynamicClient, clientset, newConfigs, manifests, cm); err != nil {
-			log.Error().Err(err).Msg("gateway reconciliation after config update failed")
-		}
-	})
 }
 
 func buildKubeConfig(kubeconfig string) (*rest.Config, error) {

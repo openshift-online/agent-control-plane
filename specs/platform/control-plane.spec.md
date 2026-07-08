@@ -67,6 +67,18 @@ Handles `session ADDED` and `session MODIFIED (phase=Pending)` events by provisi
 On `phase=Stopping` → calls `deprovisionSession` (deletes pods).
 On `DELETED` → calls `cleanupSession` (deletes pod, secret, service account, service, namespace).
 
+#### `internal/reconciler/project_reconciler.go` — ProjectReconciler
+
+Watches Project events via gRPC informer. Creates Kubernetes namespaces for each Project via `ensureNamespace()`, provisions runner secrets, and sets up control plane RBAC. Project = Namespace — the ProjectReconciler is the sole owner of namespace lifecycle.
+
+#### `internal/reconciler/gateway_reconciler.go` — GatewayReconciler
+
+Watches Gateway resource events via gRPC informer. Reconciles `kind: Gateway` API resources into Kubernetes gateway deployments (StatefulSet, Service, RBAC, certgen Job, NetworkPolicy) in the project namespace. Replaces the previous ConfigMap-based `internal/gateway/` package. Reuses manifest templating from `internal/gateway/manifests.go` and validation from `internal/gateway/validation.go`. See [gateway-provisioning.spec.md](./gateway-provisioning.spec.md) for the full specification.
+
+#### `internal/reconciler/application_reconciler.go` — ApplicationReconciler
+
+Git-based GitOps reconciler that syncs agent fleet definitions from git repositories. Uses the shared kustomize library (extracted from `acpctl apply`) to render manifests. Supports `kind: Gateway` documents in rendered manifests, applying them to the API server alongside Project, Agent, Credential, and RoleBinding resources.
+
 #### `internal/reconciler/shared.go` — SDKClientFactory
 
 Mints and caches per-project SDK clients. Each project uses the same bearer token but different project context. Also provides `namespaceForSession`, phase constants, and label helpers.
@@ -92,7 +104,7 @@ The CP binds the `system:image-builder` ClusterRole to `session-{id}-sa` via a n
 
 ### Start Context Assembly
 
-`assembleInitialPrompt` builds `INITIAL_PROMPT` from four sources in order:
+`assembleInitialPrompt` builds the initial prompt from four sources in order:
 
 ```
 1. Project.prompt        — workspace-level context (shared by all agents in this project)
@@ -101,7 +113,11 @@ The CP binds the `system:image-builder` ClusterRole to `session-{id}-sa` via a n
 4. Session.prompt        — what this specific run should do
 ```
 
-Each section is joined with `\n\n`. Empty sections are omitted. If all four are empty, `INITIAL_PROMPT` is not set and the runner waits for a user message via gRPC.
+Each section is joined with `\n\n`. Empty sections are omitted. If all four are empty, the prompt is not delivered and the runner waits for a user message via gRPC.
+
+**Delivery mechanism varies by runtime:**
+- **Gateway (OpenShell) sandboxes:** The assembled prompt is written to `/tmp/initial_prompt.txt` via SSH payload upload before the runner entrypoint executes. The `INITIAL_PROMPT` env var is NOT set — OpenShell strips env vars containing newlines, which the assembled prompt always contains.
+- **Operator (Job) pods:** The assembled prompt is set as the `INITIAL_PROMPT` env var on the Job container spec.
 
 ### Environment Variables Injected into Runner Pod
 
@@ -115,7 +131,7 @@ Each section is joined with `\n\n`. Empty sections are omitted. If all four are 
 | `AMBIENT_GRPC_URL` | CP config | api-server gRPC address |
 | `AMBIENT_GRPC_USE_TLS` | CP config | TLS flag for gRPC |
 | `AMBIENT_CP_TOKEN_URL` | CP config | CP token endpoint URL (e.g. `http://ambient-control-plane.{ns}.svc:8080/token`) |
-| `INITIAL_PROMPT` | assembled prompt | Auto-execute on startup |
+| `INITIAL_PROMPT` | assembled prompt | Auto-execute on startup (operator Job path only; gateway sandboxes receive the prompt via `/tmp/initial_prompt.txt` file upload) |
 | `IS_RESUME` | `"true"` | Set when `session.StartTime != nil` (session has been started before); tells the runner to skip `INITIAL_PROMPT` auto-execute |
 | `RESUME_AFTER_SEQ` | max `seq` from session_messages | Set alongside `IS_RESUME` when messages exist; runner's gRPC listener starts watching from this seq to prevent replay of historical messages |
 | `USE_VERTEX` / `ANTHROPIC_VERTEX_PROJECT_ID` / `CLOUD_ML_REGION` | CP config | Vertex AI config (when enabled) |
@@ -205,7 +221,10 @@ When `AMBIENT_GRPC_URL` is set (standard deployment):
        → listener.ready asyncio.Event set
 5. await bridge._grpc_listener.ready.wait()
    (blocks until WatchSessionMessages stream is confirmed open)
-6. If INITIAL_PROMPT set and not IS_RESUME:
+6. If not IS_RESUME, read initial prompt:
+     a. Try /tmp/initial_prompt.txt (gateway file upload)
+     b. Fall back to INITIAL_PROMPT env var (operator Job path)
+   If prompt found:
      _auto_execute_initial_prompt(prompt, session_id, grpc_url)
      → _push_initial_prompt_via_grpc()
        → PushSessionMessage(event_type="user", payload=prompt)
@@ -527,6 +546,63 @@ Status: ✅ implemented — Credential Kind live (PR #1110); CP integration pend
 
 ---
 
+## Sandbox Snapshot Collection
+
+The CP persists sandbox logs and policy to the API server's sessions table so they survive sandbox shutdown. This enables the UI to display historical sandbox data for stopped sessions, matching the pattern used for chat message history.
+
+### Policy Extraction (every 15s — zero additional cost)
+
+`PodStatusSyncer.syncSandboxStatus()` already calls `GetSandbox` on each 15s sync cycle. Policy is extracted from the existing response using exported helpers in `internal/openshell/sandbox_helpers.go`:
+
+- `SandboxPhaseString(phase)` — converts proto phase enum to human-readable string
+- `PolicyToMap(policy)` — converts proto policy to a JSON-serializable map
+
+The policy envelope is JSON-marshaled and included in the `UpdateStatus` patch as `sandbox_policy_snapshot`. No additional network calls.
+
+### Log Fetch (every 15s)
+
+After policy extraction, the CP calls `GatewayClient.FetchSandboxLogs()` — a method that wraps `WatchSandbox` with `FollowLogs: false, LogTailLines: openshell.LogTailLines` (500). This returns a bounded snapshot of the most recent log entries as a JSON array matching the SSE log format. The result is included in the same `UpdateStatus` patch as `sandbox_logs_snapshot`.
+
+The tail line count is defined as the exported constant `openshell.LogTailLines` to keep it consistent across the periodic syncer and pre-delete final snapshot.
+
+### Pre-Delete Final Snapshot
+
+In `deprovisionSessionSandbox()`, a final snapshot of both logs and policy is taken **before** `DeleteSandbox` is called. This guarantees the stored data matches the live SSE stream for normal stop flows:
+
+```
+deprovisionSessionSandbox():
+    1. Resolve gateway namespace
+    2. Compute sandbox name
+    3. GetSandbox → extract policy snapshot     ← NEW
+    4. FetchSandboxLogs → extract log snapshot   ← NEW
+    5. UpdateStatus with both snapshots          ← NEW
+    6. DeleteSandbox                             (existing)
+    7. UpdateSessionPhase                        (existing)
+```
+
+For abnormal termination (sandbox crash without `deprovisionSessionSandbox`), the most recent periodic snapshot (at most 15s stale) serves as fallback.
+
+### Error Handling
+
+Snapshot errors (gateway unreachable, gRPC timeout, policy marshal failure) are logged at WARN/DEBUG level and never block the status sync or sandbox deletion. The periodic 15s snapshots provide redundancy — a failed final snapshot still has the recent periodic data as fallback.
+
+`FetchSandboxLogs` returns both partial data AND the error when the stream fails mid-read. Callers log the error and persist whatever entries were collected, so partial snapshots are never silently dropped. When the stream errors before any entries are received, only the error is returned.
+
+### Shared Helpers
+
+`internal/openshell/sandbox_helpers.go` exports shared functions used by both the token server and the reconciler:
+
+- `SandboxPhaseString(phase)` — converts proto phase enum to human-readable string
+- `PolicyToMap(policy)` — converts proto policy to a JSON-serializable map
+- `BuildSnapshotPatch(sbx)` — builds the complete `UpdateStatus` patch map from a `*pb.Sandbox`, including the policy envelope with version, hash, status, source, config_revision, and policy fields. Returns `(patch, error)`. Both `snapshotSandboxData` (periodic sync) and `finalSandboxSnapshot` (pre-delete) call this shared helper to keep the envelope structure and field names in one place.
+- `LogTailLines` — exported constant (`500`) for the log tail line count
+
+Both `tokenserver` and `reconciler` import `openshell`, so no import cycles are introduced.
+
+Status: ✅ implemented
+
+---
+
 ## Namespace Deletion RBAC Gap
 
 The CP's `cleanupSession` calls `kube.DeleteNamespace()`. This currently fails in kind with:
@@ -559,5 +635,11 @@ The `ambient-control-plane` ServiceAccount does not have `delete` on `namespaces
 | Runner SA token for CP auth | K8s SA tokens are already mounted in every pod, long-lived, and K8s-managed — no new secrets or out-of-band key distribution required |
 | CP is sole token source — no BOT_TOKEN Secret | CP creates the runner pod, so it is always reachable before the runner's first token request; retaining a Secret adds complexity and a second failure mode with the same blast radius |
 | `system:image-builder` bound to session SA at provision time | Agents need push access to the internal image registry to build and distribute images; OpenShift grants pull automatically via `system:image-pullers` at namespace init but push requires an explicit RoleBinding; co-locating it with the other session SA grants keeps all RBAC provisioning in one place |
+| Sandbox snapshots in PostgreSQL, not a log store | Snapshots are bounded (500 lines), session-scoped, and low-frequency (15s writes). PostgreSQL handles this without a new dependency. A dedicated log store would be appropriate for unbounded historical search, not for session-scoped snapshots |
+| Pre-delete final snapshot before `DeleteSandbox` | Periodic 15s snapshots provide good coverage, but the final state is most valuable for post-mortem. Fetching before delete guarantees stored data matches the live stream |
+| Snapshot errors logged, partial data preserved | Snapshot collection must never block status sync or sandbox deletion — it is best-effort. `FetchSandboxLogs` returns partial data with the error so callers can persist whatever was collected. Periodic snapshots provide redundancy for failed final snapshots |
+| Gateway as API resource, not ConfigMap | Gateway configuration lives in PostgreSQL as `kind: Gateway`, applied via `acpctl apply -k`. Eliminates the ConfigMap watcher, `initGatewayProvisioning()`, and the `internal/gateway/config.go` code path. The GatewayReconciler receives events via the same gRPC watch stream as all other resources — unified, testable, composable via kustomize |
+| ProjectReconciler owns namespace lifecycle | Project = Namespace. The ProjectReconciler creates namespaces; the GatewayReconciler deploys gateways into existing namespaces. No ConfigMap needed to declare which namespaces exist |
+| Shared kustomize library | The rendering engine from `acpctl apply` is extracted into a shared library consumed by both the CLI and the ApplicationReconciler, enabling unit testing without a running cluster |
 
 ---

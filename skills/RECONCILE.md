@@ -50,19 +50,19 @@ skills/
 
 ## Reconciliation State
 
-**Last analyzed**: 2026-07-06 (Wave 2 through Wave 9 executed)
+**Last analyzed**: 2026-07-08 (PR #281 gateway spec reconciliation)
 **Spec corpus**: 29 specs across 4 domains
-**Codebase commit**: 1fbebf75 (squizzi/reconcile-frontend-gaps branch)
+**Codebase commit**: 8fb60a30 (reconcile/pr-281-gateway-spec-changes branch)
 
 ### Coverage Summary
 
 | Domain | Specs | Requirements | Present | Partial | Missing | Coverage |
 |--------|-------|-------------|---------|---------|---------|----------|
-| Platform | 12 | 113 | 107 | 3 | 3 | 94.7% |
+| Platform | 12 | 121 | 116 | 1 | 4 | 95.9% |
 | Security | 6 | 55 | 45 | 5 | 5 | 81.8% |
 | UI | 7 | 70 | 62 | 6 | 2 | 88.6% |
 | CLI | 1 | 13 | 13 | 0 | 0 | 100% |
-| **TOTAL** | **29** | **251** | **225** | **16** | **10** | **89.6%** |
+| **TOTAL** | **29** | **259** | **236** | **12** | **11** | **91.1%** |
 
 ### Spec Dependency Order
 
@@ -112,6 +112,17 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | ID | Spec | Requirement | Layer | Status | Severity | Notes |
 |----|------|-------------|-------|--------|----------|-------|
 | P1 | data-model | Application GitOps sync engine | CP | partial | critical | Only syncs Agent kind. Missing: Project, Credential, RoleBinding, Inbox sync. No kustomize rendering, auto_sync, self_heal, per-resource status. |
+| P11 | gateway-provisioning | Gateway as API Resource (DB, REST, gRPC) | BE | **done** | blocker | Gateway plugin implemented: model, DAO, service, handler, presenter, migration, mock DAO, OpenAPI spec. Project-scoped CRUD under `/projects/{id}/gateways`. RBAC tier checks, jsonb fields (server_dns_names, labels, annotations). SDKs generated (Go, Python, TypeScript). |
+| P12 | gateway-provisioning | GatewayReconciler in internal/reconciler/ | CP | **done** | blocker | `gateway_reconciler.go` created with polling pattern (30s ticker). Lists all projects, lists gateways per project, reconciles via existing `ReconcileGateways`. Wired into `main.go` replacing `initGatewayProvisioning`. |
+| P13 | gateway-provisioning | Shared Kustomize Library | SDK | **done** | blocker | Extracted kustomize engine from `acpctl apply/cmd.go` into `ambient-sdk/go-sdk/kustomize/kustomize.go`. Exports: Resource, PayloadDecl, InboxSeed types; LoadKustomize, LoadFile, LoadDir, ParseManifests, MergeResources, ApplyPatch, StrategicMerge functions. CLI refactored to use shared library. |
+| P14 | gateway-provisioning | Elimination of ConfigMap-Based Provisioning | CP | **done** | critical | ConfigMap loading/watching functions removed from `config.go` (only type defs remain). `initGatewayProvisioning` removed from `main.go`. `setOwnerReference` removed from `reconciler.go`. `platformConfigCM` parameter eliminated from `ReconcileGateways`/`deployGateway`. `config_test.go` deleted. |
+| P15 | gateway-provisioning | Gateway kind in acpctl apply | CLI | **done** | critical | Added `case "gateway"` to apply switch. `applyGateway` reconciles create/update with `buildGatewayPatch`. Resource struct includes `ServerDnsNames`, `Image`, `Config`. `strategicMerge` handles Gateway fields. |
+| P16 | gateway-provisioning | Gateway Manifest Templating | CP | **done** | major | `internal/gateway/manifests.go` consumed by new `GatewayReconciler` via `gateway.LoadGatewayManifests` and `gateway.ReconcileGateways` which calls `ApplyManifestToNamespace` and `ApplyConfigOverrides`. |
+| P17 | gateway-provisioning | Gateway Configuration Validation | CP | **done** | major | `internal/gateway/validation.go` consumed by `GatewayReconciler.reconcileGateway` — calls `gateway.ValidateGatewayConfig` before reconciling, skips invalid gateways with warning log. |
+| P18 | gateway-provisioning | Kustomize Overlay Structure for Gateways | Examples | **done** | major | `examples/base/gateways/openshell-gateway.yaml` with `kind: Gateway`, image, server_dns_names, labels. `examples/base/gateways/kustomization.yaml`. Base kustomization updated. |
+| P19 | gateway-provisioning | Gateway Deployment Failure Handling | CP | **done** | major | GatewayReconciler tracks per-gateway failures, updates `ambient.ai/reconcile-status` and `ambient.ai/last-reconciled-at` annotations on Gateway resources. Validation failures annotated as `ValidationFailed`. Reconcile loop counts and warns on partial failures. |
+| P20 | gateway-provisioning | platform-config ConfigMap overlays removal | Manifests | **done** | minor | Deleted `platform-config.yaml` from `overlays/kind/` and `overlays/hcmais-dev/`. Removed references from both `kustomization.yaml` files. |
+| P21 | control-plane | ProjectReconciler namespace lifecycle | CP | **done** | minor | Ordering already enforced: informer `initialSync` syncs `projects` before `sessions`, and `RegisterHandler` in main.go registers ProjectReconciler first. ProjectReconciler runs `ensureNamespace()` which creates namespaces before session reconcilers attempt to use them. |
 | P2 | data-model | Application CLI sync/refresh commands | CLI | **done** | major | SDK `Sync()`/`Refresh()` methods added. CLI calls `POST /sync` and `POST /refresh`. Flags: `--prune`, `--revision`, `--prune-project`. |
 | P3 | data-model | Application frontend UI | FE | **done** | major | Full CRUD UI: domain types, port, adapter, mapper, query hooks, list page, detail page. Gated behind `feature.applications.enabled` flag. |
 | P4 | data-model | SessionEvent runner-side compression | Runner | **done** | major | `EventCompressor` integrated into gRPC transport path. Compressed events pushed to `session_events.push()` with `event_count` and `completed_at`. |
@@ -142,11 +153,12 @@ Severity: `blocker` > `critical` > `major` > `minor`
 
 These items intentionally differ from spec. Decision needed: update spec or update code?
 
-| ID | Spec | Issue | Current Code | Spec Says |
-|----|------|-------|-------------|-----------|
-| D1 | gateway-rbac | Gateway mode activation | Hardcoded `true` in `IsGatewayModeActive()` | Env-var gated: `OPENSHELL_USE_GATEWAY=true AND OPENSHELL_ENABLED=true` |
-| D2 | gateway-rbac | Agent CRUD gating | CRUD permitted; tests verify it is NOT blocked | 403 for create/update/delete in gateway mode |
-| D3 | data-model | Implementation coverage matrix | Application CRUD, credential bind, Events API implemented | Matrix says "planned" / "not yet implemented" |
+| ID | Spec | Issue | Current Code | Spec Says | Resolution |
+|----|------|-------|-------------|-----------|------------|
+| D1 | gateway-rbac | Gateway mode activation | Hardcoded `true` in `IsGatewayModeActive()` | ~~Env-var gated~~ → Always-active | **Resolved in PR #281**: Spec updated to match code (always-active). |
+| D2 | gateway-rbac | Agent CRUD gating | CRUD permitted; tests verify it is NOT blocked | ~~403 for CRUD~~ → CRUD permitted via API | **Resolved in PR #281**: Spec updated to match code. |
+| D3 | data-model | Implementation coverage matrix | Application CRUD, credential bind, Events API implemented | ~~"planned"~~ → Matrix corrected | **Resolved in PR #281**: Spec matrix updated. |
+| D4 | gateway-provisioning | ConfigMap vs API-driven gateway | ~~Code uses ConfigMap-based `platform-config`~~ | API-driven `kind: Gateway` resource | **Resolved**: Code migrated to API-driven Gateway (P11-P14). ConfigMap provisioning removed. |
 
 ---
 
@@ -156,15 +168,19 @@ Gaps grouped by execution wave. Each wave gates the next.
 
 | Wave | Layer | Items | IDs | Gate |
 |------|-------|-------|-----|------|
-| 2 | API | 3 | P5, P6, U2 (endpoint) | `make lint` on API server |
-| 4 | BE + CP | 10 | S1, S2, S3, S4, S5, S7, S8, P1, P10, S6 | `go vet ./... && golangci-lint run` |
-| 5 | CLI + Runner | 3 | P2, P4, P8 | CLI tests, `python -m pytest tests/` |
-| 6 | FE | 7 | P3, U1, U2 (UI), U3, U4, U5, U6 | `npm run build` -- 0 errors |
-| 7 | Integration | 2 | P7, P9 | MCP tool test in Kind |
-| 8 | FE | 2 | U7, U8 | UI cleanup: sidebar label, gear icon, OpenShell-only mode |
-| 9 | FE | 0 new | (cleanup) | YAML types, lifecycle badges, namespace removal, file renames |
+| ~~2~~ | ~~API~~ | ~~3~~ | ~~P5, P6, U2~~ | ✅ Completed 2026-07-05 |
+| ~~4~~ | ~~BE + CP~~ | ~~10~~ | ~~S1–S8, P10, S6~~ | ✅ Completed 2026-07-05 |
+| ~~5~~ | ~~CLI + Runner~~ | ~~3~~ | ~~P2, P4, P8~~ | ✅ Completed 2026-07-05 |
+| ~~6~~ | ~~FE~~ | ~~7~~ | ~~P3, U1, U2(UI), U3~~ | ✅ Completed 2026-07-05 (U4/U5/U6 blocked) |
+| ~~7~~ | ~~Integration~~ | ~~2~~ | ~~P7~~ | ✅ Completed 2026-07-05 (P9 blocked) |
+| ~~8~~ | ~~FE~~ | ~~2~~ | ~~U7, U8~~ | ✅ Completed 2026-07-06 |
+| ~~9~~ | ~~FE~~ | ~~0 new~~ | ~~(cleanup)~~ | ✅ Completed 2026-07-06 |
+| ~~10~~ | ~~BE (API Server)~~ | ~~1~~ | ~~P11~~ | ✅ Completed 2026-07-08 |
+| ~~11~~ | ~~SDK + CLI~~ | ~~2~~ | ~~P13, P15~~ | ✅ Completed 2026-07-08 |
+| ~~12~~ | ~~CP~~ | ~~4~~ | ~~P12, P14, P16, P17~~ | ✅ Completed 2026-07-08 |
+| ~~13~~ | ~~Examples + Manifests~~ | ~~4~~ | ~~P18, P19, P20, P21~~ | ✅ Completed 2026-07-08 |
 
-**Partials** (S9, S10, S11) are low-severity and can be addressed opportunistically.
+**Partials** (S9, S10, S11, P1, P9) are low-severity and can be addressed opportunistically.
 
 ---
 
@@ -211,3 +227,8 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-06 | 2213d3cc | Wave 8 executed: U7, U8 + OpenShell cleanup | 90.7% | Sidebar label → "Config". Gear icon in nav header. Removed non-OpenShell dual-mode paths, GitOps info boxes, "Generate YAML" button labels. |
 | 2026-07-06 | 1fbebf75 | Wave 9: FE consistency + type safety | 90.7% | Dynamic lifecycle badges for providers/policies (was hardcoded GitOps). Narrow YAML input types (AgentYamlInput, ProviderYamlInput, PolicyYamlInput). Removed namespace fields from all create sheets (inherited from project). Renamed configmap-yaml-preview → yaml-preview. Provider types narrowed to github/vertex/generic. Image field disabled (coming soon). All buttons → "Generate X Manifest". |
 | 2026-07-07 | 8d5903d3 | Git repo payload support: P11,P13 done, P12 partial | 89.6% | go-git clone + tar SSH delivery, failSession condition fix, UI SandboxFailure title. 3 new reqs tracked (251 total). |
+| 2026-07-08 | 8fb60a30 | PR #281 reconciliation: gap analysis | 86.9% | PR #281 merged: gateway-provisioning spec rewritten from ConfigMap to API-driven `kind: Gateway`. 11 new gaps (P11-P21), 3 divergences resolved (D1-D3), 1 new divergence (D4). Waves 10-13 planned for Gateway API resource implementation. |
+| 2026-07-08 | (pending) | Wave 10 executed: P11 | 87.3% | Gateway API resource fully implemented: plugin (model, DAO, service, handler, presenter, migration, mock), OpenAPI spec, SDK codegen (Go/Python/TypeScript). `go vet ./...` clean, `golangci-lint run` 0 issues. |
+| 2026-07-08 | (pending) | Wave 11 executed: P13, P15 | 88.0% | Shared kustomize library extracted to `ambient-sdk/go-sdk/kustomize/`. CLI refactored to use shared library. Gateway kind added to `acpctl apply` with reconcile semantics. |
+| 2026-07-08 | (pending) | Wave 12 executed: P12, P14, P16, P17 | 89.6% | GatewayReconciler created (polling pattern, 30s ticker). ConfigMap-based provisioning eliminated. Manifests and validation consumed by new reconciler. `go build ./...` clean. |
+| 2026-07-08 | (pending) | Wave 13 executed: P18, P19, P20, P21 | 91.1% | Gateway overlay examples added. Failure handling with annotation-based status tracking. platform-config.yaml removed from kind and hcmais-dev overlays. ProjectReconciler ordering verified as already enforced. |

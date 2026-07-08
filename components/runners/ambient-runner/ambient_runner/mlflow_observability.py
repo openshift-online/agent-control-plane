@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 _TURN_SPAN_NAME = "llm_interaction"
 _SESSION_METRICS_SPAN_NAME = "Session Metrics"
 _SESSION_METRICS_SOURCE = "ambient-runner-metrics"
+_OPENSHELL_RESOLVE_PREFIX = "openshell:resolve:env:"
 
 
 class MLflowSessionTracer:
@@ -36,6 +37,10 @@ class MLflowSessionTracer:
     @property
     def has_active_turn(self) -> bool:
         return self._turn_span is not None
+
+    @staticmethod
+    def _is_openshell_token(value: str) -> bool:
+        return value.startswith(_OPENSHELL_RESOLVE_PREFIX)
 
     def initialize(
         self,
@@ -66,20 +71,31 @@ class MLflowSessionTracer:
             )
             return False
 
-        try:
-            mlflow.set_tracking_uri(tracking_uri)
-            exp_name = os.getenv(
-                "MLFLOW_EXPERIMENT_NAME", "ambient-code-sessions"
-            ).strip()
-            if not exp_name:
-                exp_name = "ambient-code-sessions"
-            mlflow.set_experiment(exp_name)
-        except Exception as e:
-            logger.warning("MLflow: failed to set tracking URI or experiment: %s", e)
-            return False
+        # openshell sandbox env vars use lazy-resolve tokens that the
+        # supervisor resolves at the C library level. Skip explicit
+        # mlflow.set_tracking_uri / set_experiment so MLflow reads from
+        # the environment through its own native (Rust/C) bindings where
+        # the supervisor intercepts getenv() and returns real values.
+        openshell_env = self._is_openshell_token(tracking_uri)
+        exp_name = os.getenv(
+            "MLFLOW_EXPERIMENT_NAME", "ambient-code-sessions"
+        ).strip() or "ambient-code-sessions"
+
+        if openshell_env:
+            logger.info(
+                "MLflow: openshell resolve tokens detected — deferring "
+                "tracking URI and experiment config to runtime env resolution"
+            )
+        else:
+            try:
+                mlflow.set_tracking_uri(tracking_uri)
+                mlflow.set_experiment(exp_name)
+            except Exception as e:
+                logger.warning("MLflow: failed to set tracking URI or experiment: %s", e)
+                return False
 
         auth_mode = os.getenv("MLFLOW_TRACKING_AUTH", "").strip()
-        if auth_mode:
+        if auth_mode and not self._is_openshell_token(auth_mode):
             logger.info("MLflow: MLFLOW_TRACKING_AUTH=%s", auth_mode)
         if os.getenv("MLFLOW_WORKSPACE", "").strip():
             logger.info("MLflow: MLFLOW_WORKSPACE override is set")

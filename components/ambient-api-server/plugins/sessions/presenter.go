@@ -85,5 +85,7 @@ func PresentSession(session *Session) openapi.Session {
 		KubeCrUid:                session.KubeCrUid,
 		KubeNamespace:            session.KubeNamespace,
 		LastActivityAt:           session.LastActivityAt,
+		SandboxLogsSnapshot:      session.SandboxLogsSnapshot,
+		SandboxPolicySnapshot:    session.SandboxPolicySnapshot,
 	}
 }
