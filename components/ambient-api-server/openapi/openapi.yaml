@@ -108,6 +108,10 @@ paths:
     $ref: 'openapi.sessions.yaml#/paths/~1api~1ambient~1v1~1sessions~1{id}~1events'
   /api/ambient/v1/sessions/{id}/events/history:
     $ref: 'openapi.sessionEvents.yaml#/paths/~1api~1ambient~1v1~1sessions~1{id}~1events~1history'
+  /api/ambient/v1/projects/{id}/gateways:
+    $ref: 'openapi.gateways.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1gateways'
+  /api/ambient/v1/projects/{id}/gateways/{gateway_id}:
+    $ref: 'openapi.gateways.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1gateways~1{gateway_id}'
   # AUTO-ADD NEW PATHS
 components:
   securitySchemes:
@@ -291,6 +295,12 @@ components:
       $ref: 'openapi.sessionEvents.yaml#/components/schemas/SessionEvent'
     SessionEventList:
       $ref: 'openapi.sessionEvents.yaml#/components/schemas/SessionEventList'
+    Gateway:
+      $ref: 'openapi.gateways.yaml#/components/schemas/Gateway'
+    GatewayList:
+      $ref: 'openapi.gateways.yaml#/components/schemas/GatewayList'
+    GatewayPatchRequest:
+      $ref: 'openapi.gateways.yaml#/components/schemas/GatewayPatchRequest'
     # AUTO-ADD NEW SCHEMAS
   parameters:
     id:

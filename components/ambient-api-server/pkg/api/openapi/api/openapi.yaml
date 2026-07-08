@@ -5041,6 +5041,313 @@ paths:
       security:
       - Bearer: []
       summary: List persisted compressed AG-UI events
+  /api/ambient/v1/projects/{id}/gateways:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GatewayList"
+          description: A JSON array of gateway objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of gateways for a project
+    post:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Gateway"
+        description: Gateway data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Gateway"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Gateway already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the gateway
+      security:
+      - Bearer: []
+      summary: Create a new gateway in a project
+  /api/ambient/v1/projects/{id}/gateways/{gateway_id}:
+    delete:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the gateway
+        in: path
+        name: gateway_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Gateway deleted successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No gateway with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Delete a gateway
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the gateway
+        in: path
+        name: gateway_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Gateway"
+          description: Gateway found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No gateway with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get a gateway by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the gateway
+        in: path
+        name: gateway_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GatewayPatchRequest"
+        description: Updated gateway data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Gateway"
+          description: Gateway updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No gateway with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Gateway already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating gateway
+      security:
+      - Bearer: []
+      summary: Update a gateway
 components:
   parameters:
     id:
@@ -5113,6 +5420,13 @@ components:
       description: The id of the application
       in: path
       name: app_id
+      required: true
+      schema:
+        type: string
+    gateway_id:
+      description: The id of the gateway
+      in: path
+      name: gateway_id
       required: true
       schema:
         type: string
@@ -7508,6 +7822,122 @@ components:
           id: id
           href: href
           seq: 5
+    Gateway:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          name:
+            description: Resource name (typically openshell-gateway)
+            type: string
+          project_id:
+            description: The project this gateway belongs to
+            type: string
+          image:
+            description: Gateway container image reference
+            type: string
+          server_dns_names:
+            description: DNS names for TLS certificate generation
+            items:
+              type: string
+            type: array
+          config:
+            description: OpenShell gateway TOML configuration
+            type: string
+          labels:
+            description: JSON-encoded labels
+            type: string
+          annotations:
+            description: JSON-encoded annotations
+            type: string
+        required:
+        - name
+        - project_id
+        - server_dns_names
+        type: object
+      example:
+        image: image
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        project_id: project_id
+        kind: kind
+        server_dns_names:
+        - server_dns_names
+        - server_dns_names
+        name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        annotations: annotations
+        id: id
+        href: href
+        config: config
+        labels: labels
+    GatewayList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/Gateway"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - image: image
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          kind: kind
+          server_dns_names:
+          - server_dns_names
+          - server_dns_names
+          name: name
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          id: id
+          href: href
+          config: config
+          labels: labels
+        - image: image
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          kind: kind
+          server_dns_names:
+          - server_dns_names
+          - server_dns_names
+          name: name
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          id: id
+          href: href
+          config: config
+          labels: labels
+    GatewayPatchRequest:
+      example:
+        image: image
+        server_dns_names:
+        - server_dns_names
+        - server_dns_names
+        name: name
+        annotations: annotations
+        config: config
+        labels: labels
+      properties:
+        name:
+          type: string
+        image:
+          type: string
+        server_dns_names:
+          items:
+            type: string
+          type: array
+        config:
+          type: string
+        labels:
+          type: string
+        annotations:
+          type: string
+      type: object
     Payload:
       example:
         repo_url: repo_url
