@@ -36,7 +36,7 @@ from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
 from ambient_runner.bridge import PlatformBridge
-from ambient_runner.platform.config import load_ambient_config
+from ambient_runner.platform.config import get_session_config_path, load_ambient_config
 from ambient_runner.platform.context import RunnerContext
 from ambient_runner.platform.utils import get_bot_token, parse_owner_repo
 
@@ -114,6 +114,7 @@ def create_ambient_app(
         context = RunnerContext(
             session_id=session_id,
             workspace_path=workspace_path,
+            session_config_path=get_session_config_path(),
         )
         bridge.set_context(context)
 

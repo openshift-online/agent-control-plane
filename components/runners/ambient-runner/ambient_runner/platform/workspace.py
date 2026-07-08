@@ -161,6 +161,14 @@ def resolve_workspace_paths(context: RunnerContext) -> tuple[str, list[str]]:
             logger.error(f"Failed to create working directory: {e}")
             cwd_path = context.workspace_path
 
+    session_config_path = context.session_config_path
+    if (
+        session_config_path
+        and session_config_path != cwd_path
+        and session_config_path not in add_dirs
+    ):
+        add_dirs.append(session_config_path)
+
     logger.info(f"Claude SDK CWD: {cwd_path}")
     if add_dirs:
         logger.info(f"Claude SDK additional directories: {add_dirs}")

@@ -223,7 +223,7 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		if dynErr != nil {
 			return fmt.Errorf("create dynamic client for gateway reconciler: %w", dynErr)
 		}
-		gwReconciler := reconciler.NewGatewayReconciler(factory, gwDynamic, gwClientset, log.Logger)
+		gwReconciler := reconciler.NewGatewayReconciler(factory, gwDynamic, gwClientset, provisioner, log.Logger)
 		go func() {
 			gatewayErrCh <- gwReconciler.Run(ctx)
 		}()

@@ -40,6 +40,7 @@
     "NextJS",
     "OAuth",
     "OIDC",
+    "openshell",
     "OpenShift",
     "Opus",
     "Playwright",
@@ -63,6 +64,7 @@
     "teardown",
     "TypeScript",
     "unwatch",
+    "vTeam",
     "worktree",
     "YAML"
   ]

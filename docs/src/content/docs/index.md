@@ -18,7 +18,10 @@ ACP is not a CRD data model. The API server is a Go service backed by PostgreSQL
 
 1. Read [What is ACP?](getting-started/) for the system model.
 2. Use [Quick start](getting-started/quickstart-ui/) to create a project, agent, and session from the UI.
-3. Use [CLI Reference](getting-started/cli/) when you want repeatable automation from a terminal or CI job.
+3. Add a [Session Config Quickstart](getting-started/session-config/) repo when an agent needs shared instructions, Claude skills, or reusable team
+   context.
+4. Use [CLI Reference](getting-started/cli/) when you want repeatable automation from a terminal or CI job.
+5. Try the [catalog lab](guides/vteam-lab/) when you want to apply a bundled multi-agent catalog.
 
 ## Core objects
 

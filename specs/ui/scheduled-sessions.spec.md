@@ -84,7 +84,7 @@ The user SHALL be able to edit an existing scheduled session.
 - GIVEN the user clicks the edit action on a schedule row
 - WHEN the edit sheet opens
 - THEN it SHALL be pre-populated with the schedule's current values
-- AND the user SHALL be able to modify any field except `created_by_user_id`
+- AND the user SHALL be able to modify any mutable field
 
 ---
 

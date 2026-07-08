@@ -5,7 +5,7 @@
 .PHONY: local-test local-test-dev local-test-quick test-all local-troubleshoot local-port-forward local-stop-port-forward
 .PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-reload-ambient-control-plane kind-reload-ambient-api-server kind-reload-runner-openshell kind-status kind-login kind-sso-toggle kind-setup-vertex kind-setup-openshell-cli
 .PHONY: preflight-cluster preflight dev-env dev
-.PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift test-gateway-e2e
+.PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift test-gateway-e2e test-vteam-catalog-lab
 .PHONY: unleash-port-forward unleash-status
 .PHONY: kind-port-forward kind-port-forward-stop _kind-start-port-forward kind-acpctl-login kind-apply-examples
 .PHONY: setup-minio minio-console minio-logs minio-status
@@ -123,10 +123,10 @@ GOOGLE_APPLICATION_CREDENTIALS ?= $(or $(shell echo $$GOOGLE_APPLICATION_CREDENT
 VERTEX_CRED ?= $(GOOGLE_APPLICATION_CREDENTIALS)
 
 # OpenShell Gateway Configuration (OPENSHELL_USE_GATEWAY=true by default)
-# Provisions two tenant namespaces (tenant-a, tenant-b) with an OpenShell gateway each.
+# Provisions tenant namespaces with an OpenShell gateway each.
 # Override with OPENSHELL_TENANTS="ns1 ns2" to change the set of tenant namespaces.
 OPENSHELL_USE_GATEWAY ?= true
-OPENSHELL_TENANTS ?= tenant-a tenant-b
+OPENSHELL_TENANTS ?= tenant-a tenant-b vteam-product-swarm codebase-maintainers
 AGENT_SANDBOX_VERSION ?= v0.4.6
 
 # Colors for output (using tput for better compatibility, with fallback to printf-compatible codes)
@@ -495,6 +495,10 @@ test-gateway-e2e: check-kubectl _kind-require-cluster ## Run full gateway e2e te
 	@TEST_TOKEN=$$(kubectl get secret test-user-token -n $(NAMESPACE) -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null) \
 		API_URL="http://localhost:$(KIND_FWD_API_SERVER_PORT)" ./tests/e2e/gateway-e2e-test.sh \
 		$(if $(filter true 1,$(SKIP_CLEANUP)),--skip-cleanup)
+
+test-vteam-catalog-lab: check-kubectl _kind-require-cluster ## Validate vTeam Catalog lab markdown copy/paste flow
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running vTeam Catalog lab markdown e2e test..."
+	@./tests/e2e/vteam-catalog-lab-test.sh
 
 local-test-quick: check-kubectl ## Quick smoke test of local environment
 	@echo "$(COLOR_BOLD)🧪 Quick Smoke Test$(COLOR_RESET)"

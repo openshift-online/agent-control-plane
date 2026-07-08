@@ -9,7 +9,7 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
       == "main" && ( "components/runners/ambient-runner/***".pathChanged() || ".tekton/acp-runner-openshell-main-push.yaml".pathChanged()
-      || "Dockerfile.gw".pathChanged() )
+      || "components/runners/ambient-runner/Dockerfile.openshell".pathChanged() )
   labels:
     appstudio.openshift.io/application: agent-control-plane-main
     appstudio.openshift.io/component: acp-runner-openshell-main
@@ -25,7 +25,7 @@ spec:
   - name: output-image
     value: quay.io/redhat-user-workloads/hcm-eng-prod-tenant/agent-control-plane-main/acp-runner-openshell-main:{{revision}}
   - name: dockerfile
-    value: Dockerfile.gw
+    value: Dockerfile.openshell
   - name: path-context
     value: components/runners/ambient-runner
   pipelineSpec:

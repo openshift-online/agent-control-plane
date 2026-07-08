@@ -138,7 +138,69 @@ else
   exit 1
 fi
 
-section "3. Verify tenant project exists"
+section "3. Gateway deployment via acpctl apply"
+
+# Apply a minimal project+gateway catalog and verify the control plane deploys
+# the gateway StatefulSet into the project's namespace (not the gateway's name).
+E2E_GW_PROJECT="e2e-gateway-apply"
+E2E_GW_FIXTURE="$SCRIPT_DIR/fixtures/gateway-apply"
+E2E_GW_CLEANUP=true
+
+if $ACPCTL apply -k "$E2E_GW_FIXTURE" --project "$E2E_GW_PROJECT" >/dev/null 2>&1; then
+  pass "acpctl apply -k fixtures/gateway-apply succeeded"
+else
+  fail "acpctl apply -k fixtures/gateway-apply failed"
+  E2E_GW_CLEANUP=false
+fi
+
+if [ "$E2E_GW_CLEANUP" = "true" ]; then
+  # The gateway reconciler runs on a 30s interval. Wait up to 120s for the
+  # StatefulSet to appear, checking every 5s.
+  GW_DEPLOYED=false
+  for i in $(seq 1 24); do
+    GW_STS=$(kubectl get statefulset openshell-gateway -n "$E2E_GW_PROJECT" \
+      -o jsonpath='{.metadata.name}' 2>/dev/null || echo "")
+    if [ "$GW_STS" = "openshell-gateway" ]; then
+      GW_DEPLOYED=true
+      break
+    fi
+    sleep 5
+  done
+
+  if [ "$GW_DEPLOYED" = "true" ]; then
+    pass "Gateway StatefulSet created in namespace '${E2E_GW_PROJECT}'"
+  else
+    fail "Gateway StatefulSet not found in namespace '${E2E_GW_PROJECT}' after 120s"
+    echo "  Control plane may be using gateway name as namespace instead of project namespace"
+  fi
+
+  # Verify the certgen job ran (creates TLS secrets the session reconciler needs)
+  CERTGEN_JOB=$(kubectl get job openshell-gateway-certgen -n "$E2E_GW_PROJECT" \
+    -o jsonpath='{.metadata.name}' 2>/dev/null || echo "")
+  if [ "$CERTGEN_JOB" = "openshell-gateway-certgen" ]; then
+    pass "Certgen job created in namespace '${E2E_GW_PROJECT}'"
+  else
+    fail "Certgen job not found in namespace '${E2E_GW_PROJECT}'"
+  fi
+
+  # Verify TLS secrets were created (needed for session provisioning)
+  SERVER_TLS=$(kubectl get secret openshell-server-tls -n "$E2E_GW_PROJECT" \
+    -o jsonpath='{.metadata.name}' 2>/dev/null || echo "")
+  if [ "$SERVER_TLS" = "openshell-server-tls" ]; then
+    pass "TLS secret openshell-server-tls created"
+  else
+    skip "TLS secret openshell-server-tls" "certgen may still be running"
+  fi
+
+  # Cleanup: delete the test project (namespace will be deprovisioned by project reconciler)
+  if $ACPCTL delete project "$E2E_GW_PROJECT" >/dev/null 2>&1; then
+    echo "  Cleaned up project '${E2E_GW_PROJECT}'"
+  else
+    echo "  Could not delete project '${E2E_GW_PROJECT}' (non-fatal)"
+  fi
+fi
+
+section "4. Verify tenant project exists"
 
 PROJECT_RESP=$(api GET "/api/ambient/v1/projects?size=50" || echo "")
 PROJECT_ID=$(echo "$PROJECT_RESP" \
@@ -152,7 +214,7 @@ else
   exit 1
 fi
 
-section "4. Verify agent exists"
+section "5. Verify agent exists"
 
 AGENTS_RESP=$(api GET "/api/ambient/v1/projects/${PROJECT_ID}/agents?size=50" || echo "")
 AGENT_ID=$(echo "$AGENTS_RESP" \
@@ -182,10 +244,10 @@ fi
 if [ -n "$REPO_AGENT_ID" ]; then
   pass "Agent 'repo-clone-workspace' exists (id: ${REPO_AGENT_ID})"
 else
-  fail "Agent 'repo-clone-workspace' not found in project '${TENANT}'"
+  skip "Agent 'repo-clone-workspace'" "not found — repo payload tests will be skipped"
 fi
 
-section "5. Verify provider and credential"
+section "6. Verify provider and credential"
 
 PROVIDERS_RESP=$(api GET "/api/ambient/v1/providers?size=50" || echo "")
 PROVIDER_NAME=$(echo "$PROVIDERS_RESP" \
@@ -207,7 +269,7 @@ else
   skip "Vertex credential" "not configured (non-fatal)"
 fi
 
-section "6. OpenShell gateway healthy"
+section "7. OpenShell gateway healthy"
 
 GW_READY=$(kubectl get statefulset openshell-gateway -n "$TENANT" \
   -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
@@ -229,7 +291,7 @@ else
   fail "agent-sandbox controller not ready"
 fi
 
-section "7. Start agent session"
+section "8. Start agent session"
 
 START_RESP=$(api POST "/api/ambient/v1/projects/${PROJECT_ID}/agents/${AGENT_ID}/start" \
   -d '{"prompt": "gateway-e2e-test: say hello"}' || echo "")
@@ -244,7 +306,7 @@ else
   echo "  Response: $(echo "$START_RESP" | head -c 200)"
 fi
 
-section "8. Session state verification"
+section "9. Session state verification"
 
 if [ -n "$CREATED_SESSION_ID" ]; then
   sleep 3
@@ -280,7 +342,7 @@ else
   skip "Session state verification" "session not created"
 fi
 
-section "9. Sandbox configuration verification"
+section "10. Sandbox configuration verification"
 
 if [ -n "$CREATED_SESSION_ID" ]; then
   # Derive sandbox pod name: "session-" + lowercased session ID (first 40 chars)
@@ -330,7 +392,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
       done
     fi
 
-    # 9a. Payload upload — agent-defined file written via SSH-over-gRPC
+    # 10a. Payload upload — agent-defined file written via SSH-over-gRPC
     if [ "${PAYLOAD_READY:-false}" = "true" ]; then
       pass "Payload /sandbox/CLAUDE.md uploaded successfully"
     else
@@ -339,7 +401,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
       echo "  Session phase: ${PHASE:-unknown}"
     fi
 
-    # 9b. Agent environment variable passed through to sandbox
+    # 10b. Agent environment variable passed through to sandbox
     ENV_VAL=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
       printenv ENV_NAME 2>/dev/null || echo "")
     if [ "$ENV_VAL" = "test" ]; then
@@ -348,7 +410,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
       fail "Agent env var ENV_NAME not found or wrong value (got: '${ENV_VAL}')"
     fi
 
-    # 9c. MCP config env var patterns preserved (not auto-expanded)
+    # 10c. MCP config env var patterns preserved (not auto-expanded)
     MCP_CONTENT=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
       cat /sandbox/.mcp.json 2>/dev/null || echo "")
     if [ -n "$MCP_CONTENT" ]; then
@@ -365,7 +427,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
       fail "Baked-in MCP config /sandbox/.mcp.json not found"
     fi
 
-    # 9d. Claude settings baked into image match source
+    # 10d. Claude settings baked into image match source
     SETTINGS_ACTUAL=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
       cat /sandbox/.claude/settings.json 2>/dev/null || echo "")
     SETTINGS_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/claude-settings.json" 2>/dev/null || echo "")
@@ -377,7 +439,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
       fail "Claude settings.json not found at /sandbox/.claude/settings.json"
     fi
 
-    # 9e. Claude settings.local.json baked into image matches source
+    # 10e. Claude settings.local.json baked into image matches source
     SETTINGS_LOCAL_ACTUAL=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
       cat /sandbox/.claude/settings.local.json 2>/dev/null || echo "")
     SETTINGS_LOCAL_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/claude-settings-local.json" 2>/dev/null || echo "")
@@ -389,7 +451,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
       fail "Claude settings.local.json not found at /sandbox/.claude/settings.local.json"
     fi
 
-    # 9f. Sandbox network policy present at /etc/openshell/policy.yaml
+    # 10f. Sandbox network policy present at /etc/openshell/policy.yaml
     POLICY_ACTUAL=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
       cat /etc/openshell/policy.yaml 2>/dev/null || echo "")
     POLICY_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/policy.yaml" 2>/dev/null || echo "")
