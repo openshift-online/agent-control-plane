@@ -10,8 +10,8 @@ import (
 func migration() *gormigrate.Migration {
 	type Gateway struct {
 		db.Model
-		Name           string  `gorm:"not null"`
-		ProjectId      string  `gorm:"not null;index"`
+		Name           string `gorm:"not null"`
+		ProjectId      string `gorm:"not null;index"`
 		Image          *string
 		ServerDnsNames *string `gorm:"type:jsonb"`
 		Config         *string

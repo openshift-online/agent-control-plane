@@ -42,8 +42,8 @@ func validateTSLValue(value string) error {
 }
 
 const (
-	mcpSidecarPort   = int64(8090)
-	mcpSidecarURL    = "http://localhost:8090"
+	mcpSidecarPort    = int64(8090)
+	mcpSidecarURL     = "http://localhost:8090"
 	initialPromptPath = "/tmp/initial_prompt.txt"
 )
 
@@ -72,39 +72,39 @@ var credentialSidecarRegistry = map[string]credentialSidecarSpec{
 }
 
 type KubeReconcilerConfig struct {
-	RunnerImage              string
-	RunnerGRPCURL            string
-	RunnerGRPCUseTLS         bool
-	AnthropicAPIKey          string
-	VertexEnabled            bool
-	VertexProjectID          string
-	VertexRegion             string
-	VertexCredentialsPath    string
-	VertexSecretName         string
-	VertexSecretNamespace    string
-	RunnerImageNamespace     string
-	MCPImage                 string
-	MCPAPIServerURL          string
-	GitHubMCPImage           string
-	JiraMCPImage             string
-	K8sMCPImage              string
-	GoogleMCPImage           string
-	RunnerLogLevel           string
-	CPRuntimeNamespace       string
-	CPTokenURL               string
-	CPTokenPublicKey         string
-	HTTPProxy                string
-	HTTPSProxy               string
-	NoProxy                  string
-	ImagePullSecret          string
-	PlatformMode             string
-	MPPConfigNamespace       string
-	OpenShellEnabled         bool
-	OpenShellUseGateway      bool
-	OpenShellRunnerImage     string
-	OpenShellPolicyName      string
-	ServiceIdentity          string
-	CACertFile               string
+	RunnerImage                    string
+	RunnerGRPCURL                  string
+	RunnerGRPCUseTLS               bool
+	AnthropicAPIKey                string
+	VertexEnabled                  bool
+	VertexProjectID                string
+	VertexRegion                   string
+	VertexCredentialsPath          string
+	VertexSecretName               string
+	VertexSecretNamespace          string
+	RunnerImageNamespace           string
+	MCPImage                       string
+	MCPAPIServerURL                string
+	GitHubMCPImage                 string
+	JiraMCPImage                   string
+	K8sMCPImage                    string
+	GoogleMCPImage                 string
+	RunnerLogLevel                 string
+	CPRuntimeNamespace             string
+	CPTokenURL                     string
+	CPTokenPublicKey               string
+	HTTPProxy                      string
+	HTTPSProxy                     string
+	NoProxy                        string
+	ImagePullSecret                string
+	PlatformMode                   string
+	MPPConfigNamespace             string
+	OpenShellEnabled               bool
+	OpenShellUseGateway            bool
+	OpenShellRunnerImage           string
+	OpenShellPolicyName            string
+	ServiceIdentity                string
+	CACertFile                     string
 	AllowedSandboxRegistries       []string
 	SandboxReadinessTimeoutSeconds int
 }

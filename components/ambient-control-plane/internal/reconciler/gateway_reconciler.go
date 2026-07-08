@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -82,17 +83,22 @@ func (r *GatewayReconciler) reconcileOnce(ctx context.Context) {
 		return
 	}
 
-	var totalGateways int
+	var totalGateways, failedGateways int
 	for _, project := range projects {
-		count, reconcileErr := r.reconcileProjectGateways(ctx, project.ID)
+		count, failures, reconcileErr := r.reconcileProjectGateways(ctx, project.ID)
 		if reconcileErr != nil {
 			r.logger.Error().Err(reconcileErr).Str("project_id", project.ID).Msg("failed to reconcile project gateways")
 			continue
 		}
 		totalGateways += count
+		failedGateways += failures
 	}
 
-	r.logger.Debug().Int("projects", len(projects)).Int("gateways", totalGateways).Msg("gateway reconciliation complete")
+	logEvent := r.logger.Debug().Int("projects", len(projects)).Int("gateways", totalGateways)
+	if failedGateways > 0 {
+		logEvent = r.logger.Warn().Int("projects", len(projects)).Int("gateways", totalGateways).Int("failed", failedGateways)
+	}
+	logEvent.Msg("gateway reconciliation complete")
 }
 
 func (r *GatewayReconciler) buildServiceClient(ctx context.Context) (*sdkclient.Client, error) {
@@ -121,29 +127,32 @@ func (r *GatewayReconciler) listAllProjects(ctx context.Context, client *sdkclie
 	return all, nil
 }
 
-func (r *GatewayReconciler) reconcileProjectGateways(ctx context.Context, projectID string) (int, error) {
+func (r *GatewayReconciler) reconcileProjectGateways(ctx context.Context, projectID string) (int, int, error) {
 	projectClient, err := r.factory.ForProject(ctx, projectID)
 	if err != nil {
-		return 0, fmt.Errorf("create SDK client for project %s: %w", projectID, err)
+		return 0, 0, fmt.Errorf("create SDK client for project %s: %w", projectID, err)
 	}
 
 	gateways, err := r.listAllGateways(ctx, projectClient)
 	if err != nil {
-		return 0, fmt.Errorf("list gateways in project %s: %w", projectID, err)
+		return 0, 0, fmt.Errorf("list gateways in project %s: %w", projectID, err)
 	}
 
+	var failures int
 	for i := range gateways {
 		gw := &gateways[i]
-		if err := r.reconcileGateway(ctx, gw); err != nil {
-			r.logger.Error().Err(err).
+		if reconcileErr := r.reconcileGateway(ctx, projectClient, gw); reconcileErr != nil {
+			failures++
+			r.logger.Error().Err(reconcileErr).
 				Str("gateway_id", gw.ID).
 				Str("gateway_name", gw.Name).
 				Str("project_id", projectID).
 				Msg("failed to reconcile gateway")
+			r.updateGatewayAnnotation(ctx, projectClient, gw, "ambient.ai/reconcile-status", "Failed: "+reconcileErr.Error())
 		}
 	}
 
-	return len(gateways), nil
+	return len(gateways), failures, nil
 }
 
 func (r *GatewayReconciler) listAllGateways(ctx context.Context, client *sdkclient.Client) ([]types.Gateway, error) {
@@ -164,7 +173,7 @@ func (r *GatewayReconciler) listAllGateways(ctx context.Context, client *sdkclie
 	return all, nil
 }
 
-func (r *GatewayReconciler) reconcileGateway(ctx context.Context, gw *types.Gateway) error {
+func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway) error {
 	gwConfig := gateway.GatewayConfig{
 		Image:          gw.Image,
 		ServerDnsNames: gw.ServerDnsNames,
@@ -175,6 +184,7 @@ func (r *GatewayReconciler) reconcileGateway(ctx context.Context, gw *types.Gate
 		r.logger.Warn().Err(err).
 			Str("gateway_name", gw.Name).
 			Msg("invalid gateway configuration, skipping")
+		r.updateGatewayAnnotation(ctx, projectClient, gw, "ambient.ai/reconcile-status", "ValidationFailed: "+err.Error())
 		return nil
 	}
 
@@ -198,7 +208,32 @@ func (r *GatewayReconciler) reconcileGateway(ctx context.Context, gw *types.Gate
 		Int("dns_names", len(gw.ServerDnsNames)).
 		Msg("gateway reconciled")
 
+	r.updateGatewayAnnotation(ctx, projectClient, gw, "ambient.ai/reconcile-status", "Synced")
 	return nil
+}
+
+func (r *GatewayReconciler) updateGatewayAnnotation(ctx context.Context, client *sdkclient.Client, gw *types.Gateway, key, value string) {
+	annotations := make(map[string]string)
+	if gw.Annotations != "" {
+		_ = json.Unmarshal([]byte(gw.Annotations), &annotations)
+	}
+
+	if annotations[key] == value {
+		return
+	}
+
+	annotations[key] = value
+	annotations["ambient.ai/last-reconciled-at"] = time.Now().UTC().Format(time.RFC3339)
+	annJSON, err := json.Marshal(annotations)
+	if err != nil {
+		r.logger.Warn().Err(err).Str("gateway_id", gw.ID).Msg("failed to marshal gateway annotations")
+		return
+	}
+
+	patch := map[string]interface{}{"annotations": string(annJSON)}
+	if _, err := client.Gateways().Update(ctx, gw.ID, patch); err != nil {
+		r.logger.Warn().Err(err).Str("gateway_id", gw.ID).Msg("failed to update gateway reconcile status")
+	}
 }
 
 func resolveGatewayImage(configImage, defaultImage string) string {

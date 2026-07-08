@@ -99,6 +99,10 @@ func (m *mockGateway) UploadPayloads(_ context.Context, _ string, _ string, _ []
 	return nil
 }
 
+func (m *mockGateway) FetchSandboxLogs(_ context.Context, _, _ string, _ uint32) ([]map[string]interface{}, error) {
+	return nil, nil
+}
+
 func newFakeKubeClientWithSecrets(objects ...runtime.Object) *kubeclient.KubeClient {
 	scheme := runtime.NewScheme()
 	scheme.AddKnownTypeWithName(

@@ -7,7 +7,6 @@ resources:
 - ../../base
 - ambient-ui-route.yaml
 - api-server-route.yaml
-- platform-config.yaml
 
 components:
 - ../../components/postgresql-rhel

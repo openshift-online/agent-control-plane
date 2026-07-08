@@ -1,0 +1,7 @@
+kind: Gateway
+name: openshell-gateway
+image: ghcr.io/nvidia/openshell/gateway:0.0.74
+server_dns_names:
+  - openshell-gateway.NAMESPACE_PLACEHOLDER.svc.cluster.local
+labels:
+  purpose: openshell

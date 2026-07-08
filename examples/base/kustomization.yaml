@@ -5,3 +5,4 @@ resources:
   - agents/jira-simple-whoami.yaml
   - agents/pr-reviewer.yaml
   - agents/jira-issue-categorizer.yaml
+  - gateways/openshell-gateway.yaml

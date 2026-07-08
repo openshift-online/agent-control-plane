@@ -3,8 +3,8 @@ package gateways
 import (
 	"net/http"
 
-	"github.com/gorilla/mux"
 	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/plugins/rbac"
+	"github.com/gorilla/mux"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
@@ -15,7 +15,6 @@ import (
 	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/plugins/events"
 	"github.com/openshift-online/rh-trex-ai/plugins/generic"
-
 )
 
 type ServiceLocator func() GatewayService
