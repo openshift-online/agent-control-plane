@@ -32,11 +32,11 @@ type Resource struct {
 	Scope          string            `yaml:"scope"`
 	ScopeID        string            `yaml:"scope_id"`
 	UserID         string            `yaml:"user_id"`
-	ServerDnsNames []string                `yaml:"server_dns_names"`
-	Image          string                 `yaml:"image"`
-	Config         string                 `yaml:"config"`
-	SandboxPolicy  string                 `yaml:"sandbox_policy"`
-	Spec           map[string]any `yaml:"spec"`
+	ServerDnsNames []string          `yaml:"server_dns_names"`
+	Image          string            `yaml:"image"`
+	Config         string            `yaml:"config"`
+	SandboxPolicy  string            `yaml:"sandbox_policy"`
+	Spec           map[string]any    `yaml:"spec"`
 }
 
 type PayloadDecl struct {
