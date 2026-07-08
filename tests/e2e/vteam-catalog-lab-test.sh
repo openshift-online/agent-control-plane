@@ -108,6 +108,25 @@ run_doc_block() {
   fi
 }
 
+run_doc_block_with_retry() {
+  local max_attempts="${1:-3}"
+  local label="$2"
+  local pattern="$3"
+  local attempt=1
+  while [ "$attempt" -le "$max_attempts" ]; do
+    if run_doc_block "$label" "$pattern"; then
+      return 0
+    fi
+    if [ "$attempt" -lt "$max_attempts" ]; then
+      FAILED=$((FAILED - 1))
+      echo "  Retrying ($((attempt + 1))/$max_attempts) after transient failure..."
+      sleep 3
+    fi
+    attempt=$((attempt + 1))
+  done
+  return 1
+}
+
 find_acpctl() {
   if command -v acpctl >/dev/null 2>&1; then
     echo acpctl
@@ -204,7 +223,7 @@ run_doc_block "kind-acpctl-login" 'make kind-acpctl-login'
 
 section "5. Execute catalog apply from markdown"
 
-run_doc_block "catalog-apply" "examples/vteam-catalog/product-swarm"
+run_doc_block_with_retry 3 "catalog-apply" "examples/vteam-catalog/product-swarm"
 
 section "6. Verify ACP records from markdown commands"
 
