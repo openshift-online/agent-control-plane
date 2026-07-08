@@ -75,7 +75,6 @@ erDiagram
     Agent {
         string ID PK "KSUID"
         string project_id FK
-        string owner_user_id FK "user who owns this agent"
         string name "human-readable; unique within project"
         string display_name "nullable — human-friendly display label"
         string description "nullable — purpose description"
@@ -123,8 +122,6 @@ erDiagram
         string  name "human-readable display name"
         string  project_id FK "nullable — direct project context (no agent)"
         string  agent_id FK "nullable — set when started via agent ignite"
-        string  created_by_user_id FK "who created or started the session"
-        string  assigned_user_id FK "nullable — override for session ownership"
         string  parent_session_id FK "nullable — source session for clones"
         string  source_scheduled_session_id "nullable — FK to ScheduledSession that triggered this"
         time    scheduled_for "nullable — cron tick time; idempotency key with source_scheduled_session_id"
@@ -234,7 +231,6 @@ erDiagram
         string ID PK "KSUID"
         string project_id FK
         string agent_id FK "nullable — which Agent to ignite on each trigger"
-        string created_by_user_id "set from JWT on create; immutable"
         string name "human-readable; unique within project"
         string description
         string schedule "cron expression"
@@ -488,7 +484,6 @@ Agent is scoped to a Project. The stable address is `{project_name}/{agent_name}
 | `display_name` | Nullable. Human-friendly label for UI display; does not affect addressing. |
 | `description` | Nullable. Free-text purpose description. |
 | `prompt` | Defines who the agent is. Mutable via PATCH. Access controlled by RBAC (`agent:editor` or higher). |
-| `owner_user_id` | FK to the User who owns this agent. Set at creation; matches the authenticated caller. |
 | `repo_url` | Nullable. Primary repository URL cloned into every session the agent starts. Copied to `Session.repo_url` on ignite. |
 | `workflow_id` | Nullable. Default workflow identifier injected into sessions. Copied to `Session.workflow_id` on ignite. |
 | `llm_model` | Active LLM model name. Default: `claude-sonnet-4-6`. Copied to `Session.llm_model` on ignite. |
@@ -961,7 +956,6 @@ A `ScheduledSession` is a project-scoped definition that ignites an Agent on a r
 |-------|-------|
 | `name` | Human-readable, unique within the project. |
 | `agent_id` | Which Agent to ignite. Nullable — if NULL, creates a project-scoped session. |
-| `created_by_user_id` | User who created the schedule. Set server-side from JWT on create. Immutable. Used for pre-trigger authorization checks. |
 | `schedule` | Standard cron expression (e.g. `"0 9 * * 1-5"` = 9 AM on weekdays). Validated at write time. |
 | `timezone` | IANA timezone string (e.g. `"America/New_York"`). Defaults to `UTC`. |
 | `enabled` | `false` suspends evaluation without deleting the schedule. |
@@ -1307,7 +1301,6 @@ GET    /api/ambient/v1/projects/{id}/agents/{agent_id}/role_bindings    RBAC bin
     "id": "2abc...",
     "agent_id": "1def...",
     "phase": "pending",
-    "created_by_user_id": "...",
     "created_at": "2026-03-20T00:00:00Z"
   },
   "start_context": "# Agent: API\n\nYou are API...\n\n## Inbox\n...\n\n## Task\n..."
@@ -1870,7 +1863,7 @@ This structure means you can define and compose bespoke agent suites — entire 
 |---|---|
 | Agent is project-scoped, not global | Simplicity. An agent's identity and prompt are contextual to the project it serves. No indirection via a global registry. |
 | Agent.prompt is mutable | Prompt editing is a routine operational task. RBAC controls who can change it. No versioning overhead. |
-| Agent ownership via RBAC, not a hardcoded FK | Ownership is expressed as a RoleBinding (`scope=agent`, `agent_id=<id>`, `user_id=<owner>`). Enables multi-owner and delegated ownership consistently across all Kinds. |
+| Ownership via RBAC, not hardcoded FKs | Ownership of all Kinds is expressed through RoleBindings, not `owner_user_id` FKs. For Agents: `RoleBinding(scope=agent, agent_id=<id>, user_id=<owner>)`. For Sessions: `RoleBinding(scope=session, session_id=<id>, user_id=<assignee>)`. Enables multi-owner, delegated ownership, and transfer — consistently across all Kinds. Audit fields (who created/modified a resource) belong at the REST middleware layer, not on individual Kind schemas. |
 | One active Session per Agent | Avoids concurrent conflicting runs; start is idempotent |
 | Inbox on Agent, not Session | Messages persist across re-ignitions; addressed to the agent, not the run |
 | Inbox drained at start | Unread messages become part of the start context; session picks up where things left off |
