@@ -23,6 +23,10 @@ ACP ships two catalog examples:
 
 The manifests live in `examples/vteam-catalog/`.
 
+For local Kind clusters, `make kind-up` includes `vteam-product-swarm` and
+`codebase-maintainers` in the default `OPENSHELL_TENANTS` list, so those
+namespaces are ready for the lab.
+
 ## Apply a catalog team
 
 Log in to ACP with `acpctl`, then apply one catalog directory to its matching
@@ -40,6 +44,9 @@ acpctl apply -k examples/vteam-catalog/codebase-maintainers \
 
 The apply step creates or updates ACP records. Provider credentials become
 runtime requirements when a session starts.
+
+See `examples/README.md` for the full examples inventory, including starter
+tenant examples and the shared gateway field reference.
 
 ## Gateway and namespace behavior
 
@@ -69,16 +76,25 @@ creates the gateway Kubernetes resources there.
 After applying a catalog team, check the ACP records:
 
 ```bash
+# Product swarm
 acpctl get project vteam-product-swarm
 acpctl agent list --project-id vteam-product-swarm
 acpctl provider list --project-id vteam-product-swarm
+
+# Codebase maintainers
+acpctl get project codebase-maintainers
+acpctl agent list --project-id codebase-maintainers
+acpctl provider list --project-id codebase-maintainers
 ```
 
-On a local Kind cluster, also check the project namespace:
+On a local Kind cluster, also check the project namespaces:
 
 ```bash
 kubectl get namespace vteam-product-swarm
 kubectl get statefulset openshell-gateway -n vteam-product-swarm
+
+kubectl get namespace codebase-maintainers
+kubectl get statefulset openshell-gateway -n codebase-maintainers
 ```
 
 For a hand-run local reload flow, use
