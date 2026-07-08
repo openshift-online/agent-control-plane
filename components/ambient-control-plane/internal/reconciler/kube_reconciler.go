@@ -42,8 +42,8 @@ func validateTSLValue(value string) error {
 }
 
 const (
-	mcpSidecarPort   = int64(8090)
-	mcpSidecarURL    = "http://localhost:8090"
+	mcpSidecarPort    = int64(8090)
+	mcpSidecarURL     = "http://localhost:8090"
 	initialPromptPath = "/tmp/initial_prompt.txt"
 )
 
@@ -72,39 +72,39 @@ var credentialSidecarRegistry = map[string]credentialSidecarSpec{
 }
 
 type KubeReconcilerConfig struct {
-	RunnerImage              string
-	RunnerGRPCURL            string
-	RunnerGRPCUseTLS         bool
-	AnthropicAPIKey          string
-	VertexEnabled            bool
-	VertexProjectID          string
-	VertexRegion             string
-	VertexCredentialsPath    string
-	VertexSecretName         string
-	VertexSecretNamespace    string
-	RunnerImageNamespace     string
-	MCPImage                 string
-	MCPAPIServerURL          string
-	GitHubMCPImage           string
-	JiraMCPImage             string
-	K8sMCPImage              string
-	GoogleMCPImage           string
-	RunnerLogLevel           string
-	CPRuntimeNamespace       string
-	CPTokenURL               string
-	CPTokenPublicKey         string
-	HTTPProxy                string
-	HTTPSProxy               string
-	NoProxy                  string
-	ImagePullSecret          string
-	PlatformMode             string
-	MPPConfigNamespace       string
-	OpenShellEnabled         bool
-	OpenShellUseGateway      bool
-	OpenShellRunnerImage     string
-	OpenShellPolicyName      string
-	ServiceIdentity          string
-	CACertFile               string
+	RunnerImage                    string
+	RunnerGRPCURL                  string
+	RunnerGRPCUseTLS               bool
+	AnthropicAPIKey                string
+	VertexEnabled                  bool
+	VertexProjectID                string
+	VertexRegion                   string
+	VertexCredentialsPath          string
+	VertexSecretName               string
+	VertexSecretNamespace          string
+	RunnerImageNamespace           string
+	MCPImage                       string
+	MCPAPIServerURL                string
+	GitHubMCPImage                 string
+	JiraMCPImage                   string
+	K8sMCPImage                    string
+	GoogleMCPImage                 string
+	RunnerLogLevel                 string
+	CPRuntimeNamespace             string
+	CPTokenURL                     string
+	CPTokenPublicKey               string
+	HTTPProxy                      string
+	HTTPSProxy                     string
+	NoProxy                        string
+	ImagePullSecret                string
+	PlatformMode                   string
+	MPPConfigNamespace             string
+	OpenShellEnabled               bool
+	OpenShellUseGateway            bool
+	OpenShellRunnerImage           string
+	OpenShellPolicyName            string
+	ServiceIdentity                string
+	CACertFile                     string
 	AllowedSandboxRegistries       []string
 	SandboxReadinessTimeoutSeconds int
 }
@@ -480,12 +480,41 @@ func (r *SimpleKubeReconciler) patchSandboxDNSConfig(ctx context.Context, namesp
 		return fmt.Errorf("patching sandbox %s dnsConfig: %w", sandboxName, err)
 	}
 
-	if err := r.nsKube().DeletePod(ctx, namespace, sandboxName, &metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
-		r.logger.Warn().Err(err).Str("sandbox", sandboxName).Msg("failed to delete sandbox pod for dnsConfig recreation")
+	r.logger.Info().Str("sandbox", sandboxName).Str("namespace", namespace).Msg("patched sandbox CR dnsConfig with ndots:1")
+	return nil
+}
+
+// verifyAndFixDNSConfig checks the sandbox pod's /etc/resolv.conf for the
+// incorrect ndots:5 value. If found, the pod is deleted so the agent-sandbox
+// controller recreates it from the already-patched CR (which has ndots:1).
+// Returns (true, nil) when DNS config is correct, (false, nil) when the pod
+// was deleted and needs recreation, or (false, err) on failure.
+func (r *SimpleKubeReconciler) verifyAndFixDNSConfig(namespace, sandboxID, sbxName string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := r.gateway.ExecSandbox(ctx, namespace, &openshellpb.ExecSandboxRequest{
+		SandboxId:      sandboxID,
+		Command:        []string{"cat", "/etc/resolv.conf"},
+		TimeoutSeconds: 10,
+	})
+	if err != nil {
+		return false, fmt.Errorf("exec cat /etc/resolv.conf: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return false, fmt.Errorf("cat /etc/resolv.conf exited %d: %s", result.ExitCode, string(result.Stderr))
 	}
 
-	r.logger.Info().Str("sandbox", sandboxName).Str("namespace", namespace).Msg("patched sandbox dnsConfig with ndots:1 and triggered pod recreation")
-	return nil
+	if !strings.Contains(string(result.Stdout), "ndots:5") {
+		r.logger.Info().Str("sandbox", sbxName).Msg("verified sandbox DNS config: ndots is correct")
+		return true, nil
+	}
+
+	r.logger.Warn().Str("sandbox", sbxName).Msg("sandbox pod has ndots:5, deleting for recreation from patched CR")
+	if err := r.nsKube().DeletePod(ctx, namespace, sbxName, &metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
+		return false, fmt.Errorf("deleting pod %s for ndots fix: %w", sbxName, err)
+	}
+	return false, nil
 }
 
 func (r *SimpleKubeReconciler) appendPromptToEntrypoint(ctx context.Context, entrypoint []string, session types.Session, sdk *sdkclient.Client) []string {
@@ -592,6 +621,8 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 	defer ticker.Stop()
 	pollStart := time.Now()
 	lastProgressLog := pollStart
+	ndotsRetries := 0
+	const maxNdotsRetries = 3
 
 	for {
 		select {
@@ -640,6 +671,22 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			sandboxID := sbxName
 			if resp.Sandbox.Metadata != nil && resp.Sandbox.Metadata.Id != "" {
 				sandboxID = resp.Sandbox.Metadata.Id
+			}
+
+			dnsOK, dnsErr := r.verifyAndFixDNSConfig(namespace, sandboxID, sbxName)
+			if dnsErr != nil {
+				r.logger.Warn().Err(dnsErr).Str("sandbox", sbxName).Int("ndots_retry", ndotsRetries).Msg("failed to verify sandbox DNS config")
+				continue
+			}
+			if !dnsOK {
+				ndotsRetries++
+				if ndotsRetries > maxNdotsRetries {
+					r.logger.Error().Str("sandbox", sbxName).Str("session_id", sessionID).Int("retries", ndotsRetries).Msg("sandbox DNS config still incorrect after max retries")
+					failSession("sandbox DNS config (ndots) incorrect after maximum retries")
+					return
+				}
+				r.logger.Warn().Str("sandbox", sbxName).Int("ndots_retry", ndotsRetries).Msg("sandbox pod had ndots:5; deleted pod, waiting for recreation")
+				continue
 			}
 
 			r.logger.Info().
