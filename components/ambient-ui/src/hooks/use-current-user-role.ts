@@ -3,6 +3,8 @@ import { useAllRoleBindings } from '@/queries/use-role-bindings'
 import { useRoles } from '@/queries/use-roles'
 import { useMemo } from 'react'
 
+const ADMIN_GROUP = '/ambient-admins'
+
 export function useCurrentUserRole(projectId: string): {
   roleName: string | null
   isLoading: boolean
@@ -15,6 +17,8 @@ export function useCurrentUserRole(projectId: string): {
   const { data: rolesData, isLoading: rolesLoading } = useRoles()
 
   const roleName = useMemo(() => {
+    if (user?.groups?.includes(ADMIN_GROUP)) return 'platform:admin'
+
     if (!bindings || bindings.length === 0 || !rolesData) return null
 
     const relevant = bindings.filter(
@@ -32,7 +36,7 @@ export function useCurrentUserRole(projectId: string): {
     if (roles.includes('project:viewer')) return 'project:viewer'
 
     return roles[0] ?? null
-  }, [bindings, rolesData, projectId])
+  }, [user, bindings, rolesData, projectId])
 
   return { roleName, isLoading: userLoading || bindingsLoading || rolesLoading }
 }
