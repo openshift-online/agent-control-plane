@@ -559,12 +559,29 @@ func (r *SimpleKubeReconciler) isAllowedRegistry(image string) bool {
 	return false
 }
 
+// Platform-critical env vars that agent configs must not override.
+var immutableSandboxEnvKeys = map[string]bool{
+	"AMBIENT_CP_TOKEN_URL":        true,
+	"AMBIENT_CP_TOKEN_PUBLIC_KEY": true,
+	"ANTHROPIC_BASE_URL":          true,
+	"ANTHROPIC_API_KEY":           true,
+	"ACP_OPENSHELL_INFERENCE":     true,
+	"AMBIENT_GRPC_URL":            true,
+	"AMBIENT_GRPC_USE_TLS":        true,
+	"AMBIENT_GRPC_CA_CERT_FILE":   true,
+	"AMBIENT_GRPC_ENABLED":        true,
+	"SSL_CERT_FILE":               true,
+	"REQUESTS_CA_BUNDLE":          true,
+}
+
 func (r *SimpleKubeReconciler) mergeAgentEnvironment(env map[string]string, agent *types.Agent) {
 	if agent == nil || len(agent.Environment) == 0 {
 		return
 	}
 	for k, v := range agent.Environment {
-		env[k] = v
+		if !immutableSandboxEnvKeys[k] {
+			env[k] = v
+		}
 	}
 }
 

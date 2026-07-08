@@ -61,8 +61,8 @@ type ControlPlaneConfig struct {
 	CACertFile                      string
 	AllowedSandboxRegistries        []string
 	SandboxReadinessTimeoutSeconds  int
-	MLflowTrackingURI               string
-	MLflowExperimentName            string
+	MLflowTrackingURI               string // empty = no default; sandboxes get no URI unless set
+	MLflowExperimentName            string // empty = no default; runner falls back to its own default
 }
 
 func Load() (*ControlPlaneConfig, error) {
