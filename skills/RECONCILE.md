@@ -50,19 +50,19 @@ skills/
 
 ## Reconciliation State
 
-**Last analyzed**: 2026-07-08 (PR #281 gateway spec reconciliation)
-**Spec corpus**: 29 specs across 4 domains
-**Codebase commit**: 8fb60a30 (reconcile/pr-281-gateway-spec-changes branch)
+**Last analyzed**: 2026-07-08 (PR #292 RBAC ownership + MLflow spec integration)
+**Spec corpus**: 30 specs across 4 domains
+**Codebase commit**: b9dfc496 (spec/rbac-ownership-remove-owner-fks branch)
 
 ### Coverage Summary
 
 | Domain | Specs | Requirements | Present | Partial | Missing | Coverage |
 |--------|-------|-------------|---------|---------|---------|----------|
-| Platform | 12 | 121 | 116 | 1 | 4 | 95.9% |
+| Platform | 13 | 126 | 119 | 3 | 4 | 94.4% |
 | Security | 6 | 55 | 45 | 5 | 5 | 81.8% |
 | UI | 7 | 70 | 62 | 6 | 2 | 88.6% |
 | CLI | 1 | 13 | 13 | 0 | 0 | 100% |
-| **TOTAL** | **29** | **259** | **236** | **12** | **11** | **91.1%** |
+| **TOTAL** | **30** | **264** | **239** | **14** | **11** | **90.5%** |
 
 ### Spec Dependency Order
 
@@ -73,7 +73,7 @@ Layer 0 (roots):  data-model, identity-boundaries, standards/*
 Layer 1:          control-plane, sso-authentication, rbac-enforcement
 Layer 2:          runner, agent-sandbox-config, credential-binding, gateway-rbac-policy
 Layer 3:          gateway-provisioning, credential-encryption, openshell-sandbox
-Layer 4:          openshell-sandbox-provisioning, agent-inheritance
+Layer 4:          openshell-sandbox-provisioning, agent-inheritance, mlflow-tracing
 Layer 5:          scheduled-session-execution, session-activity-tracking, mcp-server
 Layer 6 (leaves): architecture, annotations, views, live-preview, project-sharing,
                   scheduled-sessions, work-tracking-dashboard, credentials-tui
@@ -123,8 +123,12 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | P19 | gateway-provisioning | Gateway Deployment Failure Handling | CP | **done** | major | GatewayReconciler tracks per-gateway failures, updates `ambient.ai/reconcile-status` and `ambient.ai/last-reconciled-at` annotations on Gateway resources. Validation failures annotated as `ValidationFailed`. Reconcile loop counts and warns on partial failures. |
 | P20 | gateway-provisioning | platform-config ConfigMap overlays removal | Manifests | **done** | minor | Deleted `platform-config.yaml` from `overlays/kind/` and `overlays/hcmais-dev/`. Removed references from both `kustomization.yaml` files. |
 | P21 | control-plane | ProjectReconciler namespace lifecycle | CP | **done** | minor | Ordering already enforced: informer `initialSync` syncs `projects` before `sessions`, and `RegisterHandler` in main.go registers ProjectReconciler first. ProjectReconciler runs `ensureNamespace()` which creates namespaces before session reconcilers attempt to use them. |
-| P22 | data-model | `acpctl apply` missing `sandbox_policy`, `sandbox_template`, `entrypoint` on Agent | CLI | missing | critical | `resource` struct and `buildAgentPatch()` in `apply/cmd.go` silently drop these fields during YAML parsing. API server and SDK fully support them. New deployments cannot declaratively set sandbox policies on agents. |
+| P22 | data-model | `acpctl apply` missing `sandbox_policy`, `sandbox_template`, `entrypoint` on Agent | CLI | missing | critical | `Resource` struct in `kustomize.go` and `buildAgentPatch()` in `apply/cmd.go` silently drop these fields during YAML parsing. API server and SDK fully support them. New deployments cannot declaratively set sandbox policies on agents. |
 | P23 | data-model | `acpctl apply` missing `Policy` as supported kind | CLI | missing | critical | Policy has full CRUD in API server (`plugins/policies/`) and SDK (`Policys()` client) but is not in the `apply` dispatch switch. Policies must be created via REST API instead of declarative YAML. |
+| P24 | mlflow-tracing | Runner Image INTERNAL_BUILD conditional CA | Runner | partial | minor | CA cert installed unconditionally via `COPY` in `Dockerfile.openshell`. Missing `INTERNAL_BUILD` build arg, conditional logic, and remote fetch from `certs.corp.redhat.com`. |
+| P25 | mlflow-tracing | OpenShell resolve token handling in autolog | Runner | partial | major | `mlflow_autolog.py` always calls `set_tracking_uri()`/`set_experiment()` unconditionally. Missing detection of `openshell:resolve:env:` prefix to defer URI config to supervisor. |
+| P26 | mlflow-tracing | Tracing Token Security (regex redaction) | Runner | missing | major | No runner-wide regex redaction filter for `MLFLOW_TRACKING_TOKEN` in logs/errors/API responses. Spec acknowledges as TODO — no existing redaction infrastructure to extend. |
+| P27 | mlflow-tracing | MLflow URI domain allowlist validation | BE | missing | minor | Spec requires HTTP 400 at credential-bind time when URI host not in allowlist. Spec acknowledges as TODO — requires new API server capability. |
 | P2 | data-model | Application CLI sync/refresh commands | CLI | **done** | major | SDK `Sync()`/`Refresh()` methods added. CLI calls `POST /sync` and `POST /refresh`. Flags: `--prune`, `--revision`, `--prune-project`. |
 | P3 | data-model | Application frontend UI | FE | **done** | major | Full CRUD UI: domain types, port, adapter, mapper, query hooks, list page, detail page. Gated behind `feature.applications.enabled` flag. |
 | P4 | data-model | SessionEvent runner-side compression | Runner | **done** | major | `EventCompressor` integrated into gRPC transport path. Compressed events pushed to `session_events.push()` with `event_count` and `completed_at`. |
@@ -179,7 +183,11 @@ Gaps grouped by execution wave. Each wave gates the next.
 | ~~12~~ | ~~CP~~ | ~~4~~ | ~~P12, P14, P16, P17~~ | ✅ Completed 2026-07-08 |
 | ~~13~~ | ~~Examples + Manifests~~ | ~~4~~ | ~~P18, P19, P20, P21~~ | ✅ Completed 2026-07-08 |
 
-**Partials** (S9, S10, S11, P1, P9) are low-severity and can be addressed opportunistically.
+**Next wave candidates**: P22, P23 (both critical, no blockers — CLI `apply` gaps for sandbox fields and Policy kind).
+
+**Partials** (S9, S10, S11, P1, P9, P24, P25) are low-to-major severity and can be addressed opportunistically.
+
+**Spec-acknowledged TODOs** (P26, P27) require new infrastructure; deferred by spec design.
 
 ---
 
@@ -230,3 +238,4 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-08 | (pending) | Wave 11 executed: P13, P15 | 88.0% | Shared kustomize library extracted to `ambient-sdk/go-sdk/kustomize/`. CLI refactored to use shared library. Gateway kind added to `acpctl apply` with reconcile semantics. |
 | 2026-07-08 | (pending) | Wave 12 executed: P12, P14, P16, P17 | 89.6% | GatewayReconciler created (polling pattern, 30s ticker). ConfigMap-based provisioning eliminated. Manifests and validation consumed by new reconciler. `go build ./...` clean. |
 | 2026-07-08 | (pending) | Wave 13 executed: P18, P19, P20, P21 | 91.1% | Gateway overlay examples added. Failure handling with annotation-based status tracking. platform-config.yaml removed from kind and hcmais-dev overlays. ProjectReconciler ordering verified as already enforced. |
+| 2026-07-08 | b9dfc496 | Reconcile: PR #292 + MLflow spec integration | 90.5% | Removed `owner_user_id`/`created_by_user_id`/`assigned_user_id` FKs from all Kind schemas (PR #292). New MLflow tracing spec (PR #222) analyzed: 6 requirements, 4 present, 2 partial, 2 missing (both spec-acknowledged TODOs). P22/P23 confirmed still open. New gaps: P24-P27. |
