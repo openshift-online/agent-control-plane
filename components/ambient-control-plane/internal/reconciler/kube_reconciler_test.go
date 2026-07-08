@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/gateway"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell"
 	pb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
@@ -841,5 +842,27 @@ func TestVerifyAndFixDNSConfig(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestReconcileGateway_NamespacePlaceholderSubstitution(t *testing.T) {
+	input := []string{
+		"openshell-gateway.NAMESPACE_PLACEHOLDER.svc.cluster.local",
+	}
+	gatewayName := "tenant-a"
+
+	resolved := make([]string, len(input))
+	for i, dns := range input {
+		resolved[i] = strings.ReplaceAll(dns, "NAMESPACE_PLACEHOLDER", gatewayName)
+	}
+
+	if resolved[0] != "openshell-gateway.tenant-a.svc.cluster.local" {
+		t.Errorf("expected substituted DNS name, got %q", resolved[0])
+	}
+
+	for _, dns := range resolved {
+		if err := gateway.ValidateDNSName(dns); err != nil {
+			t.Errorf("resolved DNS name %q failed validation: %v", dns, err)
+		}
 	}
 }

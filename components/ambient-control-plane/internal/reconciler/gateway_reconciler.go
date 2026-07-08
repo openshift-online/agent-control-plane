@@ -181,9 +181,14 @@ func (r *GatewayReconciler) listAllGateways(ctx context.Context, client *sdkclie
 }
 
 func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway) error {
+	resolvedDnsNames := make([]string, len(gw.ServerDnsNames))
+	for i, dns := range gw.ServerDnsNames {
+		resolvedDnsNames[i] = strings.ReplaceAll(dns, "NAMESPACE_PLACEHOLDER", gw.Name)
+	}
+
 	gwConfig := gateway.GatewayConfig{
 		Image:          gw.Image,
-		ServerDnsNames: gw.ServerDnsNames,
+		ServerDnsNames: resolvedDnsNames,
 		Config:         gw.Config,
 	}
 
