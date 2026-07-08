@@ -70,12 +70,16 @@ export function CreateSessionSheet({
       return
     }
 
+    if (!agentId) {
+      setError('Agent is required.')
+      return
+    }
+
     const request: DomainSessionCreateRequest = {
       name: name.trim(),
       projectId,
+      agentId,
     }
-
-    if (agentId) request.agentId = agentId
     if (prompt.trim()) request.prompt = prompt.trim()
     if (model) request.model = model
 
@@ -126,11 +130,11 @@ export function CreateSessionSheet({
 
           <div className="space-y-1.5">
             <label htmlFor="session-agent" className="text-sm font-medium">
-              Agent
+              Agent <span className="text-destructive">*</span>
             </label>
             <Select value={agentId} onValueChange={setAgentId}>
               <SelectTrigger id="session-agent" className="w-full">
-                <SelectValue placeholder="Select an agent (optional)" />
+                <SelectValue placeholder="Select an agent" />
               </SelectTrigger>
               <SelectContent>
                 {agents.map(agent => (
@@ -246,7 +250,7 @@ export function CreateSessionSheet({
             </Button>
             <Button
               type="submit"
-              disabled={createSession.isPending || !name.trim()}
+              disabled={createSession.isPending || !name.trim() || !agentId}
             >
               {createSession.isPending ? 'Creating...' : 'Create Session'}
             </Button>

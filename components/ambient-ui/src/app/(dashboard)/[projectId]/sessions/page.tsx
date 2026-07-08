@@ -16,6 +16,8 @@ import { FleetSummary } from './_components/fleet-summary'
 import { FolderTreePanel } from './_components/folder-tree-panel'
 import { CreateSessionSheet } from './_components/create-session-sheet'
 
+const PAGE_SIZE = 20
+
 export default function FleetPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const [search, setSearch] = useState('')
@@ -25,7 +27,8 @@ export default function FleetPage() {
   const [showTestRuns, setShowTestRuns] = useState(false)
   const [showFolderTree, setShowFolderTree] = useState(false)
   const [pathFilter, setPathFilter] = useState<string | null>(null)
-  const { data, isLoading, error } = useSessions(projectId)
+  const [currentPage, setCurrentPage] = useState(1)
+  const { data, isLoading, error } = useSessions(projectId, { page: currentPage, size: PAGE_SIZE, orderBy: 'created_at desc' })
   const { data: agentNames } = useAgentNames(projectId)
 
   const handleFilteredCountChange = useCallback((count: number) => {
@@ -56,13 +59,15 @@ export default function FleetPage() {
   }
 
   const sessions = data?.items ?? []
+  const serverTotal = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(serverTotal / PAGE_SIZE))
   const testSessionCount = sessions.filter(
     (s) => s.annotations['ambient-code.io/ui/test-session'] === 'true',
   ).length
   const folderTree = useMemo(() => buildFolderTree(sessions), [sessions])
   const hasFolders = folderTree.length > 0
 
-  if (sessions.length === 0) {
+  if (sessions.length === 0 && currentPage === 1) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold tracking-tight">Sessions</h1>
@@ -130,6 +135,7 @@ export default function FleetPage() {
       </div>
       <FleetSummary
         sessions={sessions}
+        serverTotal={serverTotal}
         filteredCount={filteredCount}
         activePhase={phaseFilter}
         onPhaseFilter={setPhaseFilter}
@@ -151,6 +157,11 @@ export default function FleetPage() {
             showTestRuns={showTestRuns}
             pathFilter={pathFilter}
             onFilteredCountChange={handleFilteredCountChange}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={PAGE_SIZE}
+            serverTotal={serverTotal}
+            onPageChange={setCurrentPage}
           />
         </div>
       </div>

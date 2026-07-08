@@ -4,11 +4,13 @@ import { PhaseBadge } from './phase-badge'
 
 export function FleetSummary({
   sessions,
+  serverTotal,
   filteredCount,
   activePhase,
   onPhaseFilter,
 }: {
   sessions: DomainSession[]
+  serverTotal?: number
   filteredCount?: number
   activePhase?: SessionPhase | null
   onPhaseFilter?: (phase: SessionPhase | null) => void
@@ -18,6 +20,7 @@ export function FleetSummary({
     return acc
   }, {})
 
+  const displayTotal = serverTotal ?? sessions.length
   const total = sessions.length
   const showFiltered = filteredCount !== undefined && filteredCount !== total
 
@@ -27,8 +30,8 @@ export function FleetSummary({
     <div className="flex items-center gap-4 text-sm rounded-lg border bg-muted/30 px-4 py-2.5">
       <span className="font-medium">
         {showFiltered
-          ? `Showing ${filteredCount} of ${total} sessions`
-          : `${total} sessions`}
+          ? `Showing ${filteredCount} of ${displayTotal} sessions`
+          : `${displayTotal} sessions`}
       </span>
       <span className="text-muted-foreground">—</span>
       {phases.map(phase => {

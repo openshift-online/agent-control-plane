@@ -1,6 +1,6 @@
 'use client'
 
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
@@ -37,6 +37,7 @@ function phaseBadgeVariant(phase: string): 'default' | 'secondary' | 'destructiv
 }
 
 export function RunsDialog({ schedule, open, onOpenChange }: RunsDialogProps) {
+  const router = useRouter()
   const { projectId } = useParams<{ projectId: string }>()
   const { data, isLoading } = useScheduledSessionRuns(
     projectId,
@@ -76,7 +77,21 @@ export function RunsDialog({ schedule, open, onOpenChange }: RunsDialogProps) {
             </TableHeader>
             <TableBody>
               {runs.map(session => (
-                <TableRow key={session.id}>
+                <TableRow
+                  key={session.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => {
+                    onOpenChange(false)
+                    router.push(`/${projectId}/sessions/${session.id}`)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      onOpenChange(false)
+                      router.push(`/${projectId}/sessions/${session.id}`)
+                    }
+                  }}
+                  tabIndex={0}
+                >
                   <TableCell className="font-medium">{session.name}</TableCell>
                   <TableCell>
                     <Badge variant={phaseBadgeVariant(session.phase)}>

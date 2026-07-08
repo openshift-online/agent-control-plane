@@ -10,7 +10,7 @@ import {
   flexRender,
 } from '@tanstack/react-table'
 import type { SortingState, ColumnFiltersState, RowSelectionState } from '@tanstack/react-table'
-import { ChevronUp, ChevronDown } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { DomainSession, SessionPhase } from '@/domain/types'
 import { sessionMatchesPath } from '@/domain/folder-tree'
@@ -38,6 +39,11 @@ export function FleetTable({
   showTestRuns = false,
   pathFilter,
   onFilteredCountChange,
+  currentPage,
+  totalPages,
+  pageSize,
+  serverTotal,
+  onPageChange,
 }: {
   sessions: DomainSession[]
   searchFilter: string
@@ -46,6 +52,11 @@ export function FleetTable({
   showTestRuns?: boolean
   pathFilter?: string | null
   onFilteredCountChange?: (count: number) => void
+  currentPage?: number
+  totalPages?: number
+  pageSize?: number
+  serverTotal?: number
+  onPageChange?: (page: number) => void
 }) {
   const router = useRouter()
   const { projectId } = useParams<{ projectId: string }>()
@@ -248,6 +259,36 @@ export function FleetTable({
         </TableBody>
       </Table>
     </div>
+    {currentPage != null && totalPages != null && totalPages > 1 && onPageChange && (
+      <div className="flex items-center justify-between px-2 py-3">
+        <p className="text-sm text-muted-foreground">
+          Showing {((currentPage - 1) * (pageSize ?? 20)) + 1}–{Math.min(currentPage * (pageSize ?? 20), serverTotal ?? 0)} of {serverTotal} sessions
+        </p>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={currentPage <= 1}
+            onClick={() => onPageChange(currentPage - 1)}
+          >
+            <ChevronLeft className="mr-1 size-4" />
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {currentPage} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={currentPage >= totalPages}
+            onClick={() => onPageChange(currentPage + 1)}
+          >
+            Next
+            <ChevronRight className="ml-1 size-4" />
+          </Button>
+        </div>
+      </div>
+    )}
     </TooltipProvider>
   )
 }
