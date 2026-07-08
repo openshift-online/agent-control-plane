@@ -21,7 +21,8 @@ ACP ships two catalog examples:
 | Product swarm | `vteam-product-swarm` | Cross-functional product delivery work with product, engineering, design, research, and writing roles. |
 | Codebase maintainers | `codebase-maintainers` | Internal codebase upkeep across implementation, runtime readiness, CI, security, docs, and release gates. |
 
-The manifests live in `examples/vteam-catalog/`.
+The manifests live in
+[examples/vteam-catalog](https://github.com/openshift-online/agent-control-plane/tree/main/examples/vteam-catalog).
 
 For local Kind clusters, `make kind-up` includes `vteam-product-swarm` and
 `codebase-maintainers` in the default `OPENSHELL_TENANTS` list, so those
@@ -45,8 +46,10 @@ acpctl apply -k examples/vteam-catalog/codebase-maintainers \
 The apply step creates or updates ACP records. Provider credentials become
 runtime requirements when a session starts.
 
-See `examples/README.md` for the full examples inventory, including starter
-tenant examples and the shared gateway field reference.
+See
+[examples/README.md](https://github.com/openshift-online/agent-control-plane/blob/main/examples/README.md)
+for the full examples inventory, including starter tenant examples and the
+shared gateway field reference.
 
 ## Gateway and namespace behavior
 
@@ -97,5 +100,5 @@ kubectl get namespace codebase-maintainers
 kubectl get statefulset openshell-gateway -n codebase-maintainers
 ```
 
-For a hand-run local reload flow, use
-`examples/vteam-catalog/QUICKSTART.md`.
+For a hand-run local reload flow, use the
+[vTeam Catalog quickstart](https://github.com/openshift-online/agent-control-plane/blob/main/examples/vteam-catalog/QUICKSTART.md).
