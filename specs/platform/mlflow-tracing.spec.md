@@ -11,7 +11,7 @@
 
 The platform MUST support MLflow tracing of Claude SDK interactions. When an `mlflow` credential is available (bound at project scope, or inherited from the global credential in the ACP deployment namespace), the runner MUST activate MLflow's Claude Agent SDK autologging, sending traces (prompts, responses, tool calls, token usage, latency) to the MLflow tracking server. This replaces the manual span-tracking approach in `mlflow_observability.py` with the SDK-native autologging integration (`mlflow.anthropic.autolog()`), which captures the full call graph automatically.
 
-Tracing is enabled by default when all three MLflow environment variables are present in the runner's environment, injected via the `mlflow` credential provider. Platform maintainers are responsible for ensuring the `mlflow` credential is present either globally or at project scope. When the `MLFLOW_REQUIRED` environment variable is set to `true`, sandboxes MUST fail to start if any of the three MLflow environment variables are missing, indicating a configuration error.
+Tracing is enabled by default when all three MLflow environment variables are present in the runner's environment. `MLFLOW_TRACKING_TOKEN` is injected via the `mlflow` credential provider (gateway provider credentials). `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` are global platform defaults set as environment variables on the control-plane deployment and forwarded to sandboxes. Agent-level environment configuration may override the platform defaults. Platform maintainers are responsible for ensuring the `mlflow` credential is present either globally or at project scope, and that the control-plane deployment has the URI and experiment name configured. When the `MLFLOW_REQUIRED` environment variable is set to `true`, sandboxes MUST fail to start if any of the three MLflow environment variables are missing, indicating a configuration error.
 
 ---
 
@@ -60,44 +60,57 @@ The runner MUST depend on `mlflow>=3.10`. This is the minimum version shipped by
 
 ### Requirement: MLflow Credential Provider
 
-The platform SHALL support an `mlflow` credential provider. The credential MUST be of type `generic` and MUST provide the following environment variables to the runner:
+The platform SHALL support an `mlflow` credential provider. The credential secret provides authentication credentials (e.g., `MLFLOW_TRACKING_TOKEN`) which are injected as provider credentials on the OpenShell gateway. The `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` are NOT stored in the credential secret — they are global platform defaults configured as environment variables on the control-plane deployment and forwarded to sandboxes that have an MLflow provider.
 
-| Environment Variable | Purpose |
-|---|---|
-| `MLFLOW_TRACKING_URI` | URL of the MLflow tracking server (must be HTTPS, e.g., `https://mlflow.example.com`) |
-| `MLFLOW_TRACKING_TOKEN` | Authentication token for the MLflow tracking server |
-| `MLFLOW_EXPERIMENT_NAME` | Name of the MLflow experiment to log traces to |
+| Source | Environment Variable | Purpose |
+|---|---|---|
+| Control-plane env | `MLFLOW_TRACKING_URI` | URL of the MLflow tracking server (must be HTTPS, e.g., `https://mlflow.example.com`) |
+| Credential secret | `MLFLOW_TRACKING_TOKEN` | Authentication token for the MLflow tracking server |
+| Control-plane env | `MLFLOW_EXPERIMENT_NAME` | Name of the MLflow experiment to log traces to |
 
 The credential provider follows the existing credential binding hierarchy defined in `credential-binding.spec.md` — it can be bound at agent, project, or global scope. The platform MUST also support a global `mlflow` credential in the ACP deployment namespace. If no `mlflow` credential is bound in the tenant namespace, the platform MUST fall back to the global credential.
 
+The control-plane reads `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` from its own process environment (set on the deployment). When a sandbox has an MLflow provider, the control-plane injects these values into the sandbox environment. Agent-level environment configuration (`agent.environment`) MAY override these defaults — agent environment takes precedence over platform defaults.
+
 #### Scenario: MLflow credential bound to project
 
-- GIVEN a user creates a credential with provider type `mlflow` containing `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_TOKEN`, and `MLFLOW_EXPERIMENT_NAME`
+- GIVEN a user creates a credential with provider type `mlflow` containing `MLFLOW_TRACKING_TOKEN`
+- AND the control-plane deployment has `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` set
 - AND the user binds the credential to project P
 - WHEN a session starts in project P
-- THEN the runner pod MUST have `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_TOKEN`, and `MLFLOW_EXPERIMENT_NAME` set in its environment
+- THEN the runner pod MUST have `MLFLOW_TRACKING_TOKEN` set via the gateway provider credential
+- AND `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` MUST be set from the control-plane's environment
 
 #### Scenario: Global credential fallback
 
 - GIVEN no `mlflow` credential is bound to project P
 - AND a global `mlflow` credential exists in the ACP deployment namespace
 - WHEN a session starts in project P
-- THEN the runner pod MUST inherit `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_TOKEN`, and `MLFLOW_EXPERIMENT_NAME` from the global credential
+- THEN the runner pod MUST inherit `MLFLOW_TRACKING_TOKEN` from the global credential
+- AND `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` MUST be set from the control-plane's environment
 
 #### Scenario: No MLflow credential at any scope
 
 - GIVEN no `mlflow` credential is bound to project P
 - AND no global `mlflow` credential exists in the ACP deployment namespace
 - WHEN a session starts in project P
-- THEN the runner pod SHALL NOT have `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_TOKEN`, or `MLFLOW_EXPERIMENT_NAME` in its environment
+- THEN the runner pod SHALL NOT have `MLFLOW_TRACKING_TOKEN`, `MLFLOW_TRACKING_URI`, or `MLFLOW_EXPERIMENT_NAME` in its environment
 - AND tracing SHALL remain disabled
+
+#### Scenario: Agent-level experiment name override
+
+- GIVEN an `mlflow` credential is bound to a project
+- AND the control-plane has `MLFLOW_EXPERIMENT_NAME=acp-general`
+- AND the agent configuration sets `environment.MLFLOW_EXPERIMENT_NAME=my-custom-experiment`
+- WHEN a session starts using that agent
+- THEN the sandbox MUST have `MLFLOW_EXPERIMENT_NAME=my-custom-experiment`
 
 #### Scenario: OpenShell gateway provider type mapping
 
 - GIVEN an `mlflow` credential is bound to a project
 - WHEN the control plane creates an OpenShell provider for this credential
 - THEN the provider type MUST be `generic`
-- AND the provider MUST inject `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_TOKEN`, and `MLFLOW_EXPERIMENT_NAME` into the sandbox environment
+- AND the provider credentials MUST contain only the authentication keys from the secret (e.g., `MLFLOW_TRACKING_TOKEN`)
 
 #### Scenario: Malformed MLFLOW_TRACKING_URI rejected at bind time
 
@@ -257,10 +270,10 @@ When operating in gateway mode with MLflow tracing enabled, the sandbox OPA netw
 | `pyproject.toml` | `mlflow[kubernetes]==3.13.0` in `mlflow-observability` extra | Verify `mlflow>=3.10` constraint is satisfied (current 3.13.0 already satisfies) |
 | `openshell-sandbox-provisioning.spec.md` § Provider type mapping | Maps `jira`, `google`, `kubeconfig`, and unknown types to `generic` | Add `mlflow` → `generic` to the mapping table |
 | `agent-sandbox-config.spec.md` § Provider type mapping | Maps credential types to OpenShell provider types | Add `mlflow` → `generic` to the mapping table |
-| Control plane `provider_mapping.go` | Maps ambient credential providers to OpenShell provider types; contained `MLflowNetworkPolicy()` for dynamic OPA policy generation | Add `mlflow` → `generic` entry (follows existing pattern for `jira`, `google`, `kubeconfig`); remove `MLflowNetworkPolicy()` function (superseded by static `policy.yaml` entry) |
+| Control plane `provider_mapping.go` | Maps ambient credential providers to OpenShell provider types; contained `MLflowNetworkPolicy()` for dynamic OPA policy generation | Add `mlflow` → `generic` entry (follows existing pattern for `jira`, `google`, `kubeconfig`); remove `MLflowNetworkPolicy()` function (superseded by static `policy.yaml` entry); remove `MLflowSandboxEnvVars()` and `MLflowProviderCredentials()` — URI and experiment name now come from CP config, not the secret |
 | OPA policy (`policy.yaml`) | Network policy sections for known endpoints | Add `_mlflow_rh` static entry with the MLflow tracking server endpoint; uses `_` prefix convention for platform-managed policies (matching `_acp_internal`) |
 | `mlflow_observability.py` | Manual span tracking using `mlflow.start_span()` | Add openshell resolve token detection — when `MLFLOW_TRACKING_URI` starts with `openshell:resolve:env:`, skip explicit `mlflow.set_tracking_uri()` / `mlflow.set_experiment()` and defer to runtime env resolution by the openshell supervisor |
-| Control plane `config.go` | No MLflow config fields | Add `MLflowTrackingURI` and `MLflowExperimentName` config fields read from `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` env vars (used for auto-creating default MLflow provider from CP namespace secret) |
+| Control plane `config.go` | No MLflow config fields | Add `MLflowTrackingURI` and `MLflowExperimentName` config fields read from `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` env vars; these are the global defaults forwarded to sandboxes that have an MLflow provider |
 
 ### Specs requiring amendment
 

@@ -60,9 +60,9 @@ func TestProviderCredentialsFromSecret(t *testing.T) {
 			want:     map[string]string{"API_KEY": "abc", "API_SECRET": "xyz"},
 		},
 		{
-			name:     "mlflow excludes URI and experiment name from credentials",
+			name:     "mlflow passes all secret keys through as credentials",
 			provider: "mlflow",
-			secret:   map[string]string{"MLFLOW_TRACKING_URI": "https://mlflow.example.com", "MLFLOW_TRACKING_TOKEN": "tok", "MLFLOW_EXPERIMENT_NAME": "exp", "MLFLOW_TRACKING_AUTH": "kubernetes"},
+			secret:   map[string]string{"MLFLOW_TRACKING_TOKEN": "tok", "MLFLOW_TRACKING_AUTH": "kubernetes"},
 			want:     map[string]string{"MLFLOW_TRACKING_TOKEN": "tok", "MLFLOW_TRACKING_AUTH": "kubernetes"},
 		},
 		{
@@ -70,12 +70,6 @@ func TestProviderCredentialsFromSecret(t *testing.T) {
 			provider: "mlflow",
 			secret:   map[string]string{"MLFLOW_TRACKING_TOKEN": "tok"},
 			want:     map[string]string{"MLFLOW_TRACKING_TOKEN": "tok"},
-		},
-		{
-			name:     "mlflow with only URI returns empty credentials",
-			provider: "mlflow",
-			secret:   map[string]string{"MLFLOW_TRACKING_URI": "https://mlflow.example.com"},
-			want:     map[string]string{},
 		},
 	}
 
@@ -175,49 +169,6 @@ func TestDetectGoogleCredentialType(t *testing.T) {
 			}
 			if got != tt.wantType {
 				t.Errorf("got %d, want %d", got, tt.wantType)
-			}
-		})
-	}
-}
-
-func TestMLflowSandboxEnvVars(t *testing.T) {
-	tests := []struct {
-		name   string
-		secret map[string]string
-		want   map[string]string
-	}{
-		{
-			name:   "extracts URI and experiment name",
-			secret: map[string]string{"MLFLOW_TRACKING_URI": "https://mlflow.example.com", "MLFLOW_EXPERIMENT_NAME": "exp", "MLFLOW_TRACKING_TOKEN": "tok"},
-			want:   map[string]string{"MLFLOW_TRACKING_URI": "https://mlflow.example.com", "MLFLOW_EXPERIMENT_NAME": "exp"},
-		},
-		{
-			name:   "URI only",
-			secret: map[string]string{"MLFLOW_TRACKING_URI": "https://mlflow.example.com", "MLFLOW_TRACKING_TOKEN": "tok"},
-			want:   map[string]string{"MLFLOW_TRACKING_URI": "https://mlflow.example.com"},
-		},
-		{
-			name:   "empty secret returns empty map",
-			secret: map[string]string{},
-			want:   map[string]string{},
-		},
-		{
-			name:   "empty values are excluded",
-			secret: map[string]string{"MLFLOW_TRACKING_URI": "", "MLFLOW_EXPERIMENT_NAME": "exp"},
-			want:   map[string]string{"MLFLOW_EXPERIMENT_NAME": "exp"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := MLflowSandboxEnvVars(tt.secret)
-			if len(got) != len(tt.want) {
-				t.Fatalf("got %d keys %v, want %d keys %v", len(got), got, len(tt.want), tt.want)
-			}
-			for k, wantVal := range tt.want {
-				if got[k] != wantVal {
-					t.Errorf("key %q: got %q, want %q", k, got[k], wantVal)
-				}
 			}
 		})
 	}

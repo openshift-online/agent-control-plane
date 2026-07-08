@@ -61,6 +61,8 @@ type ControlPlaneConfig struct {
 	CACertFile                      string
 	AllowedSandboxRegistries        []string
 	SandboxReadinessTimeoutSeconds  int
+	MLflowTrackingURI               string
+	MLflowExperimentName            string
 }
 
 func Load() (*ControlPlaneConfig, error) {
@@ -118,6 +120,8 @@ func Load() (*ControlPlaneConfig, error) {
 		CACertFile:                      envOrDefault("CA_CERT_FILE", "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"),
 		AllowedSandboxRegistries:        parseAllowedRegistries(os.Getenv("ALLOWED_SANDBOX_REGISTRIES")),
 		SandboxReadinessTimeoutSeconds:  envOrDefaultInt("SANDBOX_READINESS_TIMEOUT_SECONDS", 600),
+		MLflowTrackingURI:               os.Getenv("MLFLOW_TRACKING_URI"),
+		MLflowExperimentName:            os.Getenv("MLFLOW_EXPERIMENT_NAME"),
 	}
 
 	if cfg.MCPAPIServerURL == "" {

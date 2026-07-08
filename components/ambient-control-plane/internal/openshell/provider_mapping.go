@@ -97,41 +97,6 @@ func ProviderCredentials(ambientProvider, token string) map[string]string {
 	return map[string]string{"token": token}
 }
 
-// mlflowSandboxEnvKeys are MLflow secret keys that the control plane sets
-// as plain sandbox environment variables (not provider credentials). This
-// ensures they are present in the env map for network policy construction.
-var mlflowSandboxEnvKeys = []string{"MLFLOW_TRACKING_URI", "MLFLOW_EXPERIMENT_NAME"}
-
-// MLflowSandboxEnvVars extracts the env vars from an MLflow secret that should
-// be set directly on the sandbox environment. The tracking URI and experiment
-// name are needed in the env map so the network policy can allow egress.
-func MLflowSandboxEnvVars(secretData map[string]string) map[string]string {
-	env := map[string]string{}
-	for _, key := range mlflowSandboxEnvKeys {
-		if v, ok := secretData[key]; ok && v != "" {
-			env[key] = v
-		}
-	}
-	return env
-}
-
-// MLflowProviderCredentials returns only the credential keys from an MLflow
-// secret — everything except the URI and experiment name, which are injected
-// as plain sandbox env vars instead.
-func MLflowProviderCredentials(secretData map[string]string) map[string]string {
-	skip := map[string]bool{}
-	for _, key := range mlflowSandboxEnvKeys {
-		skip[key] = true
-	}
-	creds := map[string]string{}
-	for k, v := range secretData {
-		if !skip[k] {
-			creds[k] = v
-		}
-	}
-	return creds
-}
-
 // ProviderCredentialsFromSecret builds the credential map for an OpenShell
 // provider. For known types (vertex, github, anthropic), it reads the "token"
 // key from the secret and maps it to the standard credential name. For unknown
@@ -142,9 +107,6 @@ func MLflowProviderCredentials(secretData map[string]string) map[string]string {
 // strips the raw key after configuring refresh). ADC credentials are NOT set as
 // initial credentials — the refresh flow mints the first access token.
 func ProviderCredentialsFromSecret(ambientProvider string, secretData map[string]string) map[string]string {
-	if ambientProvider == "mlflow" {
-		return MLflowProviderCredentials(secretData)
-	}
 	if ambientProvider == "vertex" {
 		if token, has := secretData["token"]; has {
 			credType, err := DetectGoogleCredentialType(token)

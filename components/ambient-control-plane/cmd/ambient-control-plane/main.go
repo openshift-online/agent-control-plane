@@ -173,6 +173,8 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		CACertFile:               cfg.CACertFile,
 		AllowedSandboxRegistries:       cfg.AllowedSandboxRegistries,
 		SandboxReadinessTimeoutSeconds: cfg.SandboxReadinessTimeoutSeconds,
+		MLflowTrackingURI:              cfg.MLflowTrackingURI,
+		MLflowExperimentName:           cfg.MLflowExperimentName,
 	}
 
 	conn, err := grpc.NewClient(cfg.GRPCServerAddr, grpc.WithTransportCredentials(grpcCredentials(cfg.GRPCUseTLS)))

@@ -483,9 +483,9 @@ All env vars are injected by the CP at pod creation time.
 | `AGUI_TOKEN` | Session-scoped bearer token; when set, all non-health endpoints require `X-Ambient-Session-Token` header (constant-time comparison) |
 | `PAYLOAD_MCP_CONFIG_FILE` | Path to payload `.mcp.json` (default `/sandbox/.mcp.json`); merged on top of baked-in MCP config |
 | `SDK_OPTIONS` | JSON string of additional Claude SDK options |
-| `MLFLOW_TRACKING_URI` | MLflow tracking server URL (HTTPS); injected via `mlflow` credential provider |
-| `MLFLOW_TRACKING_TOKEN` | MLflow tracking server auth token (secret — must not appear in logs) |
-| `MLFLOW_EXPERIMENT_NAME` | MLflow experiment name for trace logging |
+| `MLFLOW_TRACKING_URI` | MLflow tracking server URL (HTTPS); global default from control-plane env, overridable per-agent |
+| `MLFLOW_TRACKING_TOKEN` | MLflow tracking server auth token (secret — must not appear in logs); injected via `mlflow` credential provider |
+| `MLFLOW_EXPERIMENT_NAME` | MLflow experiment name for trace logging; global default from control-plane env, overridable per-agent |
 | `MLFLOW_REQUIRED` | When `true`, sandbox fails to start if any MLflow env var is missing |
 
 ---
