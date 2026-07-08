@@ -623,6 +623,7 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 	lastProgressLog := pollStart
 	ndotsRetries := 0
 	const maxNdotsRetries = 3
+	awaitingPodRestart := false
 
 	for {
 		select {
@@ -661,10 +662,18 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				return
 			}
 			if phase != openshellpb.SandboxPhase_SANDBOX_PHASE_READY {
+				if awaitingPodRestart {
+					awaitingPodRestart = false
+					r.logger.Info().Str("sandbox", sbxName).Str("phase", phase.String()).Msg("sandbox left READY after pod deletion, waiting for new pod")
+				}
 				r.logger.Debug().
 					Str("sandbox", sbxName).
 					Str("phase", phase.String()).
 					Msg("sandbox not ready yet")
+				continue
+			}
+			if awaitingPodRestart {
+				r.logger.Debug().Str("sandbox", sbxName).Msg("sandbox still READY after pod deletion, waiting for phase transition")
 				continue
 			}
 
@@ -691,6 +700,7 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 					failSession("sandbox DNS config (ndots) incorrect after maximum retries")
 					return
 				}
+				awaitingPodRestart = true
 				r.logger.Warn().Str("sandbox", sbxName).Int("ndots_retry", ndotsRetries).Msg("sandbox pod had ndots:5; deleted pod, waiting for recreation")
 				continue
 			}
