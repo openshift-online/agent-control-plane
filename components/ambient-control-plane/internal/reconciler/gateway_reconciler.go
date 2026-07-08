@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/gateway"
@@ -22,11 +23,12 @@ const (
 )
 
 type GatewayReconciler struct {
-	factory       *SDKClientFactory
-	dynamicClient dynamic.Interface
-	clientset     *kubernetes.Clientset
-	logger        zerolog.Logger
-	manifests     map[string][]*unstructured.Unstructured
+	factory             *SDKClientFactory
+	dynamicClient       dynamic.Interface
+	clientset           *kubernetes.Clientset
+	logger              zerolog.Logger
+	manifests           map[string][]*unstructured.Unstructured
+	defaultGatewayImage string
 }
 
 func NewGatewayReconciler(
@@ -35,11 +37,16 @@ func NewGatewayReconciler(
 	clientset *kubernetes.Clientset,
 	logger zerolog.Logger,
 ) *GatewayReconciler {
+	defaultImage := os.Getenv("OPENSHELL_GATEWAY_IMAGE")
+	if defaultImage == "" {
+		defaultImage = "ghcr.io/nvidia/openshell/gateway:0.0.74"
+	}
 	return &GatewayReconciler{
-		factory:       factory,
-		dynamicClient: dynamicClient,
-		clientset:     clientset,
-		logger:        logger.With().Str("component", "gateway-reconciler").Logger(),
+		factory:             factory,
+		dynamicClient:       dynamicClient,
+		clientset:           clientset,
+		logger:              logger.With().Str("component", "gateway-reconciler").Logger(),
+		defaultGatewayImage: defaultImage,
 	}
 }
 
@@ -148,7 +155,7 @@ func (r *GatewayReconciler) reconcileProjectGateways(ctx context.Context, projec
 				Str("gateway_name", gw.Name).
 				Str("project_id", projectID).
 				Msg("failed to reconcile gateway")
-			r.updateGatewayAnnotation(ctx, projectClient, gw, "ambient.ai/reconcile-status", "Failed: "+reconcileErr.Error())
+			r.updateGatewayAnnotation(ctx, projectClient, gw, "ambient.ai/reconcile-status", "Failed: "+sanitizeAnnotationValue(reconcileErr.Error()))
 		}
 	}
 
@@ -184,13 +191,8 @@ func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient 
 		r.logger.Warn().Err(err).
 			Str("gateway_name", gw.Name).
 			Msg("invalid gateway configuration, skipping")
-		r.updateGatewayAnnotation(ctx, projectClient, gw, "ambient.ai/reconcile-status", "ValidationFailed: "+err.Error())
+		r.updateGatewayAnnotation(ctx, projectClient, gw, "ambient.ai/reconcile-status", "ValidationFailed: "+sanitizeAnnotationValue(err.Error()))
 		return nil
-	}
-
-	defaultImage := os.Getenv("OPENSHELL_GATEWAY_IMAGE")
-	if defaultImage == "" {
-		defaultImage = "ghcr.io/nvidia/openshell/gateway:0.0.74"
 	}
 
 	nsConfig := gateway.NamespaceConfig{
@@ -204,7 +206,7 @@ func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient 
 
 	r.logger.Info().
 		Str("gateway_name", gw.Name).
-		Str("image", resolveGatewayImage(gwConfig.Image, defaultImage)).
+		Str("image", resolveGatewayImage(gwConfig.Image, r.defaultGatewayImage)).
 		Int("dns_names", len(gw.ServerDnsNames)).
 		Msg("gateway reconciled")
 
@@ -241,4 +243,15 @@ func resolveGatewayImage(configImage, defaultImage string) string {
 		return configImage
 	}
 	return defaultImage
+}
+
+const maxAnnotationValueLen = 256
+
+func sanitizeAnnotationValue(s string) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	if len(s) > maxAnnotationValueLen {
+		s = s[:maxAnnotationValueLen]
+	}
+	return s
 }

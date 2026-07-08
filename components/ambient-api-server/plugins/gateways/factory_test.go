@@ -17,7 +17,7 @@ func newGateway(id string) (*gateways.Gateway, error) {
 	dnsNamesStr := string(dnsNamesJSON)
 
 	gw := &gateways.Gateway{
-		Name:           "openshell-gateway",
+		Name:           fmt.Sprintf("openshell-gateway-%s", id),
 		ProjectId:      "test-project",
 		Image:          stringPtr("ghcr.io/nvidia/openshell:v0.0.70"),
 		ServerDnsNames: &dnsNamesStr,

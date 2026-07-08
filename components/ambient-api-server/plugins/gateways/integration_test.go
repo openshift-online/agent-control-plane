@@ -22,6 +22,7 @@ func TestGatewayCreate(t *testing.T) {
 
 	gatewayInput := map[string]interface{}{
 		"name":             "openshell-gateway",
+		"project_id":       "test-project",
 		"server_dns_names": []string{"openshell-gateway.test.svc.cluster.local"},
 		"image":            "ghcr.io/nvidia/openshell:v0.0.70",
 		"config":           "[openshell.gateway]\nbind_address = \"0.0.0.0:8080\"",
@@ -88,6 +89,24 @@ func TestGatewayList(t *testing.T) {
 	var result map[string]interface{}
 	Expect(json.Unmarshal(resp.Body(), &result)).NotTo(HaveOccurred())
 	Expect(result["kind"]).To(Equal("GatewayList"))
+}
+
+func TestGatewayGetCrossProjectForbidden(t *testing.T) {
+	h, _ := test.RegisterIntegration(t)
+
+	account := h.NewRandAccount()
+	ctx := h.NewAuthenticatedContext(account)
+	jwtToken := ctx.Value(openapi.ContextAccessToken)
+
+	gatewayModel, err := newGateway(h.NewID())
+	Expect(err).NotTo(HaveOccurred())
+
+	resp, err := resty.R().
+		SetHeader("Authorization", fmt.Sprintf("Bearer %s", jwtToken)).
+		Get(h.RestURL(fmt.Sprintf("/projects/wrong-project/gateways/%s", gatewayModel.ID)))
+
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode()).To(Equal(http.StatusForbidden))
 }
 
 func TestGatewayDelete(t *testing.T) {

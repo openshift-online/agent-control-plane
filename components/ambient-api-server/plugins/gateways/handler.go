@@ -9,6 +9,7 @@ import (
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/gateway"
+	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
@@ -41,6 +42,9 @@ func (h gatewayHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
 			projectID := mux.Vars(r)["id"]
+			if !validIDPattern.MatchString(projectID) {
+				return nil, errors.Validation("invalid project id")
+			}
 			if err := gateway.CheckEditorTier(ctx, projectID); err != nil {
 				return nil, err
 			}
@@ -68,6 +72,9 @@ func (h gatewayHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 			projectID := mux.Vars(r)["id"]
 			gatewayID := mux.Vars(r)["gateway_id"]
+			if !validIDPattern.MatchString(projectID) || !validIDPattern.MatchString(gatewayID) {
+				return nil, errors.Validation("invalid project or gateway id")
+			}
 			if err := gateway.CheckEditorTier(ctx, projectID); err != nil {
 				return nil, err
 			}
@@ -126,11 +133,13 @@ func (h gatewayHandler) List(w http.ResponseWriter, r *http.Request) {
 			}
 
 			listArgs := services.NewListArguments(r.URL.Query())
-			projectFilter := "project_id = '" + projectID + "'"
-			if listArgs.Search != "" {
-				listArgs.Search = projectFilter + " and (" + listArgs.Search + ")"
-			} else {
-				listArgs.Search = projectFilter
+			projectFilter, filterErr := pkgrbac.TSLEqual("project_id", projectID)
+			if filterErr != nil {
+				return nil, errors.Validation("invalid project_id format")
+			}
+			pkgrbac.PrependTSLFilter(listArgs, projectFilter)
+			if !pkgrbac.ApplyListFilter(ctx, listArgs, "project_id", false) {
+				return openapi.GatewayList{Kind: "GatewayList", Page: 1, Size: 0, Total: 0, Items: []openapi.Gateway{}}, nil
 			}
 
 			var gatewaysList []Gateway
@@ -169,6 +178,9 @@ func (h gatewayHandler) Get(w http.ResponseWriter, r *http.Request) {
 		Action: func() (interface{}, *errors.ServiceError) {
 			projectID := mux.Vars(r)["id"]
 			gatewayID := mux.Vars(r)["gateway_id"]
+			if !validIDPattern.MatchString(projectID) || !validIDPattern.MatchString(gatewayID) {
+				return nil, errors.Validation("invalid project or gateway id")
+			}
 			ctx := r.Context()
 			gw, svcErr := h.gateway.Get(ctx, gatewayID)
 			if svcErr != nil {
@@ -190,6 +202,9 @@ func (h gatewayHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		Action: func() (interface{}, *errors.ServiceError) {
 			projectID := mux.Vars(r)["id"]
 			gatewayID := mux.Vars(r)["gateway_id"]
+			if !validIDPattern.MatchString(projectID) || !validIDPattern.MatchString(gatewayID) {
+				return nil, errors.Validation("invalid project or gateway id")
+			}
 			ctx := r.Context()
 			if err := gateway.CheckEditorTier(ctx, projectID); err != nil {
 				return nil, err
