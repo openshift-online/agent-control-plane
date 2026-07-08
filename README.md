@@ -35,7 +35,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md#local-development-setup) for full local de
 
 ### OpenShell Gateway (Kind)
 
-The control plane delegates sandbox creation to an OpenShell gateway by default. `make kind-up` automatically installs all prerequisites: the tenant namespace, the [agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) CRD (v0.4.6), and the [OpenShell gateway Helm chart](https://github.com/NVIDIA/OpenShell/tree/main/deploy/helm/openshell).
+The control plane delegates sandbox creation to an OpenShell gateway by default. `make kind-up` automatically installs all prerequisites: the tenant namespace, and the [agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) CRD (v0.4.6). ACP will automatically install configuration similar to the [OpenShell gateway Helm chart](https://github.com/NVIDIA/OpenShell/tree/main/deploy/helm/openshell) when it is configured to manage a namespace.
 
 Override defaults with:
 
