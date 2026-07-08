@@ -58,11 +58,11 @@ skills/
 
 | Domain | Specs | Requirements | Present | Partial | Missing | Coverage |
 |--------|-------|-------------|---------|---------|---------|----------|
-| Platform | 12 | 121 | 106 | 2 | 13 | 87.6% |
+| Platform | 12 | 121 | 108 | 2 | 11 | 89.3% |
 | Security | 6 | 55 | 45 | 5 | 5 | 81.8% |
 | UI | 7 | 70 | 62 | 6 | 2 | 88.6% |
 | CLI | 1 | 13 | 13 | 0 | 0 | 100% |
-| **TOTAL** | **29** | **259** | **226** | **13** | **20** | **87.3%** |
+| **TOTAL** | **29** | **259** | **228** | **13** | **18** | **88.0%** |
 
 ### Spec Dependency Order
 
@@ -114,9 +114,9 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | P1 | data-model | Application GitOps sync engine | CP | partial | critical | Only syncs Agent kind. Missing: Project, Credential, RoleBinding, Inbox sync. No kustomize rendering, auto_sync, self_heal, per-resource status. |
 | P11 | gateway-provisioning | Gateway as API Resource (DB, REST, gRPC) | BE | **done** | blocker | Gateway plugin implemented: model, DAO, service, handler, presenter, migration, mock DAO, OpenAPI spec. Project-scoped CRUD under `/projects/{id}/gateways`. RBAC tier checks, jsonb fields (server_dns_names, labels, annotations). SDKs generated (Go, Python, TypeScript). |
 | P12 | gateway-provisioning | GatewayReconciler in internal/reconciler/ | CP | missing | blocker | `gateway_reconciler.go` does not exist. Legacy `internal/gateway/reconciler.go` still uses ConfigMap-driven approach. |
-| P13 | gateway-provisioning | Shared Kustomize Library | SDK | missing | blocker | No shared library at `ambient-sdk/go-sdk/kustomize/`. Kustomize engine is embedded in `acpctl apply/cmd.go`. ApplicationReconciler uses flat directory scan, not kustomize. |
+| P13 | gateway-provisioning | Shared Kustomize Library | SDK | **done** | blocker | Extracted kustomize engine from `acpctl apply/cmd.go` into `ambient-sdk/go-sdk/kustomize/kustomize.go`. Exports: Resource, PayloadDecl, InboxSeed types; LoadKustomize, LoadFile, LoadDir, ParseManifests, MergeResources, ApplyPatch, StrategicMerge functions. CLI refactored to use shared library. |
 | P14 | gateway-provisioning | Elimination of ConfigMap-Based Provisioning | CP | missing | critical | `internal/gateway/config.go` (ConfigMap watcher) and `internal/gateway/reconciler.go` (ConfigMap reconciler) still exist. Spec requires deletion. |
-| P15 | gateway-provisioning | Gateway kind in acpctl apply | CLI | missing | critical | `acpctl apply` switch handles Project, Agent, Credential, Provider, RoleBinding — NOT Gateway. Falls through to default with warning. |
+| P15 | gateway-provisioning | Gateway kind in acpctl apply | CLI | **done** | critical | Added `case "gateway"` to apply switch. `applyGateway` reconciles create/update with `buildGatewayPatch`. Resource struct includes `ServerDnsNames`, `Image`, `Config`. `strategicMerge` handles Gateway fields. |
 | P16 | gateway-provisioning | Gateway Manifest Templating | CP | partial | major | `internal/gateway/manifests.go` exists and works. Needs to be consumed by new GatewayReconciler instead of old ConfigMap reconciler. |
 | P17 | gateway-provisioning | Gateway Configuration Validation | CP | partial | major | `internal/gateway/validation.go` exists. Needs to be consumed by new GatewayReconciler. |
 | P18 | gateway-provisioning | Kustomize Overlay Structure for Gateways | Examples | missing | major | No `gateway.yaml` in `examples/base/` or any overlay. No example kustomization references Gateway kind. |
@@ -173,7 +173,7 @@ Gaps grouped by execution wave. Each wave gates the next.
 | ~~8~~ | ~~FE~~ | ~~2~~ | ~~U7, U8~~ | ✅ Completed 2026-07-06 |
 | ~~9~~ | ~~FE~~ | ~~0 new~~ | ~~(cleanup)~~ | ✅ Completed 2026-07-06 |
 | ~~10~~ | ~~BE (API Server)~~ | ~~1~~ | ~~P11~~ | ✅ Completed 2026-07-08 |
-| 11 | SDK + CLI | 2 | P13, P15 | Shared kustomize library extracted. `acpctl apply` supports `kind: Gateway`. |
+| ~~11~~ | ~~SDK + CLI~~ | ~~2~~ | ~~P13, P15~~ | ✅ Completed 2026-07-08 |
 | 12 | CP | 4 | P12, P14, P16, P17 | GatewayReconciler created, ConfigMap code removed. `go vet ./... && golangci-lint run` |
 | 13 | Examples + Manifests | 3 | P18, P19, P20, P21 | Gateway overlay examples. platform-config removed. |
 
@@ -225,3 +225,4 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-06 | 1fbebf75 | Wave 9: FE consistency + type safety | 90.7% | Dynamic lifecycle badges for providers/policies (was hardcoded GitOps). Narrow YAML input types (AgentYamlInput, ProviderYamlInput, PolicyYamlInput). Removed namespace fields from all create sheets (inherited from project). Renamed configmap-yaml-preview → yaml-preview. Provider types narrowed to github/vertex/generic. Image field disabled (coming soon). All buttons → "Generate X Manifest". |
 | 2026-07-08 | 8fb60a30 | PR #281 reconciliation: gap analysis | 86.9% | PR #281 merged: gateway-provisioning spec rewritten from ConfigMap to API-driven `kind: Gateway`. 11 new gaps (P11-P21), 3 divergences resolved (D1-D3), 1 new divergence (D4). Waves 10-13 planned for Gateway API resource implementation. |
 | 2026-07-08 | (pending) | Wave 10 executed: P11 | 87.3% | Gateway API resource fully implemented: plugin (model, DAO, service, handler, presenter, migration, mock), OpenAPI spec, SDK codegen (Go/Python/TypeScript). `go vet ./...` clean, `golangci-lint run` 0 issues. |
+| 2026-07-08 | (pending) | Wave 11 executed: P13, P15 | 88.0% | Shared kustomize library extracted to `ambient-sdk/go-sdk/kustomize/`. CLI refactored to use shared library. Gateway kind added to `acpctl apply` with reconcile semantics. |
