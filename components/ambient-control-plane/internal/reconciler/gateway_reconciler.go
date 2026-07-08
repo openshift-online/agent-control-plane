@@ -148,7 +148,7 @@ func (r *GatewayReconciler) reconcileProjectGateways(ctx context.Context, projec
 	var failures int
 	for i := range gateways {
 		gw := &gateways[i]
-		if reconcileErr := r.reconcileGateway(ctx, projectClient, gw); reconcileErr != nil {
+		if reconcileErr := r.reconcileGateway(ctx, projectClient, gw, projectID); reconcileErr != nil {
 			failures++
 			r.logger.Error().Err(reconcileErr).
 				Str("gateway_id", gw.ID).
@@ -180,10 +180,10 @@ func (r *GatewayReconciler) listAllGateways(ctx context.Context, client *sdkclie
 	return all, nil
 }
 
-func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway) error {
+func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway, namespace string) error {
 	resolvedDnsNames := make([]string, len(gw.ServerDnsNames))
 	for i, dns := range gw.ServerDnsNames {
-		resolvedDnsNames[i] = strings.ReplaceAll(dns, "NAMESPACE_PLACEHOLDER", gw.Name)
+		resolvedDnsNames[i] = strings.ReplaceAll(dns, "NAMESPACE_PLACEHOLDER", namespace)
 	}
 
 	gwConfig := gateway.GatewayConfig{
@@ -201,7 +201,7 @@ func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient 
 	}
 
 	nsConfig := gateway.NamespaceConfig{
-		Name:    gw.Name,
+		Name:    namespace,
 		Gateway: gwConfig,
 	}
 
