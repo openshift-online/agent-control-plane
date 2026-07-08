@@ -63,5 +63,8 @@ def activate_mlflow_autologging() -> bool:
         )
         return True
     except Exception:
-        logger.warning("MLflow autologging activation failed — continuing without tracing", exc_info=True)
+        logger.warning(
+            "MLflow autologging activation failed — continuing without tracing",
+            exc_info=True,
+        )
         return False

@@ -398,7 +398,11 @@ def _read_initial_prompt_file(path: str) -> str:
     except FileNotFoundError:
         return ""
     except OSError:
-        logger.warning("Failed to read initial prompt file %s, falling back to env var", path, exc_info=True)
+        logger.warning(
+            "Failed to read initial prompt file %s, falling back to env var",
+            path,
+            exc_info=True,
+        )
         return ""
 
 
