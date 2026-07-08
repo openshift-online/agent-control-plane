@@ -387,6 +387,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	if policyErr != nil {
 		return fmt.Errorf("resolving sandbox policy: %w", policyErr)
 	}
+	sandboxPolicy = ensureACPInternalPolicy(sandboxPolicy, r.cfg.CPRuntimeNamespace)
 
 	req := &openshellpb.CreateSandboxRequest{
 		Name: sbxName,
