@@ -42,6 +42,11 @@ Method | HTTP request | Description
 [**ApiAmbientV1ProjectsIdCredentialsGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsGet) | **Get** /api/ambient/v1/projects/{id}/credentials | Returns a list of credentials for a project
 [**ApiAmbientV1ProjectsIdCredentialsPost**](DefaultAPI.md#ApiAmbientV1ProjectsIdCredentialsPost) | **Post** /api/ambient/v1/projects/{id}/credentials | Create a new credential in a project
 [**ApiAmbientV1ProjectsIdDelete**](DefaultAPI.md#ApiAmbientV1ProjectsIdDelete) | **Delete** /api/ambient/v1/projects/{id} | Delete a project by id
+[**ApiAmbientV1ProjectsIdGatewaysGatewayIdDelete**](DefaultAPI.md#ApiAmbientV1ProjectsIdGatewaysGatewayIdDelete) | **Delete** /api/ambient/v1/projects/{id}/gateways/{gateway_id} | Delete a gateway
+[**ApiAmbientV1ProjectsIdGatewaysGatewayIdGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdGatewaysGatewayIdGet) | **Get** /api/ambient/v1/projects/{id}/gateways/{gateway_id} | Get a gateway by id
+[**ApiAmbientV1ProjectsIdGatewaysGatewayIdPatch**](DefaultAPI.md#ApiAmbientV1ProjectsIdGatewaysGatewayIdPatch) | **Patch** /api/ambient/v1/projects/{id}/gateways/{gateway_id} | Update a gateway
+[**ApiAmbientV1ProjectsIdGatewaysGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdGatewaysGet) | **Get** /api/ambient/v1/projects/{id}/gateways | Returns a list of gateways for a project
+[**ApiAmbientV1ProjectsIdGatewaysPost**](DefaultAPI.md#ApiAmbientV1ProjectsIdGatewaysPost) | **Post** /api/ambient/v1/projects/{id}/gateways | Create a new gateway in a project
 [**ApiAmbientV1ProjectsIdGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdGet) | **Get** /api/ambient/v1/projects/{id} | Get a project by id
 [**ApiAmbientV1ProjectsIdHomeGet**](DefaultAPI.md#ApiAmbientV1ProjectsIdHomeGet) | **Get** /api/ambient/v1/projects/{id}/home | Project home — latest status for every Agent in this project
 [**ApiAmbientV1ProjectsIdPatch**](DefaultAPI.md#ApiAmbientV1ProjectsIdPatch) | **Patch** /api/ambient/v1/projects/{id} | Update a project
@@ -2773,6 +2778,367 @@ Name | Type | Description  | Notes
 ### HTTP request headers
 
 - **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdGatewaysGatewayIdDelete
+
+> ApiAmbientV1ProjectsIdGatewaysGatewayIdDelete(ctx, id, gatewayId).Execute()
+
+Delete a gateway
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	gatewayId := "gatewayId_example" // string | The id of the gateway
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdGatewaysGatewayIdDelete(context.Background(), id, gatewayId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdGatewaysGatewayIdDelete``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**gatewayId** | **string** | The id of the gateway | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdGatewaysGatewayIdDeleteRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+
+### Return type
+
+ (empty response body)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdGatewaysGatewayIdGet
+
+> Gateway ApiAmbientV1ProjectsIdGatewaysGatewayIdGet(ctx, id, gatewayId).Execute()
+
+Get a gateway by id
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	gatewayId := "gatewayId_example" // string | The id of the gateway
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdGatewaysGatewayIdGet(context.Background(), id, gatewayId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdGatewaysGatewayIdGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdGatewaysGatewayIdGet`: Gateway
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdGatewaysGatewayIdGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**gatewayId** | **string** | The id of the gateway | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdGatewaysGatewayIdGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+
+### Return type
+
+[**Gateway**](Gateway.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdGatewaysGatewayIdPatch
+
+> Gateway ApiAmbientV1ProjectsIdGatewaysGatewayIdPatch(ctx, id, gatewayId).GatewayPatchRequest(gatewayPatchRequest).Execute()
+
+Update a gateway
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	gatewayId := "gatewayId_example" // string | The id of the gateway
+	gatewayPatchRequest := *openapiclient.NewGatewayPatchRequest() // GatewayPatchRequest | Updated gateway data
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdGatewaysGatewayIdPatch(context.Background(), id, gatewayId).GatewayPatchRequest(gatewayPatchRequest).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdGatewaysGatewayIdPatch``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdGatewaysGatewayIdPatch`: Gateway
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdGatewaysGatewayIdPatch`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+**gatewayId** | **string** | The id of the gateway | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdGatewaysGatewayIdPatchRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+ **gatewayPatchRequest** | [**GatewayPatchRequest**](GatewayPatchRequest.md) | Updated gateway data | 
+
+### Return type
+
+[**Gateway**](Gateway.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdGatewaysGet
+
+> GatewayList ApiAmbientV1ProjectsIdGatewaysGet(ctx, id).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
+
+Returns a list of gateways for a project
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
+	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
+	search := "search_example" // string | Specifies the search criteria (optional)
+	orderBy := "orderBy_example" // string | Specifies the order by criteria (optional)
+	fields := "fields_example" // string | Supplies a comma-separated list of fields to be returned (optional)
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdGatewaysGet(context.Background(), id).Page(page).Size(size).Search(search).OrderBy(orderBy).Fields(fields).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdGatewaysGet``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdGatewaysGet`: GatewayList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdGatewaysGet`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdGatewaysGetRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
+ **size** | **int32** | Maximum number of records to return | [default to 100]
+ **search** | **string** | Specifies the search criteria | 
+ **orderBy** | **string** | Specifies the order by criteria | 
+ **fields** | **string** | Supplies a comma-separated list of fields to be returned | 
+
+### Return type
+
+[**GatewayList**](GatewayList.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ApiAmbientV1ProjectsIdGatewaysPost
+
+> Gateway ApiAmbientV1ProjectsIdGatewaysPost(ctx, id).Gateway(gateway).Execute()
+
+Create a new gateway in a project
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	gateway := *openapiclient.NewGateway("Name_example", "ProjectId_example", []string{"ServerDnsNames_example"}) // Gateway | Gateway data
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ApiAmbientV1ProjectsIdGatewaysPost(context.Background(), id).Gateway(gateway).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ApiAmbientV1ProjectsIdGatewaysPost``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ApiAmbientV1ProjectsIdGatewaysPost`: Gateway
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ApiAmbientV1ProjectsIdGatewaysPost`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiApiAmbientV1ProjectsIdGatewaysPostRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **gateway** | [**Gateway**](Gateway.md) | Gateway data | 
+
+### Return type
+
+[**Gateway**](Gateway.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
 - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)

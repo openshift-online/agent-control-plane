@@ -185,6 +185,7 @@ When the control plane creates OpenShell providers on the gateway, it maps ACP c
 | `google` | `generic` |
 | `vertex` | `google-vertex-ai` |
 | `kubeconfig` | `generic` |
+| `mlflow` | `generic` |
 
 Credential types not in this table are mapped to `generic`. The mapping may be extended as new credential types are added.
 
@@ -610,7 +611,8 @@ The control plane SHALL start the runner process inside the sandbox by calling t
 
 - GIVEN a sandbox was just created
 - WHEN the control plane polls `GetSandbox` for readiness
-- THEN it SHALL poll every 2 seconds with a 120-second timeout
+- THEN it SHALL poll every 2 seconds with a configurable timeout (default 600 seconds, set via `SANDBOX_READINESS_TIMEOUT_SECONDS` env var)
+- AND the control plane SHALL log a progress message every 30 seconds during polling, including sandbox name, session ID, and elapsed time
 - AND if the sandbox enters `SANDBOX_PHASE_ERROR`, the control plane SHALL log an error, stop polling, and transition the session to `Failed`
 - AND if the timeout expires before `SANDBOX_PHASE_READY`, the control plane SHALL log an error and transition the session to `Failed`
 
@@ -825,6 +827,8 @@ This spec describes the complete desired state. Implementation is expected to pr
 - `acpctl apply` support for agent declaration ConfigMaps
 
 > **Known gap (PR #246):** The `ApplicationReconciler`'s `gitAgentDeclaration` struct currently supports `name`, `display_name`, `description`, `prompt`, `entrypoint`, `providers`, `payloads`, `environment`, `repo_url`, `llm_model`, `labels`, and `annotations` — but does NOT include `sandbox_template` or `sandbox_policy`. Git-sourced agent declarations cannot yet declare compute resources or custom sandbox policies. The `UploadPayloads` SSH mechanism (Iteration 1) is wired to `agent.Payloads` at sandbox creation time, so payload delivery works end-to-end for git-sourced agents.
+>
+> **Known gap (`acpctl apply`):** The `acpctl apply` command's `resource` struct and `buildAgentPatch()` function do not include `sandbox_policy`, `sandbox_template`, or `entrypoint` fields. These fields are silently dropped during YAML parsing, meaning `acpctl apply -k` cannot set them on agents. The API server and SDK fully support these fields via PATCH. Additionally, `Policy` is not a supported `kind` in `acpctl apply` despite having full CRUD in the API server (`plugins/policies/`) and SDK (`Policys()` client). Both gaps must be closed so that new deployments can declaratively configure sandbox policies and agent sandbox settings without manual API calls.
 
 **Depends on:** Iteration 1 (gateway provisioning)
 

@@ -1,6 +1,7 @@
 """Unit tests for app.py initial prompt dispatch functions.
 
 Coverage targets:
+- _read_initial_prompt_file: file exists, file missing, file unreadable (OSError)
 - _push_initial_prompt_via_grpc: happy path, push raises (client still closed),
   None result, from_env error, offloaded to executor (non-blocking)
 - _push_initial_prompt_via_http: happy path, missing env vars bail, bot token,
@@ -12,17 +13,39 @@ Coverage targets:
 """
 
 import asyncio
-import json
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from ambient_runner.app import (
+    _INITIAL_PROMPT_FILE,
     _auto_execute_initial_prompt,
     _push_initial_prompt_via_grpc,
     _push_initial_prompt_via_http,
+    _read_initial_prompt_file,
 )
+
+
+# ---------------------------------------------------------------------------
+# _read_initial_prompt_file
+# ---------------------------------------------------------------------------
+
+
+class TestReadInitialPromptFile:
+    def test_reads_existing_file(self, tmp_path):
+        f = tmp_path / "prompt.txt"
+        f.write_text("  hello world  \n")
+        assert _read_initial_prompt_file(str(f)) == "hello world"
+
+    def test_returns_empty_when_missing(self):
+        assert _read_initial_prompt_file("/nonexistent/path.txt") == ""
+
+    def test_returns_empty_when_unreadable(self, tmp_path):
+        f = tmp_path / "prompt.txt"
+        f.write_text("hello")
+        f.chmod(0o000)
+        assert _read_initial_prompt_file(str(f)) == ""
 
 
 # ---------------------------------------------------------------------------
@@ -50,12 +73,7 @@ class TestPushInitialPromptViaGRPC:
         call = mock_client.session_messages.push.call_args
         assert call[0][0] == "sess-1"
         assert call[1]["event_type"] == "user"
-        payload = json.loads(call[1]["payload"])
-        assert payload["threadId"] == "sess-1"
-        assert "runId" in payload
-        assert len(payload["messages"]) == 1
-        assert payload["messages"][0]["role"] == "user"
-        assert payload["messages"][0]["content"] == "hello world"
+        assert call[1]["payload"] == "hello world"
 
     async def test_closes_client_after_push(self):
         mock_result = MagicMock()
@@ -338,7 +356,7 @@ class TestPushInitialPromptViaHTTP:
 
 @pytest.mark.asyncio
 class TestAutoExecuteInitialPrompt:
-    async def test_skips_push_when_grpc_url_set(self):
+    async def test_pushes_via_grpc_when_grpc_url_set(self):
         with (
             patch(
                 "ambient_runner.app._push_initial_prompt_via_grpc",
@@ -354,7 +372,7 @@ class TestAutoExecuteInitialPrompt:
                 "hello", "sess-1", grpc_url="localhost:9000"
             )
 
-        mock_grpc.assert_not_awaited()
+        mock_grpc.assert_awaited_once_with("hello", "sess-1")
         mock_http.assert_not_awaited()
 
     async def test_routes_to_http_when_no_grpc_url(self):

@@ -1,0 +1,4 @@
+kind: Provider
+name: github
+type: github
+secret: github-creds

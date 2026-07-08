@@ -43,6 +43,22 @@ spec:
             - name: realm-config
               mountPath: /opt/keycloak/data/import
               readOnly: true
+            - name: acp-theme
+              mountPath: /opt/keycloak/themes/acp/login/theme.properties
+              subPath: theme.properties
+              readOnly: true
+            - name: acp-theme
+              mountPath: /opt/keycloak/themes/acp/login/resources/css/login.css
+              subPath: login.css
+              readOnly: true
+            - name: acp-theme
+              mountPath: /opt/keycloak/themes/acp/login/resources/img/acp-logo.svg
+              subPath: acp-logo.svg
+              readOnly: true
+            - name: acp-theme
+              mountPath: /opt/keycloak/themes/acp/login/messages/messages_en.properties
+              subPath: messages_en.properties
+              readOnly: true
           resources:
             requests:
               cpu: 200m
@@ -68,6 +84,9 @@ spec:
         - name: realm-config
           configMap:
             name: keycloak-realm-config
+        - name: acp-theme
+          configMap:
+            name: keycloak-acp-theme
 ---
 apiVersion: v1
 kind: Service

@@ -6,3 +6,6 @@ resources:
   - agents/jira-simple-whoami.yaml
   - agents/pr-reviewer.yaml
   - agents/jira-issue-categorizer.yaml
+  - providers/vertex.yaml
+  - providers/github.yaml
+  - providers/jira.yaml

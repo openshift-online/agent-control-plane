@@ -20,8 +20,6 @@ resources:
 - keycloak-deployment.yaml
 - sso-credentials.yaml
 - e2e-rolebinding.yaml
-# Platform config for gateway provisioning
-- platform-config.yaml
 
 # Patches for e2e environment
 patches:
@@ -92,5 +90,13 @@ configMapGenerator:
 - name: keycloak-realm-config
   files:
   - ambient-code-realm.json=keycloak-realm.json
+  options:
+    disableNameSuffixHash: true
+- name: keycloak-acp-theme
+  files:
+  - theme.properties=keycloak-theme/theme.properties
+  - login.css=keycloak-theme/login.css
+  - acp-logo.svg=keycloak-theme/acp-logo.svg
+  - messages_en.properties=keycloak-theme/messages_en.properties
   options:
     disableNameSuffixHash: true

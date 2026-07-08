@@ -78,7 +78,7 @@ def test_get_current_trace_id_uses_mlflow_when_langfuse_turn_inactive():
     m._mlflow.enabled = True
     m._mlflow.has_active_turn = True
 
-    with patch("mlflow.get_active_trace_id", return_value="mlflow-trace-xyz"):
+    with patch("mlflow.get_active_trace_id", create=True, return_value="mlflow-trace-xyz"):
         assert m.get_current_trace_id() == "mlflow-trace-xyz"
 
 
@@ -93,7 +93,7 @@ def test_get_current_trace_id_prefers_langfuse_when_both_active():
     m._mlflow.enabled = True
     m._mlflow.has_active_turn = True
 
-    with patch("mlflow.get_active_trace_id", return_value="mlflow-tid"):
+    with patch("mlflow.get_active_trace_id", create=True, return_value="mlflow-tid"):
         assert m.get_current_trace_id() == "langfuse-tid"
 
 
@@ -106,6 +106,6 @@ def test_sync_last_trace_id_from_mlflow_sets_last_trace_id():
     m._mlflow.enabled = True
     m._mlflow.has_active_turn = True
 
-    with patch("mlflow.get_active_trace_id", return_value="persist-tid"):
+    with patch("mlflow.get_active_trace_id", create=True, return_value="persist-tid"):
         m._sync_last_trace_id_from_mlflow()
     assert m.last_trace_id == "persist-tid"

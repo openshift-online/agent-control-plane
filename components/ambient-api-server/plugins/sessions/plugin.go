@@ -162,6 +162,9 @@ func init() {
 		sessionsRouter.HandleFunc("/{id}/repos/status", sessionHandler.ReposStatus).Methods(http.MethodGet)
 		// Pod events (K8s stub)
 		sessionsRouter.HandleFunc("/{id}/pod-events", sessionHandler.PodEvents).Methods(http.MethodGet)
+		// Sandbox observability (OpenShell gateway proxy)
+		sessionsRouter.HandleFunc("/{id}/sandbox/logs", sessionHandler.SandboxLogs).Methods(http.MethodGet)
+		sessionsRouter.HandleFunc("/{id}/sandbox/policy", sessionHandler.SandboxPolicy).Methods(http.MethodGet)
 		// Operational sub-resources
 		sessionsRouter.HandleFunc("/{id}/displayname", sessionHandler.PatchDisplayName).Methods(http.MethodPatch)
 		sessionsRouter.HandleFunc("/{id}/workflow/metadata", sessionHandler.WorkflowMetadata).Methods(http.MethodGet)
@@ -212,4 +215,5 @@ func init() {
 	db.RegisterMigration(lastActivityAtMigration())
 	db.RegisterMigration(scheduledSessionLinkMigration())
 	db.RegisterMigration(sessionEventsMigration())
+	db.RegisterMigration(sandboxSnapshotMigration())
 }

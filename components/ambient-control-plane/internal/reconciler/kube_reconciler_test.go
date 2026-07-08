@@ -1,15 +1,23 @@
 package reconciler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell"
+	pb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	"github.com/rs/zerolog"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic/fake"
 )
 
 func TestBuildCredentialSidecars_NoCredentials(t *testing.T) {
@@ -415,6 +423,295 @@ func TestUseMCPSidecar_GatewayModeDisablesMCP(t *testing.T) {
 
 			if useMCPSidecar != tt.expectedUseMCP {
 				t.Errorf("useMCPSidecar = %v, want %v", useMCPSidecar, tt.expectedUseMCP)
+			}
+		})
+	}
+}
+
+type mockProvisioner struct{}
+
+func (m *mockProvisioner) NamespaceName(projectID string) string {
+	return "ns-" + projectID
+}
+func (m *mockProvisioner) ProvisionNamespace(_ context.Context, _ string, _ map[string]string) error {
+	return nil
+}
+func (m *mockProvisioner) DeprovisionNamespace(_ context.Context, _ string) error {
+	return nil
+}
+
+func TestMergeAgentEnvironment_ImmutableKeys(t *testing.T) {
+	r := &SimpleKubeReconciler{}
+
+	env := map[string]string{
+		"AMBIENT_CP_TOKEN_URL":        "http://cp:8080",
+		"AMBIENT_CP_TOKEN_PUBLIC_KEY": "real-key",
+		"ANTHROPIC_BASE_URL":          "https://inference.local",
+		"ANTHROPIC_API_KEY":           "notused",
+		"ACP_OPENSHELL_INFERENCE":     "true",
+		"AMBIENT_GRPC_URL":            "grpc://real:8001",
+		"AMBIENT_GRPC_USE_TLS":        "true",
+		"AMBIENT_GRPC_CA_CERT_FILE":   "/certs/ca.crt",
+		"AMBIENT_GRPC_ENABLED":        "true",
+		"SSL_CERT_FILE":               "/certs/ca.crt",
+		"REQUESTS_CA_BUNDLE":          "/certs/ca.crt",
+		"MLFLOW_EXPERIMENT_NAME":      "default-experiment",
+	}
+
+	agent := &types.Agent{
+		Environment: map[string]string{
+			"AMBIENT_CP_TOKEN_URL":        "http://evil:9999",
+			"ANTHROPIC_BASE_URL":          "https://evil.example.com",
+			"ANTHROPIC_API_KEY":           "stolen",
+			"ACP_OPENSHELL_INFERENCE":     "false",
+			"AMBIENT_GRPC_URL":            "grpc://evil:1234",
+			"MLFLOW_EXPERIMENT_NAME":      "my-experiment",
+			"CUSTOM_VAR":                  "allowed",
+		},
+	}
+
+	r.mergeAgentEnvironment(env, agent)
+
+	// Platform-critical keys must NOT be overwritten
+	if env["AMBIENT_CP_TOKEN_URL"] != "http://cp:8080" {
+		t.Errorf("AMBIENT_CP_TOKEN_URL was overwritten: %s", env["AMBIENT_CP_TOKEN_URL"])
+	}
+	if env["ANTHROPIC_BASE_URL"] != "https://inference.local" {
+		t.Errorf("ANTHROPIC_BASE_URL was overwritten: %s", env["ANTHROPIC_BASE_URL"])
+	}
+	if env["ANTHROPIC_API_KEY"] != "notused" {
+		t.Errorf("ANTHROPIC_API_KEY was overwritten: %s", env["ANTHROPIC_API_KEY"])
+	}
+	if env["ACP_OPENSHELL_INFERENCE"] != "true" {
+		t.Errorf("ACP_OPENSHELL_INFERENCE was overwritten: %s", env["ACP_OPENSHELL_INFERENCE"])
+	}
+	if env["AMBIENT_GRPC_URL"] != "grpc://real:8001" {
+		t.Errorf("AMBIENT_GRPC_URL was overwritten: %s", env["AMBIENT_GRPC_URL"])
+	}
+
+	// Non-platform keys MUST be overwritten
+	if env["MLFLOW_EXPERIMENT_NAME"] != "my-experiment" {
+		t.Errorf("MLFLOW_EXPERIMENT_NAME should be overridden, got: %s", env["MLFLOW_EXPERIMENT_NAME"])
+	}
+	if env["CUSTOM_VAR"] != "allowed" {
+		t.Errorf("CUSTOM_VAR should be set, got: %s", env["CUSTOM_VAR"])
+	}
+}
+
+func TestBuildSandboxEnv_MLflowInjection(t *testing.T) {
+	mlflowProviderName := openshell.ProviderName("test-project", "mlflow")
+
+	tests := []struct {
+		name             string
+		trackingURI      string
+		experimentName   string
+		providerNames    []string
+		wantURI          string
+		wantExperiment   string
+		wantTracingFlag  bool
+	}{
+		{
+			name:            "MLflow provider present with config values",
+			trackingURI:     "https://mlflow.example.com",
+			experimentName:  "my-experiment",
+			providerNames:   []string{mlflowProviderName},
+			wantURI:         "https://mlflow.example.com",
+			wantExperiment:  "my-experiment",
+			wantTracingFlag: true,
+		},
+		{
+			name:            "MLflow provider absent",
+			trackingURI:     "https://mlflow.example.com",
+			experimentName:  "my-experiment",
+			providerNames:   []string{},
+			wantURI:         "",
+			wantExperiment:  "",
+			wantTracingFlag: false,
+		},
+		{
+			name:            "MLflow provider present but empty config",
+			trackingURI:     "",
+			experimentName:  "",
+			providerNames:   []string{mlflowProviderName},
+			wantURI:         "",
+			wantExperiment:  "",
+			wantTracingFlag: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &SimpleKubeReconciler{
+				cfg: KubeReconcilerConfig{
+					MLflowTrackingURI:    tt.trackingURI,
+					MLflowExperimentName: tt.experimentName,
+					OpenShellUseGateway:  true,
+				},
+				provisioner: &mockProvisioner{},
+			}
+			r.logger = zerolog.Nop()
+
+			session := types.Session{
+				ObjectReference: types.ObjectReference{ID: "sess-1"},
+				Name:            "test",
+				ProjectID:       "test-project",
+			}
+
+			env := r.buildSandboxEnv(context.Background(), session, "test-project", nil, tt.providerNames)
+
+			if got := env["MLFLOW_TRACKING_URI"]; got != tt.wantURI {
+				t.Errorf("MLFLOW_TRACKING_URI = %q, want %q", got, tt.wantURI)
+			}
+			if got := env["MLFLOW_EXPERIMENT_NAME"]; got != tt.wantExperiment {
+				t.Errorf("MLFLOW_EXPERIMENT_NAME = %q, want %q", got, tt.wantExperiment)
+			}
+			if tt.wantTracingFlag {
+				if env["MLFLOW_TRACING_ENABLED"] != "true" {
+					t.Errorf("MLFLOW_TRACING_ENABLED = %q, want \"true\"", env["MLFLOW_TRACING_ENABLED"])
+				}
+			} else {
+				if _, exists := env["MLFLOW_TRACING_ENABLED"]; exists {
+					t.Errorf("MLFLOW_TRACING_ENABLED should not be set when no MLflow provider")
+				}
+			}
+		})
+	}
+}
+
+func newFakeKubeClientWithPods(objects ...runtime.Object) *kubeclient.KubeClient {
+	scheme := runtime.NewScheme()
+	scheme.AddKnownTypeWithName(
+		schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+		&unstructured.Unstructured{},
+	)
+	scheme.AddKnownTypeWithName(
+		schema.GroupVersionKind{Group: "", Version: "v1", Kind: "PodList"},
+		&unstructured.UnstructuredList{},
+	)
+	dynClient := fake.NewSimpleDynamicClient(scheme, objects...)
+	return kubeclient.NewFromDynamic(dynClient, zerolog.Nop())
+}
+
+func makeNamedPod(namespace, name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Pod",
+			"metadata":   map[string]interface{}{"name": name, "namespace": namespace},
+			"spec":       map[string]interface{}{},
+		},
+	}
+}
+
+func TestVerifyAndFixDNSConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		execResult  *openshell.ExecResult
+		execErr     error
+		podExists   bool
+		wantOK      bool
+		wantErr     bool
+		wantDeleted bool
+	}{
+		{
+			name: "ndots:1 present - DNS is correct",
+			execResult: &openshell.ExecResult{
+				Stdout:   []byte("nameserver 10.96.0.10\nsearch default.svc.cluster.local svc.cluster.local cluster.local\noptions ndots:1\n"),
+				ExitCode: 0,
+			},
+			podExists:   true,
+			wantOK:      true,
+			wantErr:     false,
+			wantDeleted: false,
+		},
+		{
+			name: "ndots:5 present - deletes pod",
+			execResult: &openshell.ExecResult{
+				Stdout:   []byte("nameserver 10.96.0.10\nsearch default.svc.cluster.local svc.cluster.local cluster.local\noptions ndots:5\n"),
+				ExitCode: 0,
+			},
+			podExists:   true,
+			wantOK:      false,
+			wantErr:     false,
+			wantDeleted: true,
+		},
+		{
+			name:        "exec error - returns error",
+			execErr:     fmt.Errorf("connection refused"),
+			podExists:   true,
+			wantOK:      false,
+			wantErr:     true,
+			wantDeleted: false,
+		},
+		{
+			name: "non-zero exit code - returns error",
+			execResult: &openshell.ExecResult{
+				Stderr:   []byte("cat: /etc/resolv.conf: No such file or directory"),
+				ExitCode: 1,
+			},
+			podExists:   true,
+			wantOK:      false,
+			wantErr:     true,
+			wantDeleted: false,
+		},
+		{
+			name: "ndots:2 present - DNS is correct (not ndots:5)",
+			execResult: &openshell.ExecResult{
+				Stdout:   []byte("nameserver 10.96.0.10\noptions ndots:2\n"),
+				ExitCode: 0,
+			},
+			podExists:   true,
+			wantOK:      true,
+			wantErr:     false,
+			wantDeleted: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gw := &mockGateway{
+				execSandboxFn: func(_ context.Context, _ string, req *pb.ExecSandboxRequest) (*openshell.ExecResult, error) {
+					if len(req.Command) < 2 || req.Command[0] != "cat" || req.Command[1] != "/etc/resolv.conf" {
+						t.Errorf("unexpected command: %v", req.Command)
+					}
+					return tt.execResult, tt.execErr
+				},
+			}
+
+			var objects []runtime.Object
+			if tt.podExists {
+				objects = append(objects, makeNamedPod("test-ns", "test-sandbox"))
+			}
+			kube := newFakeKubeClientWithPods(objects...)
+			logger := zerolog.Nop()
+
+			r := &SimpleKubeReconciler{
+				gateway: gw,
+				kube:    kube,
+				logger:  logger,
+			}
+
+			ok, err := r.verifyAndFixDNSConfig(context.Background(), "test-ns", "sandbox-id-123", "test-sandbox")
+
+			if ok != tt.wantOK {
+				t.Errorf("ok = %v, want %v", ok, tt.wantOK)
+			}
+			if (err != nil) != tt.wantErr {
+				t.Errorf("err = %v, wantErr = %v", err, tt.wantErr)
+			}
+
+			// Verify pod was deleted when expected
+			if tt.wantDeleted {
+				_, getErr := kube.DynamicClient().Resource(kubeclient.PodGVR).Namespace("test-ns").Get(context.Background(), "test-sandbox", metav1.GetOptions{})
+				if !k8serrors.IsNotFound(getErr) {
+					t.Errorf("expected pod to be deleted, but got err: %v", getErr)
+				}
+			}
+			if !tt.wantDeleted && tt.podExists && err == nil {
+				_, getErr := kube.DynamicClient().Resource(kubeclient.PodGVR).Namespace("test-ns").Get(context.Background(), "test-sandbox", metav1.GetOptions{})
+				if getErr != nil {
+					t.Errorf("expected pod to still exist, but got err: %v", getErr)
+				}
 			}
 		})
 	}

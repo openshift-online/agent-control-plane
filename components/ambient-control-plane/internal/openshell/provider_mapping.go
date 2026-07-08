@@ -25,6 +25,7 @@ var providerTypeMapping = map[string]string{
 	"jira":       "generic",
 	"google":     "generic",
 	"kubeconfig": "generic",
+	"mlflow":     "generic",
 }
 
 func KnownAmbientProviderTypes() []string {

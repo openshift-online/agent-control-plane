@@ -42,8 +42,9 @@ func validateTSLValue(value string) error {
 }
 
 const (
-	mcpSidecarPort = int64(8090)
-	mcpSidecarURL  = "http://localhost:8090"
+	mcpSidecarPort    = int64(8090)
+	mcpSidecarURL     = "http://localhost:8090"
+	initialPromptPath = "/tmp/initial_prompt.txt"
 )
 
 type credentialSidecarSpec struct {
@@ -71,40 +72,43 @@ var credentialSidecarRegistry = map[string]credentialSidecarSpec{
 }
 
 type KubeReconcilerConfig struct {
-	RunnerImage              string
-	RunnerGRPCURL            string
-	RunnerGRPCUseTLS         bool
-	AnthropicAPIKey          string
-	VertexEnabled            bool
-	VertexProjectID          string
-	VertexRegion             string
-	VertexCredentialsPath    string
-	VertexSecretName         string
-	VertexSecretNamespace    string
-	RunnerImageNamespace     string
-	MCPImage                 string
-	MCPAPIServerURL          string
-	GitHubMCPImage           string
-	JiraMCPImage             string
-	K8sMCPImage              string
-	GoogleMCPImage           string
-	RunnerLogLevel           string
-	CPRuntimeNamespace       string
-	CPTokenURL               string
-	CPTokenPublicKey         string
-	HTTPProxy                string
-	HTTPSProxy               string
-	NoProxy                  string
-	ImagePullSecret          string
-	PlatformMode             string
-	MPPConfigNamespace       string
-	OpenShellEnabled         bool
-	OpenShellUseGateway      bool
-	OpenShellRunnerImage     string
-	OpenShellPolicyName      string
-	ServiceIdentity          string
-	CACertFile               string
-	AllowedSandboxRegistries []string
+	RunnerImage                    string
+	RunnerGRPCURL                  string
+	RunnerGRPCUseTLS               bool
+	AnthropicAPIKey                string
+	VertexEnabled                  bool
+	VertexProjectID                string
+	VertexRegion                   string
+	VertexCredentialsPath          string
+	VertexSecretName               string
+	VertexSecretNamespace          string
+	RunnerImageNamespace           string
+	MCPImage                       string
+	MCPAPIServerURL                string
+	GitHubMCPImage                 string
+	JiraMCPImage                   string
+	K8sMCPImage                    string
+	GoogleMCPImage                 string
+	RunnerLogLevel                 string
+	CPRuntimeNamespace             string
+	CPTokenURL                     string
+	CPTokenPublicKey               string
+	HTTPProxy                      string
+	HTTPSProxy                     string
+	NoProxy                        string
+	ImagePullSecret                string
+	PlatformMode                   string
+	MPPConfigNamespace             string
+	OpenShellEnabled               bool
+	OpenShellUseGateway            bool
+	OpenShellRunnerImage           string
+	OpenShellPolicyName            string
+	ServiceIdentity                string
+	CACertFile                     string
+	AllowedSandboxRegistries       []string
+	SandboxReadinessTimeoutSeconds int
+	MLflowTrackingURI              string
+	MLflowExperimentName           string
 }
 
 type SimpleKubeReconciler struct {
@@ -337,6 +341,15 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		return fmt.Errorf("resolving agent providers: %w", err)
 	}
 
+	// Resolve global/project credential bindings and create gateway providers
+	// for credential types not already covered by agent provider declarations.
+	credProviders := r.resolveCredentialBasedProviders(ctx, sdk, namespace, project.Name, session, providerNames)
+	providerNames = append(providerNames, credProviders...)
+
+	if defaultMLflowName, created := r.ensureDefaultMLflowProvider(ctx, namespace, project.Name, providerNames); created {
+		providerNames = append(providerNames, defaultMLflowName)
+	}
+
 	if err := r.configureInferenceFromProviders(ctx, namespace, session.LlmModel, inferenceProviders); err != nil {
 		return fmt.Errorf("configuring inference: %w", err)
 	}
@@ -348,12 +361,12 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 			r.logger.Warn().Err(err).Str("sandbox", sbxName).Msg("failed to patch sandbox dnsConfig; DNS resolution for external FQDNs may fail")
 		}
 		execEnv := r.inferenceExecEnv()
-		execEntrypoint := r.appendPromptToEntrypoint(ctx, entrypoint, session, sdk)
 		var payloads []types.Payload
 		if agent != nil {
 			payloads = agent.Payloads
 		}
-		go r.execAfterReady(namespace, sbxName, session.ID, execEntrypoint, sdk, execEnv, payloads)
+		payloads = r.appendInitialPromptPayload(ctx, session, sdk, payloads)
+		go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads)
 		r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 		return nil
 	}
@@ -410,12 +423,12 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		Msg("sandbox created via gateway")
 
 	execEnv := r.inferenceExecEnv()
-	execEntrypoint := r.appendPromptToEntrypoint(ctx, entrypoint, session, sdk)
 	var payloads []types.Payload
 	if agent != nil {
 		payloads = agent.Payloads
 	}
-	go r.execAfterReady(namespace, sbxName, session.ID, execEntrypoint, sdk, execEnv, payloads)
+	payloads = r.appendInitialPromptPayload(ctx, session, sdk, payloads)
+	go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads)
 
 	r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 	return nil
@@ -455,12 +468,41 @@ func (r *SimpleKubeReconciler) patchSandboxDNSConfig(ctx context.Context, namesp
 		return fmt.Errorf("patching sandbox %s dnsConfig: %w", sandboxName, err)
 	}
 
-	if err := r.nsKube().DeletePod(ctx, namespace, sandboxName, &metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
-		r.logger.Warn().Err(err).Str("sandbox", sandboxName).Msg("failed to delete sandbox pod for dnsConfig recreation")
+	r.logger.Info().Str("sandbox", sandboxName).Str("namespace", namespace).Msg("patched sandbox CR dnsConfig with ndots:1")
+	return nil
+}
+
+// verifyAndFixDNSConfig checks the sandbox pod's /etc/resolv.conf for the
+// incorrect ndots:5 value. If found, the pod is deleted so the agent-sandbox
+// controller recreates it from the already-patched CR (which has ndots:1).
+// Returns (true, nil) when DNS config is correct, (false, nil) when the pod
+// was deleted and needs recreation, or (false, err) on failure.
+func (r *SimpleKubeReconciler) verifyAndFixDNSConfig(ctx context.Context, namespace, sandboxID, sbxName string) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	result, err := r.gateway.ExecSandbox(ctx, namespace, &openshellpb.ExecSandboxRequest{
+		SandboxId:      sandboxID,
+		Command:        []string{"cat", "/etc/resolv.conf"},
+		TimeoutSeconds: 10,
+	})
+	if err != nil {
+		return false, fmt.Errorf("exec cat /etc/resolv.conf: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return false, fmt.Errorf("cat /etc/resolv.conf exited %d: %s", result.ExitCode, string(result.Stderr))
 	}
 
-	r.logger.Info().Str("sandbox", sandboxName).Str("namespace", namespace).Msg("patched sandbox dnsConfig with ndots:1 and triggered pod recreation")
-	return nil
+	if !strings.Contains(string(result.Stdout), "ndots:5") {
+		r.logger.Info().Str("sandbox", sbxName).Msg("verified sandbox DNS config: ndots is correct")
+		return true, nil
+	}
+
+	r.logger.Warn().Str("sandbox", sbxName).Msg("sandbox pod has ndots:5, deleting for recreation from patched CR")
+	if err := r.nsKube().DeletePod(ctx, namespace, sbxName, &metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
+		return false, fmt.Errorf("deleting pod %s for ndots fix: %w", sbxName, err)
+	}
+	return false, nil
 }
 
 func (r *SimpleKubeReconciler) appendPromptToEntrypoint(ctx context.Context, entrypoint []string, session types.Session, sdk *sdkclient.Client) []string {
@@ -518,19 +560,49 @@ func (r *SimpleKubeReconciler) isAllowedRegistry(image string) bool {
 	return false
 }
 
+// Platform-critical env vars that agent configs must not override.
+var immutableSandboxEnvKeys = map[string]bool{
+	"AMBIENT_CP_TOKEN_URL":        true,
+	"AMBIENT_CP_TOKEN_PUBLIC_KEY": true,
+	"ANTHROPIC_BASE_URL":          true,
+	"ANTHROPIC_API_KEY":           true,
+	"ACP_OPENSHELL_INFERENCE":     true,
+	"AMBIENT_GRPC_URL":            true,
+	"AMBIENT_GRPC_USE_TLS":        true,
+	"AMBIENT_GRPC_CA_CERT_FILE":   true,
+	"AMBIENT_GRPC_ENABLED":        true,
+	"SSL_CERT_FILE":               true,
+	"REQUESTS_CA_BUNDLE":          true,
+}
+
 func (r *SimpleKubeReconciler) mergeAgentEnvironment(env map[string]string, agent *types.Agent) {
 	if agent == nil || len(agent.Environment) == 0 {
 		return
 	}
 	for k, v := range agent.Environment {
-		if _, exists := env[k]; !exists {
+		if !immutableSandboxEnvKeys[k] {
 			env[k] = v
 		}
 	}
 }
 
+func (r *SimpleKubeReconciler) appendInitialPromptPayload(ctx context.Context, session types.Session, sdk *sdkclient.Client, payloads []types.Payload) []types.Payload {
+	if prompt := r.assembleInitialPrompt(ctx, session, sdk); prompt != "" {
+		return append(payloads, types.Payload{SandboxPath: initialPromptPath, Content: prompt})
+	}
+	return payloads
+}
+
+func (r *SimpleKubeReconciler) sandboxReadinessTimeout() time.Duration {
+	if r.cfg.SandboxReadinessTimeoutSeconds > 0 {
+		return time.Duration(r.cfg.SandboxReadinessTimeoutSeconds) * time.Second
+	}
+	return 600 * time.Second
+}
+
 func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string, sdk *sdkclient.Client, execEnv map[string]string, payloads []types.Payload) {
-	pollCtx, pollCancel := context.WithTimeout(context.Background(), 120*time.Second)
+	timeout := r.sandboxReadinessTimeout()
+	pollCtx, pollCancel := context.WithTimeout(context.Background(), timeout)
 	defer pollCancel()
 
 	failSession := func(reason string) {
@@ -550,6 +622,11 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
+	pollStart := time.Now()
+	lastProgressLog := pollStart
+	ndotsRetries := 0
+	const maxNdotsRetries = 3
+	awaitingPodRestart := false
 
 	for {
 		select {
@@ -557,10 +634,19 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			r.logger.Error().
 				Str("sandbox", sbxName).
 				Str("session_id", sessionID).
+				Dur("elapsed", time.Since(pollStart)).
 				Msg("timed out waiting for sandbox to become ready")
-			failSession("sandbox did not become ready within 120s")
+			failSession(fmt.Sprintf("sandbox did not become ready within %ds", int(timeout.Seconds())))
 			return
 		case <-ticker.C:
+			if time.Since(lastProgressLog) >= 30*time.Second {
+				r.logger.Info().
+					Str("sandbox", sbxName).
+					Str("session_id", sessionID).
+					Dur("elapsed", time.Since(pollStart)).
+					Msg("still waiting for sandbox readiness")
+				lastProgressLog = time.Now()
+			}
 			resp, err := r.gateway.GetSandbox(pollCtx, namespace, sbxName)
 			if err != nil {
 				r.logger.Debug().Err(err).Str("sandbox", sbxName).Msg("polling sandbox status")
@@ -579,10 +665,18 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				return
 			}
 			if phase != openshellpb.SandboxPhase_SANDBOX_PHASE_READY {
+				if awaitingPodRestart {
+					awaitingPodRestart = false
+					r.logger.Info().Str("sandbox", sbxName).Str("phase", phase.String()).Msg("sandbox left READY after pod deletion, waiting for new pod")
+				}
 				r.logger.Debug().
 					Str("sandbox", sbxName).
 					Str("phase", phase.String()).
 					Msg("sandbox not ready yet")
+				continue
+			}
+			if awaitingPodRestart {
+				r.logger.Debug().Str("sandbox", sbxName).Msg("sandbox still READY after pod deletion, waiting for phase transition")
 				continue
 			}
 
@@ -591,12 +685,49 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				sandboxID = resp.Sandbox.Metadata.Id
 			}
 
+			dnsOK, dnsErr := r.verifyAndFixDNSConfig(pollCtx, namespace, sandboxID, sbxName)
+			if dnsErr != nil {
+				ndotsRetries++
+				r.logger.Warn().Err(dnsErr).Str("sandbox", sbxName).Int("ndots_retry", ndotsRetries).Msg("failed to verify sandbox DNS config")
+				if ndotsRetries > maxNdotsRetries {
+					r.logger.Error().Str("sandbox", sbxName).Str("session_id", sessionID).Int("retries", ndotsRetries).Msg("sandbox DNS verification failed after max retries")
+					failSession(fmt.Sprintf("sandbox DNS verification failed after %d retries: %v", ndotsRetries, dnsErr))
+					return
+				}
+				continue
+			}
+			if !dnsOK {
+				ndotsRetries++
+				if ndotsRetries > maxNdotsRetries {
+					r.logger.Error().Str("sandbox", sbxName).Str("session_id", sessionID).Int("retries", ndotsRetries).Msg("sandbox DNS config still incorrect after max retries")
+					failSession("sandbox DNS config (ndots) incorrect after maximum retries")
+					return
+				}
+				awaitingPodRestart = true
+				r.logger.Warn().Str("sandbox", sbxName).Int("ndots_retry", ndotsRetries).Msg("sandbox pod had ndots:5; deleted pod, waiting for recreation")
+				continue
+			}
+
 			r.logger.Info().
 				Str("sandbox", sbxName).
 				Str("sandbox_id", sandboxID).
 				Str("session_id", sessionID).
 				Strs("entrypoint", entrypoint).
 				Msg("sandbox is ready, executing entrypoint")
+
+			// Transition session from Creating → Running now that the
+			// sandbox is ready and we are about to exec the entrypoint.
+			runCtx, runCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer runCancel()
+			now := time.Now()
+			if _, phaseErr := sdk.Sessions().UpdateStatus(runCtx, sessionID, map[string]interface{}{
+				"phase":      PhaseRunning,
+				"start_time": &now,
+			}); phaseErr != nil {
+				r.logger.Warn().Err(phaseErr).Str("session_id", sessionID).Msg("failed to update session phase to Running")
+			} else {
+				r.logger.Info().Str("session_id", sessionID).Str("new_phase", PhaseRunning).Msg("session phase updated")
+			}
 
 			execCtx := context.Background()
 
@@ -871,6 +1002,172 @@ func (r *SimpleKubeReconciler) readProviderSecretCredentials(ctx context.Context
 	return creds, nil
 }
 
+// resolveCredentialBasedProviders resolves global and project-level credential
+// bindings and creates gateway providers for credential types that are not
+// already covered by the agent's explicit provider declarations.
+func (r *SimpleKubeReconciler) resolveCredentialBasedProviders(
+	ctx context.Context,
+	sdk *sdkclient.Client,
+	namespace, projectName string,
+	session types.Session,
+	existingProviders []string,
+) (additionalProviders []string) {
+	credentialIDs, err := r.resolveCredentialIDs(ctx, sdk, session.ProjectID, session.AgentID)
+	if err != nil {
+		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("credential binding resolution failed; skipping credential-based providers")
+		return nil
+	}
+	if len(credentialIDs) == 0 {
+		return nil
+	}
+
+	existingSet := map[string]bool{}
+	for _, p := range existingProviders {
+		existingSet[p] = true
+	}
+
+	for credType := range credentialIDs {
+		osName := openshell.ProviderName(projectName, credType)
+		if existingSet[osName] {
+			continue
+		}
+
+		secretData, err := r.ensureCredentialSecret(ctx, namespace, credType)
+		if err != nil {
+			r.logger.Warn().Err(err).Str("credential_type", credType).Msg("failed to ensure credential secret in sandbox namespace; skipping")
+			continue
+		}
+
+		osType := openshell.OpenShellProviderType(credType)
+		credentials := openshell.ProviderCredentialsFromSecret(credType, secretData)
+
+		providerData := &datapb.Provider{
+			Metadata:    &datapb.ObjectMeta{Name: osName},
+			Type:        osType,
+			Credentials: credentials,
+		}
+
+		_, updErr := r.gateway.UpdateProvider(ctx, namespace, &openshellpb.UpdateProviderRequest{Provider: providerData})
+		if updErr == nil {
+			r.logger.Info().Str("provider", osName).Str("type", osType).Msg("gateway provider updated from credential binding")
+		} else if st, ok := status.FromError(updErr); ok && st.Code() == codes.NotFound {
+			if _, crErr := r.gateway.CreateProvider(ctx, namespace, &openshellpb.CreateProviderRequest{Provider: providerData}); crErr != nil {
+				r.logger.Warn().Err(crErr).Str("provider", osName).Msg("failed to create gateway provider from credential binding; skipping")
+				continue
+			}
+			r.logger.Info().Str("provider", osName).Str("type", osType).Msg("gateway provider created from credential binding")
+		} else {
+			r.logger.Warn().Err(updErr).Str("provider", osName).Msg("failed to update gateway provider from credential binding; skipping")
+			continue
+		}
+
+		additionalProviders = append(additionalProviders, osName)
+	}
+
+	if len(additionalProviders) > 0 {
+		r.logger.Info().
+			Int("count", len(additionalProviders)).
+			Strs("providers", additionalProviders).
+			Msg("resolved additional providers from credential bindings")
+	}
+
+	return additionalProviders
+}
+
+// ensureCredentialSecret copies a K8s secret from the control plane namespace
+// to the sandbox namespace, using update-or-create to keep it in sync.
+// Returns the decoded secret data.
+func (r *SimpleKubeReconciler) ensureCredentialSecret(ctx context.Context, sandboxNamespace, credentialType string) (map[string]string, error) {
+	src, err := r.nsKube().GetSecret(ctx, r.cfg.CPRuntimeNamespace, credentialType)
+	if err != nil {
+		return nil, fmt.Errorf("reading credential secret %s/%s: %w", r.cfg.CPRuntimeNamespace, credentialType, err)
+	}
+
+	data, found, nestedErr := unstructured.NestedMap(src.Object, "data")
+	if nestedErr != nil || !found || len(data) == 0 {
+		return nil, fmt.Errorf("credential secret %s/%s has no data field", r.cfg.CPRuntimeNamespace, credentialType)
+	}
+
+	// No OwnerReference: cross-namespace owner refs are unsupported in K8s.
+	// Cleanup relies on sandbox namespace deletion by the gateway.
+	dst := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Secret",
+			"metadata": map[string]interface{}{
+				"name":      credentialType,
+				"namespace": sandboxNamespace,
+				"labels": map[string]interface{}{
+					LabelManaged:   "true",
+					LabelManagedBy: "ambient-control-plane",
+				},
+			},
+			"type": "Opaque",
+			"data": data,
+		},
+	}
+
+	if _, err := r.nsKube().UpdateSecret(ctx, dst); err != nil {
+		if k8serrors.IsNotFound(err) {
+			if _, crErr := r.nsKube().CreateSecret(ctx, dst); crErr != nil {
+				return nil, fmt.Errorf("creating credential secret %s in %s: %w", credentialType, sandboxNamespace, crErr)
+			}
+		} else {
+			return nil, fmt.Errorf("updating credential secret %s in %s: %w", credentialType, sandboxNamespace, err)
+		}
+	}
+
+	r.logger.Debug().Str("namespace", sandboxNamespace).Str("secret", credentialType).Msg("credential secret synced")
+
+	return r.readProviderSecretCredentials(ctx, sandboxNamespace, credentialType)
+}
+
+// ensureDefaultMLflowProvider creates an MLflow gateway provider from the
+// default 'mlflow' secret in CPRuntimeNamespace when no MLflow provider was
+// resolved via agent declarations or credential bindings. This allows
+// platform-wide MLflow tracing without per-tenant configuration.
+func (r *SimpleKubeReconciler) ensureDefaultMLflowProvider(
+	ctx context.Context,
+	namespace, projectName string,
+	existingProviders []string,
+) (providerName string, ok bool) {
+	osName := openshell.ProviderName(projectName, "mlflow")
+	for _, p := range existingProviders {
+		if p == osName {
+			return "", false
+		}
+	}
+
+	secretData, err := r.ensureCredentialSecret(ctx, namespace, "mlflow")
+	if err != nil {
+		r.logger.Debug().Err(err).Msg("no default mlflow secret in CP namespace; skipping default MLflow provider")
+		return "", false
+	}
+
+	credentials := openshell.ProviderCredentialsFromSecret("mlflow", secretData)
+	providerData := &datapb.Provider{
+		Metadata:    &datapb.ObjectMeta{Name: osName},
+		Type:        "generic",
+		Credentials: credentials,
+	}
+
+	_, updErr := r.gateway.UpdateProvider(ctx, namespace, &openshellpb.UpdateProviderRequest{Provider: providerData})
+	if updErr == nil {
+		r.logger.Info().Str("provider", osName).Msg("default MLflow gateway provider updated from CP namespace secret")
+	} else if st, okSt := status.FromError(updErr); okSt && st.Code() == codes.NotFound {
+		if _, crErr := r.gateway.CreateProvider(ctx, namespace, &openshellpb.CreateProviderRequest{Provider: providerData}); crErr != nil {
+			r.logger.Warn().Err(crErr).Str("provider", osName).Msg("failed to create default MLflow gateway provider; skipping")
+			return "", false
+		}
+		r.logger.Info().Str("provider", osName).Msg("default MLflow gateway provider created from CP namespace secret")
+	} else {
+		r.logger.Warn().Err(updErr).Str("provider", osName).Msg("failed to update default MLflow gateway provider; skipping")
+		return "", false
+	}
+
+	return osName, true
+}
+
 func (r *SimpleKubeReconciler) configureInferenceFromProviders(ctx context.Context, namespace, sessionModel string, inferenceProviders map[string]string) error {
 	inferenceModel := sessionModel
 	if inferenceModel == "" {
@@ -1047,9 +1344,6 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 		env["GCE_METADATA_TIMEOUT"] = "1"
 	}
 
-	if prompt := r.assembleInitialPrompt(ctx, session, sdk); prompt != "" {
-		env["INITIAL_PROMPT"] = prompt
-	}
 	if session.LlmModel != "" {
 		env["LLM_MODEL"] = session.LlmModel
 	}
@@ -1080,6 +1374,27 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 	}
 	if noProxy != "" {
 		env["NO_PROXY"] = noProxy
+	}
+
+	// When an MLflow provider is among the resolved providers, enable
+	// MLflow tracing in the runner via observability env vars.
+	mlflowProviderName := openshell.ProviderName(env["PROJECT_NAME"], "mlflow")
+	for _, pn := range providerNames {
+		if pn == mlflowProviderName {
+			env["MLFLOW_TRACING_ENABLED"] = "true"
+			if existing := env["OBSERVABILITY_BACKENDS"]; existing != "" {
+				env["OBSERVABILITY_BACKENDS"] = existing + ",mlflow"
+			} else {
+				env["OBSERVABILITY_BACKENDS"] = "mlflow"
+			}
+			if r.cfg.MLflowTrackingURI != "" {
+				env["MLFLOW_TRACKING_URI"] = r.cfg.MLflowTrackingURI
+			}
+			if r.cfg.MLflowExperimentName != "" {
+				env["MLFLOW_EXPERIMENT_NAME"] = r.cfg.MLflowExperimentName
+			}
+			break
+		}
 	}
 
 	injected := map[string]bool{}
@@ -1151,6 +1466,8 @@ func (r *SimpleKubeReconciler) deprovisionSessionSandbox(ctx context.Context, se
 		Str("sandbox", sbxName).
 		Msg("deprovisioning session via gateway")
 
+	r.finalSandboxSnapshot(ctx, session, namespace, sbxName)
+
 	if err := r.gateway.DeleteSandbox(ctx, namespace, sbxName); err != nil {
 		if st, ok := status.FromError(err); !ok || st.Code() != codes.NotFound {
 			r.logger.Warn().Err(err).Str("sandbox", sbxName).Msg("deleting sandbox")
@@ -1159,6 +1476,55 @@ func (r *SimpleKubeReconciler) deprovisionSessionSandbox(ctx context.Context, se
 
 	r.updateSessionPhase(ctx, session, nextPhase)
 	return nil
+}
+
+func (r *SimpleKubeReconciler) finalSandboxSnapshot(ctx context.Context, session types.Session, namespace, sbxName string) {
+	if session.ProjectID == "" {
+		return
+	}
+
+	sdk, err := r.factory.ForProject(ctx, session.ProjectID)
+	if err != nil {
+		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("final snapshot: failed to get SDK client")
+		return
+	}
+
+	resp, err := r.gateway.GetSandbox(ctx, namespace, sbxName)
+	if err != nil {
+		r.logger.Debug().Err(err).Str("session_id", session.ID).Msg("final snapshot: sandbox already gone")
+		return
+	}
+
+	sbx := resp.GetSandbox()
+	if sbx == nil {
+		return
+	}
+
+	patch, patchErr := openshell.BuildSnapshotPatch(sbx)
+	if patchErr != nil {
+		r.logger.Warn().Err(patchErr).Str("session_id", session.ID).Msg("final snapshot: failed to build patch")
+		return
+	}
+
+	sandboxID := sbx.GetMetadata().GetId()
+	if sandboxID != "" {
+		logs, logErr := r.gateway.FetchSandboxLogs(ctx, namespace, sandboxID, openshell.LogTailLines)
+		if logErr != nil {
+			r.logger.Debug().Err(logErr).Str("session_id", session.ID).Msg("final snapshot: failed to fetch logs")
+		}
+		if len(logs) > 0 {
+			logsJSON, err := json.Marshal(logs)
+			if err == nil {
+				patch["sandbox_logs_snapshot"] = string(logsJSON)
+			}
+		}
+	}
+
+	if _, err := sdk.Sessions().UpdateStatus(ctx, session.ID, patch); err != nil {
+		r.logger.Warn().Err(err).Str("session_id", session.ID).Msg("final snapshot: failed to persist")
+	} else {
+		r.logger.Info().Str("session_id", session.ID).Msg("final sandbox snapshot persisted")
+	}
 }
 
 func (r *SimpleKubeReconciler) cleanupSession(ctx context.Context, session types.Session) error {

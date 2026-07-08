@@ -21,4 +21,5 @@ type gatewayClient interface {
 	ExecSandboxStreaming(ctx context.Context, namespace string, req *pb.ExecSandboxRequest) error
 	UpdateConfig(ctx context.Context, namespace string, req *pb.UpdateConfigRequest) (*pb.UpdateConfigResponse, error)
 	UploadPayloads(ctx context.Context, namespace string, sandboxID string, payloads []openshell.Payload) error
+	FetchSandboxLogs(ctx context.Context, namespace, sandboxID string, tailLines uint32) ([]map[string]interface{}, error)
 }

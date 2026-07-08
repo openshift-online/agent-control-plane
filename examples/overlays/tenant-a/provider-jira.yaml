@@ -1,9 +1,0 @@
-# Prerequisite: create the backing secret in the tenant namespace:
-#   kubectl create secret generic jira \
-#     --from-literal=JIRA_USERNAME="your-email@example.com" \
-#     --from-literal=JIRA_API_TOKEN="$(cat /path/to/jira-token.txt)" \
-#     -n tenant-a
-kind: Provider
-name: jira
-type: generic
-secret: jira

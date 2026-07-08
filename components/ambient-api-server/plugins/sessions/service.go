@@ -175,8 +175,9 @@ func (s *sqlSessionService) UpdateStatus(ctx context.Context, id string, patch *
 	if patch.Phase == nil && patch.StartTime == nil && patch.CompletionTime == nil &&
 		patch.SdkSessionId == nil && patch.SdkRestartCount == nil && patch.Conditions == nil &&
 		patch.ReconciledRepos == nil && patch.ReconciledWorkflow == nil &&
-		patch.KubeCrUid == nil && patch.KubeNamespace == nil {
-		return nil, errors.Validation("status patch body must set at least one field: phase, start_time, completion_time, sdk_session_id, sdk_restart_count, conditions, reconciled_repos, reconciled_workflow, kube_cr_uid, kube_namespace")
+		patch.KubeCrUid == nil && patch.KubeNamespace == nil &&
+		patch.SandboxLogsSnapshot == nil && patch.SandboxPolicySnapshot == nil {
+		return nil, errors.Validation("status patch body must set at least one field: phase, start_time, completion_time, sdk_session_id, sdk_restart_count, conditions, reconciled_repos, reconciled_workflow, kube_cr_uid, kube_namespace, sandbox_logs_snapshot, sandbox_policy_snapshot")
 	}
 
 	session, err := s.sessionDao.Get(ctx, id)
@@ -216,6 +217,12 @@ func (s *sqlSessionService) UpdateStatus(ctx context.Context, id string, patch *
 	}
 	if patch.KubeNamespace != nil {
 		session.KubeNamespace = patch.KubeNamespace
+	}
+	if patch.SandboxLogsSnapshot != nil {
+		session.SandboxLogsSnapshot = patch.SandboxLogsSnapshot
+	}
+	if patch.SandboxPolicySnapshot != nil {
+		session.SandboxPolicySnapshot = patch.SandboxPolicySnapshot
 	}
 
 	session, err = s.sessionDao.Replace(ctx, session)

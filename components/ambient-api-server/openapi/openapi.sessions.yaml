@@ -494,6 +494,14 @@ components:
               format: date-time
               readOnly: true
               description: Timestamp of the last agent activity (message push) for staleness detection.
+            sandbox_logs_snapshot:
+              type: string
+              readOnly: true
+              description: JSON array of sandbox log entries; last snapshot before sandbox stop.
+            sandbox_policy_snapshot:
+              type: string
+              readOnly: true
+              description: JSON sandbox policy response; last snapshot before sandbox stop.
     # NEW SCHEMA START
     SessionList:
     # NEW SCHEMA END
@@ -567,6 +575,10 @@ components:
         kube_cr_uid:
           type: string
         kube_namespace:
+          type: string
+        sandbox_logs_snapshot:
+          type: string
+        sandbox_policy_snapshot:
           type: string
   parameters:
       id:

@@ -19,4 +19,3 @@ Structured metadata on sessions, agents, and projects. Covers annotation schemas
 ### [Live Preview and Real-Time Updates](live-preview.spec.md)
 
 Visual feedback for running sessions including live preview, screenshot capture, real-time update streaming, and WebSocket integration.
-

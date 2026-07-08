@@ -116,6 +116,11 @@ Class | Method | HTTP request | Description
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsGet**](docs/DefaultAPI.md#apiambientv1projectsidcredentialsget) | **Get** /api/ambient/v1/projects/{id}/credentials | Returns a list of credentials for a project
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdCredentialsPost**](docs/DefaultAPI.md#apiambientv1projectsidcredentialspost) | **Post** /api/ambient/v1/projects/{id}/credentials | Create a new credential in a project
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdDelete**](docs/DefaultAPI.md#apiambientv1projectsiddelete) | **Delete** /api/ambient/v1/projects/{id} | Delete a project by id
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdGatewaysGatewayIdDelete**](docs/DefaultAPI.md#apiambientv1projectsidgatewaysgatewayiddelete) | **Delete** /api/ambient/v1/projects/{id}/gateways/{gateway_id} | Delete a gateway
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdGatewaysGatewayIdGet**](docs/DefaultAPI.md#apiambientv1projectsidgatewaysgatewayidget) | **Get** /api/ambient/v1/projects/{id}/gateways/{gateway_id} | Get a gateway by id
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdGatewaysGatewayIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidgatewaysgatewayidpatch) | **Patch** /api/ambient/v1/projects/{id}/gateways/{gateway_id} | Update a gateway
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdGatewaysGet**](docs/DefaultAPI.md#apiambientv1projectsidgatewaysget) | **Get** /api/ambient/v1/projects/{id}/gateways | Returns a list of gateways for a project
+*DefaultAPI* | [**ApiAmbientV1ProjectsIdGatewaysPost**](docs/DefaultAPI.md#apiambientv1projectsidgatewayspost) | **Post** /api/ambient/v1/projects/{id}/gateways | Create a new gateway in a project
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdGet**](docs/DefaultAPI.md#apiambientv1projectsidget) | **Get** /api/ambient/v1/projects/{id} | Get a project by id
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdHomeGet**](docs/DefaultAPI.md#apiambientv1projectsidhomeget) | **Get** /api/ambient/v1/projects/{id}/home | Project home — latest status for every Agent in this project
 *DefaultAPI* | [**ApiAmbientV1ProjectsIdPatch**](docs/DefaultAPI.md#apiambientv1projectsidpatch) | **Patch** /api/ambient/v1/projects/{id} | Update a project
@@ -182,6 +187,9 @@ Class | Method | HTTP request | Description
  - [CredentialPatchRequest](docs/CredentialPatchRequest.md)
  - [CredentialTokenResponse](docs/CredentialTokenResponse.md)
  - [Error](docs/Error.md)
+ - [Gateway](docs/Gateway.md)
+ - [GatewayList](docs/GatewayList.md)
+ - [GatewayPatchRequest](docs/GatewayPatchRequest.md)
  - [GpuRequirements](docs/GpuRequirements.md)
  - [InboxMessage](docs/InboxMessage.md)
  - [InboxMessageList](docs/InboxMessageList.md)

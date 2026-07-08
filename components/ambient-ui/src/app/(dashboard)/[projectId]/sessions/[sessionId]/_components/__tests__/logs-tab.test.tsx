@@ -29,6 +29,9 @@ function makeSession(overrides: Partial<DomainSession> = {}): DomainSession {
     repos: [],
     reconciledRepos: [],
     conditions: [],
+    kubeNamespace: null,
+    sandboxLogsSnapshot: null,
+    sandboxPolicySnapshot: null,
     ...overrides,
   }
 }
@@ -139,28 +142,37 @@ describe('LogsTab', () => {
 
   it('renders messages that match active filters', async () => {
     const messages = [
-      makeMessage({ id: 'msg-1', eventType: 'tool_use', payload: 'git status' }),
+      makeMessage({
+        id: 'msg-1',
+        eventType: 'tool_use',
+        payload: JSON.stringify({ tool: 'Bash', arguments: { command: 'git status' } }),
+      }),
       makeMessage({ id: 'msg-2', eventType: 'error', payload: 'Command failed' }),
     ]
     const LogsTab = await loadWithMessages(messages)
 
     render(<LogsTab session={makeSession()} />, { wrapper: createWrapper() })
 
-    expect(await screen.findByText('git status')).toBeInTheDocument()
+    // tool_use rows are collapsed by default — only the tool name label is visible
+    expect(await screen.findByText('Bash')).toBeInTheDocument()
     expect(screen.getByText('Command failed')).toBeInTheDocument()
   })
 
   it('hides messages when their filter is toggled off', async () => {
     const messages = [
-      makeMessage({ id: 'msg-1', eventType: 'tool_use', payload: 'git status' }),
+      makeMessage({
+        id: 'msg-1',
+        eventType: 'tool_use',
+        payload: JSON.stringify({ tool: 'Bash', arguments: { command: 'git status' } }),
+      }),
       makeMessage({ id: 'msg-2', eventType: 'error', payload: 'Command failed' }),
     ]
     const LogsTab = await loadWithMessages(messages)
 
     render(<LogsTab session={makeSession()} />, { wrapper: createWrapper() })
 
-    // Wait for messages to load
-    expect(await screen.findByText('git status')).toBeInTheDocument()
+    // Wait for messages to load — tool_use rows show tool name when collapsed
+    expect(await screen.findByText('Bash')).toBeInTheDocument()
 
     // Toggle off 'Tool Call' filter -- scope to filter group to avoid
     // matching EventTypeBadge elements in message rows
@@ -168,21 +180,109 @@ describe('LogsTab', () => {
     fireEvent.click(within(filterGroup).getByText('Tool Call'))
 
     // tool_use message should be hidden
-    expect(screen.queryByText('git status')).not.toBeInTheDocument()
+    expect(screen.queryByText('Bash')).not.toBeInTheDocument()
     // error message should still be visible
     expect(screen.getByText('Command failed')).toBeInTheDocument()
   })
 
-  it('shows "No events match" when all filters toggled off', async () => {
+  it('expands and collapses tool_use rows when clicked', async () => {
     const messages = [
-      makeMessage({ id: 'msg-1', eventType: 'tool_use', payload: 'some command' }),
+      makeMessage({
+        id: 'msg-collapse',
+        eventType: 'tool_use',
+        payload: JSON.stringify({
+          tool: 'Bash',
+          arguments: { command: 'git status' },
+          tool_call_id: 'tc-collapse',
+        }),
+      }),
     ]
     const LogsTab = await loadWithMessages(messages)
 
     render(<LogsTab session={makeSession()} />, { wrapper: createWrapper() })
 
-    // Wait for data to load
-    expect(await screen.findByText('some command')).toBeInTheDocument()
+    // Collapsed by default — tool name visible, arguments hidden
+    const toolLabel = await screen.findByText('Bash')
+    expect(toolLabel).toBeInTheDocument()
+    expect(screen.queryByText('git status')).not.toBeInTheDocument()
+
+    // Expand
+    fireEvent.click(toolLabel)
+    expect(screen.getByText(/git status/)).toBeInTheDocument()
+
+    // Collapse again
+    fireEvent.click(toolLabel)
+    expect(screen.queryByText('git status')).not.toBeInTheDocument()
+  })
+
+  it('truncates tool_result to 4 lines with a Show more button', async () => {
+    const longResult = 'line 1\nline 2\nline 3\nline 4\nline 5\nline 6'
+    const messages = [
+      makeMessage({
+        id: 'msg-long-result',
+        eventType: 'tool_result',
+        payload: JSON.stringify({
+          tool_call_id: 'tc-long',
+          result: longResult,
+        }),
+      }),
+    ]
+    const LogsTab = await loadWithMessages(messages)
+
+    render(<LogsTab session={makeSession()} />, { wrapper: createWrapper() })
+
+    // Should show first 4 lines but not line 5/6
+    expect(await screen.findByText(/line 1/)).toBeInTheDocument()
+    expect(screen.getByText(/line 4/)).toBeInTheDocument()
+    expect(screen.queryByText(/line 5/)).not.toBeInTheDocument()
+
+    // "Show more" button should be present
+    const showMore = screen.getByText('Show more')
+    expect(showMore).toBeInTheDocument()
+
+    // Click to expand
+    fireEvent.click(showMore)
+    expect(screen.getByText(/line 5/)).toBeInTheDocument()
+    expect(screen.getByText(/line 6/)).toBeInTheDocument()
+
+    // "Show less" button should now be present
+    const showLess = screen.getByText('Show less')
+    expect(showLess).toBeInTheDocument()
+
+    // Collapse back
+    fireEvent.click(showLess)
+    expect(screen.queryByText(/line 5/)).not.toBeInTheDocument()
+  })
+
+  it('shows "Unknown Tool" when tool_use payload is not parseable', async () => {
+    const messages = [
+      makeMessage({
+        id: 'msg-bad-tool',
+        eventType: 'tool_use',
+        payload: 'not valid json',
+      }),
+    ]
+    const LogsTab = await loadWithMessages(messages)
+
+    render(<LogsTab session={makeSession()} />, { wrapper: createWrapper() })
+
+    expect(await screen.findByText('Unknown Tool')).toBeInTheDocument()
+  })
+
+  it('shows "No events match" when all filters toggled off', async () => {
+    const messages = [
+      makeMessage({
+        id: 'msg-1',
+        eventType: 'tool_use',
+        payload: JSON.stringify({ tool: 'Read', arguments: { path: '/workspace' } }),
+      }),
+    ]
+    const LogsTab = await loadWithMessages(messages)
+
+    render(<LogsTab session={makeSession()} />, { wrapper: createWrapper() })
+
+    // Wait for data to load — tool_use rows show tool name when collapsed
+    expect(await screen.findByText('Read')).toBeInTheDocument()
 
     // Toggle off all filters using the filter group buttons.
     // We must scope to the filter group because EventTypeBadge also

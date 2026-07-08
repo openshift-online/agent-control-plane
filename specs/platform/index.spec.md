@@ -24,9 +24,21 @@ Behavioral rules and versioned governance for the runner component. Inherits fro
 
 Declarative agent YAML schema for ConfigMap-based agent definitions. Covers entrypoint, providers (namespace-scoped shared resources), payloads, sandbox policies, sandbox templates, and environment variables for OpenShell Gateway-managed sandboxes.
 
+### [Gateway Provisioning](gateway-provisioning.spec.md)
+
+API-driven gateway lifecycle management. Gateways are declared as `kind: Gateway` resources, applied via `acpctl apply -k`, persisted in PostgreSQL, and reconciled by the GatewayReconciler into Kubernetes gateway deployments (StatefulSet, Service, RBAC, certgen Job). Replaces the previous ConfigMap-based `platform-config` approach.
+
 ### [Agent Configuration Reuse via Kustomize Overlays](agent-inheritance.spec.md) *(Draft)*
 
 Configuration reuse patterns using Kustomize bases and overlays for agent, provider, and policy composition. Composition happens at apply time — the control plane only sees fully-resolved ConfigMaps. Extension to the Agent Sandbox Configuration spec.
+
+### [MLflow Tracing](mlflow-tracing.spec.md)
+
+MLflow tracing of Claude SDK interactions, enabled by default when credentials are present. Covers the `mlflow` credential provider, global credential fallback, runner image CA trust, conditional autologging activation, and OPA network policy for gateway mode.
+
+### [OpenShell Sandbox Observability](openshell-sandbox-observability.spec.md)
+
+Sandbox log streaming and policy display in the session detail UI. Surfaces OpenShell gateway logs (streaming SSE) and effective sandbox policy (filesystem, network, process controls) through the control plane's gateway gRPC channel.
 
 ### [MCP Server](mcp-server.spec.md)
 
