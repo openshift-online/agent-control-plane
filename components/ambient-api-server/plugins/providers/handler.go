@@ -2,14 +2,19 @@ package providers
 
 import (
 	"net/http"
+	"regexp"
 
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/gateway"
+	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 )
+
+var validIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)
 
 type providerHandler struct {
 	provider ProviderService
@@ -24,7 +29,6 @@ func NewProviderHandler(provider ProviderService, generic services.GenericServic
 }
 
 func (h providerHandler) Create(w http.ResponseWriter, r *http.Request) {
-
 	var provider openapi.Provider
 	cfg := &handlers.HandlerConfig{
 		Body: &provider,
@@ -34,11 +38,17 @@ func (h providerHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
 			projectID := mux.Vars(r)["id"]
+			if !validIDPattern.MatchString(projectID) {
+				return nil, errors.Validation("invalid project id")
+			}
+			if err := gateway.CheckEditorTier(ctx, projectID); err != nil {
+				return nil, err
+			}
 			model := ConvertProvider(provider)
 			model.ProjectId = projectID
-			model, err := h.provider.Create(ctx, model)
-			if err != nil {
-				return nil, err
+			model, svcErr := h.provider.Create(ctx, model)
+			if svcErr != nil {
+				return nil, svcErr
 			}
 			return PresentProvider(model), nil
 		},
@@ -53,18 +63,24 @@ func (h providerHandler) List(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 			projectID := mux.Vars(r)["id"]
 
+			if !validIDPattern.MatchString(projectID) {
+				return nil, errors.Validation("invalid project id")
+			}
+
 			listArgs := services.NewListArguments(r.URL.Query())
-			projectFilter := "project_id = '" + projectID + "'"
-			if listArgs.Search != "" {
-				listArgs.Search = projectFilter + " and (" + listArgs.Search + ")"
-			} else {
-				listArgs.Search = projectFilter
+			projectFilter, filterErr := pkgrbac.TSLEqual("project_id", projectID)
+			if filterErr != nil {
+				return nil, errors.Validation("invalid project_id format")
+			}
+			pkgrbac.PrependTSLFilter(listArgs, projectFilter)
+			if !pkgrbac.ApplyListFilter(ctx, listArgs, "project_id", false) {
+				return openapi.ProviderList{Kind: "ProviderList", Page: 1, Size: 0, Total: 0, Items: []openapi.Provider{}}, nil
 			}
 
 			var providers []Provider
-			paging, err := h.generic.List(ctx, "id", listArgs, &providers)
-			if err != nil {
-				return nil, err
+			paging, svcErr := h.generic.List(ctx, "id", listArgs, &providers)
+			if svcErr != nil {
+				return nil, svcErr
 			}
 
 			providerList := openapi.ProviderList{
@@ -89,10 +105,13 @@ func (h providerHandler) Get(w http.ResponseWriter, r *http.Request) {
 		Action: func() (interface{}, *errors.ServiceError) {
 			projectID := mux.Vars(r)["id"]
 			id := mux.Vars(r)["provider_id"]
+			if !validIDPattern.MatchString(projectID) || !validIDPattern.MatchString(id) {
+				return nil, errors.Validation("invalid project or provider id")
+			}
 			ctx := r.Context()
-			provider, err := h.provider.Get(ctx, id)
-			if err != nil {
-				return nil, err
+			provider, svcErr := h.provider.Get(ctx, id)
+			if svcErr != nil {
+				return nil, svcErr
 			}
 			if provider.ProjectId != projectID {
 				return nil, errors.Forbidden("provider does not belong to this project")
@@ -104,7 +123,6 @@ func (h providerHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h providerHandler) Patch(w http.ResponseWriter, r *http.Request) {
-
 	var patch openapi.ProviderPatchRequest
 	cfg := &handlers.HandlerConfig{
 		Body:       &patch,
@@ -113,9 +131,15 @@ func (h providerHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 			projectID := mux.Vars(r)["id"]
 			id := mux.Vars(r)["provider_id"]
-			found, err := h.provider.Get(ctx, id)
-			if err != nil {
+			if !validIDPattern.MatchString(projectID) || !validIDPattern.MatchString(id) {
+				return nil, errors.Validation("invalid project or provider id")
+			}
+			if err := gateway.CheckEditorTier(ctx, projectID); err != nil {
 				return nil, err
+			}
+			found, svcErr := h.provider.Get(ctx, id)
+			if svcErr != nil {
+				return nil, svcErr
 			}
 			if found.ProjectId != projectID {
 				return nil, errors.Forbidden("provider does not belong to this project")
@@ -140,9 +164,9 @@ func (h providerHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				found.Annotations = patch.Annotations
 			}
 
-			model, err := h.provider.Replace(ctx, found)
-			if err != nil {
-				return nil, err
+			model, svcErr := h.provider.Replace(ctx, found)
+			if svcErr != nil {
+				return nil, svcErr
 			}
 			return PresentProvider(model), nil
 		},
@@ -152,22 +176,27 @@ func (h providerHandler) Patch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h providerHandler) Delete(w http.ResponseWriter, r *http.Request) {
-
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
 			projectID := mux.Vars(r)["id"]
 			id := mux.Vars(r)["provider_id"]
+			if !validIDPattern.MatchString(projectID) || !validIDPattern.MatchString(id) {
+				return nil, errors.Validation("invalid project or provider id")
+			}
 			ctx := r.Context()
-			provider, getErr := h.provider.Get(ctx, id)
-			if getErr != nil {
-				return nil, getErr
+			if err := gateway.CheckEditorTier(ctx, projectID); err != nil {
+				return nil, err
+			}
+			provider, svcErr := h.provider.Get(ctx, id)
+			if svcErr != nil {
+				return nil, svcErr
 			}
 			if provider.ProjectId != projectID {
 				return nil, errors.Forbidden("provider does not belong to this project")
 			}
-			err := h.provider.Delete(ctx, id)
-			if err != nil {
-				return nil, err
+			svcErr = h.provider.Delete(ctx, id)
+			if svcErr != nil {
+				return nil, svcErr
 			}
 			return nil, nil
 		},

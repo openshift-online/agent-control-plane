@@ -50,19 +50,19 @@ skills/
 
 ## Reconciliation State
 
-**Last analyzed**: 2026-07-08 (PR #281 gateway spec reconciliation)
+**Last analyzed**: 2026-07-08 (provider/gateway RBAC fix)
 **Spec corpus**: 29 specs across 4 domains
-**Codebase commit**: 8fb60a30 (reconcile/pr-281-gateway-spec-changes branch)
+**Codebase commit**: f564e59e (fix/hcmais-ui-sso-redirect-patch branch)
 
 ### Coverage Summary
 
 | Domain | Specs | Requirements | Present | Partial | Missing | Coverage |
 |--------|-------|-------------|---------|---------|---------|----------|
 | Platform | 12 | 121 | 116 | 1 | 4 | 95.9% |
-| Security | 6 | 55 | 45 | 5 | 5 | 81.8% |
+| Security | 6 | 55 | 47 | 3 | 5 | 85.5% |
 | UI | 7 | 70 | 62 | 6 | 2 | 88.6% |
 | CLI | 1 | 13 | 13 | 0 | 0 | 100% |
-| **TOTAL** | **29** | **259** | **236** | **12** | **11** | **91.1%** |
+| **TOTAL** | **29** | **259** | **238** | **10** | **11** | **91.9%** |
 
 ### Spec Dependency Order
 
@@ -106,6 +106,8 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | S10 | rbac-enforcement | gRPC watch idle timeout | BE | partial | minor | gRPC interceptor populates AuthResult but no idle timeout for watch streams. |
 | S11 | sso-authentication | E2E test auth helper | Tests | partial | minor | Keycloak client_credentials flow exists in CLI. No E2E test helper using Kind Keycloak. |
 | S12 | identity-boundaries | Build agent SA scoping | Manifests | missing | minor | `ambient-agent` SA for OpenShift build workflows not implemented. Future feature. |
+| S13 | rbac-enforcement | Provider/Gateway RBAC resource registration | BE | **done** | blocker | `provider` and `gateway` resources missing from RBAC permission system — middleware returned 404 before handler ran. Fixed: resource constants, isListEndpoint allowlist, role permissions migration. |
+| S14 | rbac-enforcement | Provider handler SQL injection + missing RBAC | BE | **done** | critical | Provider List handler used raw string concat for project filter (SQL injection). Missing `ApplyListFilter`, input validation, and editor tier check. Fixed to match gateway handler pattern. |
 
 ### Platform Gaps
 
@@ -178,6 +180,7 @@ Gaps grouped by execution wave. Each wave gates the next.
 | ~~11~~ | ~~SDK + CLI~~ | ~~2~~ | ~~P13, P15~~ | ✅ Completed 2026-07-08 |
 | ~~12~~ | ~~CP~~ | ~~4~~ | ~~P12, P14, P16, P17~~ | ✅ Completed 2026-07-08 |
 | ~~13~~ | ~~Examples + Manifests~~ | ~~4~~ | ~~P18, P19, P20, P21~~ | ✅ Completed 2026-07-08 |
+| ~~14~~ | ~~BE (RBAC)~~ | ~~2~~ | ~~S13, S14~~ | ✅ Completed 2026-07-08 |
 
 **Partials** (S9, S10, S11, P1, P9) are low-severity and can be addressed opportunistically.
 
@@ -230,3 +233,4 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-08 | (pending) | Wave 11 executed: P13, P15 | 88.0% | Shared kustomize library extracted to `ambient-sdk/go-sdk/kustomize/`. CLI refactored to use shared library. Gateway kind added to `acpctl apply` with reconcile semantics. |
 | 2026-07-08 | (pending) | Wave 12 executed: P12, P14, P16, P17 | 89.6% | GatewayReconciler created (polling pattern, 30s ticker). ConfigMap-based provisioning eliminated. Manifests and validation consumed by new reconciler. `go build ./...` clean. |
 | 2026-07-08 | (pending) | Wave 13 executed: P18, P19, P20, P21 | 91.1% | Gateway overlay examples added. Failure handling with annotation-based status tracking. platform-config.yaml removed from kind and hcmais-dev overlays. ProjectReconciler ordering verified as already enforced. |
+| 2026-07-08 | (pending) | Wave 14 executed: S13, S14 | 91.9% | Provider/Gateway RBAC fix: added ResourceProvider/ResourceGateway to permissions.go, isListEndpoint allowlist, role permissions migration (202607080001). Provider handler hardened: SQL injection fix (TSLEqual), ApplyListFilter, input validation (validIDPattern), CheckEditorTier on writes. Tests added. |
