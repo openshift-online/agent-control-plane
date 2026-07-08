@@ -1996,8 +1996,8 @@ _Last updated: 2026-07-05. Use this as the authoritative index — click into co
 | **Generic proxy — cluster/platform** | ✅ proxy plugin | n/a | 🔲 `acpctl version`, `acpctl cluster-info` | cluster-info, version, health, LDAP, OOTB workflows |
 | **Declarative apply** | n/a | uses SDK | ✅ `apply -f`, `apply -k` | Upsert semantics; supports inbox seeding |
 | **Declarative apply — Credential kind** | n/a | uses SDK | ✅ `apply -f credential.yaml` | Global resource; token sourced from env var in YAML |
-| **Declarative apply — Policy kind** | ✅ `plugins/policies/` | ✅ `Policys()` (SDK) | 🔲 `apply -f policy.yaml` | Project-scoped; spec contains OpenShell SandboxPolicy JSON |
-| **Declarative apply — Agent sandbox fields** | ✅ PATCH accepts all fields | ✅ `AgentBuilder.SandboxPolicy()`, `.SandboxTemplate()` | 🔲 `acpctl apply` resource struct missing `sandbox_policy`, `sandbox_template`, `entrypoint` | Fields silently dropped during YAML parsing; only `prompt`, `providers`, `payloads`, `environment`, `labels`, `annotations` applied |
+| **Declarative apply — Policy kind** | ✅ `plugins/policies/` | ✅ `Policys()` (SDK) | ✅ `apply -f policy.yaml` | Project-scoped; spec contains OpenShell SandboxPolicy JSON. Create-or-update with spec/labels/annotations diffing. Data migration renames `filesystem_policy` → `filesystem` in stored specs. |
+| **Declarative apply — Agent sandbox fields** | ✅ PATCH accepts all fields | ✅ `AgentBuilder.SandboxPolicy()`, `.SandboxTemplate()` | ✅ `sandbox_policy` in `resource` struct, create, patch, and `strategicMerge()` | `sandbox_policy` fully wired. `sandbox_template` and `entrypoint` remain unwired (not addressed in this PR). |
 | **Declarative apply — ScheduledSession kind** | n/a | 🔲 | 🔲 | Planned; schedule and agent reference in YAML |
 | **Applications — CRUD** | ✅ `plugins/applications/` | ✅ `ApplicationAPI.{Get,List,Create,Update,Delete}` | ✅ `application list/get/create/update/delete` | GitOps sync binding |
 | **Applications — sync/refresh** | ✅ `sync`/`refresh` handlers | ✅ `ApplicationAPI.{Sync,Refresh}` | ⚠️ `application sync/refresh` (stub implementations) | Sync engine partial — only Agent kind synced |
