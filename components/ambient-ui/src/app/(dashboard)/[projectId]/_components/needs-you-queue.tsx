@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import Link from 'next/link'
-import { XCircle, AlertTriangle, Info } from 'lucide-react'
+import { XCircle, AlertTriangle, Info, ExternalLink, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Tooltip,
@@ -49,8 +49,34 @@ type NeedsYouQueueProps = {
   agentNames?: Map<string, string>
 }
 
+const STORAGE_KEY = 'acp:dismissed-attention'
+
+function loadDismissed(): Set<string> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return new Set(JSON.parse(raw) as string[])
+  } catch { /* ignore corrupt data */ }
+  return new Set()
+}
+
+function saveDismissed(ids: Set<string>) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]))
+  } catch { /* storage full / unavailable */ }
+}
+
 export function NeedsYouQueue({ items, projectId, agentNames }: NeedsYouQueueProps) {
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
+  const [hydrated, setHydrated] = useState(false)
+
+  useEffect(() => {
+    setDismissedIds(loadDismissed())
+    setHydrated(true)
+  }, [])
+
+  useEffect(() => {
+    if (hydrated) saveDismissed(dismissedIds)
+  }, [dismissedIds, hydrated])
 
   const visibleItems = useMemo(
     () => items.filter((item) => !dismissedIds.has(item.session.id)),
@@ -59,13 +85,13 @@ export function NeedsYouQueue({ items, projectId, agentNames }: NeedsYouQueuePro
 
   const hasCritical = visibleItems.some((item) => item.criticality === 'critical')
 
-  const dismissItem = (sessionId: string) => {
+  const dismissItem = useCallback((sessionId: string) => {
     setDismissedIds((prev) => new Set(prev).add(sessionId))
-  }
+  }, [])
 
-  const clearAll = () => {
+  const clearAll = useCallback(() => {
     setDismissedIds(new Set(items.map((item) => item.session.id)))
-  }
+  }, [items])
 
   return (
     <section
@@ -182,18 +208,30 @@ function NeedsYouRow({ item, projectId, agentNames, onDismiss }: NeedsYouRowProp
         </div>
 
         {/* Action */}
-        <div className="flex items-center gap-1.5">
-          <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
-            <Link href={`/${projectId}/sessions/${session.id}`}>View session</Link>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs text-muted-foreground"
-            onClick={() => onDismiss(session.id)}
-          >
-            Dismiss
-          </Button>
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="icon" className="size-7" asChild>
+                <Link href={`/${projectId}/sessions/${session.id}`}>
+                  <ExternalLink className="size-3.5" />
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>View session</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 text-muted-foreground"
+                onClick={() => onDismiss(session.id)}
+              >
+                <X className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Dismiss</TooltipContent>
+          </Tooltip>
         </div>
       </RowGrid>
     </li>
