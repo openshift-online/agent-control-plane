@@ -67,6 +67,10 @@ type Session struct {
 	KubeNamespace      *string    `json:"kube_namespace,omitempty"`
 	// Timestamp of the last agent activity (message push) for staleness detection.
 	LastActivityAt *time.Time `json:"last_activity_at,omitempty"`
+	// JSON array of sandbox log entries; last snapshot before sandbox stop.
+	SandboxLogsSnapshot *string `json:"sandbox_logs_snapshot,omitempty"`
+	// JSON sandbox policy response; last snapshot before sandbox stop.
+	SandboxPolicySnapshot *string `json:"sandbox_policy_snapshot,omitempty"`
 }
 
 type _Session Session
@@ -1297,6 +1301,70 @@ func (o *Session) SetLastActivityAt(v time.Time) {
 	o.LastActivityAt = &v
 }
 
+// GetSandboxLogsSnapshot returns the SandboxLogsSnapshot field value if set, zero value otherwise.
+func (o *Session) GetSandboxLogsSnapshot() string {
+	if o == nil || IsNil(o.SandboxLogsSnapshot) {
+		var ret string
+		return ret
+	}
+	return *o.SandboxLogsSnapshot
+}
+
+// GetSandboxLogsSnapshotOk returns a tuple with the SandboxLogsSnapshot field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetSandboxLogsSnapshotOk() (*string, bool) {
+	if o == nil || IsNil(o.SandboxLogsSnapshot) {
+		return nil, false
+	}
+	return o.SandboxLogsSnapshot, true
+}
+
+// HasSandboxLogsSnapshot returns a boolean if a field has been set.
+func (o *Session) HasSandboxLogsSnapshot() bool {
+	if o != nil && !IsNil(o.SandboxLogsSnapshot) {
+		return true
+	}
+
+	return false
+}
+
+// SetSandboxLogsSnapshot gets a reference to the given string and assigns it to the SandboxLogsSnapshot field.
+func (o *Session) SetSandboxLogsSnapshot(v string) {
+	o.SandboxLogsSnapshot = &v
+}
+
+// GetSandboxPolicySnapshot returns the SandboxPolicySnapshot field value if set, zero value otherwise.
+func (o *Session) GetSandboxPolicySnapshot() string {
+	if o == nil || IsNil(o.SandboxPolicySnapshot) {
+		var ret string
+		return ret
+	}
+	return *o.SandboxPolicySnapshot
+}
+
+// GetSandboxPolicySnapshotOk returns a tuple with the SandboxPolicySnapshot field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetSandboxPolicySnapshotOk() (*string, bool) {
+	if o == nil || IsNil(o.SandboxPolicySnapshot) {
+		return nil, false
+	}
+	return o.SandboxPolicySnapshot, true
+}
+
+// HasSandboxPolicySnapshot returns a boolean if a field has been set.
+func (o *Session) HasSandboxPolicySnapshot() bool {
+	if o != nil && !IsNil(o.SandboxPolicySnapshot) {
+		return true
+	}
+
+	return false
+}
+
+// SetSandboxPolicySnapshot gets a reference to the given string and assigns it to the SandboxPolicySnapshot field.
+func (o *Session) SetSandboxPolicySnapshot(v string) {
+	o.SandboxPolicySnapshot = &v
+}
+
 func (o Session) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -1418,6 +1486,12 @@ func (o Session) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.LastActivityAt) {
 		toSerialize["last_activity_at"] = o.LastActivityAt
+	}
+	if !IsNil(o.SandboxLogsSnapshot) {
+		toSerialize["sandbox_logs_snapshot"] = o.SandboxLogsSnapshot
+	}
+	if !IsNil(o.SandboxPolicySnapshot) {
+		toSerialize["sandbox_policy_snapshot"] = o.SandboxPolicySnapshot
 	}
 	return toSerialize, nil
 }

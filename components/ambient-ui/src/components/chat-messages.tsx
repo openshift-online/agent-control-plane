@@ -25,6 +25,37 @@ export const CHAT_EVENT_TYPES: ReadonlySet<SessionEventType> = new Set([
 
 // ---- Payload Parsing Helpers ----
 
+// Bounded unwrapping: max 5 recursive {result} wrappers × 10 iterative JSON.parse
+// layers = 50 parse calls worst-case. Both limits are well above real-world nesting.
+function unwrapNestedJson(value: unknown, depth = 0): unknown {
+  if (depth > 5 || typeof value !== 'string') return value
+
+  let current: unknown = value
+  for (let i = 0; i < 10; i++) {
+    if (typeof current !== 'string') break
+    try {
+      current = JSON.parse(current)
+    } catch {
+      break
+    }
+  }
+
+  if (typeof current === 'object' && current !== null && !Array.isArray(current)) {
+    const obj = current as Record<string, unknown>
+    if ('result' in obj && Object.keys(obj).every(k => k === 'result' || k === 'tool_call_id')) {
+      return unwrapNestedJson(obj.result, depth + 1)
+    }
+  }
+
+  return current
+}
+
+export function deepUnwrapJson(value: string): string {
+  const unwrapped = unwrapNestedJson(value)
+  if (typeof unwrapped === 'string') return unwrapped
+  return JSON.stringify(unwrapped, null, 2)
+}
+
 type ToolPayload = {
   name: string
   arguments: Record<string, unknown>
@@ -67,10 +98,8 @@ export function tryParseToolResult(payload: string): ToolResultPayload | null {
       return null
     }
     const obj = parsed as Record<string, unknown>
-    let result = typeof obj.result === 'string' ? obj.result : payload
-    if (result.startsWith('"') && result.endsWith('"')) {
-      result = result.slice(1, -1)
-    }
+    const raw = typeof obj.result === 'string' ? obj.result : payload
+    const result = deepUnwrapJson(raw)
     return {
       result,
       toolCallId: typeof obj.tool_call_id === 'string' ? obj.tool_call_id : '',

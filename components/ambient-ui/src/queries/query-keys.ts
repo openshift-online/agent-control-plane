@@ -109,6 +109,11 @@ export const queryKeys = {
     detail: (id: string) =>
       [...queryKeys.applications.details(), id] as const,
   },
+  sandboxPolicy: {
+    all: ['sandboxPolicy'] as const,
+    detail: (sessionId: string) =>
+      [...queryKeys.sandboxPolicy.all, sessionId] as const,
+  },
   platformInfo: {
     all: ['platform-info'] as const,
   },

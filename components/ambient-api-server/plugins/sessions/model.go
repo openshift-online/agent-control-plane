@@ -32,18 +32,20 @@ type Session struct {
 	ProjectId                *string    `json:"project_id"`
 	AgentId                  *string    `json:"agent_id"`
 
-	Phase              *string    `json:"phase"`
-	StartTime          *time.Time `json:"start_time"`
-	CompletionTime     *time.Time `json:"completion_time"`
-	SdkSessionId       *string    `json:"sdk_session_id"`
-	SdkRestartCount    *int32     `json:"sdk_restart_count"`
-	Conditions         *string    `json:"conditions"`
-	ReconciledRepos    *string    `json:"reconciled_repos"`
-	ReconciledWorkflow *string    `json:"reconciled_workflow"`
-	KubeCrName         *string    `json:"kube_cr_name"`
-	KubeCrUid          *string    `json:"kube_cr_uid"`
-	KubeNamespace      *string    `json:"kube_namespace"`
-	LastActivityAt     *time.Time `json:"last_activity_at"`
+	Phase                 *string    `json:"phase"`
+	StartTime             *time.Time `json:"start_time"`
+	CompletionTime        *time.Time `json:"completion_time"`
+	SdkSessionId          *string    `json:"sdk_session_id"`
+	SdkRestartCount       *int32     `json:"sdk_restart_count"`
+	Conditions            *string    `json:"conditions"`
+	ReconciledRepos       *string    `json:"reconciled_repos"`
+	ReconciledWorkflow    *string    `json:"reconciled_workflow"`
+	KubeCrName            *string    `json:"kube_cr_name"`
+	KubeCrUid             *string    `json:"kube_cr_uid"`
+	KubeNamespace         *string    `json:"kube_namespace"`
+	LastActivityAt        *time.Time `json:"last_activity_at"`
+	SandboxLogsSnapshot   *string    `json:"sandbox_logs_snapshot"`
+	SandboxPolicySnapshot *string    `json:"sandbox_policy_snapshot"`
 }
 
 type SessionList []*Session
@@ -97,14 +99,16 @@ type SessionPatchRequest struct {
 }
 
 type SessionStatusPatchRequest struct {
-	Phase              *string    `json:"phase,omitempty"`
-	StartTime          *time.Time `json:"start_time,omitempty"`
-	CompletionTime     *time.Time `json:"completion_time,omitempty"`
-	SdkSessionId       *string    `json:"sdk_session_id,omitempty"`
-	SdkRestartCount    *int32     `json:"sdk_restart_count,omitempty"`
-	Conditions         *string    `json:"conditions,omitempty"`
-	ReconciledRepos    *string    `json:"reconciled_repos,omitempty"`
-	ReconciledWorkflow *string    `json:"reconciled_workflow,omitempty"`
-	KubeCrUid          *string    `json:"kube_cr_uid,omitempty"`
-	KubeNamespace      *string    `json:"kube_namespace,omitempty"`
+	Phase                 *string    `json:"phase,omitempty"`
+	StartTime             *time.Time `json:"start_time,omitempty"`
+	CompletionTime        *time.Time `json:"completion_time,omitempty"`
+	SdkSessionId          *string    `json:"sdk_session_id,omitempty"`
+	SdkRestartCount       *int32     `json:"sdk_restart_count,omitempty"`
+	Conditions            *string    `json:"conditions,omitempty"`
+	ReconciledRepos       *string    `json:"reconciled_repos,omitempty"`
+	ReconciledWorkflow    *string    `json:"reconciled_workflow,omitempty"`
+	KubeCrUid             *string    `json:"kube_cr_uid,omitempty"`
+	KubeNamespace         *string    `json:"kube_namespace,omitempty"`
+	SandboxLogsSnapshot   *string    `json:"sandbox_logs_snapshot,omitempty"`
+	SandboxPolicySnapshot *string    `json:"sandbox_policy_snapshot,omitempty"`
 }

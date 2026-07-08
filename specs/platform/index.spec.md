@@ -36,6 +36,10 @@ Configuration reuse patterns using Kustomize bases and overlays for agent, provi
 
 MLflow tracing of Claude SDK interactions, enabled by default when credentials are present. Covers the `mlflow` credential provider, global credential fallback, runner image CA trust, conditional autologging activation, and OPA network policy for gateway mode.
 
+### [OpenShell Sandbox Observability](openshell-sandbox-observability.spec.md)
+
+Sandbox log streaming and policy display in the session detail UI. Surfaces OpenShell gateway logs (streaming SSE) and effective sandbox policy (filesystem, network, process controls) through the control plane's gateway gRPC channel.
+
 ### [MCP Server](mcp-server.spec.md)
 
 Model Context Protocol server that exposes platform resources as MCP tools. Covers tool definitions, transport, authentication, @mention resolution, and sidecar deployment.

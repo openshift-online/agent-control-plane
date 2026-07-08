@@ -176,6 +176,8 @@ func (s *PodStatusSyncer) syncSandboxStatus(ctx context.Context, sdk *sdkclient.
 		return
 	}
 
+	s.snapshotSandboxData(ctx, sdk, namespace, session, resp)
+
 	desiredPhase := mapSandboxPhaseToSessionPhase(resp.Sandbox.Status.Phase)
 	if desiredPhase == "" {
 		return
@@ -190,6 +192,37 @@ func (s *PodStatusSyncer) syncSandboxStatus(ctx context.Context, sdk *sdkclient.
 	}
 
 	s.updateSessionPhase(ctx, sdk, session, desiredPhase, nil)
+}
+
+func (s *PodStatusSyncer) snapshotSandboxData(ctx context.Context, sdk *sdkclient.Client, namespace string, session *types.Session, resp *openshellpb.SandboxResponse) {
+	sbx := resp.GetSandbox()
+	if sbx == nil {
+		return
+	}
+
+	patch, patchErr := openshell.BuildSnapshotPatch(sbx)
+	if patchErr != nil {
+		s.logger.Warn().Err(patchErr).Str("session_id", session.ID).Msg("snapshot: failed to build patch")
+		return
+	}
+
+	sandboxID := sbx.GetMetadata().GetId()
+	if sandboxID != "" {
+		logs, logErr := s.gateway.FetchSandboxLogs(ctx, namespace, sandboxID, openshell.LogTailLines)
+		if logErr != nil {
+			s.logger.Debug().Err(logErr).Str("session_id", session.ID).Msg("snapshot: failed to fetch logs")
+		}
+		if len(logs) > 0 {
+			logsJSON, marshalErr := json.Marshal(logs)
+			if marshalErr == nil {
+				patch["sandbox_logs_snapshot"] = string(logsJSON)
+			}
+		}
+	}
+
+	if _, err := sdk.Sessions().UpdateStatus(ctx, session.ID, patch); err != nil {
+		s.logger.Warn().Err(err).Str("session_id", session.ID).Msg("snapshot: failed to persist sandbox data")
+	}
 }
 
 func mapSandboxPhaseToSessionPhase(phase openshellpb.SandboxPhase) string {

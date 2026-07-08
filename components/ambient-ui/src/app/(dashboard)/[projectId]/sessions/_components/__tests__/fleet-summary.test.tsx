@@ -28,6 +28,9 @@ function makeSession(overrides: Partial<DomainSession> = {}): DomainSession {
     repos: [],
     reconciledRepos: [],
     conditions: [],
+    kubeNamespace: null,
+    sandboxLogsSnapshot: null,
+    sandboxPolicySnapshot: null,
     ...overrides,
   }
 }

@@ -43,6 +43,8 @@ function makeSdkSession(overrides: Partial<Session> = {}): Session {
     last_activity_at: '',
     source_scheduled_session_id: '',
     scheduled_for: '',
+    sandbox_logs_snapshot: '',
+    sandbox_policy_snapshot: '',
     ...overrides,
   }
 }

@@ -59,6 +59,9 @@ export type DomainSession = {
   repos: DomainRepo[]
   reconciledRepos: DomainReconciledRepo[]
   conditions: DomainCondition[]
+  kubeNamespace: string | null
+  sandboxLogsSnapshot: SandboxLogEntry[] | null
+  sandboxPolicySnapshot: SandboxPolicyResponse | null
 }
 
 export type DomainProject = {
@@ -366,6 +369,61 @@ export type DomainPolicy = {
   labels: Record<string, string>
   createdAt: string
   updatedAt: string
+}
+
+export type SandboxLogEntry = {
+  timestamp: number
+  source: 'gateway' | 'sandbox'
+  level: string
+  module: string
+  message: string
+  category?: string
+  denied?: boolean
+}
+
+export type SandboxNetworkEndpoint = {
+  host: string
+  port: number
+  protocol?: string
+  tls?: string
+  enforcement?: string
+  access?: string
+}
+
+export type SandboxNetworkBinary = {
+  path: string
+}
+
+export type SandboxNetworkPolicy = {
+  name: string
+  endpoints: SandboxNetworkEndpoint[]
+  binaries?: SandboxNetworkBinary[]
+}
+
+export type SandboxPolicyData = {
+  version: number
+  filesystem_policy: {
+    include_workdir: boolean
+    read_only: string[]
+    read_write: string[]
+  }
+  landlock: {
+    compatibility: string
+  }
+  process: {
+    run_as_user: string
+    run_as_group: string
+  }
+  network_policies: Record<string, SandboxNetworkPolicy>
+}
+
+export type SandboxPolicyResponse = {
+  version: number
+  hash: string
+  status: string
+  source: string
+  config_revision: string
+  policy: SandboxPolicyData
 }
 
 export type DomainApplication = {
