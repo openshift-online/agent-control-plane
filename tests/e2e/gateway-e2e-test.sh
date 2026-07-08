@@ -169,10 +169,20 @@ fi
 REPO_AGENT_ID=$(echo "$AGENTS_RESP" \
   | jq -r '.items[] | select(.name == "repo-clone-workspace") | .id' 2>/dev/null | head -1 || echo "")
 
+if [ -z "$REPO_AGENT_ID" ]; then
+  # Apply the agent definition so the repo payload tests can run
+  $ACPCTL apply -f "$REPO_ROOT/examples/base/agents/repo-clone-workspace.yaml" \
+    --project "$TENANT" >/dev/null 2>&1 || true
+  # Re-fetch agents list
+  AGENTS_RESP=$(api GET "/api/ambient/v1/projects/${PROJECT_ID}/agents?size=50" || echo "")
+  REPO_AGENT_ID=$(echo "$AGENTS_RESP" \
+    | jq -r '.items[] | select(.name == "repo-clone-workspace") | .id' 2>/dev/null | head -1 || echo "")
+fi
+
 if [ -n "$REPO_AGENT_ID" ]; then
   pass "Agent 'repo-clone-workspace' exists (id: ${REPO_AGENT_ID})"
 else
-  skip "Agent 'repo-clone-workspace'" "not found — repo payload tests will be skipped"
+  fail "Agent 'repo-clone-workspace' not found in project '${TENANT}'"
 fi
 
 section "5. Verify provider and credential"
@@ -291,18 +301,42 @@ if [ -n "$CREATED_SESSION_ID" ]; then
   if [ "$POD_READY" = "true" ]; then
     pass "Sandbox pod '${SBX_NAME}' is running"
 
-    # The control plane uploads payloads after the sandbox is ready but before
-    # starting the runner. Give it a few seconds to complete the SSH upload.
-    sleep 5
+    # The control plane uploads payloads only after the sandbox reaches READY
+    # phase, passes DNS verification, and transitions the session to Running.
+    # Poll for the session phase instead of using a fixed sleep.
+    SESSION_RUNNING=false
+    for i in $(seq 1 30); do
+      PHASE=$(api GET "/api/ambient/v1/sessions/${CREATED_SESSION_ID}" 2>/dev/null \
+        | jq -r '.phase // empty' 2>/dev/null || echo "")
+      if [ "$PHASE" = "Running" ] || [ "$PHASE" = "Succeeded" ] || [ "$PHASE" = "Failed" ]; then
+        SESSION_RUNNING=true
+        break
+      fi
+      sleep 2
+    done
+
+    if [ "$SESSION_RUNNING" = "true" ]; then
+      # Session is Running — payloads are uploaded just before exec starts.
+      # Poll briefly for the file to appear.
+      PAYLOAD_READY=false
+      for j in $(seq 1 10); do
+        PAYLOAD_CONTENT=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+          cat /sandbox/CLAUDE.md 2>/dev/null || echo "")
+        if echo "$PAYLOAD_CONTENT" | grep -q "hello"; then
+          PAYLOAD_READY=true
+          break
+        fi
+        sleep 2
+      done
+    fi
 
     # 9a. Payload upload — agent-defined file written via SSH-over-gRPC
-    PAYLOAD_CONTENT=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
-      cat /sandbox/CLAUDE.md 2>/dev/null || echo "")
-    if echo "$PAYLOAD_CONTENT" | grep -q "hello"; then
+    if [ "${PAYLOAD_READY:-false}" = "true" ]; then
       pass "Payload /sandbox/CLAUDE.md uploaded successfully"
     else
       fail "Payload /sandbox/CLAUDE.md not found or content mismatch"
-      echo "  Got: $(echo "$PAYLOAD_CONTENT" | head -c 200)"
+      echo "  Got: $(echo "${PAYLOAD_CONTENT:-}" | head -c 200)"
+      echo "  Session phase: ${PHASE:-unknown}"
     fi
 
     # 9b. Agent environment variable passed through to sandbox
@@ -404,23 +438,37 @@ if [ -n "$REPO_AGENT_ID" ]; then
     if [ "$REPO_POD_READY" = "true" ]; then
       pass "Repo sandbox pod '${REPO_SBX_NAME}' is running"
 
-      # Poll for repo payload delivery (clone + tar transfer)
+      # Wait for the session to reach Running phase — payloads are uploaded
+      # only after sandbox READY + DNS verification + phase transition.
+      REPO_SESSION_RUNNING=false
+      for i in $(seq 1 30); do
+        REPO_PHASE=$(api GET "/api/ambient/v1/sessions/${REPO_SESSION_ID}" 2>/dev/null \
+          | jq -r '.phase // empty' 2>/dev/null || echo "")
+        if [ "$REPO_PHASE" = "Running" ] || [ "$REPO_PHASE" = "Succeeded" ] || [ "$REPO_PHASE" = "Failed" ]; then
+          REPO_SESSION_RUNNING=true
+          break
+        fi
+        sleep 2
+      done
+
       # Poll for repo payload delivery (clone + tar transfer).
       # Uses octocat/Hello-World which contains a single README file.
       REPO_PAYLOADS_READY=false
-      for i in $(seq 1 10); do
-        if kubectl exec -n "$TENANT" "$REPO_SBX_NAME" -- \
-            test -f /sandbox/workspace/README 2>/dev/null; then
-          REPO_PAYLOADS_READY=true
-          break
-        fi
-        sleep 3
-      done
+      if [ "$REPO_SESSION_RUNNING" = "true" ]; then
+        for i in $(seq 1 15); do
+          if kubectl exec -n "$TENANT" "$REPO_SBX_NAME" -- \
+              test -f /sandbox/workspace/README 2>/dev/null; then
+            REPO_PAYLOADS_READY=true
+            break
+          fi
+          sleep 2
+        done
+      fi
 
       if [ "$REPO_PAYLOADS_READY" = "true" ]; then
-        pass "Repo payload delivered (clone landed in $(( i * 3 ))s)"
+        pass "Repo payload delivered"
       else
-        fail "Repo payload not delivered within 30s — clone may have failed"
+        fail "Repo payload not delivered — clone may have failed (session phase: ${REPO_PHASE:-unknown})"
       fi
 
       # 10a. Inline content payload present alongside repo payload
@@ -459,7 +507,7 @@ if [ -n "$REPO_AGENT_ID" ]; then
     echo "  Response: $(echo "$REPO_START_RESP" | head -c 200)"
   fi
 else
-  skip "Repo payload verification" "agent 'repo-clone-workspace' not found"
+  fail "Repo payload verification requires agent 'repo-clone-workspace' (not found)"
 fi
 
 section "Cleanup"
