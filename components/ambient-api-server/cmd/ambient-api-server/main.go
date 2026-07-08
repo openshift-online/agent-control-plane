@@ -32,7 +32,6 @@ import (
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/scheduledSessions"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/users"
-	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/gateways"
 	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/version"
 )
 
