@@ -931,7 +931,7 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 	@KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_HTTP_PORT=$(KIND_HTTP_PORT) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./tests/infra/extract-token.sh
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' ready!"
 	@# OpenShell gateway setup if requested
-	@if [ "$(OPENSHELL_USE_GATEWAY)" = "true" ]; then \
+	@if [ "$(OPENSHELL_USE_GATEWAY)" = "true" ] && [ "$(NO_SETUP)" != "true" ]; then \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Installing OpenShell gateway prerequisites ($(OPENSHELL_TENANTS))..."; \
 		NAMESPACE=$(NAMESPACE) \
 		OPENSHELL_TENANTS="$(OPENSHELL_TENANTS)" \
