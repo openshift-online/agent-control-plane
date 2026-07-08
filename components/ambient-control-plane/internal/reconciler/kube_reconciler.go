@@ -489,8 +489,8 @@ func (r *SimpleKubeReconciler) patchSandboxDNSConfig(ctx context.Context, namesp
 // controller recreates it from the already-patched CR (which has ndots:1).
 // Returns (true, nil) when DNS config is correct, (false, nil) when the pod
 // was deleted and needs recreation, or (false, err) on failure.
-func (r *SimpleKubeReconciler) verifyAndFixDNSConfig(namespace, sandboxID, sbxName string) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (r *SimpleKubeReconciler) verifyAndFixDNSConfig(ctx context.Context, namespace, sandboxID, sbxName string) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	result, err := r.gateway.ExecSandbox(ctx, namespace, &openshellpb.ExecSandboxRequest{
@@ -673,9 +673,15 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				sandboxID = resp.Sandbox.Metadata.Id
 			}
 
-			dnsOK, dnsErr := r.verifyAndFixDNSConfig(namespace, sandboxID, sbxName)
+			dnsOK, dnsErr := r.verifyAndFixDNSConfig(pollCtx, namespace, sandboxID, sbxName)
 			if dnsErr != nil {
+				ndotsRetries++
 				r.logger.Warn().Err(dnsErr).Str("sandbox", sbxName).Int("ndots_retry", ndotsRetries).Msg("failed to verify sandbox DNS config")
+				if ndotsRetries > maxNdotsRetries {
+					r.logger.Error().Str("sandbox", sbxName).Str("session_id", sessionID).Int("retries", ndotsRetries).Msg("sandbox DNS verification failed after max retries")
+					failSession(fmt.Sprintf("sandbox DNS verification failed after %d retries: %v", ndotsRetries, dnsErr))
+					return
+				}
 				continue
 			}
 			if !dnsOK {

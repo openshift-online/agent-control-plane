@@ -1,15 +1,23 @@
 package reconciler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell"
+	pb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	"github.com/rs/zerolog"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic/fake"
 )
 
 func TestBuildCredentialSidecars_NoCredentials(t *testing.T) {
@@ -415,6 +423,145 @@ func TestUseMCPSidecar_GatewayModeDisablesMCP(t *testing.T) {
 
 			if useMCPSidecar != tt.expectedUseMCP {
 				t.Errorf("useMCPSidecar = %v, want %v", useMCPSidecar, tt.expectedUseMCP)
+			}
+		})
+	}
+}
+
+func newFakeKubeClientWithPods(objects ...runtime.Object) *kubeclient.KubeClient {
+	scheme := runtime.NewScheme()
+	scheme.AddKnownTypeWithName(
+		schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+		&unstructured.Unstructured{},
+	)
+	scheme.AddKnownTypeWithName(
+		schema.GroupVersionKind{Group: "", Version: "v1", Kind: "PodList"},
+		&unstructured.UnstructuredList{},
+	)
+	dynClient := fake.NewSimpleDynamicClient(scheme, objects...)
+	return kubeclient.NewFromDynamic(dynClient, zerolog.Nop())
+}
+
+func makeNamedPod(namespace, name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Pod",
+			"metadata":   map[string]interface{}{"name": name, "namespace": namespace},
+			"spec":       map[string]interface{}{},
+		},
+	}
+}
+
+func TestVerifyAndFixDNSConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		execResult  *openshell.ExecResult
+		execErr     error
+		podExists   bool
+		wantOK      bool
+		wantErr     bool
+		wantDeleted bool
+	}{
+		{
+			name: "ndots:1 present - DNS is correct",
+			execResult: &openshell.ExecResult{
+				Stdout:   []byte("nameserver 10.96.0.10\nsearch default.svc.cluster.local svc.cluster.local cluster.local\noptions ndots:1\n"),
+				ExitCode: 0,
+			},
+			podExists:   true,
+			wantOK:      true,
+			wantErr:     false,
+			wantDeleted: false,
+		},
+		{
+			name: "ndots:5 present - deletes pod",
+			execResult: &openshell.ExecResult{
+				Stdout:   []byte("nameserver 10.96.0.10\nsearch default.svc.cluster.local svc.cluster.local cluster.local\noptions ndots:5\n"),
+				ExitCode: 0,
+			},
+			podExists:   true,
+			wantOK:      false,
+			wantErr:     false,
+			wantDeleted: true,
+		},
+		{
+			name:        "exec error - returns error",
+			execErr:     fmt.Errorf("connection refused"),
+			podExists:   true,
+			wantOK:      false,
+			wantErr:     true,
+			wantDeleted: false,
+		},
+		{
+			name: "non-zero exit code - returns error",
+			execResult: &openshell.ExecResult{
+				Stderr:   []byte("cat: /etc/resolv.conf: No such file or directory"),
+				ExitCode: 1,
+			},
+			podExists:   true,
+			wantOK:      false,
+			wantErr:     true,
+			wantDeleted: false,
+		},
+		{
+			name: "ndots:2 present - DNS is correct (not ndots:5)",
+			execResult: &openshell.ExecResult{
+				Stdout:   []byte("nameserver 10.96.0.10\noptions ndots:2\n"),
+				ExitCode: 0,
+			},
+			podExists:   true,
+			wantOK:      true,
+			wantErr:     false,
+			wantDeleted: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gw := &mockGateway{
+				execSandboxFn: func(_ context.Context, _ string, req *pb.ExecSandboxRequest) (*openshell.ExecResult, error) {
+					if len(req.Command) < 2 || req.Command[0] != "cat" || req.Command[1] != "/etc/resolv.conf" {
+						t.Errorf("unexpected command: %v", req.Command)
+					}
+					return tt.execResult, tt.execErr
+				},
+			}
+
+			var objects []runtime.Object
+			if tt.podExists {
+				objects = append(objects, makeNamedPod("test-ns", "test-sandbox"))
+			}
+			kube := newFakeKubeClientWithPods(objects...)
+			logger := zerolog.Nop()
+
+			r := &SimpleKubeReconciler{
+				gateway: gw,
+				kube:    kube,
+				logger:  logger,
+			}
+
+			ok, err := r.verifyAndFixDNSConfig(context.Background(), "test-ns", "sandbox-id-123", "test-sandbox")
+
+			if ok != tt.wantOK {
+				t.Errorf("ok = %v, want %v", ok, tt.wantOK)
+			}
+			if (err != nil) != tt.wantErr {
+				t.Errorf("err = %v, wantErr = %v", err, tt.wantErr)
+			}
+
+			// Verify pod was deleted when expected
+			if tt.wantDeleted {
+				_, getErr := kube.DynamicClient().Resource(kubeclient.PodGVR).Namespace("test-ns").Get(context.Background(), "test-sandbox", metav1.GetOptions{})
+				if !k8serrors.IsNotFound(getErr) {
+					t.Errorf("expected pod to be deleted, but got err: %v", getErr)
+				}
+			}
+			if !tt.wantDeleted && tt.podExists && err == nil {
+				_, getErr := kube.DynamicClient().Resource(kubeclient.PodGVR).Namespace("test-ns").Get(context.Background(), "test-sandbox", metav1.GetOptions{})
+				if getErr != nil {
+					t.Errorf("expected pod to still exist, but got err: %v", getErr)
+				}
 			}
 		})
 	}
