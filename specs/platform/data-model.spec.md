@@ -2,7 +2,8 @@
 
 **Date:** 2026-03-20
 **Status:** Active
-**Last Updated:** 2026-07-03 — added Agent sandbox fields (entrypoint, providers, payloads, environment, sandbox_template, sandbox_policy) for OpenShell gateway integration; split SessionMessage from new SessionEvent (comprehensive AG-UI event stream with compression); added Events API endpoints, gRPC protocol, storage model, compression strategy, migration plan
+**Last Updated:** 2026-07-08 — added `Policy` as supported kind in `acpctl apply` and Application sync; added `sandbox_policy`, `sandbox_template`, `entrypoint` to Agent apply fields; documented implementation gaps in acpctl apply resource struct
+**Previous:** 2026-07-03 — added Agent sandbox fields (entrypoint, providers, payloads, environment, sandbox_template, sandbox_policy) for OpenShell gateway integration; split SessionMessage from new SessionEvent (comprehensive AG-UI event stream with compression); added Events API endpoints, gRPC protocol, storage model, compression strategy, migration plan
 **Previous:** 2026-06-03 — added Application (GitOps continuous sync for agent fleets); addressed review feedback: credential_id FK for remote auth, RoleBinding escalation rules, prune safety, health status semantics, gitops role grantability, sync engine kind filtering
 **Previous-2:** 2026-05-12 — migrate Credentials from project-scoped to global routes (`/credentials`); remove `project_id` from model, OpenAPI, and SDK; add drop-column migration; update coverage matrix
 **Workflow:** *(merged into skills/build/full-stack-pipeline)* — implementation waves, gap table, build commands, run log
@@ -360,10 +361,11 @@ An Application syncs **project-scoped fleet definitions** — a subset of resour
 | Kind | Sync Behavior |
 |---|---|
 | `Project` | Created if `CreateProject=true` in `sync_options`; patched (description, prompt, labels, annotations) on subsequent syncs |
-| `Agent` | Created or patched within the destination project; prompt, providers, payloads, labels, annotations updated |
+| `Agent` | Created or patched within the destination project; prompt, providers, payloads, environment, entrypoint, sandbox_policy, sandbox_template, labels, annotations updated |
 | `Credential` | Created if not present; idempotent by name |
 | `RoleBinding` | Created if not present; idempotent by user+role+scope key. **Escalation-bound:** the sync engine can only create RoleBindings at or below the level of the service credential it uses (see Design Decisions). |
 | `Gateway` | Created or patched within the destination project; image, serverDnsNames, config updated. Reconciled into K8s gateway resources by the GatewayReconciler. |
+| `Policy` | Created or patched within the destination project; spec, labels, annotations updated. Contains the upstream OpenShell `SandboxPolicy` JSON. Referenced by agents via `sandbox_policy` field. |
 | `Inbox` (seed messages) | Idempotent delivery — only new messages (by `from_agent_id` + `body` content hash dedup) are posted. Uses immutable `from_agent_id` FK, not mutable `from_name`. |
 
 ### What Does NOT Get Synced
@@ -507,7 +509,7 @@ Agent is scoped to a Project. The stable address is `{project_name}/{agent_name}
 
 **Field propagation on ignite:** When `POST /agents/{id}/start` creates a new Session, the `ignite_handler` copies `repo_url`, `workflow_id`, `llm_model`, `llm_temperature`, `llm_max_tokens`, `bot_account_name`, `resource_overrides`, and `environment_variables` from the Agent to the new Session. Fields set directly in the start request body override these defaults.
 
-**Sandbox fields (not propagated):** The six sandbox-related fields (`entrypoint`, `providers`, `payloads`, `environment`, `sandbox_template`, `sandbox_policy`) are consumed directly by the control plane reconciler when building the OpenShell gateway sandbox — they are not copied to the Session model. The control plane reads them from the Agent record at reconcile time. These fields can be declared via `acpctl apply -k` with native ACP kinds for declarative fleet management.
+**Sandbox fields (not propagated):** The six sandbox-related fields (`entrypoint`, `providers`, `payloads`, `environment`, `sandbox_template`, `sandbox_policy`) are consumed directly by the control plane reconciler when building the OpenShell gateway sandbox — they are not copied to the Session model. The control plane reads them from the Agent record at reconcile time. These fields can be declared via `acpctl apply -k` with native ACP kinds for declarative fleet management. The `sandbox_policy` field references a `Policy` resource by name within the same project — policies are applied separately via `acpctl apply` as `kind: Policy` documents.
 
 ```
 POST /projects/{id}/agents          → create agent in this project
@@ -1122,9 +1124,10 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | Kind | Fields applied |
 |---|---|
 | `Project` | `name`, `description`, `prompt`, `labels`, `annotations` |
-| `Agent` | `name`, `prompt`, `providers`, `payloads`, `labels`, `annotations`, `inbox` (seed messages) |
+| `Agent` | `name`, `prompt`, `providers`, `payloads`, `environment`, `entrypoint`, `sandbox_policy`, `sandbox_template`, `labels`, `annotations`, `inbox` (seed messages) |
 | `Credential` | `name`, `description`, `provider`, `token` (env var reference), `url`, `email`, `labels`, `annotations` — global resource; use `credential bind` to grant project access |
 | `Gateway` | `name`, `project`, `image`, `serverDnsNames`, `config`, `labels`, `annotations` — project-scoped; declares an OpenShell gateway deployment in the project namespace |
+| `Policy` | `name`, `spec`, `labels`, `annotations` — project-scoped; declares a sandbox policy containing upstream OpenShell `SandboxPolicy` JSON. Referenced by agents via `sandbox_policy` field. See [agent-sandbox-config.spec.md](./agent-sandbox-config.spec.md) § Policy Declarations |
 
 `Agent` resources in `.ambient/teams/` files also carry an `inbox` list of seed messages. On apply, any message in the list is posted to the agent's inbox if an identical message (same `from_name` + `body`) does not already exist there.
 
@@ -1140,7 +1143,8 @@ Each file may contain one or more YAML documents separated by `---`. Documents w
 
 Apply behaviour per resource:
 - **Project**: if a project with `name` already exists, `PATCH` it (description, prompt, labels, annotations). If it does not exist, `POST` to create it.
-- **Agent**: resolved within the current project context. If an agent with `name` already exists in the project, `PATCH` it (prompt, providers, payloads, labels, annotations). If it does not exist, `POST` to create it. Payloads are stored as JSONB on the agent record and uploaded to the sandbox via SSH-over-gRPC before the entrypoint launches. After upsert, post any inbox seed messages not already present.
+- **Agent**: resolved within the current project context. If an agent with `name` already exists in the project, `PATCH` it (prompt, providers, payloads, environment, entrypoint, sandbox_policy, sandbox_template, labels, annotations). If it does not exist, `POST` to create it. Payloads are stored as JSONB on the agent record and uploaded to the sandbox via SSH-over-gRPC before the entrypoint launches. After upsert, post any inbox seed messages not already present.
+- **Policy**: resolved within the current project context. If a policy with `name` already exists in the project, `PATCH` it (spec, labels, annotations). If it does not exist, `POST` to create it. The `spec` field contains the upstream OpenShell `SandboxPolicy` JSON — see [agent-sandbox-config.spec.md](./agent-sandbox-config.spec.md) § Policy Declarations.
 
 Output (default — one line per resource):
 
@@ -1999,6 +2003,8 @@ _Last updated: 2026-07-05. Use this as the authoritative index — click into co
 | **Generic proxy — cluster/platform** | ✅ proxy plugin | n/a | 🔲 `acpctl version`, `acpctl cluster-info` | cluster-info, version, health, LDAP, OOTB workflows |
 | **Declarative apply** | n/a | uses SDK | ✅ `apply -f`, `apply -k` | Upsert semantics; supports inbox seeding |
 | **Declarative apply — Credential kind** | n/a | uses SDK | ✅ `apply -f credential.yaml` | Global resource; token sourced from env var in YAML |
+| **Declarative apply — Policy kind** | ✅ `plugins/policies/` | ✅ `Policys()` (SDK) | 🔲 `apply -f policy.yaml` | Project-scoped; spec contains OpenShell SandboxPolicy JSON |
+| **Declarative apply — Agent sandbox fields** | ✅ PATCH accepts all fields | ✅ `AgentBuilder.SandboxPolicy()`, `.SandboxTemplate()` | 🔲 `acpctl apply` resource struct missing `sandbox_policy`, `sandbox_template`, `entrypoint` | Fields silently dropped during YAML parsing; only `prompt`, `providers`, `payloads`, `environment`, `labels`, `annotations` applied |
 | **Declarative apply — ScheduledSession kind** | n/a | 🔲 | 🔲 | Planned; schedule and agent reference in YAML |
 | **Applications — CRUD** | ✅ `plugins/applications/` | ✅ `ApplicationAPI.{Get,List,Create,Update,Delete}` | ✅ `application list/get/create/update/delete` | GitOps sync binding |
 | **Applications — sync/refresh** | ✅ `sync`/`refresh` handlers | ✅ `ApplicationAPI.{Sync,Refresh}` | ⚠️ `application sync/refresh` (stub implementations) | Sync engine partial — only Agent kind synced |

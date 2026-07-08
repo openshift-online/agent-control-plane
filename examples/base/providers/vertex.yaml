@@ -1,0 +1,4 @@
+kind: Provider
+name: vertex
+type: vertex
+secret: vertex-sa-key

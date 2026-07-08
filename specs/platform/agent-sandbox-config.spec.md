@@ -827,6 +827,8 @@ This spec describes the complete desired state. Implementation is expected to pr
 - `acpctl apply` support for agent declaration ConfigMaps
 
 > **Known gap (PR #246):** The `ApplicationReconciler`'s `gitAgentDeclaration` struct currently supports `name`, `display_name`, `description`, `prompt`, `entrypoint`, `providers`, `payloads`, `environment`, `repo_url`, `llm_model`, `labels`, and `annotations` — but does NOT include `sandbox_template` or `sandbox_policy`. Git-sourced agent declarations cannot yet declare compute resources or custom sandbox policies. The `UploadPayloads` SSH mechanism (Iteration 1) is wired to `agent.Payloads` at sandbox creation time, so payload delivery works end-to-end for git-sourced agents.
+>
+> **Known gap (`acpctl apply`):** The `acpctl apply` command's `resource` struct and `buildAgentPatch()` function do not include `sandbox_policy`, `sandbox_template`, or `entrypoint` fields. These fields are silently dropped during YAML parsing, meaning `acpctl apply -k` cannot set them on agents. The API server and SDK fully support these fields via PATCH. Additionally, `Policy` is not a supported `kind` in `acpctl apply` despite having full CRUD in the API server (`plugins/policies/`) and SDK (`Policys()` client). Both gaps must be closed so that new deployments can declaratively configure sandbox policies and agent sandbox settings without manual API calls.
 
 **Depends on:** Iteration 1 (gateway provisioning)
 
