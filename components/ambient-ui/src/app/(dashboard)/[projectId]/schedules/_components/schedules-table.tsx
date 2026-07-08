@@ -42,6 +42,7 @@ import { schedulesColumns } from './schedules-columns'
 type SchedulesTableProps = {
   schedules: DomainScheduledSession[]
   searchFilter: string
+  showControls: boolean
   onEdit: (schedule: DomainScheduledSession) => void
   onDelete: (id: string) => void
   onSuspend: (id: string) => void
@@ -53,6 +54,7 @@ type SchedulesTableProps = {
 export function SchedulesTable({
   schedules,
   searchFilter,
+  showControls,
   onEdit,
   onDelete,
   onSuspend,
@@ -80,15 +82,19 @@ export function SchedulesTable({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => onEdit(schedule)}>
-                  <Pencil className="mr-2 h-4 w-4" />
-                  Edit
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onTrigger(schedule.id)}>
-                  <PlayCircle className="mr-2 h-4 w-4" />
-                  Trigger Now
-                </DropdownMenuItem>
-                {schedule.enabled ? (
+                {showControls && (
+                  <DropdownMenuItem onClick={() => onEdit(schedule)}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit
+                  </DropdownMenuItem>
+                )}
+                {showControls && (
+                  <DropdownMenuItem onClick={() => onTrigger(schedule.id)}>
+                    <PlayCircle className="mr-2 h-4 w-4" />
+                    Trigger Now
+                  </DropdownMenuItem>
+                )}
+                {showControls && (schedule.enabled ? (
                   <DropdownMenuItem onClick={() => onSuspend(schedule.id)}>
                     <Pause className="mr-2 h-4 w-4" />
                     Suspend
@@ -98,19 +104,23 @@ export function SchedulesTable({
                     <Play className="mr-2 h-4 w-4" />
                     Resume
                   </DropdownMenuItem>
-                )}
+                ))}
                 <DropdownMenuItem onClick={() => onViewRuns(schedule)}>
                   <List className="mr-2 h-4 w-4" />
                   View Runs
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive"
-                  onClick={() => setDeleteTarget(schedule)}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
+                {showControls && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => setDeleteTarget(schedule)}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           )

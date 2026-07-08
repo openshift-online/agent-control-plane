@@ -8,7 +8,7 @@ export function useCurrentUserRole(projectId: string): {
   isLoading: boolean
 } {
   const { user, isLoading: userLoading } = useCurrentUser()
-  const searchFilter = `user_id = '${user?.username}' and project_id = '${projectId}'`
+  const searchFilter = `user_id = '${user?.username}'`
   const { data: bindings, isLoading: bindingsLoading } = useAllRoleBindings(
     user?.username ? searchFilter : undefined,
   )
@@ -17,11 +17,14 @@ export function useCurrentUserRole(projectId: string): {
   const roleName = useMemo(() => {
     if (!bindings || bindings.length === 0 || !rolesData) return null
 
-    // Build role ID to name map
+    const relevant = bindings.filter(
+      (b) => b.scope === 'global' || b.projectId === projectId,
+    )
+    if (relevant.length === 0) return null
+
     const roleMap = new Map(rolesData.items?.map(r => [r.id, r.name]) ?? [])
 
-    // Return highest privilege role if multiple bindings
-    const roles = bindings.map((b) => roleMap.get(b.roleId)).filter(Boolean) as string[]
+    const roles = relevant.map((b) => roleMap.get(b.roleId)).filter(Boolean) as string[]
     if (roles.includes('platform:admin')) return 'platform:admin'
     if (roles.includes('project:owner')) return 'project:owner'
     if (roles.includes('project:editor')) return 'project:editor'
@@ -29,7 +32,7 @@ export function useCurrentUserRole(projectId: string): {
     if (roles.includes('project:viewer')) return 'project:viewer'
 
     return roles[0] ?? null
-  }, [bindings, rolesData])
+  }, [bindings, rolesData, projectId])
 
   return { roleName, isLoading: userLoading || bindingsLoading || rolesLoading }
 }
