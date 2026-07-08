@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -24,7 +23,6 @@ func ReconcileGateways(
 	clientset *kubernetes.Clientset,
 	namespaceConfigs []NamespaceConfig,
 	manifests map[string][]*unstructured.Unstructured,
-	platformConfigCM *v1.ConfigMap,
 ) error {
 	defaultImage := os.Getenv("OPENSHELL_GATEWAY_IMAGE")
 	if defaultImage == "" {
@@ -50,7 +48,7 @@ func ReconcileGateways(
 		}
 
 		// 3. Deploy/update gateway manifests (reconcile pattern)
-		if err := deployGateway(ctx, dynamicClient, nsConfig, manifests, defaultImage, platformConfigCM); err != nil {
+		if err := deployGateway(ctx, dynamicClient, nsConfig, manifests, defaultImage); err != nil {
 			log.Error().
 				Str("namespace", nsConfig.Name).
 				Err(err).
@@ -80,7 +78,6 @@ func deployGateway(
 	nsConfig NamespaceConfig,
 	manifests map[string][]*unstructured.Unstructured,
 	defaultImage string,
-	platformConfigCM *v1.ConfigMap,
 ) error {
 	// Check what changed for THIS namespace
 	dnsNamesChanged := false
@@ -425,22 +422,6 @@ func kindToResource(kind string) string {
 	// Fallback for unknown types (logged as debug)
 	log.Debug().Str("kind", kind).Msg("unknown kind, using naive plural")
 	return strings.ToLower(kind) + "s"
-}
-
-// setOwnerReference sets the platform-config ConfigMap as owner of the resource
-// for automatic garbage collection when the ConfigMap is deleted
-func setOwnerReference(obj *unstructured.Unstructured, platformConfigCM *v1.ConfigMap) {
-	controller := true
-	obj.SetOwnerReferences([]metav1.OwnerReference{
-		{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
-			Name:       platformConfigCM.Name,
-			UID:        platformConfigCM.UID,
-			Controller: &controller,
-			// BlockOwnerDeletion omitted per project convention
-		},
-	})
 }
 
 // mergeClusterRoleBindingSubjects merges subjects from an existing ClusterRoleBinding

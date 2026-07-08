@@ -14,7 +14,6 @@ import (
 
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/auth"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/config"
-	"github.com/ambient-code/platform/components/ambient-control-plane/internal/gateway"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/informer"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/keypair"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
@@ -29,7 +28,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -208,14 +206,27 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	inf.RegisterHandler("projects", projectReconciler.Reconcile)
 	inf.RegisterHandler("project_settings", projectSettingsReconciler.Reconcile)
 
-	// Initialize gateway provisioning (if enabled)
+	// Initialize API-driven gateway reconciler (if enabled)
 	gatewayErrCh := make(chan error, 1)
 	if cfg.OpenShellUseGateway {
+		kubeCfg, kubeErr := buildKubeConfig(cfg.Kubeconfig)
+		if kubeErr != nil {
+			return fmt.Errorf("build kubeconfig for gateway reconciler: %w", kubeErr)
+		}
+		gwClientset, csErr := kubernetes.NewForConfig(kubeCfg)
+		if csErr != nil {
+			return fmt.Errorf("create kubernetes clientset for gateway reconciler: %w", csErr)
+		}
+		gwDynamic, dynErr := dynamic.NewForConfig(kubeCfg)
+		if dynErr != nil {
+			return fmt.Errorf("create dynamic client for gateway reconciler: %w", dynErr)
+		}
+		gwReconciler := reconciler.NewGatewayReconciler(factory, gwDynamic, gwClientset, log.Logger)
 		go func() {
-			gatewayErrCh <- initGatewayProvisioning(ctx, cfg.Kubeconfig, cfg.CPRuntimeNamespace)
+			gatewayErrCh <- gwReconciler.Run(ctx)
 		}()
+		log.Info().Msg("gateway reconciler enabled")
 	} else {
-		// Close channel immediately so it's never selected
 		close(gatewayErrCh)
 	}
 
@@ -333,54 +344,6 @@ func createSessionReconcilers(reconcilerTypes []string, factory *reconciler.SDKC
 	return reconcilers
 }
 
-func initGatewayProvisioning(ctx context.Context, kubeconfig string, namespace string) error {
-	log.Info().Msg("initializing gateway provisioning")
-
-	// Build REST config
-	cfg, err := buildKubeConfig(kubeconfig)
-	if err != nil {
-		return fmt.Errorf("build kubeconfig: %w", err)
-	}
-
-	// Create Kubernetes clientset
-	clientset, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return fmt.Errorf("create kubernetes clientset: %w", err)
-	}
-
-	// Create dynamic client
-	dynamicClient, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return fmt.Errorf("create dynamic client: %w", err)
-	}
-
-	// Load platform config
-	nsConfigs, platformConfigCM, err := gateway.LoadPlatformConfig(ctx, clientset, namespace)
-	if err != nil {
-		log.Error().Err(err).Msg("failed to load platform config, gateway provisioning disabled")
-		nsConfigs = []gateway.NamespaceConfig{} // Continue without gateway provisioning
-		platformConfigCM = nil
-	}
-
-	// Load gateway manifests
-	manifests, err := gateway.LoadGatewayManifests("/manifests/gateway")
-	if err != nil {
-		return fmt.Errorf("load gateway manifests: %w", err)
-	}
-
-	// Initial reconciliation
-	if err := gateway.ReconcileGateways(ctx, dynamicClient, clientset, nsConfigs, manifests, platformConfigCM); err != nil {
-		log.Error().Err(err).Msg("initial gateway reconciliation failed")
-	}
-
-	// Start ConfigMap watcher (blocks until context cancelled)
-	return gateway.WatchPlatformConfig(ctx, clientset, namespace, func(newConfigs []gateway.NamespaceConfig, cm *v1.ConfigMap) {
-		log.Debug().Int("namespaces", len(newConfigs)).Msg("reconciling gateways")
-		if err := gateway.ReconcileGateways(ctx, dynamicClient, clientset, newConfigs, manifests, cm); err != nil {
-			log.Error().Err(err).Msg("gateway reconciliation after config update failed")
-		}
-	})
-}
 
 func buildKubeConfig(kubeconfig string) (*rest.Config, error) {
 	if kubeconfig != "" {
