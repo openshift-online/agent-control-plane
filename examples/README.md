@@ -7,59 +7,9 @@ This directory contains example Agent, Provider, Gateway, and Credential definit
 
 ## Prerequisites
 
-All examples share the same prerequisites. Set these up once before applying any example.
-
-### Vertex AI (required by all agents)
-
-All agents use Vertex AI for inference. When running `make kind-up`, the Vertex AI credential is automatically installed into all tenant namespaces from your local `vertex.json` (or the path in `VERTEX_CRED`).
-
-To create the secret manually in a namespace:
-
-```bash
-kubectl create secret generic vertex-sa-key \
-  --namespace=tenant-a \
-  --from-literal=token="$(cat vertex.json)"
-```
-
-The secret key must be `token`. The value must be the raw JSON content of a Google Service Account key file or an ADC `authorized_user` credential file.
-
-### GitHub (required by `pr-reviewer`)
-
-Create the secret with a GitHub Personal Access Token (classic or fine-grained) in each namespace that needs GitHub access:
-
-```bash
-kubectl create secret generic github-creds \
-  --from-literal=token="$(cat ~/github-pat.txt)" \
-  -n tenant-b
-```
-
-The token needs at minimum: `repo` (read), `pull_requests` (read).
-
-### Jira (required by `jira-simple-whoami`, `jira-simple-whoami-with-skill-payload`, and `jira-issue-categorizer`)
-
-Create the secret in each namespace that needs Jira access:
-
-```bash
-kubectl create secret generic jira \
-  --from-literal=JIRA_USERNAME="your-email@example.com" \
-  --from-literal=JIRA_API_TOKEN=$(cat ~/jira-token.txt) \
-  -n tenant-a
-```
-
-Store your API token in `~/jira-token.txt` before running the command. Generate one at: https://id.atlassian.com/manage-profile/security/api-tokens
-
-### Credential Environment Variables
-
-Credential YAML files reference tokens via environment variables (expanded by `acpctl apply` at apply time):
-
-| Variable | Used by | Value |
-|----------|---------|-------|
-| `$VERTEX_SA_KEY` | `credential-vertex.yaml` | Vertex AI service account JSON |
-| `$GITHUB_PAT` | `credential-github.yaml` | GitHub Personal Access Token |
-| `$JIRA_API_TOKEN` | `credential-jira.yaml` | Jira API token |
-| `$JIRA_EMAIL` | `credential-jira.yaml` | Jira account email |
-
-Export these before running `acpctl apply`.
+If you are using a hosted ACP environment, your administrators provide Vertex
+AI access; you only need to supply your own integration credentials, such as
+GitHub and Jira, for examples that use those providers.
 
 ---
 
@@ -168,6 +118,7 @@ The simplest possible agent. Sends a greeting and demonstrates payload injection
 **What it does:** Says hello world, and — thanks to an injected payload — also tells you how to say hello in a different language.
 
 **Session prompt example:**
+
 ```
 Say hello
 ```
@@ -183,6 +134,7 @@ A code security auditor. Analyzes code snippets or repositories for common vulne
 **What it does:** Reviews code for injection attacks, authentication issues, insecure data handling, and other vulnerabilities. Reports findings with severity, location, and remediation guidance.
 
 **Session prompt example:**
+
 ```
 Review this Python function for security issues:
 
@@ -200,12 +152,13 @@ looks up the authenticated user's profile.
 
 **Providers:** `vertex`, `jira`
 
-**Prerequisites:** `jira` secret in the tenant namespace (see above).
+**Prerequisites:** Jira credentials for the project.
 
 **What it does:** Uses the Jira Model Context Protocol tools to call the Jira
 API. Returns the current user's username and profile information.
 
 **Session prompt example:**
+
 ```
 Who am I in Jira?
 ```
@@ -218,11 +171,12 @@ Same as `jira-simple-whoami` but demonstrates the payload injection pattern: a s
 
 **Providers:** `vertex`, `jira`
 
-**Prerequisites:** `jira` secret in the tenant namespace (see above).
+**Prerequisites:** Jira credentials for the project.
 
 **What it does:** Looks up the Jira user profile and responds in olde English, as instructed by the injected skill payload.
 
 **Session prompt example:**
+
 ```
 Who am I in Jira?
 ```
@@ -237,9 +191,10 @@ report.
 
 **Providers:** `vertex`, `github`
 
-**Prerequisites:** `github-creds` secret in the tenant namespace (see above).
+**Prerequisites:** GitHub credentials for the project.
 
 **What it does:**
+
 1. Fetches PR metadata (title, description, author, branches)
 2. Retrieves changed files and full diffs
 3. Reads existing review comments for context
@@ -248,6 +203,7 @@ report.
 6. Ends with an overall recommendation: `APPROVE` / `REQUEST_CHANGES` / `COMMENT`
 
 **Session prompt example:**
+
 ```
 Review PR #42 in my-org/my-repo
 ```
@@ -260,9 +216,11 @@ Automatically categorizes Jira issues into Sankey Activity Types using AI. Inspi
 
 **Providers:** `vertex`, `jira`
 
-**Prerequisites:** `jira` secret in the tenant namespace (see above). The Jira URL is pre-configured to `https://redhat.atlassian.net` in the agent definition.
+**Prerequisites:** Jira credentials for the project. The Jira URL is
+pre-configured to `https://redhat.atlassian.net` in the agent definition.
 
 **What it does:**
+
 1. Searches for issues in the specified project(s) using JQL
 2. Reads each issue's summary and description
 3. Classifies it into one of six Sankey Activity Types using an injected classification guide:
@@ -276,12 +234,15 @@ Automatically categorizes Jira issues into Sankey Activity Types using AI. Inspi
 5. Optionally supports hierarchical propagation: propagates the Activity Type from parent issues down to all descendants
 
 **Session prompt examples:**
+
 ```
 Categorize issues in project RHCLOUD. Dry-run mode ON.
 ```
+
 ```
 Categorize issues in project RHCLOUD for components Clowder and Bonfire. Dry-run mode ON.
 ```
+
 ```
 Categorize issues in project HPSTRAT using hierarchical mode. Apply changes.
 ```
@@ -319,6 +280,7 @@ acpctl apply -k examples/vteam-catalog/codebase-maintainers --project codebase-m
 Each overlay declares a project-scoped OpenShell gateway in `gateway.yaml`. The gateway is reconciled by the GatewayReconciler into Kubernetes resources (StatefulSet, Service, RBAC, certgen Job).
 
 Key fields:
+
 - `image` — gateway container image (defaults to `OPENSHELL_GATEWAY_IMAGE` if omitted)
 - `server_dns_names` — DNS names for TLS certificate generation, scoped to the tenant namespace
 - `config` — optional TOML configuration for the gateway

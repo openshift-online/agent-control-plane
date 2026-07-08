@@ -21,6 +21,7 @@ ACP is not a CRD data model. The API server is a Go service backed by PostgreSQL
 3. Add a [Session Config Quickstart](getting-started/session-config/) repo when an agent needs shared instructions, Claude skills, or reusable team
    context.
 4. Use [CLI Reference](getting-started/cli/) when you want repeatable automation from a terminal or CI job.
+5. Try the [catalog lab](guides/vteam-lab/) when you want to apply a bundled multi-agent catalog.
 
 ## Core objects
 
