@@ -85,4 +85,5 @@ func init() {
 	presenters.RegisterKind(&Policy{}, "Policy")
 
 	db.RegisterMigration(migration())
+	db.RegisterMigration(renameFilesystemPolicyKey())
 }
