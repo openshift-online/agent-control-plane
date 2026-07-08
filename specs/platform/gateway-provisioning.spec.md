@@ -120,6 +120,7 @@ The kustomize rendering engine SHALL be extracted from `acpctl apply/cmd.go` int
   - `Credential`
   - `RoleBinding`
   - `Gateway` *(new)*
+  - `Policy` *(new — project-scoped sandbox policy containing upstream OpenShell `SandboxPolicy` JSON)*
 - AND documents with unrecognized `kind` values SHALL be skipped with a warning
 
 #### Scenario: Unit testability
