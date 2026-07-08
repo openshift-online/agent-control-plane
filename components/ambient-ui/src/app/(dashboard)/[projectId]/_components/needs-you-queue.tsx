@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { XCircle, AlertTriangle, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -49,33 +50,56 @@ type NeedsYouQueueProps = {
 }
 
 export function NeedsYouQueue({ items, projectId, agentNames }: NeedsYouQueueProps) {
-  const hasCritical = items.some((item) => item.criticality === 'critical')
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
+
+  const visibleItems = useMemo(
+    () => items.filter((item) => !dismissedIds.has(item.session.id)),
+    [items, dismissedIds],
+  )
+
+  const hasCritical = visibleItems.some((item) => item.criticality === 'critical')
+
+  const dismissItem = (sessionId: string) => {
+    setDismissedIds((prev) => new Set(prev).add(sessionId))
+  }
+
+  const clearAll = () => {
+    setDismissedIds(new Set(items.map((item) => item.session.id)))
+  }
 
   return (
     <section
       className={`rounded-lg border bg-card ${hasCritical ? 'border-destructive/50 bg-destructive/5' : ''}`}
     >
-      <h2 className="px-4 py-3 text-sm font-semibold">
-        Needs attention{' '}
-        {items.length > 0 && (
-          <span className={hasCritical ? 'text-destructive font-bold' : 'text-muted-foreground'}>
-            ({items.length})
-          </span>
+      <div className="flex items-center justify-between px-4 py-3">
+        <h2 className="text-sm font-semibold">
+          Needs attention{' '}
+          {visibleItems.length > 0 && (
+            <span className={hasCritical ? 'text-destructive font-bold' : 'text-muted-foreground'}>
+              ({visibleItems.length})
+            </span>
+          )}
+        </h2>
+        {visibleItems.length > 1 && (
+          <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={clearAll}>
+            Dismiss all
+          </Button>
         )}
-      </h2>
+      </div>
 
-      {items.length === 0 ? (
+      {visibleItems.length === 0 ? (
         <p className="px-4 pb-4 text-sm text-muted-foreground">All clear</p>
       ) : (
         <div>
           <RowHeader metaLabel="Since" />
           <ul className="divide-y">
-            {items.map((item) => (
+            {visibleItems.map((item) => (
               <NeedsYouRow
                 key={item.session.id}
                 item={item}
                 projectId={projectId}
                 agentNames={agentNames}
+                onDismiss={dismissItem}
               />
             ))}
           </ul>
@@ -93,9 +117,10 @@ type NeedsYouRowProps = {
   item: NeedsYouItem
   projectId: string
   agentNames?: Map<string, string>
+  onDismiss: (sessionId: string) => void
 }
 
-function NeedsYouRow({ item, projectId, agentNames }: NeedsYouRowProps) {
+function NeedsYouRow({ item, projectId, agentNames, onDismiss }: NeedsYouRowProps) {
   const { session, statusText, criticality, waitingSince } = item
   const Icon = CRITICALITY_ICON[criticality]
   const ref = getWorkItemRef(session.annotations)
@@ -157,9 +182,17 @@ function NeedsYouRow({ item, projectId, agentNames }: NeedsYouRowProps) {
         </div>
 
         {/* Action */}
-        <div>
+        <div className="flex items-center gap-1.5">
           <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
             <Link href={`/${projectId}/sessions/${session.id}`}>View session</Link>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs text-muted-foreground"
+            onClick={() => onDismiss(session.id)}
+          >
+            Dismiss
           </Button>
         </div>
       </RowGrid>

@@ -1,6 +1,15 @@
 import { cn } from '@/lib/utils'
 import type { DomainSession, SessionPhase } from '@/domain/types'
+import { getPhaseStyle } from '@/lib/status-colors'
 import { PhaseBadge } from './phase-badge'
+
+const VARIANT_RING_CLASS: Record<string, string> = {
+  success: 'ring-status-success-border',
+  error: 'ring-status-error-border',
+  warning: 'ring-status-warning-border',
+  info: 'ring-status-info-border',
+  default: 'ring-border',
+}
 
 export function FleetSummary({
   sessions,
@@ -40,6 +49,7 @@ export function FleetSummary({
         const isActive = activePhase === phase
 
         if (onPhaseFilter) {
+          const ringClass = VARIANT_RING_CLASS[getPhaseStyle(phase).variant] ?? 'ring-border'
           return (
             <button
               key={phase}
@@ -47,7 +57,7 @@ export function FleetSummary({
               className={cn(
                 'flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors',
                 isActive
-                  ? 'bg-accent ring-1 ring-ring'
+                  ? `bg-accent ring-1 ${ringClass}`
                   : 'hover:bg-accent/50'
               )}
               onClick={() => onPhaseFilter(isActive ? null : phase)}

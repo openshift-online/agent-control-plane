@@ -93,7 +93,7 @@ export type WorkItemCard = {
 export type CompletionItem = {
   session: DomainSession
   ref: WorkItemRef | null
-  result: 'completed' | 'failed' | 'stopped'
+  result: 'completed' | 'stopped'
   prRef: string | null
   duration: string | null
   completedAt: string
@@ -109,6 +109,11 @@ const ACTIVE_PHASES: ReadonlySet<SessionPhase> = new Set([
 const TERMINAL_PHASES: ReadonlySet<SessionPhase> = new Set([
   'Completed',
   'Failed',
+  'Stopped',
+])
+
+const COMPLETION_PHASES: ReadonlySet<SessionPhase> = new Set([
+  'Completed',
   'Stopped',
 ])
 
@@ -276,14 +281,13 @@ export function getWorkItemCards(sessions: DomainSession[]): WorkItemCard[] {
 }
 
 const RESULT_SORT_ORDER: Record<string, number> = {
-  Failed: 1,
-  Stopped: 2,
-  Completed: 3,
+  Stopped: 1,
+  Completed: 2,
 }
 
 export function getCompletionItems(sessions: DomainSession[]): CompletionItem[] {
   return sessions
-    .filter((s) => TERMINAL_PHASES.has(s.phase))
+    .filter((s) => COMPLETION_PHASES.has(s.phase))
     .sort((a, b) => {
       const resultDiff = (RESULT_SORT_ORDER[a.phase] ?? 4) - (RESULT_SORT_ORDER[b.phase] ?? 4)
       if (resultDiff !== 0) return resultDiff
@@ -308,7 +312,7 @@ export function getCompletionItems(sessions: DomainSession[]): CompletionItem[] 
       return {
         session,
         ref: getWorkItemRef(session.annotations),
-        result: session.phase.toLowerCase() as 'completed' | 'failed' | 'stopped',
+        result: session.phase.toLowerCase() as CompletionItem['result'],
         prRef: session.annotations[WORK_GITHUB_PR] ?? session.annotations[LEGACY_GITHUB_PR] ?? null,
         duration,
         completedAt,

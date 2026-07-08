@@ -17,7 +17,6 @@ type RecentActivityProps = {
 
 const RESULT_CONFIG = {
   completed: { label: 'Completed', phase: 'Completed' as const },
-  failed: { label: 'Failed', phase: 'Failed' as const },
   stopped: { label: 'Stopped', phase: 'Stopped' as const },
 } as const
 

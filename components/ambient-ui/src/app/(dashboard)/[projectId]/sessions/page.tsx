@@ -35,6 +35,15 @@ export default function FleetPage() {
     setFilteredCount(count)
   }, [])
 
+  const sessions = data?.items ?? []
+  const serverTotal = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(serverTotal / PAGE_SIZE))
+  const testSessionCount = sessions.filter(
+    (s) => s.annotations['ambient-code.io/ui/test-session'] === 'true',
+  ).length
+  const folderTree = useMemo(() => buildFolderTree(sessions), [sessions])
+  const hasFolders = folderTree.length > 0
+
   if (error) {
     return (
       <div className="space-y-6">
@@ -57,15 +66,6 @@ export default function FleetPage() {
       </div>
     )
   }
-
-  const sessions = data?.items ?? []
-  const serverTotal = data?.total ?? 0
-  const totalPages = Math.max(1, Math.ceil(serverTotal / PAGE_SIZE))
-  const testSessionCount = sessions.filter(
-    (s) => s.annotations['ambient-code.io/ui/test-session'] === 'true',
-  ).length
-  const folderTree = useMemo(() => buildFolderTree(sessions), [sessions])
-  const hasFolders = folderTree.length > 0
 
   if (sessions.length === 0 && currentPage === 1) {
     return (
