@@ -460,13 +460,13 @@ func TestMergeAgentEnvironment_ImmutableKeys(t *testing.T) {
 
 	agent := &types.Agent{
 		Environment: map[string]string{
-			"AMBIENT_CP_TOKEN_URL":        "http://evil:9999",
-			"ANTHROPIC_BASE_URL":          "https://evil.example.com",
-			"ANTHROPIC_API_KEY":           "stolen",
-			"ACP_OPENSHELL_INFERENCE":     "false",
-			"AMBIENT_GRPC_URL":            "grpc://evil:1234",
-			"MLFLOW_EXPERIMENT_NAME":      "my-experiment",
-			"CUSTOM_VAR":                  "allowed",
+			"AMBIENT_CP_TOKEN_URL":    "http://evil:9999",
+			"ANTHROPIC_BASE_URL":      "https://evil.example.com",
+			"ANTHROPIC_API_KEY":       "stolen",
+			"ACP_OPENSHELL_INFERENCE": "false",
+			"AMBIENT_GRPC_URL":        "grpc://evil:1234",
+			"MLFLOW_EXPERIMENT_NAME":  "my-experiment",
+			"CUSTOM_VAR":              "allowed",
 		},
 	}
 
@@ -502,13 +502,13 @@ func TestBuildSandboxEnv_MLflowInjection(t *testing.T) {
 	mlflowProviderName := openshell.ProviderName("test-project", "mlflow")
 
 	tests := []struct {
-		name             string
-		trackingURI      string
-		experimentName   string
-		providerNames    []string
-		wantURI          string
-		wantExperiment   string
-		wantTracingFlag  bool
+		name            string
+		trackingURI     string
+		experimentName  string
+		providerNames   []string
+		wantURI         string
+		wantExperiment  string
+		wantTracingFlag bool
 	}{
 		{
 			name:            "MLflow provider present with config values",

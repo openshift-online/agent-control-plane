@@ -78,7 +78,9 @@ def test_get_current_trace_id_uses_mlflow_when_langfuse_turn_inactive():
     m._mlflow.enabled = True
     m._mlflow.has_active_turn = True
 
-    with patch("mlflow.get_active_trace_id", create=True, return_value="mlflow-trace-xyz"):
+    with patch(
+        "mlflow.get_active_trace_id", create=True, return_value="mlflow-trace-xyz"
+    ):
         assert m.get_current_trace_id() == "mlflow-trace-xyz"
 
 

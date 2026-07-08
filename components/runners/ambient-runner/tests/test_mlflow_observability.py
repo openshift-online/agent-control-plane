@@ -18,7 +18,7 @@ _mock_mlflow.entities = _mock_entities
 sys.modules.setdefault("mlflow", _mock_mlflow)
 sys.modules.setdefault("mlflow.entities", _mock_entities)
 
-from ambient_runner.mlflow_observability import MLflowSessionTracer
+from ambient_runner.mlflow_observability import MLflowSessionTracer  # noqa: E402
 
 
 INIT_KWARGS = dict(
@@ -41,10 +41,18 @@ def _reset_mlflow_mocks():
 
 class TestIsOpenshellToken:
     def test_recognizes_resolve_prefix(self):
-        assert MLflowSessionTracer._is_openshell_token("openshell:resolve:env:MLFLOW_TRACKING_URI") is True
+        assert (
+            MLflowSessionTracer._is_openshell_token(
+                "openshell:resolve:env:MLFLOW_TRACKING_URI"
+            )
+            is True
+        )
 
     def test_rejects_normal_url(self):
-        assert MLflowSessionTracer._is_openshell_token("https://mlflow.example.com") is False
+        assert (
+            MLflowSessionTracer._is_openshell_token("https://mlflow.example.com")
+            is False
+        )
 
     def test_rejects_empty_string(self):
         assert MLflowSessionTracer._is_openshell_token("") is False
@@ -79,7 +87,9 @@ class TestInitializeOpenshellTokens:
 
         assert result is True
         assert tracer.enabled is True
-        _mock_mlflow.set_tracking_uri.assert_called_once_with("https://mlflow.example.com")
+        _mock_mlflow.set_tracking_uri.assert_called_once_with(
+            "https://mlflow.example.com"
+        )
         _mock_mlflow.set_experiment.assert_called_once_with("my-experiment")
 
     def test_empty_tracking_uri_disables(self):
@@ -122,13 +132,16 @@ class TestInitializeOpenshellTokens:
             "MLFLOW_TRACKING_URI": "openshell:resolve:env:MLFLOW_TRACKING_URI",
             "MLFLOW_TRACKING_AUTH": "openshell:resolve:env:MLFLOW_TRACKING_AUTH",
         }
-        with patch.dict(os.environ, env, clear=True), \
-             patch("ambient_runner.mlflow_observability.logger") as mock_logger:
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch("ambient_runner.mlflow_observability.logger") as mock_logger,
+        ):
             tracer = MLflowSessionTracer("s1", "u1", "user1")
             tracer.initialize(**INIT_KWARGS)
 
         auth_info_calls = [
-            c for c in mock_logger.info.call_args_list
+            c
+            for c in mock_logger.info.call_args_list
             if "MLFLOW_TRACKING_AUTH=" in str(c)
         ]
         assert len(auth_info_calls) == 0

@@ -77,9 +77,10 @@ class MLflowSessionTracer:
         # the environment through its own native (Rust/C) bindings where
         # the supervisor intercepts getenv() and returns real values.
         openshell_env = self._is_openshell_token(tracking_uri)
-        exp_name = os.getenv(
-            "MLFLOW_EXPERIMENT_NAME", "ambient-code-sessions"
-        ).strip() or "ambient-code-sessions"
+        exp_name = (
+            os.getenv("MLFLOW_EXPERIMENT_NAME", "ambient-code-sessions").strip()
+            or "ambient-code-sessions"
+        )
 
         if openshell_env:
             logger.info(
@@ -91,7 +92,9 @@ class MLflowSessionTracer:
                 mlflow.set_tracking_uri(tracking_uri)
                 mlflow.set_experiment(exp_name)
             except Exception as e:
-                logger.warning("MLflow: failed to set tracking URI or experiment: %s", e)
+                logger.warning(
+                    "MLflow: failed to set tracking URI or experiment: %s", e
+                )
                 return False
 
         auth_mode = os.getenv("MLFLOW_TRACKING_AUTH", "").strip()

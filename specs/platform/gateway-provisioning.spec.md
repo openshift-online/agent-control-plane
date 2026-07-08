@@ -1,9 +1,9 @@
 # Gateway Provisioning Specification
 
-**Date:** 2026-07-07  
-**Status:** Design  
-**Supersedes:** Previous ConfigMap-based `platform-config` gateway provisioning design  
-**Related:** `openshell-sandbox-provisioning.spec.md` — gateway mode usage; `control-plane.spec.md` — CP reconciliation patterns; `data-model.spec.md` — Gateway kind definition  
+**Date:** 2026-07-07
+**Status:** Design
+**Supersedes:** Previous ConfigMap-based `platform-config` gateway provisioning design
+**Related:** `openshell-sandbox-provisioning.spec.md` — gateway mode usage; `control-plane.spec.md` — CP reconciliation patterns; `data-model.spec.md` — Gateway kind definition
 **Skill:** `skills/build/full-stack-pipeline/` — wave-based implementation pipeline
 
 ---
@@ -518,7 +518,7 @@ config: |
   sandbox_namespace = "tenant-a"
   default_image = "ghcr.io/nvidia/openshell-community/sandboxes/base:latest"
   supervisor_image = "ghcr.io/nvidia/openshell/supervisor:0.0.63"
-  
+
   [openshell.gateway.auth]
   allow_unauthenticated_users = true
 ```
