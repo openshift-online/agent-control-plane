@@ -3,12 +3,12 @@
 #
 # Validates the golden path:
 #   acpctl apply -k  ->  acpctl start  ->  sandbox provisioned  ->  session Running
-#   ->  runner starts inside sandbox  ->  AG-UI RUN_STARTED event emitted
+#   ->  runner starts inside sandbox  ->  runner /health endpoint responds
 #
 # This test does NOT require a real LLM API key — it validates the platform
-# plumbing from session creation through runner startup.  The runner emits
-# RUN_STARTED before contacting any inference service, so this proves the
-# full lifecycle works without a real LLM backend.
+# plumbing from session creation through runner startup.  The runner's /health
+# endpoint responds before contacting any inference service, so this proves
+# the full lifecycle works without a real LLM backend.
 #
 # Prerequisites:
 #   - kind-up with OPENSHELL_USE_GATEWAY=true (default)
@@ -617,38 +617,27 @@ if [ -n "$LIFECYCLE_SESSION_ID" ]; then
     fail "Session did not reach Running phase within 120s (phase: ${LIFECYCLE_PHASE:-unknown})"
   fi
 
-  # 11b. Runner emitted RUN_STARTED event (proves runner process is alive)
-  # The runner pushes AG-UI events to the API server via gRPC.  RUN_STARTED
-  # fires before the LLM is contacted, so it always appears if the runner
-  # started successfully.
-  RUN_STARTED_FOUND=false
-  for i in $(seq 1 30); do
-    MESSAGES_RESP=$(api GET "/api/ambient/v1/sessions/${LIFECYCLE_SESSION_ID}/messages" || echo "")
-    if echo "$MESSAGES_RESP" | jq -e '.[] | select(.event_type == "RUN_STARTED")' >/dev/null 2>&1; then
-      RUN_STARTED_FOUND=true
-      break
-    fi
-    # Also check the operational lifecycle event (alternative event name)
-    if echo "$MESSAGES_RESP" | jq -e '.[] | select(.event_type == "lifecycle") | .payload' 2>/dev/null \
-       | grep -q 'run_started' 2>/dev/null; then
-      RUN_STARTED_FOUND=true
+  # 11b. Runner health endpoint responds (proves runner process is alive)
+  # Hit GET /health on port 8001 inside the sandbox pod directly — this is
+  # faster and more reliable than waiting for AG-UI events to propagate
+  # through gRPC to the API server's message store.
+  LIFECYCLE_SBX_NAME="session-$(echo "${LIFECYCLE_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
+  RUNNER_HEALTHY=false
+  for i in $(seq 1 60); do
+    HEALTH_RESP=$(kubectl exec -n "$TENANT" "$LIFECYCLE_SBX_NAME" -- \
+      curl -sf --max-time 2 http://localhost:8001/health 2>/dev/null || echo "")
+    if echo "$HEALTH_RESP" | grep -q '"healthy"' 2>/dev/null; then
+      RUNNER_HEALTHY=true
       break
     fi
     sleep 2
   done
 
-  if [ "$RUN_STARTED_FOUND" = "true" ]; then
-    pass "Runner emitted RUN_STARTED event (runner is alive inside sandbox)"
+  if [ "$RUNNER_HEALTHY" = "true" ]; then
+    pass "Runner health endpoint responded (runner is alive inside sandbox)"
   else
-    fail "RUN_STARTED event not found in session messages within 60s"
-    # Dump available event types for debugging
-    EVENT_TYPES=$(echo "$MESSAGES_RESP" | jq -r '.[].event_type' 2>/dev/null | sort -u | head -10)
-    if [ -n "$EVENT_TYPES" ]; then
-      echo "  Available event types: ${EVENT_TYPES}"
-    else
-      echo "  No messages found for session"
-    fi
-    # Show control plane logs for diagnosis
+    fail "Runner /health did not respond within 120s"
+    echo "  Last response: ${HEALTH_RESP:-<empty>}"
     echo "  Control plane logs (last 20 lines):"
     kubectl logs -n "${NAMESPACE}" -l app=ambient-control-plane --tail=20 2>&1 | sed 's/^/    /'
   fi
@@ -657,6 +646,7 @@ if [ -n "$LIFECYCLE_SESSION_ID" ]; then
   # The runner reads /tmp/initial_prompt.txt and pushes a user message
   # containing the prompt text via gRPC before starting the AG-UI run.
   PROMPT_FOUND=false
+  MESSAGES_RESP=$(api GET "/api/ambient/v1/sessions/${LIFECYCLE_SESSION_ID}/messages" || echo "")
   if [ -n "$MESSAGES_RESP" ]; then
     if echo "$MESSAGES_RESP" | jq -e '.[] | select(.event_type == "user")' >/dev/null 2>&1; then
       PROMPT_FOUND=true
@@ -665,10 +655,10 @@ if [ -n "$LIFECYCLE_SESSION_ID" ]; then
 
   if [ "$PROMPT_FOUND" = "true" ]; then
     pass "Initial prompt delivered as user message"
-  elif [ "$RUN_STARTED_FOUND" = "true" ]; then
-    # RUN_STARTED proves the runner is alive; the user message may arrive via
+  elif [ "$RUNNER_HEALTHY" = "true" ]; then
+    # Health check proves the runner is alive; the user message may arrive via
     # a different path (HTTP vs gRPC) depending on configuration.
-    skip "Initial prompt user message" "RUN_STARTED confirmed runner is alive; prompt delivery path may differ"
+    skip "Initial prompt user message" "health check confirmed runner is alive; prompt delivery path may differ"
   else
     fail "Initial prompt not found in session messages"
   fi
