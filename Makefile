@@ -989,6 +989,9 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 		./scripts/bootstrap-workspace.sh || \
 		echo "$(COLOR_YELLOW)⚠$(COLOR_RESET)  Bootstrap failed (non-fatal). Run 'make dev-bootstrap' manually."; \
 	fi
+	@kubectl rollout restart deployment/ambient-ui -n $(NAMESPACE) >/dev/null 2>&1
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for ambient-ui to pick up SSO config..."
+	@kubectl wait --for=condition=ready pod -l app=ambient-ui -n $(NAMESPACE) --timeout=60s >/dev/null 2>&1
 	@$(MAKE) --no-print-directory _kind-start-port-forward
 	@echo ""
 	@echo "$(COLOR_BOLD)Access the platform:$(COLOR_RESET)"
