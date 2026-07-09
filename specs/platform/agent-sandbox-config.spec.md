@@ -533,6 +533,67 @@ The agent YAML SHALL reference a sandbox policy by name. The control plane SHALL
 
 ---
 
+### Requirement: ACP Internal Policy Injection
+
+The control plane SHALL inject the `_acp_internal` network policy rule **after** sandbox creation using OpenShell's `UpdateConfig` RPC with `merge_operations`, NOT by embedding the rule in the `CreateSandboxRequest.Spec.Policy` field. This preserves the sandbox's default policy while ensuring the runner can reach ACP platform services.
+
+**Rationale:** Sandboxes have a default policy applied at creation time by OpenShell (based on the sandbox image and gateway configuration). Including `_acp_internal` in the `CreateSandbox` request's `Policy` field replaces the entire default policy, stripping non-ACP rules the sandbox depends on. The `merge_operations` field on `UpdateConfig` (equivalent to `openshell policy update --add-allow`) performs an additive merge — only the targeted rule is added or replaced while all other rules are preserved.
+
+#### Scenario: ACP internal policy injected after sandbox creation
+
+- GIVEN a sandbox has been created via `CreateSandbox`
+- AND the sandbox has received its default policy from OpenShell
+- WHEN the control plane prepares the sandbox for runner execution
+- THEN it SHALL call `UpdateConfig` with `merge_operations` to add the `_acp_internal` network policy rule
+- AND the `_acp_internal` rule SHALL include endpoints for the control plane (port 8080) and API server (ports 8000, 9000) using the deployment namespace
+- AND the `_acp_internal` rule SHALL include allowed binaries for the runner's Python processes
+- AND the `CreateSandboxRequest.Spec.Policy` field SHALL NOT contain the `_acp_internal` rule
+
+#### Scenario: Default sandbox policy preserved
+
+- GIVEN a sandbox's default policy contains rules `default_dns` and `default_metrics`
+- WHEN the control plane injects `_acp_internal` via `UpdateConfig` merge operations
+- THEN the sandbox's effective policy SHALL contain `default_dns`, `default_metrics`, AND `_acp_internal`
+- AND the `default_dns` and `default_metrics` rules SHALL be unmodified
+
+#### Scenario: Existing `_acp_internal` in default policy is overwritten
+
+- GIVEN a sandbox's default policy already contains an `_acp_internal` rule (e.g., with placeholder endpoints)
+- WHEN the control plane injects `_acp_internal` via `UpdateConfig` merge operations
+- THEN the control plane's `_acp_internal` rule SHALL replace the existing `_acp_internal` entry
+- AND all other rules in the default policy SHALL be preserved
+
+#### Scenario: Agent with named policy plus ACP internal injection
+
+- GIVEN an agent declares `sandbox_policy: restricted`
+- AND the `restricted` policy is passed to `CreateSandbox`
+- WHEN the sandbox is created
+- THEN the control plane SHALL subsequently inject `_acp_internal` via `UpdateConfig` merge operations
+- AND the `restricted` policy's rules SHALL be preserved alongside `_acp_internal`
+
+#### Scenario: Agent with no named policy
+
+- GIVEN an agent declaration with no `sandbox_policy` field
+- WHEN a session starts
+- THEN the sandbox SHALL be created without a policy in `CreateSandboxRequest` (receiving its default policy from OpenShell)
+- AND the control plane SHALL subsequently inject `_acp_internal` via `UpdateConfig` merge operations
+- AND the sandbox's default policy rules SHALL be preserved
+
+#### Scenario: Namespace rewriting in injected policy
+
+- GIVEN the control plane is deployed in namespace `pr-42` (`CP_RUNTIME_NAMESPACE=pr-42`)
+- WHEN the control plane injects `_acp_internal`
+- THEN the endpoint hostnames SHALL use namespace `pr-42` (e.g., `ambient-control-plane.pr-42.svc.cluster.local:8080`)
+
+#### Scenario: ACP internal injection failure
+
+- GIVEN the `UpdateConfig` call to inject `_acp_internal` fails
+- WHEN the control plane handles the error
+- THEN the session SHALL transition to `Failed` with a descriptive error
+- AND the error SHALL NOT expose internal endpoint hostnames or policy details
+
+---
+
 ### Requirement: Sandbox Template
 
 The agent YAML SHALL declare compute and runtime configuration for the sandbox container via the `sandbox_template` field.

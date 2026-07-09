@@ -514,33 +514,45 @@ The supervisor automatically injects proxy and TLS environment variables into pr
 - AND the SSH path is stricter because it calls `env_clear()` (the entrypoint inherits the supervisor's environment minus 4 supervisor-only vars: `SANDBOX_TOKEN`, `SANDBOX_TOKEN_FILE`, `K8S_SA_TOKEN_FILE`, `PROVIDER_SPIFFE_WORKLOAD_API_SOCKET`)
 - AND the `ns_fd` for `setns()` can silently be `None` if the namespace file open fails (the supervisor logs a warning and falls back to running without network namespace isolation)
 
-### Requirement: OPA Network Policy for ACP Internal Traffic
+### Requirement: ACP Internal Network Policy Injection
 
-The sandbox OPA network policy SHALL permit the runner process (Python/uvicorn) to reach the ACP control plane and API server through the supervisor proxy. Without this, all cluster-internal traffic from the runner will be denied by the OPA policy engine with `DENIED FORWARD`.
+The control plane SHALL inject an `_acp_internal` network policy rule into the sandbox **after creation** using OpenShell's `UpdateConfig` RPC with `merge_operations`. This permits the runner process (Python/uvicorn) to reach the ACP control plane and API server through the supervisor proxy. Without this, all cluster-internal traffic from the runner will be denied by the OPA policy engine with `DENIED FORWARD`.
 
-#### Scenario: ACP internal endpoints whitelisted
+The `_acp_internal` rule SHALL NOT be included in the `CreateSandboxRequest.Spec.Policy` field, because doing so replaces the sandbox's entire default policy — stripping rules the sandbox depends on. The `merge_operations` approach (equivalent to `openshell policy update <sandbox-name> --add-allow`) is additive: it adds or replaces only the `_acp_internal` rule while preserving all other rules in the sandbox's default policy.
 
-- GIVEN the runner process runs inside the sandbox network namespace
+#### Scenario: ACP internal endpoints injected post-creation
+
+- GIVEN a sandbox has been created via `CreateSandbox` and has received its default policy from OpenShell
+- AND the runner process will run inside the sandbox network namespace
 - AND all traffic routes through the supervisor's HTTP CONNECT proxy at `10.200.0.1:3128`
 - AND the proxy evaluates each CONNECT request against the OPA policy
-- WHEN the runner attempts to reach the control plane token endpoint or the API server gRPC/HTTP endpoints
-- THEN the OPA policy SHALL include an `acp_internal` network policy section that allows:
+- WHEN the control plane injects the `_acp_internal` rule via `UpdateConfig` merge operations
+- THEN the `_acp_internal` network policy rule SHALL allow traffic to:
 
 | Endpoint | Port | Purpose |
 |----------|------|---------|
-| `ambient-control-plane.ambient-code.svc` | 8080 | CP token endpoint |
-| `ambient-control-plane.ambient-code.svc.cluster.local` | 8080 | CP token endpoint (FQDN) |
-| `ambient-api-server.ambient-code.svc` | 8000 | API server HTTP |
-| `ambient-api-server.ambient-code.svc.cluster.local` | 8000 | API server HTTP (FQDN) |
-| `ambient-api-server.ambient-code.svc` | 9000 | API server gRPC |
-| `ambient-api-server.ambient-code.svc.cluster.local` | 9000 | API server gRPC (FQDN) |
+| `ambient-control-plane.{namespace}.svc` | 8080 | CP token endpoint |
+| `ambient-control-plane.{namespace}.svc.cluster.local` | 8080 | CP token endpoint (FQDN) |
+| `ambient-api-server.{namespace}.svc` | 8000 | API server HTTP |
+| `ambient-api-server.{namespace}.svc.cluster.local` | 8000 | API server HTTP (FQDN) |
+| `ambient-api-server.{namespace}.svc` | 9000 | API server gRPC |
+| `ambient-api-server.{namespace}.svc.cluster.local` | 9000 | API server gRPC (FQDN) |
 
-- AND allowed binaries SHALL include `/sandbox/.venv/bin/python`, `/sandbox/.venv/bin/python3`, and `/sandbox/.venv/bin/uvicorn`
+- AND `{namespace}` SHALL be the control plane's runtime namespace (`CP_RUNTIME_NAMESPACE`)
+- AND allowed binaries SHALL include `/sandbox/.venv/bin/python`, `/sandbox/.venv/bin/python3`, `/sandbox/.venv/bin/uvicorn`, and `/sandbox/.uv/python/cpython-*/bin/python*`
 - AND both short (`svc`) and fully-qualified (`svc.cluster.local`) hostnames SHALL be listed because the proxy resolves based on the exact hostname in the CONNECT request
+- AND all other rules in the sandbox's default policy SHALL be preserved
+
+#### Scenario: Default sandbox policy preserved during injection
+
+- GIVEN a sandbox's default policy contains rules for provider traffic, DNS, or other platform concerns
+- WHEN the control plane injects `_acp_internal` via `UpdateConfig` merge operations
+- THEN the existing default policy rules SHALL remain intact and unmodified
+- AND the `_acp_internal` rule SHALL be added alongside them
 
 #### Scenario: Missing ACP internal policy causes runner failure
 
-- GIVEN the OPA policy does not include the `acp_internal` section
+- GIVEN the `_acp_internal` network policy rule has not been injected (e.g., `UpdateConfig` merge failed)
 - WHEN the runner starts and attempts to fetch a CP token via `AMBIENT_CP_TOKEN_URL`
 - THEN the supervisor proxy SHALL deny the CONNECT request
 - AND the runner SHALL fail to authenticate and exit with a non-zero exit code

@@ -2,11 +2,13 @@
 # E2E test: full gateway agent flow
 #
 # Validates the golden path:
-#   acpctl apply -k  ->  acpctl start  ->  sandbox provisioned  ->  session active
+#   acpctl apply -k  ->  acpctl start  ->  sandbox provisioned  ->  session Running
+#   ->  runner starts inside sandbox  ->  AG-UI RUN_STARTED event emitted
 #
 # This test does NOT require a real LLM API key — it validates the platform
-# plumbing up to session start and sandbox creation.  If VERTEX_SA_KEY or
-# ANTHROPIC_API_KEY is available, it also checks that a runner pod is spawned.
+# plumbing from session creation through runner startup.  The runner emits
+# RUN_STARTED before contacting any inference service, so this proves the
+# full lifecycle works without a real LLM backend.
 #
 # Prerequisites:
 #   - kind-up with OPENSHELL_USE_GATEWAY=true (default)
@@ -570,6 +572,94 @@ if [ -n "$REPO_AGENT_ID" ]; then
   fi
 else
   fail "Repo payload verification requires agent 'repo-clone-workspace' (not found)"
+fi
+
+section "11. Runner lifecycle verification"
+
+# Verify the runner process started inside the sandbox and is processing.
+# The runner emits RUN_STARTED via AG-UI before contacting any LLM, so this
+# works without a real inference service.
+if [ -n "$CREATED_SESSION_ID" ]; then
+
+  # 11a. Session reaches Running phase (explicit assertion, not just a gate)
+  LIFECYCLE_PHASE=""
+  for i in $(seq 1 60); do
+    LIFECYCLE_PHASE=$(api GET "/api/ambient/v1/sessions/${CREATED_SESSION_ID}" 2>/dev/null \
+      | jq -r '.phase // empty' 2>/dev/null || echo "")
+    if [ "$LIFECYCLE_PHASE" = "Running" ] || [ "$LIFECYCLE_PHASE" = "Succeeded" ] || [ "$LIFECYCLE_PHASE" = "Failed" ]; then
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$LIFECYCLE_PHASE" = "Running" ] || [ "$LIFECYCLE_PHASE" = "Succeeded" ]; then
+    pass "Session reached Running phase"
+  elif [ "$LIFECYCLE_PHASE" = "Failed" ]; then
+    # Failed is acceptable if the runner started — it means inference failed,
+    # not that the runner never came up.  Check messages to confirm.
+    pass "Session reached terminal phase (${LIFECYCLE_PHASE}) — checking runner messages"
+  else
+    fail "Session did not reach Running phase within 120s (phase: ${LIFECYCLE_PHASE:-unknown})"
+  fi
+
+  # 11b. Runner emitted RUN_STARTED event (proves runner process is alive)
+  # The runner pushes AG-UI events to the API server via gRPC.  RUN_STARTED
+  # fires before the LLM is contacted, so it always appears if the runner
+  # started successfully.
+  RUN_STARTED_FOUND=false
+  for i in $(seq 1 30); do
+    MESSAGES_RESP=$(api GET "/api/ambient/v1/sessions/${CREATED_SESSION_ID}/messages" || echo "")
+    if echo "$MESSAGES_RESP" | jq -e '.[] | select(.event_type == "RUN_STARTED")' >/dev/null 2>&1; then
+      RUN_STARTED_FOUND=true
+      break
+    fi
+    # Also check the operational lifecycle event (alternative event name)
+    if echo "$MESSAGES_RESP" | jq -e '.[] | select(.event_type == "lifecycle") | .payload' 2>/dev/null \
+       | grep -q 'run_started' 2>/dev/null; then
+      RUN_STARTED_FOUND=true
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$RUN_STARTED_FOUND" = "true" ]; then
+    pass "Runner emitted RUN_STARTED event (runner is alive inside sandbox)"
+  else
+    fail "RUN_STARTED event not found in session messages within 60s"
+    # Dump available event types for debugging
+    EVENT_TYPES=$(echo "$MESSAGES_RESP" | jq -r '.[].event_type' 2>/dev/null | sort -u | head -10)
+    if [ -n "$EVENT_TYPES" ]; then
+      echo "  Available event types: ${EVENT_TYPES}"
+    else
+      echo "  No messages found for session"
+    fi
+    # Show control plane logs for diagnosis
+    echo "  Control plane logs (last 20 lines):"
+    kubectl logs -n "${NAMESPACE}" -l app=ambient-control-plane --tail=20 2>&1 | sed 's/^/    /'
+  fi
+
+  # 11c. Initial prompt delivered to session messages
+  # The runner reads /tmp/initial_prompt.txt and pushes a user message
+  # containing the prompt text via gRPC before starting the AG-UI run.
+  PROMPT_FOUND=false
+  if [ -n "$MESSAGES_RESP" ]; then
+    if echo "$MESSAGES_RESP" | jq -e '.[] | select(.event_type == "user")' >/dev/null 2>&1; then
+      PROMPT_FOUND=true
+    fi
+  fi
+
+  if [ "$PROMPT_FOUND" = "true" ]; then
+    pass "Initial prompt delivered as user message"
+  elif [ "$RUN_STARTED_FOUND" = "true" ]; then
+    # RUN_STARTED proves the runner is alive; the user message may arrive via
+    # a different path (HTTP vs gRPC) depending on configuration.
+    skip "Initial prompt user message" "RUN_STARTED confirmed runner is alive; prompt delivery path may differ"
+  else
+    fail "Initial prompt not found in session messages"
+  fi
+
+else
+  skip "Runner lifecycle verification" "session not created"
 fi
 
 section "Cleanup"

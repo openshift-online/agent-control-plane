@@ -741,17 +741,19 @@ The runner does not need to set proxy or TLS CA vars for general cluster traffic
 
 #### OPA Network Policy for ACP Internal Traffic
 
-The runner's OPA policy (`policy.yaml`) MUST include an `acp_internal` network policy section that whitelists the control plane and API server endpoints for the runner's Python binaries. Without this, the supervisor proxy denies all cluster-internal traffic from the runner with `DENIED FORWARD`.
+The sandbox's OPA network policy MUST include an `_acp_internal` network policy rule that whitelists the control plane and API server endpoints for the runner's Python binaries. Without this, the supervisor proxy denies all cluster-internal traffic from the runner with `DENIED FORWARD`.
 
-Required endpoints:
+The runner image bundles a default `policy.yaml` (via `Dockerfile.openshell`) that includes a static `_acp_internal` entry with hardcoded `ambient-code` namespace endpoints. In gateway mode, this baked-in policy becomes the sandbox's default policy. The control plane **overwrites** the `_acp_internal` entry after sandbox creation using OpenShell's `UpdateConfig` RPC with `merge_operations` (equivalent to `openshell policy update --add-allow`) to set the correct namespace-specific endpoints. All other rules in the baked-in default policy (e.g., `claude_code_vertex`, `github_ssh_over_https`, `pypi`) are preserved. See `agent-sandbox-config.spec.md` (ACP Internal Policy Injection) and `openshell-sandbox-provisioning.spec.md` (ACP Internal Network Policy Injection) for the injection mechanism.
+
+Required endpoints (namespace varies by deployment):
 
 | Host | Port | Purpose |
 |------|------|---------|
-| `ambient-control-plane.ambient-code.svc[.cluster.local]` | 8080 | CP token endpoint |
-| `ambient-api-server.ambient-code.svc[.cluster.local]` | 8000 | API server HTTP |
-| `ambient-api-server.ambient-code.svc[.cluster.local]` | 9000 | API server gRPC |
+| `ambient-control-plane.{namespace}.svc[.cluster.local]` | 8080 | CP token endpoint |
+| `ambient-api-server.{namespace}.svc[.cluster.local]` | 8000 | API server HTTP |
+| `ambient-api-server.{namespace}.svc[.cluster.local]` | 9000 | API server gRPC |
 
-Allowed binaries: `/sandbox/.venv/bin/python`, `/sandbox/.venv/bin/python3`, `/sandbox/.venv/bin/uvicorn`
+Allowed binaries: `/sandbox/.venv/bin/python`, `/sandbox/.venv/bin/python3`, `/sandbox/.venv/bin/uvicorn`, `/sandbox/.uv/python/cpython-*/bin/python*`
 
 Both short (`svc`) and fully-qualified (`svc.cluster.local`) hostnames must be listed because the proxy matches on the exact hostname in the CONNECT request.
 

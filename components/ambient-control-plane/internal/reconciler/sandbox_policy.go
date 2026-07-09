@@ -1,14 +1,11 @@
 package reconciler
 
 import (
-	"strings"
-
 	sandboxpb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/sandbox/v1"
+	openshellpb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 )
 
 const acpInternalPolicyKey = "_acp_internal"
-
-var acpServiceNames = []string{"ambient-control-plane", "ambient-api-server"}
 
 func acpInternalRule(namespace string) *sandboxpb.NetworkPolicyRule {
 	return &sandboxpb.NetworkPolicyRule{
@@ -30,39 +27,16 @@ func acpInternalRule(namespace string) *sandboxpb.NetworkPolicyRule {
 	}
 }
 
-func ensureACPInternalPolicy(policy *sandboxpb.SandboxPolicy, namespace string) *sandboxpb.SandboxPolicy {
-	if policy == nil {
-		policy = &sandboxpb.SandboxPolicy{}
+// acpInternalMergeOperation builds a PolicyMergeOperation that adds the
+// _acp_internal network rule using namespace-specific endpoints. The gateway
+// applies this additively — existing default policy rules are preserved.
+func acpInternalMergeOperation(namespace string) *openshellpb.PolicyMergeOperation {
+	return &openshellpb.PolicyMergeOperation{
+		Operation: &openshellpb.PolicyMergeOperation_AddRule{
+			AddRule: &openshellpb.AddNetworkRule{
+				RuleName: acpInternalPolicyKey,
+				Rule:     acpInternalRule(namespace),
+			},
+		},
 	}
-	if policy.NetworkPolicies == nil {
-		policy.NetworkPolicies = make(map[string]*sandboxpb.NetworkPolicyRule)
-	}
-
-	if existing, ok := policy.NetworkPolicies[acpInternalPolicyKey]; ok {
-		rewriteACPEndpointNamespace(existing, namespace)
-	} else {
-		policy.NetworkPolicies[acpInternalPolicyKey] = acpInternalRule(namespace)
-	}
-
-	return policy
-}
-
-func rewriteACPEndpointNamespace(rule *sandboxpb.NetworkPolicyRule, namespace string) {
-	for _, ep := range rule.Endpoints {
-		ep.Host = rewriteServiceHostNamespace(ep.Host, namespace)
-	}
-}
-
-func rewriteServiceHostNamespace(host, namespace string) string {
-	for _, svc := range acpServiceNames {
-		prefix := svc + "."
-		if !strings.HasPrefix(host, prefix) {
-			continue
-		}
-		remainder := host[len(prefix):]
-		if idx := strings.Index(remainder, ".svc"); idx >= 0 {
-			return prefix + namespace + remainder[idx:]
-		}
-	}
-	return host
 }

@@ -357,6 +357,9 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	existing, err := r.gateway.GetSandbox(ctx, namespace, sbxName)
 	if err == nil && existing != nil && existing.Sandbox != nil {
 		r.logger.Debug().Str("sandbox", sbxName).Msg("sandbox already exists")
+		if err := r.injectACPInternalPolicy(ctx, namespace, sbxName); err != nil {
+			return fmt.Errorf("injecting ACP internal policy into existing sandbox %s: %w", sbxName, err)
+		}
 		if err := r.patchSandboxDNSConfig(ctx, namespace, sbxName); err != nil {
 			r.logger.Warn().Err(err).Str("sandbox", sbxName).Msg("failed to patch sandbox dnsConfig; DNS resolution for external FQDNs may fail")
 		}
@@ -387,7 +390,6 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	if policyErr != nil {
 		return fmt.Errorf("resolving sandbox policy: %w", policyErr)
 	}
-	sandboxPolicy = ensureACPInternalPolicy(sandboxPolicy, r.cfg.CPRuntimeNamespace)
 
 	req := &openshellpb.CreateSandboxRequest{
 		Name: sbxName,
@@ -431,6 +433,22 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads)
 
 	r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
+	return nil
+}
+
+func (r *SimpleKubeReconciler) injectACPInternalPolicy(ctx context.Context, namespace, sandboxName string) error {
+	_, err := r.gateway.UpdateConfig(ctx, namespace, &openshellpb.UpdateConfigRequest{
+		Name:            sandboxName,
+		MergeOperations: []*openshellpb.PolicyMergeOperation{acpInternalMergeOperation(r.cfg.CPRuntimeNamespace)},
+	})
+	if err != nil {
+		return fmt.Errorf("UpdateConfig merge for %s: %w", acpInternalPolicyKey, err)
+	}
+	r.logger.Info().
+		Str("sandbox", sandboxName).
+		Str("namespace", namespace).
+		Str("cp_namespace", r.cfg.CPRuntimeNamespace).
+		Msg("injected _acp_internal policy via merge operation")
 	return nil
 }
 
@@ -717,8 +735,24 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				Str("sandbox", sbxName).
 				Str("sandbox_id", sandboxID).
 				Str("session_id", sessionID).
+				Msg("sandbox is ready, configuring policy")
+
+			// Inject _acp_internal policy AFTER the sandbox is READY.
+			// The supervisor syncs the image's default policy on boot;
+			// injecting earlier would merge onto an empty base, squashing
+			// the default rules.
+			if err := r.injectACPInternalPolicy(pollCtx, namespace, sbxName); err != nil {
+				r.logger.Error().Err(err).Str("sandbox", sbxName).Str("session_id", sessionID).Msg("failed to inject ACP internal policy")
+				failSession(fmt.Sprintf("failed to inject ACP internal policy: %v", err))
+				return
+			}
+
+			r.logger.Info().
+				Str("sandbox", sbxName).
+				Str("sandbox_id", sandboxID).
+				Str("session_id", sessionID).
 				Strs("entrypoint", entrypoint).
-				Msg("sandbox is ready, executing entrypoint")
+				Msg("policy configured, executing entrypoint")
 
 			// Transition session from Creating → Running now that the
 			// sandbox is ready and we are about to exec the entrypoint.

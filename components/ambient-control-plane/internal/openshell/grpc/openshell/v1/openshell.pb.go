@@ -1484,14 +1484,15 @@ func (x *ExecSandboxExit) GetExitCode() int32 {
 }
 
 type UpdateConfigRequest struct {
-	state                   protoimpl.MessageState `protogen:"open.v1"`
-	Name                    string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Policy                  *v11.SandboxPolicy     `protobuf:"bytes,2,opt,name=policy,proto3" json:"policy,omitempty"`
-	SettingKey              string                 `protobuf:"bytes,3,opt,name=setting_key,json=settingKey,proto3" json:"setting_key,omitempty"`
-	SettingValue            *v11.SettingValue      `protobuf:"bytes,4,opt,name=setting_value,json=settingValue,proto3" json:"setting_value,omitempty"`
-	DeleteSetting           bool                   `protobuf:"varint,5,opt,name=delete_setting,json=deleteSetting,proto3" json:"delete_setting,omitempty"`
-	Global                  bool                   `protobuf:"varint,6,opt,name=global,proto3" json:"global,omitempty"`
-	ExpectedResourceVersion uint64                 `protobuf:"varint,8,opt,name=expected_resource_version,json=expectedResourceVersion,proto3" json:"expected_resource_version,omitempty"`
+	state                   protoimpl.MessageState  `protogen:"open.v1"`
+	Name                    string                  `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Policy                  *v11.SandboxPolicy      `protobuf:"bytes,2,opt,name=policy,proto3" json:"policy,omitempty"`
+	SettingKey              string                  `protobuf:"bytes,3,opt,name=setting_key,json=settingKey,proto3" json:"setting_key,omitempty"`
+	SettingValue            *v11.SettingValue       `protobuf:"bytes,4,opt,name=setting_value,json=settingValue,proto3" json:"setting_value,omitempty"`
+	DeleteSetting           bool                    `protobuf:"varint,5,opt,name=delete_setting,json=deleteSetting,proto3" json:"delete_setting,omitempty"`
+	Global                  bool                    `protobuf:"varint,6,opt,name=global,proto3" json:"global,omitempty"`
+	MergeOperations         []*PolicyMergeOperation `protobuf:"bytes,7,rep,name=merge_operations,json=mergeOperations,proto3" json:"merge_operations,omitempty"`
+	ExpectedResourceVersion uint64                  `protobuf:"varint,8,opt,name=expected_resource_version,json=expectedResourceVersion,proto3" json:"expected_resource_version,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -1568,11 +1569,492 @@ func (x *UpdateConfigRequest) GetGlobal() bool {
 	return false
 }
 
+func (x *UpdateConfigRequest) GetMergeOperations() []*PolicyMergeOperation {
+	if x != nil {
+		return x.MergeOperations
+	}
+	return nil
+}
+
 func (x *UpdateConfigRequest) GetExpectedResourceVersion() uint64 {
 	if x != nil {
 		return x.ExpectedResourceVersion
 	}
 	return 0
+}
+
+type PolicyMergeOperation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Operation:
+	//
+	//	*PolicyMergeOperation_AddRule
+	//	*PolicyMergeOperation_RemoveEndpoint
+	//	*PolicyMergeOperation_RemoveRule
+	//	*PolicyMergeOperation_AddDenyRules
+	//	*PolicyMergeOperation_AddAllowRules
+	//	*PolicyMergeOperation_RemoveBinary
+	Operation     isPolicyMergeOperation_Operation `protobuf_oneof:"operation"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PolicyMergeOperation) Reset() {
+	*x = PolicyMergeOperation{}
+	mi := &file_openshell_v1_openshell_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyMergeOperation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyMergeOperation) ProtoMessage() {}
+
+func (x *PolicyMergeOperation) ProtoReflect() protoreflect.Message {
+	mi := &file_openshell_v1_openshell_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyMergeOperation.ProtoReflect.Descriptor instead.
+func (*PolicyMergeOperation) Descriptor() ([]byte, []int) {
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *PolicyMergeOperation) GetOperation() isPolicyMergeOperation_Operation {
+	if x != nil {
+		return x.Operation
+	}
+	return nil
+}
+
+func (x *PolicyMergeOperation) GetAddRule() *AddNetworkRule {
+	if x != nil {
+		if x, ok := x.Operation.(*PolicyMergeOperation_AddRule); ok {
+			return x.AddRule
+		}
+	}
+	return nil
+}
+
+func (x *PolicyMergeOperation) GetRemoveEndpoint() *RemoveNetworkEndpoint {
+	if x != nil {
+		if x, ok := x.Operation.(*PolicyMergeOperation_RemoveEndpoint); ok {
+			return x.RemoveEndpoint
+		}
+	}
+	return nil
+}
+
+func (x *PolicyMergeOperation) GetRemoveRule() *RemoveNetworkRule {
+	if x != nil {
+		if x, ok := x.Operation.(*PolicyMergeOperation_RemoveRule); ok {
+			return x.RemoveRule
+		}
+	}
+	return nil
+}
+
+func (x *PolicyMergeOperation) GetAddDenyRules() *AddDenyRules {
+	if x != nil {
+		if x, ok := x.Operation.(*PolicyMergeOperation_AddDenyRules); ok {
+			return x.AddDenyRules
+		}
+	}
+	return nil
+}
+
+func (x *PolicyMergeOperation) GetAddAllowRules() *AddAllowRules {
+	if x != nil {
+		if x, ok := x.Operation.(*PolicyMergeOperation_AddAllowRules); ok {
+			return x.AddAllowRules
+		}
+	}
+	return nil
+}
+
+func (x *PolicyMergeOperation) GetRemoveBinary() *RemoveNetworkBinary {
+	if x != nil {
+		if x, ok := x.Operation.(*PolicyMergeOperation_RemoveBinary); ok {
+			return x.RemoveBinary
+		}
+	}
+	return nil
+}
+
+type isPolicyMergeOperation_Operation interface {
+	isPolicyMergeOperation_Operation()
+}
+
+type PolicyMergeOperation_AddRule struct {
+	AddRule *AddNetworkRule `protobuf:"bytes,1,opt,name=add_rule,json=addRule,proto3,oneof"`
+}
+
+type PolicyMergeOperation_RemoveEndpoint struct {
+	RemoveEndpoint *RemoveNetworkEndpoint `protobuf:"bytes,2,opt,name=remove_endpoint,json=removeEndpoint,proto3,oneof"`
+}
+
+type PolicyMergeOperation_RemoveRule struct {
+	RemoveRule *RemoveNetworkRule `protobuf:"bytes,3,opt,name=remove_rule,json=removeRule,proto3,oneof"`
+}
+
+type PolicyMergeOperation_AddDenyRules struct {
+	AddDenyRules *AddDenyRules `protobuf:"bytes,4,opt,name=add_deny_rules,json=addDenyRules,proto3,oneof"`
+}
+
+type PolicyMergeOperation_AddAllowRules struct {
+	AddAllowRules *AddAllowRules `protobuf:"bytes,5,opt,name=add_allow_rules,json=addAllowRules,proto3,oneof"`
+}
+
+type PolicyMergeOperation_RemoveBinary struct {
+	RemoveBinary *RemoveNetworkBinary `protobuf:"bytes,6,opt,name=remove_binary,json=removeBinary,proto3,oneof"`
+}
+
+func (*PolicyMergeOperation_AddRule) isPolicyMergeOperation_Operation() {}
+
+func (*PolicyMergeOperation_RemoveEndpoint) isPolicyMergeOperation_Operation() {}
+
+func (*PolicyMergeOperation_RemoveRule) isPolicyMergeOperation_Operation() {}
+
+func (*PolicyMergeOperation_AddDenyRules) isPolicyMergeOperation_Operation() {}
+
+func (*PolicyMergeOperation_AddAllowRules) isPolicyMergeOperation_Operation() {}
+
+func (*PolicyMergeOperation_RemoveBinary) isPolicyMergeOperation_Operation() {}
+
+type AddNetworkRule struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RuleName      string                 `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name,omitempty"`
+	Rule          *v11.NetworkPolicyRule `protobuf:"bytes,2,opt,name=rule,proto3" json:"rule,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddNetworkRule) Reset() {
+	*x = AddNetworkRule{}
+	mi := &file_openshell_v1_openshell_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddNetworkRule) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddNetworkRule) ProtoMessage() {}
+
+func (x *AddNetworkRule) ProtoReflect() protoreflect.Message {
+	mi := &file_openshell_v1_openshell_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddNetworkRule.ProtoReflect.Descriptor instead.
+func (*AddNetworkRule) Descriptor() ([]byte, []int) {
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *AddNetworkRule) GetRuleName() string {
+	if x != nil {
+		return x.RuleName
+	}
+	return ""
+}
+
+func (x *AddNetworkRule) GetRule() *v11.NetworkPolicyRule {
+	if x != nil {
+		return x.Rule
+	}
+	return nil
+}
+
+type RemoveNetworkEndpoint struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RuleName      string                 `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name,omitempty"`
+	Host          string                 `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
+	Port          uint32                 `protobuf:"varint,3,opt,name=port,proto3" json:"port,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveNetworkEndpoint) Reset() {
+	*x = RemoveNetworkEndpoint{}
+	mi := &file_openshell_v1_openshell_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveNetworkEndpoint) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveNetworkEndpoint) ProtoMessage() {}
+
+func (x *RemoveNetworkEndpoint) ProtoReflect() protoreflect.Message {
+	mi := &file_openshell_v1_openshell_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveNetworkEndpoint.ProtoReflect.Descriptor instead.
+func (*RemoveNetworkEndpoint) Descriptor() ([]byte, []int) {
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *RemoveNetworkEndpoint) GetRuleName() string {
+	if x != nil {
+		return x.RuleName
+	}
+	return ""
+}
+
+func (x *RemoveNetworkEndpoint) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *RemoveNetworkEndpoint) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+type RemoveNetworkRule struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RuleName      string                 `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveNetworkRule) Reset() {
+	*x = RemoveNetworkRule{}
+	mi := &file_openshell_v1_openshell_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveNetworkRule) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveNetworkRule) ProtoMessage() {}
+
+func (x *RemoveNetworkRule) ProtoReflect() protoreflect.Message {
+	mi := &file_openshell_v1_openshell_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveNetworkRule.ProtoReflect.Descriptor instead.
+func (*RemoveNetworkRule) Descriptor() ([]byte, []int) {
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *RemoveNetworkRule) GetRuleName() string {
+	if x != nil {
+		return x.RuleName
+	}
+	return ""
+}
+
+type AddDenyRules struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Host          string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	Port          uint32                 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	DenyRules     []*v11.L7DenyRule      `protobuf:"bytes,3,rep,name=deny_rules,json=denyRules,proto3" json:"deny_rules,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddDenyRules) Reset() {
+	*x = AddDenyRules{}
+	mi := &file_openshell_v1_openshell_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddDenyRules) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddDenyRules) ProtoMessage() {}
+
+func (x *AddDenyRules) ProtoReflect() protoreflect.Message {
+	mi := &file_openshell_v1_openshell_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddDenyRules.ProtoReflect.Descriptor instead.
+func (*AddDenyRules) Descriptor() ([]byte, []int) {
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *AddDenyRules) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *AddDenyRules) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *AddDenyRules) GetDenyRules() []*v11.L7DenyRule {
+	if x != nil {
+		return x.DenyRules
+	}
+	return nil
+}
+
+type AddAllowRules struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Host          string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	Port          uint32                 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	Rules         []*v11.L7Rule          `protobuf:"bytes,3,rep,name=rules,proto3" json:"rules,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddAllowRules) Reset() {
+	*x = AddAllowRules{}
+	mi := &file_openshell_v1_openshell_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddAllowRules) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddAllowRules) ProtoMessage() {}
+
+func (x *AddAllowRules) ProtoReflect() protoreflect.Message {
+	mi := &file_openshell_v1_openshell_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddAllowRules.ProtoReflect.Descriptor instead.
+func (*AddAllowRules) Descriptor() ([]byte, []int) {
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *AddAllowRules) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *AddAllowRules) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *AddAllowRules) GetRules() []*v11.L7Rule {
+	if x != nil {
+		return x.Rules
+	}
+	return nil
+}
+
+type RemoveNetworkBinary struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RuleName      string                 `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name,omitempty"`
+	BinaryPath    string                 `protobuf:"bytes,2,opt,name=binary_path,json=binaryPath,proto3" json:"binary_path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveNetworkBinary) Reset() {
+	*x = RemoveNetworkBinary{}
+	mi := &file_openshell_v1_openshell_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveNetworkBinary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveNetworkBinary) ProtoMessage() {}
+
+func (x *RemoveNetworkBinary) ProtoReflect() protoreflect.Message {
+	mi := &file_openshell_v1_openshell_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveNetworkBinary.ProtoReflect.Descriptor instead.
+func (*RemoveNetworkBinary) Descriptor() ([]byte, []int) {
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *RemoveNetworkBinary) GetRuleName() string {
+	if x != nil {
+		return x.RuleName
+	}
+	return ""
+}
+
+func (x *RemoveNetworkBinary) GetBinaryPath() string {
+	if x != nil {
+		return x.BinaryPath
+	}
+	return ""
 }
 
 type UpdateConfigResponse struct {
@@ -1587,7 +2069,7 @@ type UpdateConfigResponse struct {
 
 func (x *UpdateConfigResponse) Reset() {
 	*x = UpdateConfigResponse{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[24]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1599,7 +2081,7 @@ func (x *UpdateConfigResponse) String() string {
 func (*UpdateConfigResponse) ProtoMessage() {}
 
 func (x *UpdateConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[24]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1612,7 +2094,7 @@ func (x *UpdateConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateConfigResponse.ProtoReflect.Descriptor instead.
 func (*UpdateConfigResponse) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{24}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *UpdateConfigResponse) GetVersion() uint32 {
@@ -1660,7 +2142,7 @@ type ProviderCredentialRefreshStatus struct {
 
 func (x *ProviderCredentialRefreshStatus) Reset() {
 	*x = ProviderCredentialRefreshStatus{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[25]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1672,7 +2154,7 @@ func (x *ProviderCredentialRefreshStatus) String() string {
 func (*ProviderCredentialRefreshStatus) ProtoMessage() {}
 
 func (x *ProviderCredentialRefreshStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[25]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1685,7 +2167,7 @@ func (x *ProviderCredentialRefreshStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderCredentialRefreshStatus.ProtoReflect.Descriptor instead.
 func (*ProviderCredentialRefreshStatus) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{25}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ProviderCredentialRefreshStatus) GetProviderName() string {
@@ -1765,7 +2247,7 @@ type ConfigureProviderRefreshRequest struct {
 
 func (x *ConfigureProviderRefreshRequest) Reset() {
 	*x = ConfigureProviderRefreshRequest{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[26]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1777,7 +2259,7 @@ func (x *ConfigureProviderRefreshRequest) String() string {
 func (*ConfigureProviderRefreshRequest) ProtoMessage() {}
 
 func (x *ConfigureProviderRefreshRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[26]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1790,7 +2272,7 @@ func (x *ConfigureProviderRefreshRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigureProviderRefreshRequest.ProtoReflect.Descriptor instead.
 func (*ConfigureProviderRefreshRequest) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{26}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ConfigureProviderRefreshRequest) GetProvider() string {
@@ -1844,7 +2326,7 @@ type ConfigureProviderRefreshResponse struct {
 
 func (x *ConfigureProviderRefreshResponse) Reset() {
 	*x = ConfigureProviderRefreshResponse{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[27]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1856,7 +2338,7 @@ func (x *ConfigureProviderRefreshResponse) String() string {
 func (*ConfigureProviderRefreshResponse) ProtoMessage() {}
 
 func (x *ConfigureProviderRefreshResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[27]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1869,7 +2351,7 @@ func (x *ConfigureProviderRefreshResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigureProviderRefreshResponse.ProtoReflect.Descriptor instead.
 func (*ConfigureProviderRefreshResponse) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{27}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ConfigureProviderRefreshResponse) GetStatus() *ProviderCredentialRefreshStatus {
@@ -1889,7 +2371,7 @@ type RotateProviderCredentialRequest struct {
 
 func (x *RotateProviderCredentialRequest) Reset() {
 	*x = RotateProviderCredentialRequest{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[28]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1901,7 +2383,7 @@ func (x *RotateProviderCredentialRequest) String() string {
 func (*RotateProviderCredentialRequest) ProtoMessage() {}
 
 func (x *RotateProviderCredentialRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[28]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1914,7 +2396,7 @@ func (x *RotateProviderCredentialRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateProviderCredentialRequest.ProtoReflect.Descriptor instead.
 func (*RotateProviderCredentialRequest) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{28}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *RotateProviderCredentialRequest) GetProvider() string {
@@ -1940,7 +2422,7 @@ type RotateProviderCredentialResponse struct {
 
 func (x *RotateProviderCredentialResponse) Reset() {
 	*x = RotateProviderCredentialResponse{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[29]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1952,7 +2434,7 @@ func (x *RotateProviderCredentialResponse) String() string {
 func (*RotateProviderCredentialResponse) ProtoMessage() {}
 
 func (x *RotateProviderCredentialResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[29]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1965,7 +2447,7 @@ func (x *RotateProviderCredentialResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateProviderCredentialResponse.ProtoReflect.Descriptor instead.
 func (*RotateProviderCredentialResponse) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{29}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *RotateProviderCredentialResponse) GetStatus() *ProviderCredentialRefreshStatus {
@@ -1984,7 +2466,7 @@ type CreateSshSessionRequest struct {
 
 func (x *CreateSshSessionRequest) Reset() {
 	*x = CreateSshSessionRequest{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[30]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1996,7 +2478,7 @@ func (x *CreateSshSessionRequest) String() string {
 func (*CreateSshSessionRequest) ProtoMessage() {}
 
 func (x *CreateSshSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[30]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2009,7 +2491,7 @@ func (x *CreateSshSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSshSessionRequest.ProtoReflect.Descriptor instead.
 func (*CreateSshSessionRequest) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{30}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *CreateSshSessionRequest) GetSandboxId() string {
@@ -2034,7 +2516,7 @@ type CreateSshSessionResponse struct {
 
 func (x *CreateSshSessionResponse) Reset() {
 	*x = CreateSshSessionResponse{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[31]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2046,7 +2528,7 @@ func (x *CreateSshSessionResponse) String() string {
 func (*CreateSshSessionResponse) ProtoMessage() {}
 
 func (x *CreateSshSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[31]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2059,7 +2541,7 @@ func (x *CreateSshSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSshSessionResponse.ProtoReflect.Descriptor instead.
 func (*CreateSshSessionResponse) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{31}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *CreateSshSessionResponse) GetSandboxId() string {
@@ -2127,7 +2609,7 @@ type TcpForwardInit struct {
 
 func (x *TcpForwardInit) Reset() {
 	*x = TcpForwardInit{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[32]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2139,7 +2621,7 @@ func (x *TcpForwardInit) String() string {
 func (*TcpForwardInit) ProtoMessage() {}
 
 func (x *TcpForwardInit) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[32]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2152,7 +2634,7 @@ func (x *TcpForwardInit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TcpForwardInit.ProtoReflect.Descriptor instead.
 func (*TcpForwardInit) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{32}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *TcpForwardInit) GetSandboxId() string {
@@ -2230,7 +2712,7 @@ type TcpForwardFrame struct {
 
 func (x *TcpForwardFrame) Reset() {
 	*x = TcpForwardFrame{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[33]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2242,7 +2724,7 @@ func (x *TcpForwardFrame) String() string {
 func (*TcpForwardFrame) ProtoMessage() {}
 
 func (x *TcpForwardFrame) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[33]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2255,7 +2737,7 @@ func (x *TcpForwardFrame) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TcpForwardFrame.ProtoReflect.Descriptor instead.
 func (*TcpForwardFrame) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{33}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *TcpForwardFrame) GetPayload() isTcpForwardFrame_Payload {
@@ -2307,7 +2789,7 @@ type SshRelayTarget struct {
 
 func (x *SshRelayTarget) Reset() {
 	*x = SshRelayTarget{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[34]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2319,7 +2801,7 @@ func (x *SshRelayTarget) String() string {
 func (*SshRelayTarget) ProtoMessage() {}
 
 func (x *SshRelayTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[34]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2332,7 +2814,7 @@ func (x *SshRelayTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SshRelayTarget.ProtoReflect.Descriptor instead.
 func (*SshRelayTarget) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{34}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{41}
 }
 
 type TcpRelayTarget struct {
@@ -2345,7 +2827,7 @@ type TcpRelayTarget struct {
 
 func (x *TcpRelayTarget) Reset() {
 	*x = TcpRelayTarget{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[35]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2357,7 +2839,7 @@ func (x *TcpRelayTarget) String() string {
 func (*TcpRelayTarget) ProtoMessage() {}
 
 func (x *TcpRelayTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[35]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2370,7 +2852,7 @@ func (x *TcpRelayTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TcpRelayTarget.ProtoReflect.Descriptor instead.
 func (*TcpRelayTarget) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{35}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *TcpRelayTarget) GetHost() string {
@@ -2405,7 +2887,7 @@ type WatchSandboxRequest struct {
 
 func (x *WatchSandboxRequest) Reset() {
 	*x = WatchSandboxRequest{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[36]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2417,7 +2899,7 @@ func (x *WatchSandboxRequest) String() string {
 func (*WatchSandboxRequest) ProtoMessage() {}
 
 func (x *WatchSandboxRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[36]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2430,7 +2912,7 @@ func (x *WatchSandboxRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchSandboxRequest.ProtoReflect.Descriptor instead.
 func (*WatchSandboxRequest) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{36}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *WatchSandboxRequest) GetId() string {
@@ -2518,7 +3000,7 @@ type SandboxStreamEvent struct {
 
 func (x *SandboxStreamEvent) Reset() {
 	*x = SandboxStreamEvent{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[37]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2530,7 +3012,7 @@ func (x *SandboxStreamEvent) String() string {
 func (*SandboxStreamEvent) ProtoMessage() {}
 
 func (x *SandboxStreamEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[37]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2543,7 +3025,7 @@ func (x *SandboxStreamEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SandboxStreamEvent.ProtoReflect.Descriptor instead.
 func (*SandboxStreamEvent) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{37}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *SandboxStreamEvent) GetPayload() isSandboxStreamEvent_Payload {
@@ -2632,7 +3114,7 @@ type SandboxLogLine struct {
 
 func (x *SandboxLogLine) Reset() {
 	*x = SandboxLogLine{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[38]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2644,7 +3126,7 @@ func (x *SandboxLogLine) String() string {
 func (*SandboxLogLine) ProtoMessage() {}
 
 func (x *SandboxLogLine) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[38]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2657,7 +3139,7 @@ func (x *SandboxLogLine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SandboxLogLine.ProtoReflect.Descriptor instead.
 func (*SandboxLogLine) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{38}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *SandboxLogLine) GetSandboxId() string {
@@ -2723,7 +3205,7 @@ type PlatformEvent struct {
 
 func (x *PlatformEvent) Reset() {
 	*x = PlatformEvent{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[39]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2735,7 +3217,7 @@ func (x *PlatformEvent) String() string {
 func (*PlatformEvent) ProtoMessage() {}
 
 func (x *PlatformEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[39]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2748,7 +3230,7 @@ func (x *PlatformEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlatformEvent.ProtoReflect.Descriptor instead.
 func (*PlatformEvent) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{39}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *PlatformEvent) GetTimestampMs() int64 {
@@ -2802,7 +3284,7 @@ type SandboxStreamWarning struct {
 
 func (x *SandboxStreamWarning) Reset() {
 	*x = SandboxStreamWarning{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[40]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2814,7 +3296,7 @@ func (x *SandboxStreamWarning) String() string {
 func (*SandboxStreamWarning) ProtoMessage() {}
 
 func (x *SandboxStreamWarning) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[40]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2827,7 +3309,7 @@ func (x *SandboxStreamWarning) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SandboxStreamWarning.ProtoReflect.Descriptor instead.
 func (*SandboxStreamWarning) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{40}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *SandboxStreamWarning) GetMessage() string {
@@ -2850,7 +3332,7 @@ type GetSandboxLogsRequest struct {
 
 func (x *GetSandboxLogsRequest) Reset() {
 	*x = GetSandboxLogsRequest{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[41]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2862,7 +3344,7 @@ func (x *GetSandboxLogsRequest) String() string {
 func (*GetSandboxLogsRequest) ProtoMessage() {}
 
 func (x *GetSandboxLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[41]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2875,7 +3357,7 @@ func (x *GetSandboxLogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSandboxLogsRequest.ProtoReflect.Descriptor instead.
 func (*GetSandboxLogsRequest) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{41}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *GetSandboxLogsRequest) GetSandboxId() string {
@@ -2923,7 +3405,7 @@ type GetSandboxLogsResponse struct {
 
 func (x *GetSandboxLogsResponse) Reset() {
 	*x = GetSandboxLogsResponse{}
-	mi := &file_openshell_v1_openshell_proto_msgTypes[42]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2935,7 +3417,7 @@ func (x *GetSandboxLogsResponse) String() string {
 func (*GetSandboxLogsResponse) ProtoMessage() {}
 
 func (x *GetSandboxLogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openshell_v1_openshell_proto_msgTypes[42]
+	mi := &file_openshell_v1_openshell_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2948,7 +3430,7 @@ func (x *GetSandboxLogsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSandboxLogsResponse.ProtoReflect.Descriptor instead.
 func (*GetSandboxLogsResponse) Descriptor() ([]byte, []int) {
-	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{42}
+	return file_openshell_v1_openshell_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *GetSandboxLogsResponse) GetLogs() []*SandboxLogLine {
@@ -3079,7 +3561,7 @@ const file_openshell_v1_openshell_proto_rawDesc = "" +
 	"\x11ExecSandboxStderr\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\".\n" +
 	"\x0fExecSandboxExit\x12\x1b\n" +
-	"\texit_code\x18\x01 \x01(\x05R\bexitCode\"\xcb\x02\n" +
+	"\texit_code\x18\x01 \x01(\x05R\bexitCode\"\x9a\x03\n" +
 	"\x13UpdateConfigRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12;\n" +
 	"\x06policy\x18\x02 \x01(\v2#.openshell.sandbox.v1.SandboxPolicyR\x06policy\x12\x1f\n" +
@@ -3087,8 +3569,40 @@ const file_openshell_v1_openshell_proto_rawDesc = "" +
 	"settingKey\x12G\n" +
 	"\rsetting_value\x18\x04 \x01(\v2\".openshell.sandbox.v1.SettingValueR\fsettingValue\x12%\n" +
 	"\x0edelete_setting\x18\x05 \x01(\bR\rdeleteSetting\x12\x16\n" +
-	"\x06global\x18\x06 \x01(\bR\x06global\x12:\n" +
-	"\x19expected_resource_version\x18\b \x01(\x04R\x17expectedResourceVersion\"\x98\x01\n" +
+	"\x06global\x18\x06 \x01(\bR\x06global\x12M\n" +
+	"\x10merge_operations\x18\a \x03(\v2\".openshell.v1.PolicyMergeOperationR\x0fmergeOperations\x12:\n" +
+	"\x19expected_resource_version\x18\b \x01(\x04R\x17expectedResourceVersion\"\xc7\x03\n" +
+	"\x14PolicyMergeOperation\x129\n" +
+	"\badd_rule\x18\x01 \x01(\v2\x1c.openshell.v1.AddNetworkRuleH\x00R\aaddRule\x12N\n" +
+	"\x0fremove_endpoint\x18\x02 \x01(\v2#.openshell.v1.RemoveNetworkEndpointH\x00R\x0eremoveEndpoint\x12B\n" +
+	"\vremove_rule\x18\x03 \x01(\v2\x1f.openshell.v1.RemoveNetworkRuleH\x00R\n" +
+	"removeRule\x12B\n" +
+	"\x0eadd_deny_rules\x18\x04 \x01(\v2\x1a.openshell.v1.AddDenyRulesH\x00R\faddDenyRules\x12E\n" +
+	"\x0fadd_allow_rules\x18\x05 \x01(\v2\x1b.openshell.v1.AddAllowRulesH\x00R\raddAllowRules\x12H\n" +
+	"\rremove_binary\x18\x06 \x01(\v2!.openshell.v1.RemoveNetworkBinaryH\x00R\fremoveBinaryB\v\n" +
+	"\toperation\"j\n" +
+	"\x0eAddNetworkRule\x12\x1b\n" +
+	"\trule_name\x18\x01 \x01(\tR\bruleName\x12;\n" +
+	"\x04rule\x18\x02 \x01(\v2'.openshell.sandbox.v1.NetworkPolicyRuleR\x04rule\"\\\n" +
+	"\x15RemoveNetworkEndpoint\x12\x1b\n" +
+	"\trule_name\x18\x01 \x01(\tR\bruleName\x12\x12\n" +
+	"\x04host\x18\x02 \x01(\tR\x04host\x12\x12\n" +
+	"\x04port\x18\x03 \x01(\rR\x04port\"0\n" +
+	"\x11RemoveNetworkRule\x12\x1b\n" +
+	"\trule_name\x18\x01 \x01(\tR\bruleName\"w\n" +
+	"\fAddDenyRules\x12\x12\n" +
+	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
+	"\x04port\x18\x02 \x01(\rR\x04port\x12?\n" +
+	"\n" +
+	"deny_rules\x18\x03 \x03(\v2 .openshell.sandbox.v1.L7DenyRuleR\tdenyRules\"k\n" +
+	"\rAddAllowRules\x12\x12\n" +
+	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
+	"\x04port\x18\x02 \x01(\rR\x04port\x122\n" +
+	"\x05rules\x18\x03 \x03(\v2\x1c.openshell.sandbox.v1.L7RuleR\x05rules\"S\n" +
+	"\x13RemoveNetworkBinary\x12\x1b\n" +
+	"\trule_name\x18\x01 \x01(\tR\bruleName\x12\x1f\n" +
+	"\vbinary_path\x18\x02 \x01(\tR\n" +
+	"binaryPath\"\x98\x01\n" +
 	"\x14UpdateConfigResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x1f\n" +
 	"\vpolicy_hash\x18\x02 \x01(\tR\n" +
@@ -3257,7 +3771,7 @@ func file_openshell_v1_openshell_proto_rawDescGZIP() []byte {
 }
 
 var file_openshell_v1_openshell_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_openshell_v1_openshell_proto_msgTypes = make([]protoimpl.MessageInfo, 53)
+var file_openshell_v1_openshell_proto_msgTypes = make([]protoimpl.MessageInfo, 60)
 var file_openshell_v1_openshell_proto_goTypes = []any{
 	(SandboxPhase)(0),                        // 0: openshell.v1.SandboxPhase
 	(ProviderCredentialRefreshStrategy)(0),   // 1: openshell.v1.ProviderCredentialRefreshStrategy
@@ -3285,116 +3799,136 @@ var file_openshell_v1_openshell_proto_goTypes = []any{
 	(*ExecSandboxStderr)(nil),                // 23: openshell.v1.ExecSandboxStderr
 	(*ExecSandboxExit)(nil),                  // 24: openshell.v1.ExecSandboxExit
 	(*UpdateConfigRequest)(nil),              // 25: openshell.v1.UpdateConfigRequest
-	(*UpdateConfigResponse)(nil),             // 26: openshell.v1.UpdateConfigResponse
-	(*ProviderCredentialRefreshStatus)(nil),  // 27: openshell.v1.ProviderCredentialRefreshStatus
-	(*ConfigureProviderRefreshRequest)(nil),  // 28: openshell.v1.ConfigureProviderRefreshRequest
-	(*ConfigureProviderRefreshResponse)(nil), // 29: openshell.v1.ConfigureProviderRefreshResponse
-	(*RotateProviderCredentialRequest)(nil),  // 30: openshell.v1.RotateProviderCredentialRequest
-	(*RotateProviderCredentialResponse)(nil), // 31: openshell.v1.RotateProviderCredentialResponse
-	(*CreateSshSessionRequest)(nil),          // 32: openshell.v1.CreateSshSessionRequest
-	(*CreateSshSessionResponse)(nil),         // 33: openshell.v1.CreateSshSessionResponse
-	(*TcpForwardInit)(nil),                   // 34: openshell.v1.TcpForwardInit
-	(*TcpForwardFrame)(nil),                  // 35: openshell.v1.TcpForwardFrame
-	(*SshRelayTarget)(nil),                   // 36: openshell.v1.SshRelayTarget
-	(*TcpRelayTarget)(nil),                   // 37: openshell.v1.TcpRelayTarget
-	(*WatchSandboxRequest)(nil),              // 38: openshell.v1.WatchSandboxRequest
-	(*SandboxStreamEvent)(nil),               // 39: openshell.v1.SandboxStreamEvent
-	(*SandboxLogLine)(nil),                   // 40: openshell.v1.SandboxLogLine
-	(*PlatformEvent)(nil),                    // 41: openshell.v1.PlatformEvent
-	(*SandboxStreamWarning)(nil),             // 42: openshell.v1.SandboxStreamWarning
-	(*GetSandboxLogsRequest)(nil),            // 43: openshell.v1.GetSandboxLogsRequest
-	(*GetSandboxLogsResponse)(nil),           // 44: openshell.v1.GetSandboxLogsResponse
-	nil,                                      // 45: openshell.v1.SandboxSpec.EnvironmentEntry
-	nil,                                      // 46: openshell.v1.SandboxTemplate.LabelsEntry
-	nil,                                      // 47: openshell.v1.SandboxTemplate.AnnotationsEntry
-	nil,                                      // 48: openshell.v1.SandboxTemplate.EnvironmentEntry
-	nil,                                      // 49: openshell.v1.CreateSandboxRequest.LabelsEntry
-	nil,                                      // 50: openshell.v1.UpdateProviderRequest.CredentialExpiresAtMsEntry
-	nil,                                      // 51: openshell.v1.ExecSandboxRequest.EnvironmentEntry
-	nil,                                      // 52: openshell.v1.ConfigureProviderRefreshRequest.MaterialEntry
-	nil,                                      // 53: openshell.v1.SandboxLogLine.FieldsEntry
-	nil,                                      // 54: openshell.v1.PlatformEvent.MetadataEntry
-	(*v1.ObjectMeta)(nil),                    // 55: openshell.datamodel.v1.ObjectMeta
-	(*v11.SandboxPolicy)(nil),                // 56: openshell.sandbox.v1.SandboxPolicy
-	(*v1.Provider)(nil),                      // 57: openshell.datamodel.v1.Provider
-	(*v11.SettingValue)(nil),                 // 58: openshell.sandbox.v1.SettingValue
+	(*PolicyMergeOperation)(nil),             // 26: openshell.v1.PolicyMergeOperation
+	(*AddNetworkRule)(nil),                   // 27: openshell.v1.AddNetworkRule
+	(*RemoveNetworkEndpoint)(nil),            // 28: openshell.v1.RemoveNetworkEndpoint
+	(*RemoveNetworkRule)(nil),                // 29: openshell.v1.RemoveNetworkRule
+	(*AddDenyRules)(nil),                     // 30: openshell.v1.AddDenyRules
+	(*AddAllowRules)(nil),                    // 31: openshell.v1.AddAllowRules
+	(*RemoveNetworkBinary)(nil),              // 32: openshell.v1.RemoveNetworkBinary
+	(*UpdateConfigResponse)(nil),             // 33: openshell.v1.UpdateConfigResponse
+	(*ProviderCredentialRefreshStatus)(nil),  // 34: openshell.v1.ProviderCredentialRefreshStatus
+	(*ConfigureProviderRefreshRequest)(nil),  // 35: openshell.v1.ConfigureProviderRefreshRequest
+	(*ConfigureProviderRefreshResponse)(nil), // 36: openshell.v1.ConfigureProviderRefreshResponse
+	(*RotateProviderCredentialRequest)(nil),  // 37: openshell.v1.RotateProviderCredentialRequest
+	(*RotateProviderCredentialResponse)(nil), // 38: openshell.v1.RotateProviderCredentialResponse
+	(*CreateSshSessionRequest)(nil),          // 39: openshell.v1.CreateSshSessionRequest
+	(*CreateSshSessionResponse)(nil),         // 40: openshell.v1.CreateSshSessionResponse
+	(*TcpForwardInit)(nil),                   // 41: openshell.v1.TcpForwardInit
+	(*TcpForwardFrame)(nil),                  // 42: openshell.v1.TcpForwardFrame
+	(*SshRelayTarget)(nil),                   // 43: openshell.v1.SshRelayTarget
+	(*TcpRelayTarget)(nil),                   // 44: openshell.v1.TcpRelayTarget
+	(*WatchSandboxRequest)(nil),              // 45: openshell.v1.WatchSandboxRequest
+	(*SandboxStreamEvent)(nil),               // 46: openshell.v1.SandboxStreamEvent
+	(*SandboxLogLine)(nil),                   // 47: openshell.v1.SandboxLogLine
+	(*PlatformEvent)(nil),                    // 48: openshell.v1.PlatformEvent
+	(*SandboxStreamWarning)(nil),             // 49: openshell.v1.SandboxStreamWarning
+	(*GetSandboxLogsRequest)(nil),            // 50: openshell.v1.GetSandboxLogsRequest
+	(*GetSandboxLogsResponse)(nil),           // 51: openshell.v1.GetSandboxLogsResponse
+	nil,                                      // 52: openshell.v1.SandboxSpec.EnvironmentEntry
+	nil,                                      // 53: openshell.v1.SandboxTemplate.LabelsEntry
+	nil,                                      // 54: openshell.v1.SandboxTemplate.AnnotationsEntry
+	nil,                                      // 55: openshell.v1.SandboxTemplate.EnvironmentEntry
+	nil,                                      // 56: openshell.v1.CreateSandboxRequest.LabelsEntry
+	nil,                                      // 57: openshell.v1.UpdateProviderRequest.CredentialExpiresAtMsEntry
+	nil,                                      // 58: openshell.v1.ExecSandboxRequest.EnvironmentEntry
+	nil,                                      // 59: openshell.v1.ConfigureProviderRefreshRequest.MaterialEntry
+	nil,                                      // 60: openshell.v1.SandboxLogLine.FieldsEntry
+	nil,                                      // 61: openshell.v1.PlatformEvent.MetadataEntry
+	(*v1.ObjectMeta)(nil),                    // 62: openshell.datamodel.v1.ObjectMeta
+	(*v11.SandboxPolicy)(nil),                // 63: openshell.sandbox.v1.SandboxPolicy
+	(*v1.Provider)(nil),                      // 64: openshell.datamodel.v1.Provider
+	(*v11.SettingValue)(nil),                 // 65: openshell.sandbox.v1.SettingValue
+	(*v11.NetworkPolicyRule)(nil),            // 66: openshell.sandbox.v1.NetworkPolicyRule
+	(*v11.L7DenyRule)(nil),                   // 67: openshell.sandbox.v1.L7DenyRule
+	(*v11.L7Rule)(nil),                       // 68: openshell.sandbox.v1.L7Rule
 }
 var file_openshell_v1_openshell_proto_depIdxs = []int32{
-	55, // 0: openshell.v1.Sandbox.metadata:type_name -> openshell.datamodel.v1.ObjectMeta
+	62, // 0: openshell.v1.Sandbox.metadata:type_name -> openshell.datamodel.v1.ObjectMeta
 	3,  // 1: openshell.v1.Sandbox.spec:type_name -> openshell.v1.SandboxSpec
 	5,  // 2: openshell.v1.Sandbox.status:type_name -> openshell.v1.SandboxStatus
-	45, // 3: openshell.v1.SandboxSpec.environment:type_name -> openshell.v1.SandboxSpec.EnvironmentEntry
+	52, // 3: openshell.v1.SandboxSpec.environment:type_name -> openshell.v1.SandboxSpec.EnvironmentEntry
 	4,  // 4: openshell.v1.SandboxSpec.template:type_name -> openshell.v1.SandboxTemplate
-	56, // 5: openshell.v1.SandboxSpec.policy:type_name -> openshell.sandbox.v1.SandboxPolicy
-	46, // 6: openshell.v1.SandboxTemplate.labels:type_name -> openshell.v1.SandboxTemplate.LabelsEntry
-	47, // 7: openshell.v1.SandboxTemplate.annotations:type_name -> openshell.v1.SandboxTemplate.AnnotationsEntry
-	48, // 8: openshell.v1.SandboxTemplate.environment:type_name -> openshell.v1.SandboxTemplate.EnvironmentEntry
+	63, // 5: openshell.v1.SandboxSpec.policy:type_name -> openshell.sandbox.v1.SandboxPolicy
+	53, // 6: openshell.v1.SandboxTemplate.labels:type_name -> openshell.v1.SandboxTemplate.LabelsEntry
+	54, // 7: openshell.v1.SandboxTemplate.annotations:type_name -> openshell.v1.SandboxTemplate.AnnotationsEntry
+	55, // 8: openshell.v1.SandboxTemplate.environment:type_name -> openshell.v1.SandboxTemplate.EnvironmentEntry
 	6,  // 9: openshell.v1.SandboxStatus.conditions:type_name -> openshell.v1.SandboxCondition
 	0,  // 10: openshell.v1.SandboxStatus.phase:type_name -> openshell.v1.SandboxPhase
 	3,  // 11: openshell.v1.CreateSandboxRequest.spec:type_name -> openshell.v1.SandboxSpec
-	49, // 12: openshell.v1.CreateSandboxRequest.labels:type_name -> openshell.v1.CreateSandboxRequest.LabelsEntry
+	56, // 12: openshell.v1.CreateSandboxRequest.labels:type_name -> openshell.v1.CreateSandboxRequest.LabelsEntry
 	2,  // 13: openshell.v1.SandboxResponse.sandbox:type_name -> openshell.v1.Sandbox
-	57, // 14: openshell.v1.CreateProviderRequest.provider:type_name -> openshell.datamodel.v1.Provider
-	57, // 15: openshell.v1.UpdateProviderRequest.provider:type_name -> openshell.datamodel.v1.Provider
-	50, // 16: openshell.v1.UpdateProviderRequest.credential_expires_at_ms:type_name -> openshell.v1.UpdateProviderRequest.CredentialExpiresAtMsEntry
-	57, // 17: openshell.v1.ProviderResponse.provider:type_name -> openshell.datamodel.v1.Provider
-	57, // 18: openshell.v1.ListProvidersResponse.providers:type_name -> openshell.datamodel.v1.Provider
-	51, // 19: openshell.v1.ExecSandboxRequest.environment:type_name -> openshell.v1.ExecSandboxRequest.EnvironmentEntry
+	64, // 14: openshell.v1.CreateProviderRequest.provider:type_name -> openshell.datamodel.v1.Provider
+	64, // 15: openshell.v1.UpdateProviderRequest.provider:type_name -> openshell.datamodel.v1.Provider
+	57, // 16: openshell.v1.UpdateProviderRequest.credential_expires_at_ms:type_name -> openshell.v1.UpdateProviderRequest.CredentialExpiresAtMsEntry
+	64, // 17: openshell.v1.ProviderResponse.provider:type_name -> openshell.datamodel.v1.Provider
+	64, // 18: openshell.v1.ListProvidersResponse.providers:type_name -> openshell.datamodel.v1.Provider
+	58, // 19: openshell.v1.ExecSandboxRequest.environment:type_name -> openshell.v1.ExecSandboxRequest.EnvironmentEntry
 	22, // 20: openshell.v1.ExecSandboxEvent.stdout:type_name -> openshell.v1.ExecSandboxStdout
 	23, // 21: openshell.v1.ExecSandboxEvent.stderr:type_name -> openshell.v1.ExecSandboxStderr
 	24, // 22: openshell.v1.ExecSandboxEvent.exit:type_name -> openshell.v1.ExecSandboxExit
-	56, // 23: openshell.v1.UpdateConfigRequest.policy:type_name -> openshell.sandbox.v1.SandboxPolicy
-	58, // 24: openshell.v1.UpdateConfigRequest.setting_value:type_name -> openshell.sandbox.v1.SettingValue
-	1,  // 25: openshell.v1.ProviderCredentialRefreshStatus.strategy:type_name -> openshell.v1.ProviderCredentialRefreshStrategy
-	1,  // 26: openshell.v1.ConfigureProviderRefreshRequest.strategy:type_name -> openshell.v1.ProviderCredentialRefreshStrategy
-	52, // 27: openshell.v1.ConfigureProviderRefreshRequest.material:type_name -> openshell.v1.ConfigureProviderRefreshRequest.MaterialEntry
-	27, // 28: openshell.v1.ConfigureProviderRefreshResponse.status:type_name -> openshell.v1.ProviderCredentialRefreshStatus
-	27, // 29: openshell.v1.RotateProviderCredentialResponse.status:type_name -> openshell.v1.ProviderCredentialRefreshStatus
-	36, // 30: openshell.v1.TcpForwardInit.ssh:type_name -> openshell.v1.SshRelayTarget
-	37, // 31: openshell.v1.TcpForwardInit.tcp:type_name -> openshell.v1.TcpRelayTarget
-	34, // 32: openshell.v1.TcpForwardFrame.init:type_name -> openshell.v1.TcpForwardInit
-	2,  // 33: openshell.v1.SandboxStreamEvent.sandbox:type_name -> openshell.v1.Sandbox
-	40, // 34: openshell.v1.SandboxStreamEvent.log:type_name -> openshell.v1.SandboxLogLine
-	41, // 35: openshell.v1.SandboxStreamEvent.event:type_name -> openshell.v1.PlatformEvent
-	42, // 36: openshell.v1.SandboxStreamEvent.warning:type_name -> openshell.v1.SandboxStreamWarning
-	53, // 37: openshell.v1.SandboxLogLine.fields:type_name -> openshell.v1.SandboxLogLine.FieldsEntry
-	54, // 38: openshell.v1.PlatformEvent.metadata:type_name -> openshell.v1.PlatformEvent.MetadataEntry
-	40, // 39: openshell.v1.GetSandboxLogsResponse.logs:type_name -> openshell.v1.SandboxLogLine
-	7,  // 40: openshell.v1.OpenShell.CreateSandbox:input_type -> openshell.v1.CreateSandboxRequest
-	8,  // 41: openshell.v1.OpenShell.GetSandbox:input_type -> openshell.v1.GetSandboxRequest
-	9,  // 42: openshell.v1.OpenShell.DeleteSandbox:input_type -> openshell.v1.DeleteSandboxRequest
-	32, // 43: openshell.v1.OpenShell.CreateSshSession:input_type -> openshell.v1.CreateSshSessionRequest
-	20, // 44: openshell.v1.OpenShell.ExecSandbox:input_type -> openshell.v1.ExecSandboxRequest
-	35, // 45: openshell.v1.OpenShell.ForwardTcp:input_type -> openshell.v1.TcpForwardFrame
-	12, // 46: openshell.v1.OpenShell.CreateProvider:input_type -> openshell.v1.CreateProviderRequest
-	15, // 47: openshell.v1.OpenShell.UpdateProvider:input_type -> openshell.v1.UpdateProviderRequest
-	13, // 48: openshell.v1.OpenShell.GetProvider:input_type -> openshell.v1.GetProviderRequest
-	14, // 49: openshell.v1.OpenShell.ListProviders:input_type -> openshell.v1.ListProvidersRequest
-	25, // 50: openshell.v1.OpenShell.UpdateConfig:input_type -> openshell.v1.UpdateConfigRequest
-	28, // 51: openshell.v1.OpenShell.ConfigureProviderRefresh:input_type -> openshell.v1.ConfigureProviderRefreshRequest
-	30, // 52: openshell.v1.OpenShell.RotateProviderCredential:input_type -> openshell.v1.RotateProviderCredentialRequest
-	38, // 53: openshell.v1.OpenShell.WatchSandbox:input_type -> openshell.v1.WatchSandboxRequest
-	43, // 54: openshell.v1.OpenShell.GetSandboxLogs:input_type -> openshell.v1.GetSandboxLogsRequest
-	10, // 55: openshell.v1.OpenShell.CreateSandbox:output_type -> openshell.v1.SandboxResponse
-	10, // 56: openshell.v1.OpenShell.GetSandbox:output_type -> openshell.v1.SandboxResponse
-	11, // 57: openshell.v1.OpenShell.DeleteSandbox:output_type -> openshell.v1.DeleteSandboxResponse
-	33, // 58: openshell.v1.OpenShell.CreateSshSession:output_type -> openshell.v1.CreateSshSessionResponse
-	21, // 59: openshell.v1.OpenShell.ExecSandbox:output_type -> openshell.v1.ExecSandboxEvent
-	35, // 60: openshell.v1.OpenShell.ForwardTcp:output_type -> openshell.v1.TcpForwardFrame
-	16, // 61: openshell.v1.OpenShell.CreateProvider:output_type -> openshell.v1.ProviderResponse
-	16, // 62: openshell.v1.OpenShell.UpdateProvider:output_type -> openshell.v1.ProviderResponse
-	16, // 63: openshell.v1.OpenShell.GetProvider:output_type -> openshell.v1.ProviderResponse
-	17, // 64: openshell.v1.OpenShell.ListProviders:output_type -> openshell.v1.ListProvidersResponse
-	26, // 65: openshell.v1.OpenShell.UpdateConfig:output_type -> openshell.v1.UpdateConfigResponse
-	29, // 66: openshell.v1.OpenShell.ConfigureProviderRefresh:output_type -> openshell.v1.ConfigureProviderRefreshResponse
-	31, // 67: openshell.v1.OpenShell.RotateProviderCredential:output_type -> openshell.v1.RotateProviderCredentialResponse
-	39, // 68: openshell.v1.OpenShell.WatchSandbox:output_type -> openshell.v1.SandboxStreamEvent
-	44, // 69: openshell.v1.OpenShell.GetSandboxLogs:output_type -> openshell.v1.GetSandboxLogsResponse
-	55, // [55:70] is the sub-list for method output_type
-	40, // [40:55] is the sub-list for method input_type
-	40, // [40:40] is the sub-list for extension type_name
-	40, // [40:40] is the sub-list for extension extendee
-	0,  // [0:40] is the sub-list for field type_name
+	63, // 23: openshell.v1.UpdateConfigRequest.policy:type_name -> openshell.sandbox.v1.SandboxPolicy
+	65, // 24: openshell.v1.UpdateConfigRequest.setting_value:type_name -> openshell.sandbox.v1.SettingValue
+	26, // 25: openshell.v1.UpdateConfigRequest.merge_operations:type_name -> openshell.v1.PolicyMergeOperation
+	27, // 26: openshell.v1.PolicyMergeOperation.add_rule:type_name -> openshell.v1.AddNetworkRule
+	28, // 27: openshell.v1.PolicyMergeOperation.remove_endpoint:type_name -> openshell.v1.RemoveNetworkEndpoint
+	29, // 28: openshell.v1.PolicyMergeOperation.remove_rule:type_name -> openshell.v1.RemoveNetworkRule
+	30, // 29: openshell.v1.PolicyMergeOperation.add_deny_rules:type_name -> openshell.v1.AddDenyRules
+	31, // 30: openshell.v1.PolicyMergeOperation.add_allow_rules:type_name -> openshell.v1.AddAllowRules
+	32, // 31: openshell.v1.PolicyMergeOperation.remove_binary:type_name -> openshell.v1.RemoveNetworkBinary
+	66, // 32: openshell.v1.AddNetworkRule.rule:type_name -> openshell.sandbox.v1.NetworkPolicyRule
+	67, // 33: openshell.v1.AddDenyRules.deny_rules:type_name -> openshell.sandbox.v1.L7DenyRule
+	68, // 34: openshell.v1.AddAllowRules.rules:type_name -> openshell.sandbox.v1.L7Rule
+	1,  // 35: openshell.v1.ProviderCredentialRefreshStatus.strategy:type_name -> openshell.v1.ProviderCredentialRefreshStrategy
+	1,  // 36: openshell.v1.ConfigureProviderRefreshRequest.strategy:type_name -> openshell.v1.ProviderCredentialRefreshStrategy
+	59, // 37: openshell.v1.ConfigureProviderRefreshRequest.material:type_name -> openshell.v1.ConfigureProviderRefreshRequest.MaterialEntry
+	34, // 38: openshell.v1.ConfigureProviderRefreshResponse.status:type_name -> openshell.v1.ProviderCredentialRefreshStatus
+	34, // 39: openshell.v1.RotateProviderCredentialResponse.status:type_name -> openshell.v1.ProviderCredentialRefreshStatus
+	43, // 40: openshell.v1.TcpForwardInit.ssh:type_name -> openshell.v1.SshRelayTarget
+	44, // 41: openshell.v1.TcpForwardInit.tcp:type_name -> openshell.v1.TcpRelayTarget
+	41, // 42: openshell.v1.TcpForwardFrame.init:type_name -> openshell.v1.TcpForwardInit
+	2,  // 43: openshell.v1.SandboxStreamEvent.sandbox:type_name -> openshell.v1.Sandbox
+	47, // 44: openshell.v1.SandboxStreamEvent.log:type_name -> openshell.v1.SandboxLogLine
+	48, // 45: openshell.v1.SandboxStreamEvent.event:type_name -> openshell.v1.PlatformEvent
+	49, // 46: openshell.v1.SandboxStreamEvent.warning:type_name -> openshell.v1.SandboxStreamWarning
+	60, // 47: openshell.v1.SandboxLogLine.fields:type_name -> openshell.v1.SandboxLogLine.FieldsEntry
+	61, // 48: openshell.v1.PlatformEvent.metadata:type_name -> openshell.v1.PlatformEvent.MetadataEntry
+	47, // 49: openshell.v1.GetSandboxLogsResponse.logs:type_name -> openshell.v1.SandboxLogLine
+	7,  // 50: openshell.v1.OpenShell.CreateSandbox:input_type -> openshell.v1.CreateSandboxRequest
+	8,  // 51: openshell.v1.OpenShell.GetSandbox:input_type -> openshell.v1.GetSandboxRequest
+	9,  // 52: openshell.v1.OpenShell.DeleteSandbox:input_type -> openshell.v1.DeleteSandboxRequest
+	39, // 53: openshell.v1.OpenShell.CreateSshSession:input_type -> openshell.v1.CreateSshSessionRequest
+	20, // 54: openshell.v1.OpenShell.ExecSandbox:input_type -> openshell.v1.ExecSandboxRequest
+	42, // 55: openshell.v1.OpenShell.ForwardTcp:input_type -> openshell.v1.TcpForwardFrame
+	12, // 56: openshell.v1.OpenShell.CreateProvider:input_type -> openshell.v1.CreateProviderRequest
+	15, // 57: openshell.v1.OpenShell.UpdateProvider:input_type -> openshell.v1.UpdateProviderRequest
+	13, // 58: openshell.v1.OpenShell.GetProvider:input_type -> openshell.v1.GetProviderRequest
+	14, // 59: openshell.v1.OpenShell.ListProviders:input_type -> openshell.v1.ListProvidersRequest
+	25, // 60: openshell.v1.OpenShell.UpdateConfig:input_type -> openshell.v1.UpdateConfigRequest
+	35, // 61: openshell.v1.OpenShell.ConfigureProviderRefresh:input_type -> openshell.v1.ConfigureProviderRefreshRequest
+	37, // 62: openshell.v1.OpenShell.RotateProviderCredential:input_type -> openshell.v1.RotateProviderCredentialRequest
+	45, // 63: openshell.v1.OpenShell.WatchSandbox:input_type -> openshell.v1.WatchSandboxRequest
+	50, // 64: openshell.v1.OpenShell.GetSandboxLogs:input_type -> openshell.v1.GetSandboxLogsRequest
+	10, // 65: openshell.v1.OpenShell.CreateSandbox:output_type -> openshell.v1.SandboxResponse
+	10, // 66: openshell.v1.OpenShell.GetSandbox:output_type -> openshell.v1.SandboxResponse
+	11, // 67: openshell.v1.OpenShell.DeleteSandbox:output_type -> openshell.v1.DeleteSandboxResponse
+	40, // 68: openshell.v1.OpenShell.CreateSshSession:output_type -> openshell.v1.CreateSshSessionResponse
+	21, // 69: openshell.v1.OpenShell.ExecSandbox:output_type -> openshell.v1.ExecSandboxEvent
+	42, // 70: openshell.v1.OpenShell.ForwardTcp:output_type -> openshell.v1.TcpForwardFrame
+	16, // 71: openshell.v1.OpenShell.CreateProvider:output_type -> openshell.v1.ProviderResponse
+	16, // 72: openshell.v1.OpenShell.UpdateProvider:output_type -> openshell.v1.ProviderResponse
+	16, // 73: openshell.v1.OpenShell.GetProvider:output_type -> openshell.v1.ProviderResponse
+	17, // 74: openshell.v1.OpenShell.ListProviders:output_type -> openshell.v1.ListProvidersResponse
+	33, // 75: openshell.v1.OpenShell.UpdateConfig:output_type -> openshell.v1.UpdateConfigResponse
+	36, // 76: openshell.v1.OpenShell.ConfigureProviderRefresh:output_type -> openshell.v1.ConfigureProviderRefreshResponse
+	38, // 77: openshell.v1.OpenShell.RotateProviderCredential:output_type -> openshell.v1.RotateProviderCredentialResponse
+	46, // 78: openshell.v1.OpenShell.WatchSandbox:output_type -> openshell.v1.SandboxStreamEvent
+	51, // 79: openshell.v1.OpenShell.GetSandboxLogs:output_type -> openshell.v1.GetSandboxLogsResponse
+	65, // [65:80] is the sub-list for method output_type
+	50, // [50:65] is the sub-list for method input_type
+	50, // [50:50] is the sub-list for extension type_name
+	50, // [50:50] is the sub-list for extension extendee
+	0,  // [0:50] is the sub-list for field type_name
 }
 
 func init() { file_openshell_v1_openshell_proto_init() }
@@ -3407,16 +3941,24 @@ func file_openshell_v1_openshell_proto_init() {
 		(*ExecSandboxEvent_Stderr)(nil),
 		(*ExecSandboxEvent_Exit)(nil),
 	}
-	file_openshell_v1_openshell_proto_msgTypes[26].OneofWrappers = []any{}
-	file_openshell_v1_openshell_proto_msgTypes[32].OneofWrappers = []any{
+	file_openshell_v1_openshell_proto_msgTypes[24].OneofWrappers = []any{
+		(*PolicyMergeOperation_AddRule)(nil),
+		(*PolicyMergeOperation_RemoveEndpoint)(nil),
+		(*PolicyMergeOperation_RemoveRule)(nil),
+		(*PolicyMergeOperation_AddDenyRules)(nil),
+		(*PolicyMergeOperation_AddAllowRules)(nil),
+		(*PolicyMergeOperation_RemoveBinary)(nil),
+	}
+	file_openshell_v1_openshell_proto_msgTypes[33].OneofWrappers = []any{}
+	file_openshell_v1_openshell_proto_msgTypes[39].OneofWrappers = []any{
 		(*TcpForwardInit_Ssh)(nil),
 		(*TcpForwardInit_Tcp)(nil),
 	}
-	file_openshell_v1_openshell_proto_msgTypes[33].OneofWrappers = []any{
+	file_openshell_v1_openshell_proto_msgTypes[40].OneofWrappers = []any{
 		(*TcpForwardFrame_Init)(nil),
 		(*TcpForwardFrame_Data)(nil),
 	}
-	file_openshell_v1_openshell_proto_msgTypes[37].OneofWrappers = []any{
+	file_openshell_v1_openshell_proto_msgTypes[44].OneofWrappers = []any{
 		(*SandboxStreamEvent_Sandbox)(nil),
 		(*SandboxStreamEvent_Log)(nil),
 		(*SandboxStreamEvent_Event)(nil),
@@ -3428,7 +3970,7 @@ func file_openshell_v1_openshell_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_openshell_v1_openshell_proto_rawDesc), len(file_openshell_v1_openshell_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   53,
+			NumMessages:   60,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
