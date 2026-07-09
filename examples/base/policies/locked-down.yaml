@@ -1,0 +1,28 @@
+kind: Policy
+name: locked-down
+spec:
+  version: 1
+
+  filesystem:
+    include_workdir: true
+    read_only:
+      - /usr
+      - /lib
+      - /opt
+      - /proc
+      - /dev/urandom
+      - /app
+      - /runner
+      - /etc
+      - /var/log
+    read_write:
+      - /sandbox
+      - /tmp
+      - /dev/null
+
+  landlock:
+    compatibility: best_effort
+
+  process:
+    run_as_user: sandbox
+    run_as_group: sandbox

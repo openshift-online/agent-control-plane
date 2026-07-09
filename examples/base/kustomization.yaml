@@ -1,6 +1,7 @@
 kind: Kustomization
 resources:
   - policies/permissive.yaml
+  - policies/locked-down.yaml
   - agents/hello-world.yaml
   - agents/repo-clone-workspace.yaml
   - agents/security-reviewer.yaml

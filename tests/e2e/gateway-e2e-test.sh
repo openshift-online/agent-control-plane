@@ -193,7 +193,7 @@ if [ "$E2E_GW_CLEANUP" = "true" ]; then
   fi
 
   # Cleanup: delete the test project (namespace will be deprovisioned by project reconciler)
-  if $ACPCTL delete project "$E2E_GW_PROJECT" >/dev/null 2>&1; then
+  if $ACPCTL delete project "$E2E_GW_PROJECT" --yes >/dev/null 2>&1; then
     echo "  Cleaned up project '${E2E_GW_PROJECT}'"
   else
     echo "  Could not delete project '${E2E_GW_PROJECT}' (non-fatal)"
@@ -464,13 +464,13 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fi
 
   else
-    skip "Sandbox configuration verification" "sandbox pod not ready (phase: ${POD_PHASE:-unknown})"
+    fail "Sandbox configuration verification — sandbox pod not ready (phase: ${POD_PHASE:-unknown})"
   fi
 else
-  skip "Sandbox configuration verification" "session not created"
+  fail "Sandbox configuration verification — session not created"
 fi
 
-section "10. Repository payload verification"
+section "11. Repository payload verification"
 
 REPO_SESSION_ID=""
 if [ -n "$REPO_AGENT_ID" ]; then
@@ -572,11 +572,118 @@ else
   fail "Repo payload verification requires agent 'repo-clone-workspace' (not found)"
 fi
 
+section "12. Network policy enforcement"
+
+LOCKED_SESSION_ID=""
+
+# 11a. Apply locked-down policy and test agent
+$ACPCTL apply -f "$REPO_ROOT/examples/base/policies/locked-down.yaml" \
+  --project "$TENANT" >/dev/null 2>&1 && \
+  pass "Locked-down policy applied to ${TENANT}" || \
+  fail "Could not apply locked-down policy"
+
+$ACPCTL apply -k "$SCRIPT_DIR/fixtures/network-policy-test" \
+  --project "$TENANT" >/dev/null 2>&1 && \
+  pass "Network test agent applied to ${TENANT}" || \
+  fail "Could not apply network test agent"
+
+# Look up the locked-down agent
+AGENTS_RESP=$(api GET "/api/ambient/v1/projects/${PROJECT_ID}/agents?size=50" || echo "")
+LOCKED_AGENT_ID=$(echo "$AGENTS_RESP" \
+  | jq -r '.items[] | select(.name == "network-test-locked-down") | .id' 2>/dev/null | head -1 || echo "")
+
+if [ -n "$LOCKED_AGENT_ID" ]; then
+  # 11b. Start locked-down session and wait for sandbox pod
+  LOCKED_START_RESP=$(api POST "/api/ambient/v1/projects/${PROJECT_ID}/agents/${LOCKED_AGENT_ID}/start" \
+    -d '{"prompt": "gateway-e2e-test: network policy enforcement"}' || echo "")
+
+  LOCKED_SESSION_ID=$(echo "$LOCKED_START_RESP" \
+    | jq -r '.session.id // empty' 2>/dev/null || echo "")
+
+  if [ -n "$LOCKED_SESSION_ID" ]; then
+    pass "Locked-down session started (id: ${LOCKED_SESSION_ID})"
+
+    LOCKED_SBX_NAME="session-$(echo "${LOCKED_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
+
+    LOCKED_POD_READY=false
+    for i in $(seq 1 30); do
+      LOCKED_POD_PHASE=$(kubectl get pod "$LOCKED_SBX_NAME" -n "$TENANT" \
+        -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+      if [ "$LOCKED_POD_PHASE" = "Running" ]; then
+        LOCKED_POD_READY=true
+        break
+      fi
+      sleep 2
+    done
+
+    if [ "$LOCKED_POD_READY" = "true" ]; then
+      pass "Locked-down sandbox pod '${LOCKED_SBX_NAME}' is running"
+
+      # Wait for session to reach Running phase so sandbox is fully initialized
+      LOCKED_SESSION_RUNNING=false
+      for i in $(seq 1 30); do
+        LOCKED_PHASE=$(api GET "/api/ambient/v1/sessions/${LOCKED_SESSION_ID}" 2>/dev/null \
+          | jq -r '.phase // empty' 2>/dev/null || echo "")
+        if [ "$LOCKED_PHASE" = "Running" ] || [ "$LOCKED_PHASE" = "Succeeded" ] || [ "$LOCKED_PHASE" = "Failed" ]; then
+          LOCKED_SESSION_RUNNING=true
+          break
+        fi
+        sleep 2
+      done
+
+      # 11c. Verify locked-down policy blocks external network access
+      if [ "$LOCKED_SESSION_RUNNING" = "true" ]; then
+        LOCKED_CURL_EXIT=0
+        kubectl exec -n "$TENANT" "$LOCKED_SBX_NAME" -- \
+          curl --connect-timeout 5 -s -o /dev/null https://github.com 2>/dev/null || LOCKED_CURL_EXIT=$?
+
+        if [ "$LOCKED_CURL_EXIT" -ne 0 ]; then
+          pass "Locked-down policy blocks external network (curl exit=${LOCKED_CURL_EXIT})"
+        else
+          fail "Locked-down policy did NOT block curl to github.com (expected failure)"
+        fi
+      else
+        fail "Locked-down network test — session not Running (phase: ${LOCKED_PHASE:-unknown})"
+      fi
+    else
+      fail "Locked-down network test — sandbox pod not ready (phase: ${LOCKED_POD_PHASE:-unknown})"
+    fi
+  else
+    fail "Failed to start locked-down session"
+    echo "  Response: $(echo "$LOCKED_START_RESP" | head -c 200)"
+  fi
+else
+  fail "Agent 'network-test-locked-down' not found after apply"
+fi
+
+# 11d. Verify permissive policy allows external network access
+# Use the hello-world session sandbox from section 8 (permissive policy)
+if [ -n "${SBX_NAME:-}" ]; then
+  PERM_POD_PHASE=$(kubectl get pod "$SBX_NAME" -n "$TENANT" \
+    -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+
+  if [ "$PERM_POD_PHASE" = "Running" ]; then
+    PERM_CURL_EXIT=0
+    kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+      curl --connect-timeout 5 -s -o /dev/null https://github.com 2>/dev/null || PERM_CURL_EXIT=$?
+
+    if [ "$PERM_CURL_EXIT" -eq 0 ]; then
+      pass "Permissive policy allows external network (curl to github.com succeeded)"
+    else
+      fail "Permissive policy blocked curl to github.com (exit=${PERM_CURL_EXIT})"
+    fi
+  else
+    fail "Permissive network test — hello-world sandbox pod not running (phase: ${PERM_POD_PHASE:-unknown})"
+  fi
+else
+  fail "Permissive network test — hello-world session was not created"
+fi
+
 section "Cleanup"
 
 if [ "$SKIP_CLEANUP" = "true" ]; then
   echo -e "  ${YELLOW}Skipping cleanup (--skip-cleanup)${NC}"
-  for _sid in "$CREATED_SESSION_ID" "$REPO_SESSION_ID"; do
+  for _sid in "$CREATED_SESSION_ID" "$REPO_SESSION_ID" "$LOCKED_SESSION_ID"; do
     [ -z "$_sid" ] && continue
     _pod="session-$(echo "${_sid:0:40}" | tr '[:upper:]' '[:lower:]')"
     _phase=$(kubectl get pod "$_pod" -n "$TENANT" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
@@ -596,6 +703,11 @@ else
     api DELETE "/api/ambient/v1/sessions/${REPO_SESSION_ID}" >/dev/null 2>&1 && \
       echo "  Deleted repo session ${REPO_SESSION_ID}" || \
       echo "  Could not delete repo session (non-fatal)"
+  fi
+  if [ -n "$LOCKED_SESSION_ID" ]; then
+    api DELETE "/api/ambient/v1/sessions/${LOCKED_SESSION_ID}" >/dev/null 2>&1 && \
+      echo "  Deleted locked-down session ${LOCKED_SESSION_ID}" || \
+      echo "  Could not delete locked-down session (non-fatal)"
   fi
 fi
 

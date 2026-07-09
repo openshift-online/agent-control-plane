@@ -1,0 +1,4 @@
+kind: Agent
+name: network-test-locked-down
+sandbox_policy: locked-down
+prompt: Network policy e2e test agent — sandbox only, no LLM interaction needed.

@@ -779,7 +779,7 @@ func applyPolicy(ctx context.Context, client *sdkclient.Client, doc kustomize.Re
 		patch := sdktypes.NewPolicyPatchBuilder()
 		changed := false
 		if specJSON != "" && specJSON != match.Spec {
-			patch = patch.Spec(specJSON)
+			sdktypes.PolicyPatchSpec(patch, specJSON)
 			changed = true
 		}
 		if len(doc.Labels) > 0 {

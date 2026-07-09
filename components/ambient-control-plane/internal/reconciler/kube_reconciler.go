@@ -376,7 +376,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 			payloads = agent.Payloads
 		}
 		payloads = r.appendInitialPromptPayload(ctx, session, sdk, payloads)
-		go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads)
+		go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads, nil)
 		r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 		return nil
 	}
@@ -437,27 +437,50 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		payloads = agent.Payloads
 	}
 	payloads = r.appendInitialPromptPayload(ctx, session, sdk, payloads)
-	go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads)
+	go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads, sandboxPolicy)
 
 	r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 	return nil
 }
 
-func (r *SimpleKubeReconciler) injectACPInternalPolicy(ctx context.Context, namespace, sandboxName string) error {
-	resp, err := r.gateway.UpdateConfig(ctx, namespace, &openshellpb.UpdateConfigRequest{
-		Name:            sandboxName,
-		MergeOperations: []*openshellpb.PolicyMergeOperation{acpInternalMergeOperation(r.cfg.CPRuntimeNamespace)},
-	})
-	if err != nil {
-		return fmt.Errorf("UpdateConfig merge for ACP internal policy: %w", err)
+func (r *SimpleKubeReconciler) injectACPInternalPolicy(ctx context.Context, namespace, sandboxName string, sandboxPolicy *sandboxpb.SandboxPolicy) error {
+	// The gateway enforces that policy, setting_key, and merge_operations
+	// are mutually exclusive in a single UpdateConfig request. When the
+	// agent has a custom policy we need two calls: first replace the
+	// non-network fields (filesystem, process, landlock) via the Policy
+	// field, then use merge operations to swap out network rules.
+	if sandboxPolicy != nil {
+		policyReq := &openshellpb.UpdateConfigRequest{
+			Name:   sandboxName,
+			Policy: sandboxPolicy,
+		}
+		if _, err := r.gateway.UpdateConfig(ctx, namespace, policyReq); err != nil {
+			return fmt.Errorf("UpdateConfig policy replacement: %w", err)
+		}
 	}
+
+	var mergeOps []*openshellpb.PolicyMergeOperation
+	if sandboxPolicy != nil {
+		mergeOps = policyReplacementOperations(r.cfg.CPRuntimeNamespace, sandboxPolicy)
+	} else {
+		mergeOps = platformMergeOperations(r.cfg.CPRuntimeNamespace)
+	}
+
+	mergeReq := &openshellpb.UpdateConfigRequest{
+		Name:            sandboxName,
+		MergeOperations: mergeOps,
+	}
+	if _, err := r.gateway.UpdateConfig(ctx, namespace, mergeReq); err != nil {
+		return fmt.Errorf("UpdateConfig merge operations: %w", err)
+	}
+
 	r.logger.Info().
 		Str("sandbox", sandboxName).
 		Str("namespace", namespace).
 		Str("cp_namespace", r.cfg.CPRuntimeNamespace).
-		Uint32("policy_version", resp.GetVersion()).
-		Str("policy_hash", resp.GetPolicyHash()).
-		Msg("_acp_internal policy merge confirmed by gateway")
+		Bool("policy_replacement", sandboxPolicy != nil).
+		Int("merge_ops", len(mergeOps)).
+		Msg("injected platform policy via merge operation")
 	return nil
 }
 
@@ -631,7 +654,7 @@ func (r *SimpleKubeReconciler) sandboxReadinessTimeout() time.Duration {
 	return 600 * time.Second
 }
 
-func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string, sdk *sdkclient.Client, execEnv map[string]string, payloads []types.Payload) {
+func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string, sdk *sdkclient.Client, execEnv map[string]string, payloads []types.Payload, sandboxPolicy *sandboxpb.SandboxPolicy) {
 	timeout := r.sandboxReadinessTimeout()
 	pollCtx, pollCancel := context.WithTimeout(context.Background(), timeout)
 	defer pollCancel()
@@ -781,11 +804,13 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				Str("session_id", sessionID).
 				Msg("sandbox is ready, configuring policy")
 
-			// Inject _acp_internal policy AFTER the sandbox is READY.
+			// Inject platform policy AFTER the sandbox is READY.
 			// The supervisor syncs the image's default policy on boot;
 			// injecting earlier would merge onto an empty base, squashing
-			// the default rules.
-			if err := r.injectACPInternalPolicy(pollCtx, namespace, sbxName); err != nil {
+			// the default rules. When an agent-specific policy is set, we
+			// replace the image default; platform rules (_acp_internal,
+			// _mlflow_rh) are always merged on top.
+			if err := r.injectACPInternalPolicy(pollCtx, namespace, sbxName, sandboxPolicy); err != nil {
 				r.logger.Error().Err(err).Str("sandbox", sbxName).Str("session_id", sessionID).Msg("failed to inject ACP internal policy")
 				failSession(fmt.Sprintf("failed to inject ACP internal policy: %v", err))
 				return
