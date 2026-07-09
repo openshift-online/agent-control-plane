@@ -533,61 +533,72 @@ The agent YAML SHALL reference a sandbox policy by name. The control plane SHALL
 
 ---
 
-### Requirement: ACP Internal Policy Injection
+### Requirement: Platform Policy Injection
 
-The control plane SHALL inject the `_acp_internal` network policy rule **after** sandbox creation using OpenShell's `UpdateConfig` RPC with `merge_operations`, NOT by embedding the rule in the `CreateSandboxRequest.Spec.Policy` field. This preserves the sandbox's default policy while ensuring the runner can reach ACP platform services.
+The control plane SHALL inject platform-required network policy rules (`_acp_internal` and `_mlflow_rh`) into every sandbox to ensure runner connectivity to ACP services and observability infrastructure. Injection uses a **dual approach**:
 
-**Rationale:** Sandboxes have a default policy applied at creation time by OpenShell (based on the sandbox image and gateway configuration). Including `_acp_internal` in the `CreateSandbox` request's `Policy` field replaces the entire default policy, stripping non-ACP rules the sandbox depends on. The `merge_operations` field on `UpdateConfig` (equivalent to `openshell policy update --add-allow`) performs an additive merge — only the targeted rule is added or replaced while all other rules are preserved.
+1. **At `CreateSandbox` time** — when an agent declares a `sandbox_policy`, the control plane calls `mergePlatformRules()` to inject both rules directly into the resolved `SandboxPolicy` before passing it to `CreateSandbox`. The gateway receives the complete policy upfront.
+2. **Post-ready via `UpdateConfig`** — after the sandbox reports READY, the control plane calls `UpdateConfig` with `platformMergeOperations()` to additively merge both rules on top of whichever policy the sandbox is running (image default or agent-specific). This ensures platform rules are always present, even if the image default policy was applied at boot.
 
-#### Scenario: ACP internal policy injected after sandbox creation
+**Platform rules:**
 
-- GIVEN a sandbox has been created via `CreateSandbox`
-- AND the sandbox has received its default policy from OpenShell
-- WHEN the control plane prepares the sandbox for runner execution
-- THEN it SHALL call `UpdateConfig` with `merge_operations` to add the `_acp_internal` network policy rule
-- AND the `_acp_internal` rule SHALL include endpoints for the control plane (port 8080) and API server (ports 8000, 9000) using the deployment namespace
-- AND the `_acp_internal` rule SHALL include allowed binaries for the runner's Python processes
-- AND the `CreateSandboxRequest.Spec.Policy` field SHALL NOT contain the `_acp_internal` rule
+| Rule Key | Purpose | Endpoints |
+|----------|---------|-----------|
+| `_acp_internal` | Runner connectivity to control plane and API server | `ambient-control-plane.{ns}.svc:8080`, `ambient-api-server.{ns}.svc:8000`, `ambient-api-server.{ns}.svc:9000` (+ `.cluster.local` variants) |
+| `_mlflow_rh` | MLflow tracking for observability | `mlflow.apps.int.spoke.prod.us-west-2.aws.paas.redhat.com:443` |
+
+Both rules restrict allowed binaries to the runner's Python processes (`/sandbox/.venv/bin/python`, `/sandbox/.venv/bin/python3`, `/sandbox/.venv/bin/uvicorn`). The `_acp_internal` rule additionally allows `/sandbox/.uv/python/cpython-*/bin/python*`.
+
+**Rationale:** Sandboxes have a default policy applied at creation time by OpenShell (based on the sandbox image and gateway configuration). When an agent declares a `sandbox_policy`, the control plane replaces the image default by passing the agent's policy to `CreateSandbox`. Platform rules are merged into this policy before the RPC call so the gateway receives a complete, self-contained policy. The post-ready `UpdateConfig` merge (equivalent to `openshell policy update --add-allow`) provides a safety net — it additively merges platform rules on top of whatever policy the sandbox is running, ensuring they survive regardless of boot sequencing.
+
+#### Scenario: Platform rules merged into agent-specific policy at CreateSandbox
+
+- GIVEN an agent declares `sandbox_policy: restricted`
+- AND the `restricted` policy is resolved from the project
+- WHEN the control plane prepares the `CreateSandboxRequest`
+- THEN it SHALL call `mergePlatformRules()` to inject `_acp_internal` and `_mlflow_rh` into the policy's `NetworkPolicies` map
+- AND the merged policy SHALL be passed to `CreateSandbox` in the request's `Policy` field
+- AND the gateway SHALL receive both the agent's declared rules and platform rules in a single policy
+
+#### Scenario: Platform rules injected post-ready via UpdateConfig
+
+- GIVEN a sandbox has been created and reports READY
+- WHEN the control plane runs `execAfterReady` to configure the sandbox
+- THEN it SHALL call `UpdateConfig` with `platformMergeOperations()` containing `AddNetworkRule` operations for both `_acp_internal` and `_mlflow_rh`
+- AND the merge operations SHALL be additive — existing policy rules are preserved
 
 #### Scenario: Default sandbox policy preserved
 
 - GIVEN a sandbox's default policy contains rules `default_dns` and `default_metrics`
-- WHEN the control plane injects `_acp_internal` via `UpdateConfig` merge operations
-- THEN the sandbox's effective policy SHALL contain `default_dns`, `default_metrics`, AND `_acp_internal`
+- WHEN the control plane injects platform rules via `UpdateConfig` merge operations
+- THEN the sandbox's effective policy SHALL contain `default_dns`, `default_metrics`, `_acp_internal`, AND `_mlflow_rh`
 - AND the `default_dns` and `default_metrics` rules SHALL be unmodified
 
-#### Scenario: Existing `_acp_internal` in default policy is overwritten
+#### Scenario: Existing platform rules are overwritten
 
-- GIVEN a sandbox's default policy already contains an `_acp_internal` rule (e.g., with placeholder endpoints)
-- WHEN the control plane injects `_acp_internal` via `UpdateConfig` merge operations
-- THEN the control plane's `_acp_internal` rule SHALL replace the existing `_acp_internal` entry
-- AND all other rules in the default policy SHALL be preserved
-
-#### Scenario: Agent with named policy plus ACP internal injection
-
-- GIVEN an agent declares `sandbox_policy: restricted`
-- AND the `restricted` policy is passed to `CreateSandbox`
-- WHEN the sandbox is created
-- THEN the control plane SHALL subsequently inject `_acp_internal` via `UpdateConfig` merge operations
-- AND the `restricted` policy's rules SHALL be preserved alongside `_acp_internal`
+- GIVEN a sandbox's policy already contains an `_acp_internal` or `_mlflow_rh` rule (e.g., with placeholder endpoints)
+- WHEN the control plane injects platform rules
+- THEN the control plane's rules SHALL replace the existing entries
+- AND all other rules in the policy SHALL be preserved
 
 #### Scenario: Agent with no named policy
 
 - GIVEN an agent declaration with no `sandbox_policy` field
 - WHEN a session starts
 - THEN the sandbox SHALL be created without a policy in `CreateSandboxRequest` (receiving its default policy from OpenShell)
-- AND the control plane SHALL subsequently inject `_acp_internal` via `UpdateConfig` merge operations
-- AND the sandbox's default policy rules SHALL be preserved
+- AND the control plane SHALL inject platform rules via `UpdateConfig` merge operations post-ready
+- AND the sandbox's default policy rules SHALL be preserved alongside `_acp_internal` and `_mlflow_rh`
 
 #### Scenario: Namespace rewriting in injected policy
 
 - GIVEN the control plane is deployed in namespace `pr-42` (`CP_RUNTIME_NAMESPACE=pr-42`)
 - WHEN the control plane injects `_acp_internal`
 - THEN the endpoint hostnames SHALL use namespace `pr-42` (e.g., `ambient-control-plane.pr-42.svc.cluster.local:8080`)
+- AND the `_mlflow_rh` rule SHALL use the fixed MLflow tracking hostname (not namespace-dependent)
 
-#### Scenario: ACP internal injection failure
+#### Scenario: Platform policy injection failure
 
-- GIVEN the `UpdateConfig` call to inject `_acp_internal` fails
+- GIVEN the `UpdateConfig` call to inject platform rules fails
 - WHEN the control plane handles the error
 - THEN the session SHALL transition to `Failed` with a descriptive error
 - AND the error SHALL NOT expose internal endpoint hostnames or policy details
@@ -915,6 +926,8 @@ This spec describes the complete desired state. Implementation is expected to pr
 - Opaque passthrough to `CreateSandbox`
 - Platform minimum enforcement (merge semantics to be defined in a future spec)
 
+> **Partially delivered (PR #280):** `Policy` is a first-class ACP kind with full CRUD via the SDK and `acpctl apply`. Policies contain upstream OpenShell `SandboxPolicy` JSON in their `spec` field and are passed through to `CreateSandbox` opaquely. Platform-required network rules (`_acp_internal`, `_mlflow_rh`) are merged into agent-specific policies at `CreateSandbox` time via `mergePlatformRules()` and reinforced post-ready via `UpdateConfig` merge operations. A data migration renames `filesystem_policy` → `filesystem` in stored JSONB specs. ConfigMap-based policy watching is not yet implemented — policies are currently managed via `acpctl apply` and the REST API.
+
 **Depends on:** Iteration 2 (ConfigMap agent declarations, to provide the `sandbox_policy` name reference)
 
 ---
@@ -934,7 +947,7 @@ This spec describes the complete desired state. Implementation is expected to pr
 | Unknown fields accepted with warning | Forward compatibility — newer agent YAML schemas can be applied to older control planes without hard failures. |
 | ConfigMap is the source of truth; PostgreSQL is a projection | ConfigMap-declared agents are the authoritative source. The API server's `agents` table is a read-optimized projection for queries and status reporting. The control plane reconciles ConfigMap → database, not the reverse. API PATCH operations on ConfigMap-sourced agents are not supported — changes flow through the ConfigMap (git → ArgoCD → ConfigMap → control plane). |
 | ConfigMap authorization delegates to Kubernetes RBAC | Who can create/modify agent declarations is governed by Kubernetes RBAC on the tenant namespace. The control plane trusts that any ConfigMap with the correct label in the correct namespace was applied by an authorized principal. |
-| Sandbox policy minimums are platform-enforced (out of scope for this PR) | Agent-declared sandbox policies cannot weaken platform-level security minimums. The control plane merges agent policies with platform defaults, and platform constraints always win. Merge semantics and enforcement details are deferred to a future spec. |
+| Platform network rules are always injected | Agent-declared sandbox policies cannot omit platform-required network rules (`_acp_internal`, `_mlflow_rh`). The control plane merges these rules into the agent's policy at `CreateSandbox` time via `mergePlatformRules()` and reinforces them post-ready via `UpdateConfig` merge operations. Platform rules always overwrite any same-named entries in the agent's policy. Additional platform minimum enforcement (e.g., filesystem, process constraints) is deferred to a future spec. |
 | Feature flag gating | All ConfigMap-based agent declaration and OpenShell Gateway provisioning is gated behind `OPENSHELL_USE_GATEWAY=true`. When disabled, the existing runner-based lifecycle is unchanged. This allows incremental rollout and rollback. |
 
 ---

@@ -523,19 +523,22 @@ The supervisor automatically injects proxy and TLS environment variables into pr
 - AND the SSH path is stricter because it calls `env_clear()` (the entrypoint inherits the supervisor's environment minus 4 supervisor-only vars: `SANDBOX_TOKEN`, `SANDBOX_TOKEN_FILE`, `K8S_SA_TOKEN_FILE`, `PROVIDER_SPIFFE_WORKLOAD_API_SOCKET`)
 - AND the `ns_fd` for `setns()` can silently be `None` if the namespace file open fails (the supervisor logs a warning and falls back to running without network namespace isolation)
 
-### Requirement: ACP Internal Network Policy Injection
+### Requirement: Platform Network Policy Injection
 
-The control plane SHALL inject an `_acp_internal` network policy rule into the sandbox **after creation** using OpenShell's `UpdateConfig` RPC with `merge_operations`. This permits the runner process (Python/uvicorn) to reach the ACP control plane and API server through the supervisor proxy. Without this, all cluster-internal traffic from the runner will be denied by the OPA policy engine with `DENIED FORWARD`.
+The control plane SHALL inject platform-required network policy rules (`_acp_internal` and `_mlflow_rh`) into every sandbox. These rules permit the runner process (Python/uvicorn) to reach the ACP control plane, API server, and MLflow tracking endpoint through the supervisor proxy. Without `_acp_internal`, all cluster-internal traffic from the runner will be denied by the OPA policy engine with `DENIED FORWARD`.
 
-The `_acp_internal` rule SHALL NOT be included in the `CreateSandboxRequest.Spec.Policy` field, because doing so replaces the sandbox's entire default policy — stripping rules the sandbox depends on. The `merge_operations` approach (equivalent to `openshell policy update <sandbox-name> --add-allow`) is additive: it adds or replaces only the `_acp_internal` rule while preserving all other rules in the sandbox's default policy.
+**Injection uses a dual approach:**
 
-#### Scenario: ACP internal endpoints injected post-creation
+1. **At `CreateSandbox` time** — when an agent declares a `sandbox_policy`, the control plane calls `mergePlatformRules()` to inject both rules directly into the resolved `SandboxPolicy`'s `NetworkPolicies` map before passing it to `CreateSandbox`. The gateway receives the complete policy (agent rules + platform rules) upfront.
+2. **Post-ready via `UpdateConfig`** — after the sandbox reports READY, the control plane calls `UpdateConfig` with `platformMergeOperations()` containing `AddNetworkRule` operations for both `_acp_internal` and `_mlflow_rh`. This is additive (equivalent to `openshell policy update <sandbox-name> --add-allow`): it adds or replaces only the targeted rules while preserving all other rules. This ensures platform rules are present regardless of whether an agent-specific policy was set.
+
+#### Scenario: Platform endpoints injected post-ready
 
 - GIVEN a sandbox has been created via `CreateSandbox` and has received its default policy from OpenShell
 - AND the runner process will run inside the sandbox network namespace
 - AND all traffic routes through the supervisor's HTTP CONNECT proxy at `10.200.0.1:3128`
 - AND the proxy evaluates each CONNECT request against the OPA policy
-- WHEN the control plane injects the `_acp_internal` rule via `UpdateConfig` merge operations
+- WHEN the control plane injects platform rules via `UpdateConfig` merge operations
 - THEN the `_acp_internal` network policy rule SHALL allow traffic to:
 
 | Endpoint | Port | Purpose |
@@ -547,17 +550,33 @@ The `_acp_internal` rule SHALL NOT be included in the `CreateSandboxRequest.Spec
 | `ambient-api-server.{namespace}.svc` | 9000 | API server gRPC |
 | `ambient-api-server.{namespace}.svc.cluster.local` | 9000 | API server gRPC (FQDN) |
 
+- AND the `_mlflow_rh` network policy rule SHALL allow traffic to:
+
+| Endpoint | Port | Purpose |
+|----------|------|---------|
+| `mlflow.apps.int.spoke.prod.us-west-2.aws.paas.redhat.com` | 443 | MLflow tracking |
+
 - AND `{namespace}` SHALL be the control plane's runtime namespace (`CP_RUNTIME_NAMESPACE`)
-- AND allowed binaries SHALL include `/sandbox/.venv/bin/python`, `/sandbox/.venv/bin/python3`, `/sandbox/.venv/bin/uvicorn`, and `/sandbox/.uv/python/cpython-*/bin/python*`
+- AND allowed binaries for `_acp_internal` SHALL include `/sandbox/.venv/bin/python`, `/sandbox/.venv/bin/python3`, `/sandbox/.venv/bin/uvicorn`, and `/sandbox/.uv/python/cpython-*/bin/python*`
+- AND allowed binaries for `_mlflow_rh` SHALL include `/sandbox/.venv/bin/python`, `/sandbox/.venv/bin/python3`, and `/sandbox/.venv/bin/uvicorn`
 - AND both short (`svc`) and fully-qualified (`svc.cluster.local`) hostnames SHALL be listed because the proxy resolves based on the exact hostname in the CONNECT request
 - AND all other rules in the sandbox's default policy SHALL be preserved
+
+#### Scenario: Platform rules merged into agent-specific policy at CreateSandbox
+
+- GIVEN an agent declares `sandbox_policy: restricted`
+- AND the `restricted` policy has been resolved from the project
+- WHEN the control plane builds the `CreateSandboxRequest`
+- THEN it SHALL call `mergePlatformRules()` to inject `_acp_internal` and `_mlflow_rh` into the policy's `NetworkPolicies` map
+- AND the merged policy (containing both agent-declared rules and platform rules) SHALL be passed to the `CreateSandbox` RPC
+- AND the post-ready `UpdateConfig` SHALL still run as a safety net to reinforce platform rules
 
 #### Scenario: Default sandbox policy preserved during injection
 
 - GIVEN a sandbox's default policy contains rules for provider traffic, DNS, or other platform concerns
-- WHEN the control plane injects `_acp_internal` via `UpdateConfig` merge operations
+- WHEN the control plane injects platform rules via `UpdateConfig` merge operations
 - THEN the existing default policy rules SHALL remain intact and unmodified
-- AND the `_acp_internal` rule SHALL be added alongside them
+- AND the `_acp_internal` and `_mlflow_rh` rules SHALL be added alongside them
 
 #### Scenario: Policy merge confirmation via UpdateConfig response
 
@@ -569,7 +588,7 @@ The `_acp_internal` rule SHALL NOT be included in the `CreateSandboxRequest.Spec
 - AND the control plane SHALL log the returned `policy_version` and `policy_hash` for observability
 - AND the entrypoint execution SHALL proceed immediately after a successful `UpdateConfig` response
 
-#### Scenario: Missing ACP internal policy causes runner failure
+#### Scenario: Missing platform policy causes runner failure
 
 - GIVEN the `_acp_internal` network policy rule has not been injected (e.g., `UpdateConfig` merge failed)
 - WHEN the runner starts and attempts to fetch a CP token via `AMBIENT_CP_TOKEN_URL`
