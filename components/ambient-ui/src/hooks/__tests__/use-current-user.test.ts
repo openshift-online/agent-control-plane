@@ -84,6 +84,7 @@ describe('useCurrentUser', () => {
       name: 'John Sell',
       email: 'jsell@redhat.com',
       initials: 'JS',
+      groups: [],
     })
   })
 
@@ -130,6 +131,7 @@ describe('useCurrentUser', () => {
       name: '',
       email: '',
       initials: '?',
+      groups: [],
     })
   })
 })
