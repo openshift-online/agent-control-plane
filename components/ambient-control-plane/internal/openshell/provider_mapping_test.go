@@ -65,16 +65,28 @@ func TestProviderCredentialsFromSecret(t *testing.T) {
 			want:     map[string]string{"API_KEY": "abc", "API_SECRET": "xyz"},
 		},
 		{
-			name:     "mlflow passes all secret keys through as credentials",
+			name:     "mlflow passes only tracking token through as credential",
 			provider: "mlflow",
 			secret:   map[string]string{"MLFLOW_TRACKING_TOKEN": "tok", "MLFLOW_TRACKING_AUTH": "kubernetes"},
-			want:     map[string]string{"MLFLOW_TRACKING_TOKEN": "tok", "MLFLOW_TRACKING_AUTH": "kubernetes"},
+			want:     map[string]string{"MLFLOW_TRACKING_TOKEN": "tok"},
 		},
 		{
 			name:     "mlflow with only token",
 			provider: "mlflow",
 			secret:   map[string]string{"MLFLOW_TRACKING_TOKEN": "tok"},
 			want:     map[string]string{"MLFLOW_TRACKING_TOKEN": "tok"},
+		},
+		{
+			name:     "mlflow trims newline suffixes from materialized secrets",
+			provider: "mlflow",
+			secret:   map[string]string{"MLFLOW_TRACKING_TOKEN": "tok\n", "MLFLOW_TRACKING_AUTH": " kubernetes\t\r\n"},
+			want:     map[string]string{"MLFLOW_TRACKING_TOKEN": "tok"},
+		},
+		{
+			name:     "mlflow without tracking token returns no credentials",
+			provider: "mlflow",
+			secret:   map[string]string{"MLFLOW_TRACKING_AUTH": "kubernetes"},
+			want:     map[string]string{},
 		},
 	}
 

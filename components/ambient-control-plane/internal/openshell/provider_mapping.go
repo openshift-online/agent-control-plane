@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"strings"
 )
 
 var providerTypeMapping = map[string]string{
@@ -110,6 +111,13 @@ func ProviderCredentials(ambientProvider, token string) map[string]string {
 // strips the raw key after configuring refresh). ADC credentials are NOT set as
 // initial credentials — the refresh flow mints the first access token.
 func ProviderCredentialsFromSecret(ambientProvider string, secretData map[string]string) map[string]string {
+	if ambientProvider == "mlflow" {
+		token, ok := secretData["MLFLOW_TRACKING_TOKEN"]
+		if !ok {
+			return map[string]string{}
+		}
+		return map[string]string{"MLFLOW_TRACKING_TOKEN": strings.TrimRight(token, "\r\n")}
+	}
 	if ambientProvider == "vertex" {
 		if token, has := secretData["token"]; has {
 			credType, err := DetectGoogleCredentialType(token)

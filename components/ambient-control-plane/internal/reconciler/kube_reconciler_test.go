@@ -549,6 +549,7 @@ func TestMergeAgentEnvironment_ImmutableKeys(t *testing.T) {
 		"SSL_CERT_FILE":               "/certs/ca.crt",
 		"REQUESTS_CA_BUNDLE":          "/certs/ca.crt",
 		"MLFLOW_EXPERIMENT_NAME":      "default-experiment",
+		"MLFLOW_TRACKING_TOKEN":       "openshell:resolve:env:MLFLOW_TRACKING_TOKEN",
 	}
 
 	agent := &types.Agent{
@@ -559,6 +560,7 @@ func TestMergeAgentEnvironment_ImmutableKeys(t *testing.T) {
 			"ACP_OPENSHELL_INFERENCE": "false",
 			"AMBIENT_GRPC_URL":        "grpc://evil:1234",
 			"MLFLOW_EXPERIMENT_NAME":  "my-experiment",
+			"MLFLOW_TRACKING_TOKEN":   "raw-token",
 			"CUSTOM_VAR":              "allowed",
 		},
 	}
@@ -580,6 +582,9 @@ func TestMergeAgentEnvironment_ImmutableKeys(t *testing.T) {
 	if env["AMBIENT_GRPC_URL"] != "grpc://real:8001" {
 		t.Errorf("AMBIENT_GRPC_URL was overwritten: %s", env["AMBIENT_GRPC_URL"])
 	}
+	if env["MLFLOW_TRACKING_TOKEN"] != "openshell:resolve:env:MLFLOW_TRACKING_TOKEN" {
+		t.Errorf("MLFLOW_TRACKING_TOKEN was overwritten: %s", env["MLFLOW_TRACKING_TOKEN"])
+	}
 
 	if env["MLFLOW_EXPERIMENT_NAME"] != "my-experiment" {
 		t.Errorf("MLFLOW_EXPERIMENT_NAME should be overridden, got: %s", env["MLFLOW_EXPERIMENT_NAME"])
@@ -590,43 +595,57 @@ func TestMergeAgentEnvironment_ImmutableKeys(t *testing.T) {
 }
 
 func TestBuildSandboxEnv_MLflowInjection(t *testing.T) {
-	mlflowProviderName := openshell.ProviderName("test-project", "mlflow")
-
 	tests := []struct {
 		name            string
 		trackingURI     string
 		experimentName  string
+		tracingEnabled  string
+		auth            string
+		workspace       string
+		excludeFlavors  string
 		providerNames   []string
-		wantURI         string
-		wantExperiment  string
-		wantTracingFlag bool
+		hasMLflow       bool
+		wantToken       string
+		wantMLflowEnv   bool
+		wantTracingFlag string
 	}{
 		{
-			name:            "MLflow provider present with config values",
-			trackingURI:     "https://mlflow.example.com",
-			experimentName:  "my-experiment",
-			providerNames:   []string{mlflowProviderName},
-			wantURI:         "https://mlflow.example.com",
-			wantExperiment:  "my-experiment",
-			wantTracingFlag: true,
-		},
-		{
-			name:            "MLflow provider absent",
+			name:            "MLflow config present without provider",
 			trackingURI:     "https://mlflow.example.com",
 			experimentName:  "my-experiment",
 			providerNames:   []string{},
-			wantURI:         "",
-			wantExperiment:  "",
-			wantTracingFlag: false,
+			hasMLflow:       false,
+			wantToken:       "",
+			wantMLflowEnv:   true,
+			wantTracingFlag: "true",
 		},
 		{
-			name:            "MLflow provider present but empty config",
-			trackingURI:     "",
-			experimentName:  "",
-			providerNames:   []string{mlflowProviderName},
-			wantURI:         "",
-			wantExperiment:  "",
-			wantTracingFlag: true,
+			name:            "explicit tracing opt out is forwarded",
+			trackingURI:     "https://mlflow.example.com",
+			tracingEnabled:  "false",
+			providerNames:   []string{openshell.ProviderName("test-project", "mlflow")},
+			hasMLflow:       true,
+			wantToken:       "openshell:resolve:env:MLFLOW_TRACKING_TOKEN",
+			wantMLflowEnv:   true,
+			wantTracingFlag: "false",
+		},
+		{
+			name:          "MLflow config absent",
+			trackingURI:   "",
+			providerNames: []string{openshell.ProviderName("test-project", "mlflow")},
+			hasMLflow:     true,
+			wantToken:     "openshell:resolve:env:MLFLOW_TRACKING_TOKEN",
+			wantMLflowEnv: false,
+		},
+		{
+			name:            "custom MLflow provider name gets token placeholder",
+			trackingURI:     "https://mlflow.example.com",
+			experimentName:  "custom-provider-experiment",
+			providerNames:   []string{openshell.ProviderName("test-project", "observability")},
+			hasMLflow:       true,
+			wantToken:       "openshell:resolve:env:MLFLOW_TRACKING_TOKEN",
+			wantMLflowEnv:   true,
+			wantTracingFlag: "true",
 		},
 	}
 
@@ -634,9 +653,14 @@ func TestBuildSandboxEnv_MLflowInjection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &SimpleKubeReconciler{
 				cfg: KubeReconcilerConfig{
-					MLflowTrackingURI:    tt.trackingURI,
-					MLflowExperimentName: tt.experimentName,
-					OpenShellUseGateway:  true,
+					MLflowTrackingURI:             tt.trackingURI,
+					MLflowExperimentName:          tt.experimentName,
+					MLflowTracingEnabled:          tt.tracingEnabled,
+					MLflowTrackingAuth:            tt.auth,
+					MLflowWorkspace:               tt.workspace,
+					MLflowEnableAsyncTraceLogging: "true",
+					MLflowAutologExcludeFlavors:   tt.excludeFlavors,
+					OpenShellUseGateway:           true,
 				},
 				provisioner: &mockProvisioner{},
 			}
@@ -648,22 +672,29 @@ func TestBuildSandboxEnv_MLflowInjection(t *testing.T) {
 				ProjectID:       "test-project",
 			}
 
-			env := r.buildSandboxEnv(context.Background(), session, "test-project", nil, tt.providerNames)
+			env := r.buildSandboxEnv(context.Background(), session, "test-project", nil, tt.providerNames, tt.hasMLflow)
 
-			if got := env["MLFLOW_TRACKING_URI"]; got != tt.wantURI {
-				t.Errorf("MLFLOW_TRACKING_URI = %q, want %q", got, tt.wantURI)
+			if got := env["MLFLOW_TRACKING_TOKEN"]; got != tt.wantToken {
+				t.Errorf("MLFLOW_TRACKING_TOKEN = %q, want %q", got, tt.wantToken)
 			}
-			if got := env["MLFLOW_EXPERIMENT_NAME"]; got != tt.wantExperiment {
-				t.Errorf("MLFLOW_EXPERIMENT_NAME = %q, want %q", got, tt.wantExperiment)
+
+			if !tt.wantMLflowEnv {
+				if _, exists := env["MLFLOW_TRACKING_URI"]; exists {
+					t.Errorf("MLFLOW_TRACKING_URI should not be set")
+				}
+				return
 			}
-			if tt.wantTracingFlag {
-				if env["MLFLOW_TRACING_ENABLED"] != "true" {
-					t.Errorf("MLFLOW_TRACING_ENABLED = %q, want \"true\"", env["MLFLOW_TRACING_ENABLED"])
-				}
-			} else {
-				if _, exists := env["MLFLOW_TRACING_ENABLED"]; exists {
-					t.Errorf("MLFLOW_TRACING_ENABLED should not be set when no MLflow provider")
-				}
+			if got := env["MLFLOW_TRACKING_URI"]; got != tt.trackingURI {
+				t.Errorf("MLFLOW_TRACKING_URI = %q, want %q", got, tt.trackingURI)
+			}
+			if got := env["MLFLOW_TRACING_ENABLED"]; got != tt.wantTracingFlag {
+				t.Errorf("MLFLOW_TRACING_ENABLED = %q, want %q", got, tt.wantTracingFlag)
+			}
+			if got := env["MLFLOW_ENABLE_ASYNC_TRACE_LOGGING"]; got != "true" {
+				t.Errorf("MLFLOW_ENABLE_ASYNC_TRACE_LOGGING = %q, want \"true\"", got)
+			}
+			if got := env["MLFLOW_GENAI_AUTOLOG_INTEGRATIONS"]; got != "anthropic,openai" {
+				t.Errorf("MLFLOW_GENAI_AUTOLOG_INTEGRATIONS = %q, want \"anthropic,openai\"", got)
 			}
 		})
 	}
@@ -705,6 +736,131 @@ func TestPayloadStructFields(t *testing.T) {
 	if p.Ref != "main" {
 		t.Error("Ref field not set")
 	}
+}
+
+func TestMergeAgentEnvironment_MLflowRoutingKeysImmutable(t *testing.T) {
+	r := &SimpleKubeReconciler{}
+	env := map[string]string{
+		"MLFLOW_TRACKING_URI":               "https://platform-mlflow.example.com",
+		"MLFLOW_TRACKING_AUTH":              "kubernetes-namespaced",
+		"MLFLOW_WORKSPACE":                  "platform-workspace",
+		"MLFLOW_TRACKING_TOKEN":             "platform-token",
+		"MLFLOW_EXPERIMENT_NAME":            "platform-experiment",
+		"MLFLOW_TRACING_ENABLED":            "true",
+		"MLFLOW_AUTOLOG_EXCLUDE_FLAVORS":    "sklearn",
+		"MLFLOW_GENAI_AUTOLOG_INTEGRATIONS": "anthropic,openai",
+	}
+	agent := &types.Agent{
+		Environment: map[string]string{
+			"MLFLOW_TRACKING_URI":               "https://attacker.example.com",
+			"MLFLOW_TRACKING_AUTH":              "none",
+			"MLFLOW_WORKSPACE":                  "attacker-workspace",
+			"MLFLOW_TRACKING_TOKEN":             "attacker-token",
+			"MLFLOW_EXPERIMENT_NAME":            "tenant-experiment",
+			"MLFLOW_TRACING_ENABLED":            "false",
+			"MLFLOW_AUTOLOG_EXCLUDE_FLAVORS":    "tensorflow",
+			"MLFLOW_GENAI_AUTOLOG_INTEGRATIONS": "openai",
+		},
+	}
+
+	r.mergeAgentEnvironment(env, agent)
+
+	if got := env["MLFLOW_TRACKING_URI"]; got != "https://platform-mlflow.example.com" {
+		t.Errorf("MLFLOW_TRACKING_URI = %q, want platform URI", got)
+	}
+	if got := env["MLFLOW_TRACKING_AUTH"]; got != "kubernetes-namespaced" {
+		t.Errorf("MLFLOW_TRACKING_AUTH = %q, want platform auth", got)
+	}
+	if got := env["MLFLOW_WORKSPACE"]; got != "platform-workspace" {
+		t.Errorf("MLFLOW_WORKSPACE = %q, want platform workspace", got)
+	}
+	if got := env["MLFLOW_TRACKING_TOKEN"]; got != "platform-token" {
+		t.Errorf("MLFLOW_TRACKING_TOKEN = %q, want platform token", got)
+	}
+	if got := env["MLFLOW_EXPERIMENT_NAME"]; got != "tenant-experiment" {
+		t.Errorf("MLFLOW_EXPERIMENT_NAME = %q, want tenant override", got)
+	}
+	if got := env["MLFLOW_TRACING_ENABLED"]; got != "false" {
+		t.Errorf("MLFLOW_TRACING_ENABLED = %q, want tenant override", got)
+	}
+	if got := env["MLFLOW_AUTOLOG_EXCLUDE_FLAVORS"]; got != "tensorflow" {
+		t.Errorf("MLFLOW_AUTOLOG_EXCLUDE_FLAVORS = %q, want tenant override", got)
+	}
+	if got := env["MLFLOW_GENAI_AUTOLOG_INTEGRATIONS"]; got != "openai" {
+		t.Errorf("MLFLOW_GENAI_AUTOLOG_INTEGRATIONS = %q, want tenant override", got)
+	}
+}
+
+func TestBuildEnv_MLflowInjection(t *testing.T) {
+	r := &SimpleKubeReconciler{
+		cfg: KubeReconcilerConfig{
+			MLflowTrackingURI:              "https://mlflow.example.com",
+			MLflowExperimentName:           "my-experiment",
+			MLflowTrackingAuth:             "kubernetes-namespaced",
+			MLflowWorkspace:                "workspace-1",
+			MLflowEnableAsyncTraceLogging:  "true",
+			MLflowAsyncTraceLoggingWorkers: "4",
+			MLflowAsyncTraceLoggingQueue:   "1000",
+			MLflowAutologExcludeFlavors:    "sklearn",
+			MLflowGenAIAutologIntegrations: "anthropic,openai",
+		},
+		provisioner: &mockProvisioner{},
+	}
+
+	session := types.Session{
+		ObjectReference: types.ObjectReference{ID: "sess-1"},
+		Name:            "test",
+		ProjectID:       "test-project",
+	}
+
+	env := envListToMap(r.buildEnv(context.Background(), session, nil, false, nil))
+
+	if got := env["MLFLOW_TRACING_ENABLED"]; got != "true" {
+		t.Errorf("MLFLOW_TRACING_ENABLED = %q, want \"true\"", got)
+	}
+	if got := env["MLFLOW_TRACKING_URI"]; got != "https://mlflow.example.com" {
+		t.Errorf("MLFLOW_TRACKING_URI = %q, want tracking URI", got)
+	}
+	if got := env["MLFLOW_EXPERIMENT_NAME"]; got != "my-experiment" {
+		t.Errorf("MLFLOW_EXPERIMENT_NAME = %q, want my-experiment", got)
+	}
+	if got := env["MLFLOW_TRACKING_AUTH"]; got != "kubernetes-namespaced" {
+		t.Errorf("MLFLOW_TRACKING_AUTH = %q, want kubernetes-namespaced", got)
+	}
+	if got := env["MLFLOW_WORKSPACE"]; got != "workspace-1" {
+		t.Errorf("MLFLOW_WORKSPACE = %q, want workspace-1", got)
+	}
+	if got := env["MLFLOW_ENABLE_ASYNC_TRACE_LOGGING"]; got != "true" {
+		t.Errorf("MLFLOW_ENABLE_ASYNC_TRACE_LOGGING = %q, want true", got)
+	}
+	if got := env["MLFLOW_ASYNC_TRACE_LOGGING_MAX_WORKERS"]; got != "4" {
+		t.Errorf("MLFLOW_ASYNC_TRACE_LOGGING_MAX_WORKERS = %q, want 4", got)
+	}
+	if got := env["MLFLOW_ASYNC_TRACE_LOGGING_MAX_QUEUE_SIZE"]; got != "1000" {
+		t.Errorf("MLFLOW_ASYNC_TRACE_LOGGING_MAX_QUEUE_SIZE = %q, want 1000", got)
+	}
+	if got := env["MLFLOW_AUTOLOG_EXCLUDE_FLAVORS"]; got != "sklearn" {
+		t.Errorf("MLFLOW_AUTOLOG_EXCLUDE_FLAVORS = %q, want sklearn", got)
+	}
+	if got := env["MLFLOW_GENAI_AUTOLOG_INTEGRATIONS"]; got != "anthropic,openai" {
+		t.Errorf("MLFLOW_GENAI_AUTOLOG_INTEGRATIONS = %q, want anthropic,openai", got)
+	}
+}
+
+func envListToMap(env []interface{}) map[string]string {
+	result := map[string]string{}
+	for _, entry := range env {
+		envEntry, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		name, nameOK := envEntry["name"].(string)
+		value, valueOK := envEntry["value"].(string)
+		if nameOK && valueOK {
+			result[name] = value
+		}
+	}
+	return result
 }
 
 func newFakeKubeClientWithPods(objects ...runtime.Object) *kubeclient.KubeClient {

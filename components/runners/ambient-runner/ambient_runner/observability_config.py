@@ -10,6 +10,10 @@ def _truthy_env(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in ("1", "true", "yes")
 
 
+def _explicitly_false_env(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in ("0", "false", "no", "off")
+
+
 def observability_backend_names() -> frozenset[str]:
     """Parsed OBSERVABILITY_BACKENDS, or default ``langfuse`` only.
 
@@ -30,9 +34,6 @@ def use_langfuse_backend() -> bool:
 
 
 def use_mlflow_backend() -> bool:
-    """True when MLflow is selected, tracing is enabled, and a tracking URI is set."""
-    if "mlflow" not in observability_backend_names():
-        return False
-    if not _truthy_env("MLFLOW_TRACING_ENABLED"):
+    if _explicitly_false_env("MLFLOW_TRACING_ENABLED"):
         return False
     return bool(os.getenv("MLFLOW_TRACKING_URI", "").strip())

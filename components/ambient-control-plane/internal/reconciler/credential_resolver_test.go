@@ -257,6 +257,48 @@ func TestResolveCredentialIDs_GlobalFallback(t *testing.T) {
 	}
 }
 
+func TestResolveCredentialIDs_GlobalMLflowBindingIgnored(t *testing.T) {
+	credGlobal := "cred-global-mlflow"
+	credGlobalJira := "cred-global-jira"
+	projectID := "proj-mlflow"
+
+	server := newMockAPIServer(mockData{
+		roleBindings: []types.RoleBinding{
+			{
+				ObjectReference: types.ObjectReference{ID: "rb-global", CreatedAt: timePtr(time.Now())},
+				Scope:           "credential",
+				CredentialID:    &credGlobal,
+			},
+			{
+				ObjectReference: types.ObjectReference{ID: "rb-global-jira", CreatedAt: timePtr(time.Now().Add(time.Second))},
+				Scope:           "credential",
+				CredentialID:    &credGlobalJira,
+			},
+		},
+		credentials: map[string]types.Credential{
+			credGlobal:     {ObjectReference: types.ObjectReference{ID: credGlobal}, Provider: "mlflow", Name: "global-mlflow"},
+			credGlobalJira: {ObjectReference: types.ObjectReference{ID: credGlobalJira}, Provider: "jira", Name: "global-jira"},
+		},
+	})
+	defer server.Close()
+
+	logger := zerolog.New(zerolog.NewTestWriter(t))
+	r := newTestReconciler(logger)
+	sdk := newSDKClient(t, server.URL)
+
+	result, err := r.resolveCredentialIDs(context.Background(), sdk, projectID, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, ok := result["mlflow"]; ok {
+		t.Errorf("expected global MLflow credential to be ignored, got %v", result["mlflow"])
+	}
+	if result["jira"] != credGlobalJira {
+		t.Errorf("expected global Jira credential %s, got %s", credGlobalJira, result["jira"])
+	}
+}
+
 func TestResolveCredentialIDs_NoBindingNoInjection(t *testing.T) {
 	server := newMockAPIServer(mockData{
 		roleBindings: []types.RoleBinding{},

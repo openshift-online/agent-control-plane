@@ -143,13 +143,16 @@ The workspace context prompt is built by `build_sdk_system_prompt()` in `prompts
 
 **MLflow GenAI tracing** (optional extra: `pip install 'ambient-runner[mlflow-observability]'` — pins **`mlflow[kubernetes]>=3.11`** for cluster auth)
 
-- `MLFLOW_TRACING_ENABLED` - Must be `true` / `1` together with `mlflow` in `OBSERVABILITY_BACKENDS`
-- `MLFLOW_TRACKING_URI` - MLflow tracking server URI (e.g. `https://mlflow.example.com` or `file:./mlruns` for local tests)
+- `MLFLOW_TRACKING_URI` - MLflow tracking server URI (e.g. `https://mlflow.example.com` or `file:./mlruns` for local tests). When set, MLflow tracing is attempted by default. In cluster deployments this is normally supplied by the control plane.
+- `MLFLOW_TRACKING_TOKEN` - Optional MLflow bearer token. In cluster deployments this comes from the OpenShell `mlflow` provider when the project or agent has an explicit `mlflow` credential binding. The provider reads the Vault-materialized control-plane secret named by `MLFLOW_CREDENTIAL_SECRET_NAME` (default: `mlflow`).
+- `MLFLOW_TRACING_ENABLED` - Optional kill switch. Only `false` / `0` / `no` / `off` disables MLflow when a tracking URI is present.
 - `MLFLOW_EXPERIMENT_NAME` - Experiment name (default: `ambient-code-sessions`)
 - `MLFLOW_TRACKING_AUTH` - Optional. Set to **`kubernetes-namespaced`** on OpenShift AI / Kubeflow-style MLflow so the client adds **`Authorization: Bearer <SA JWT>`** and **`X-MLFLOW-WORKSPACE`** (from the pod namespace). Requires the **`kubernetes`** Python extra (included via `mlflow[kubernetes]`). The 3.11 client is expected to work against typical 3.9–3.10 era tracking servers; align versions with your platform if you hit protocol issues.
 - `MLFLOW_WORKSPACE` - Optional. Overrides the workspace sent as `X-MLFLOW-WORKSPACE` when using Kubernetes auth (otherwise the namespace file is used).
+- `MLFLOW_AUTOLOG_EXCLUDE_FLAVORS` - Optional comma-separated generic MLflow autolog flavor exclusions.
+- `MLFLOW_GENAI_AUTOLOG_INTEGRATIONS` - Optional comma-separated provider autolog integrations (default: `anthropic,openai`).
 
-On the cluster, when the operator copies `ambient-admin-mlflow-observability-secret`, it runs the runner pod as **`ambient-session-<session>`** with **service account token automount** enabled so MLflow can read `/var/run/secrets/kubernetes.io/serviceaccount/{token,namespace}`. The session `Role` includes **`get` / `list` / `update` on `experiments`** in API group **`mlflow.kubeflow.org`** (adjust RBAC if your MLflow operator uses a different API group).
+On the cluster, the control plane registers the OpenShell `mlflow` provider only for sessions whose project or agent has an explicit `mlflow` credential binding. The runner pod runs as **`ambient-session-<session>`** with **service account token automount** enabled so MLflow can read `/var/run/secrets/kubernetes.io/serviceaccount/{token,namespace}` when Kubernetes auth is used. The session `Role` includes **`get` / `list` / `update` on `experiments`** in API group **`mlflow.kubeflow.org`** (adjust RBAC if your MLflow operator uses a different API group).
 
 **OTLP export from MLflow** (no code changes — configure before the process creates spans; see [MLflow OTLP export](https://mlflow.org/docs/latest/genai/tracing/opentelemetry/export/)):
 

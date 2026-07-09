@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell"
@@ -18,6 +19,7 @@ import (
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -134,6 +136,28 @@ func makeK8sSecret(namespace, name string, data map[string]string) *unstructured
 			"data":       encodedData,
 		},
 	}
+}
+
+func makeManagedCredentialSecret(namespace, name, sourceNamespace, sourceName string, data map[string]string) *unstructured.Unstructured {
+	secret := makeK8sSecret(namespace, name, data)
+	secret.Object["metadata"].(map[string]interface{})["labels"] = map[string]interface{}{
+		LabelManaged:   "true",
+		LabelManagedBy: "ambient-control-plane",
+	}
+	secret.Object["metadata"].(map[string]interface{})["annotations"] = map[string]interface{}{
+		annotationCredentialSourceNamespace: sourceNamespace,
+		annotationCredentialSourceName:      sourceName,
+	}
+	return secret
+}
+
+func makeLegacyManagedCredentialSecret(namespace, name string, data map[string]string) *unstructured.Unstructured {
+	secret := makeK8sSecret(namespace, name, data)
+	secret.Object["metadata"].(map[string]interface{})["labels"] = map[string]interface{}{
+		LabelManaged:   "true",
+		LabelManagedBy: "ambient-control-plane",
+	}
+	return secret
 }
 
 func makeK8sSecretRaw(namespace, name string, data map[string]interface{}) *unstructured.Unstructured {
@@ -440,6 +464,7 @@ func TestResolveAgentProviders(t *testing.T) {
 		createProviderFn  func(ctx context.Context, ns string, req *pb.CreateProviderRequest) (*pb.ProviderResponse, error)
 		wantProviderNames []string
 		wantInference     map[string]string
+		wantMLflow        bool
 		wantErr           string
 	}{
 		{
@@ -517,6 +542,22 @@ func TestResolveAgentProviders(t *testing.T) {
 			secrets:           []runtime.Object{makeK8sSecret("test-ns", "gh-secret", map[string]string{"token": "ghp_xxx"})},
 			wantProviderNames: []string{"proj-github-main"},
 			wantInference:     map[string]string{},
+		},
+		{
+			name:  "custom named mlflow provider marks mlflow capability",
+			agent: &types.Agent{Providers: []string{"observability"}},
+			providers: map[string]types.Provider{
+				"observability": {
+					ObjectReference: types.ObjectReference{ID: "prov-mlflow"},
+					Name:            "observability",
+					Type:            "mlflow",
+					Secret:          "mlflow-secret",
+				},
+			},
+			secrets:           []runtime.Object{makeK8sSecret("test-ns", "mlflow-secret", map[string]string{"MLFLOW_TRACKING_TOKEN": "tok"})},
+			wantProviderNames: []string{"proj-observability"},
+			wantInference:     map[string]string{},
+			wantMLflow:        true,
 		},
 		{
 			name:  "update NotFound then create succeeds",
@@ -623,7 +664,7 @@ func TestResolveAgentProviders(t *testing.T) {
 				ObjectReference: types.ObjectReference{ID: "sess-1"},
 				ProjectID:       "test-project",
 			}
-			names, infProv, err := r.resolveAgentProviders(
+			names, infProv, hasMLflow, err := r.resolveAgentProviders(
 				context.Background(), sdk, "test-ns", "proj", session, tt.agent,
 			)
 
@@ -638,6 +679,9 @@ func TestResolveAgentProviders(t *testing.T) {
 			}
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
+			}
+			if hasMLflow != tt.wantMLflow {
+				t.Errorf("hasMLflowProvider = %t, want %t", hasMLflow, tt.wantMLflow)
 			}
 
 			if tt.wantProviderNames == nil {
@@ -670,6 +714,210 @@ func TestResolveAgentProviders(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestResolveProviderCredentialSecretReadsConfiguredMLflowSource(t *testing.T) {
+	kube := newFakeKubeClientWithSecrets(
+		makeK8sSecret("vault-ns", "vault-mlflow-secret", map[string]string{
+			"MLFLOW_TRACKING_TOKEN": "vault-token\n",
+			"MLFLOW_WORKSPACE":      "workspace-1",
+		}),
+	)
+	r := &SimpleKubeReconciler{
+		kube: kube,
+		cfg: KubeReconcilerConfig{
+			CPRuntimeNamespace:              "cp-ns",
+			MLflowCredentialSecretName:      "vault-mlflow-secret",
+			MLflowCredentialSecretNamespace: "vault-ns",
+			MLflowTrackingURI:               "https://mlflow.example.com",
+		},
+		logger: zerolog.New(zerolog.NewTestWriter(t)),
+	}
+
+	secretData, err := r.resolveProviderCredentialSecret(context.Background(), "sandbox-ns", "mlflow")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	credentials := openshell.ProviderCredentialsFromSecret("mlflow", secretData)
+	if got := credentials["MLFLOW_TRACKING_TOKEN"]; got != "vault-token" {
+		t.Fatalf("MLFLOW_TRACKING_TOKEN = %q, want %q", got, "vault-token")
+	}
+	if _, ok := credentials["MLFLOW_WORKSPACE"]; ok {
+		t.Fatalf("MLFLOW_WORKSPACE should not be exposed as a gateway credential")
+	}
+	if _, err := kube.GetSecret(context.Background(), "sandbox-ns", "vault-mlflow-secret"); err != nil {
+		if !k8serrors.IsNotFound(err) {
+			t.Fatalf("unexpected sandbox secret lookup error: %v", err)
+		}
+	} else {
+		t.Fatal("MLflow credential source should not be copied into the sandbox namespace")
+	}
+}
+
+func TestResolveCredentialBasedProvidersSkipsMLflowWhenAgentProviderExists(t *testing.T) {
+	credID := "mlflow-cred"
+	projectID := "proj-1"
+
+	server := newMockAPIServer(mockData{
+		roleBindings: []types.RoleBinding{
+			{
+				ObjectReference: types.ObjectReference{ID: "rb-1", CreatedAt: timePtr(time.Now())},
+				Scope:           "credential",
+				CredentialID:    &credID,
+				ProjectID:       &projectID,
+			},
+		},
+		credentials: map[string]types.Credential{
+			credID: {ObjectReference: types.ObjectReference{ID: credID}, Provider: "mlflow", Name: "mlflow"},
+		},
+	})
+	defer server.Close()
+
+	gw := &mockGateway{
+		updateProviderFn: func(context.Context, string, *pb.UpdateProviderRequest) (*pb.ProviderResponse, error) {
+			t.Fatal("credential-based MLflow provider should not be updated when an agent MLflow provider already exists")
+			return nil, nil
+		},
+		createProviderFn: func(context.Context, string, *pb.CreateProviderRequest) (*pb.ProviderResponse, error) {
+			t.Fatal("credential-based MLflow provider should not be created when an agent MLflow provider already exists")
+			return nil, nil
+		},
+	}
+	r := &SimpleKubeReconciler{
+		kube:    newFakeKubeClientWithSecrets(),
+		gateway: gw,
+		cfg:     KubeReconcilerConfig{MLflowTrackingURI: "https://mlflow.example.com"},
+		logger:  zerolog.New(zerolog.NewTestWriter(t)),
+	}
+	sdk := newSDKClient(t, server.URL)
+
+	session := types.Session{ObjectReference: types.ObjectReference{ID: "sess-1"}, ProjectID: projectID}
+	providers, hasMLflow := r.resolveCredentialBasedProviders(
+		context.Background(),
+		sdk,
+		"tenant-a",
+		"proj",
+		session,
+		[]string{"proj-custom-mlflow"},
+		true,
+	)
+
+	if len(providers) != 0 {
+		t.Fatalf("expected no additional providers, got %v", providers)
+	}
+	if !hasMLflow {
+		t.Fatal("expected MLflow provider to remain satisfied")
+	}
+}
+
+func TestEnsureCredentialSecretFromUpdatesExistingSecret(t *testing.T) {
+	kube := newFakeKubeClientWithSecrets(
+		makeK8sSecret("vault-ns", "mlflow", map[string]string{
+			"MLFLOW_TRACKING_TOKEN": "new-token",
+		}),
+		makeManagedCredentialSecret("sandbox-ns", "mlflow", "vault-ns", "mlflow", map[string]string{
+			"MLFLOW_TRACKING_TOKEN": "old-token",
+		}),
+	)
+	r := &SimpleKubeReconciler{
+		kube:   kube,
+		logger: zerolog.New(zerolog.NewTestWriter(t)),
+	}
+
+	credentials, err := r.ensureCredentialSecretFrom(context.Background(), "sandbox-ns", "vault-ns", "mlflow")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := credentials["MLFLOW_TRACKING_TOKEN"]; got != "new-token" {
+		t.Fatalf("returned MLFLOW_TRACKING_TOKEN = %q, want %q", got, "new-token")
+	}
+	updated, err := kube.GetSecret(context.Background(), "sandbox-ns", "mlflow")
+	if err != nil {
+		t.Fatalf("expected updated sandbox secret: %v", err)
+	}
+	data, found, dataErr := unstructured.NestedMap(updated.Object, "data")
+	if dataErr != nil || !found {
+		t.Fatalf("expected data on updated sandbox secret, found=%t err=%v", found, dataErr)
+	}
+	decoded, err := decodeSecretData(data, "sandbox-ns", "mlflow")
+	if err != nil {
+		t.Fatalf("decoding updated sandbox secret: %v", err)
+	}
+	if got := decoded["MLFLOW_TRACKING_TOKEN"]; got != "new-token" {
+		t.Fatalf("stored MLFLOW_TRACKING_TOKEN = %q, want %q", got, "new-token")
+	}
+	labels, found, labelErr := unstructured.NestedStringMap(updated.Object, "metadata", "labels")
+	if labelErr != nil || !found {
+		t.Fatalf("expected managed labels on updated sandbox secret, found=%t err=%v", found, labelErr)
+	}
+	if labels[LabelManaged] != "true" || labels[LabelManagedBy] != "ambient-control-plane" {
+		t.Fatalf("managed labels = %#v", labels)
+	}
+	annotations, found, annotationErr := unstructured.NestedStringMap(updated.Object, "metadata", "annotations")
+	if annotationErr != nil || !found {
+		t.Fatalf("expected source annotations on updated sandbox secret, found=%t err=%v", found, annotationErr)
+	}
+	if annotations[annotationCredentialSourceNamespace] != "vault-ns" || annotations[annotationCredentialSourceName] != "mlflow" {
+		t.Fatalf("source annotations = %#v", annotations)
+	}
+}
+
+func TestEnsureCredentialSecretFromAdoptsLegacyManagedSecret(t *testing.T) {
+	kube := newFakeKubeClientWithSecrets(
+		makeK8sSecret("vault-ns", "mlflow", map[string]string{
+			"MLFLOW_TRACKING_TOKEN": "new-token",
+		}),
+		makeLegacyManagedCredentialSecret("sandbox-ns", "mlflow", map[string]string{
+			"MLFLOW_TRACKING_TOKEN": "old-token",
+		}),
+	)
+	r := &SimpleKubeReconciler{
+		kube:   kube,
+		logger: zerolog.New(zerolog.NewTestWriter(t)),
+	}
+
+	credentials, err := r.ensureCredentialSecretFrom(context.Background(), "sandbox-ns", "vault-ns", "mlflow")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := credentials["MLFLOW_TRACKING_TOKEN"]; got != "new-token" {
+		t.Fatalf("returned MLFLOW_TRACKING_TOKEN = %q, want %q", got, "new-token")
+	}
+
+	updated, err := kube.GetSecret(context.Background(), "sandbox-ns", "mlflow")
+	if err != nil {
+		t.Fatalf("expected updated sandbox secret: %v", err)
+	}
+	annotations, found, annotationErr := unstructured.NestedStringMap(updated.Object, "metadata", "annotations")
+	if annotationErr != nil || !found {
+		t.Fatalf("expected source annotations on adopted sandbox secret, found=%t err=%v", found, annotationErr)
+	}
+	if annotations[annotationCredentialSourceNamespace] != "vault-ns" || annotations[annotationCredentialSourceName] != "mlflow" {
+		t.Fatalf("source annotations = %#v", annotations)
+	}
+}
+
+func TestEnsureCredentialSecretFromRefusesUnmanagedExistingSecret(t *testing.T) {
+	kube := newFakeKubeClientWithSecrets(
+		makeK8sSecret("vault-ns", "mlflow", map[string]string{
+			"MLFLOW_TRACKING_TOKEN": "new-token",
+		}),
+		makeK8sSecret("sandbox-ns", "mlflow", map[string]string{
+			"MLFLOW_TRACKING_TOKEN": "tenant-token",
+		}),
+	)
+	r := &SimpleKubeReconciler{
+		kube:   kube,
+		logger: zerolog.New(zerolog.NewTestWriter(t)),
+	}
+
+	_, err := r.ensureCredentialSecretFrom(context.Background(), "sandbox-ns", "vault-ns", "mlflow")
+	if err == nil {
+		t.Fatal("expected unmanaged secret refusal")
+	}
+	if !strings.Contains(err.Error(), "not managed by ambient-control-plane") {
+		t.Fatalf("error = %v, want unmanaged refusal", err)
 	}
 }
 
