@@ -75,6 +75,7 @@ function NavGroup({
         <SidebarMenu>
           {items.map((item) => {
             const isGlobal = item.global === true
+            const needsProject = !isGlobal && !effectiveProjectId
 
             const href = isGlobal
               ? item.href
@@ -94,16 +95,26 @@ function NavGroup({
 
             return (
               <SidebarMenuItem key={item.label}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={isActive}
-                  tooltip={item.label}
-                >
-                  <Link href={href}>
+                {needsProject ? (
+                  <SidebarMenuButton
+                    disabled
+                    tooltip={item.label}
+                  >
                     <item.icon />
                     <span>{item.label}</span>
-                  </Link>
-                </SidebarMenuButton>
+                  </SidebarMenuButton>
+                ) : (
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive}
+                    tooltip={item.label}
+                  >
+                    <Link href={href}>
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                )}
                 {badgeCount > 0 && (
                   <SidebarMenuBadge>{badgeCount}</SidebarMenuBadge>
                 )}
