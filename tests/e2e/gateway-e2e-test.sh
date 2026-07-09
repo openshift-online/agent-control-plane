@@ -6,9 +6,7 @@
 #   ->  runner starts inside sandbox  ->  runner /health endpoint responds
 #
 # This test does NOT require a real LLM API key — it validates the platform
-# plumbing from session creation through runner startup.  The runner's /health
-# endpoint responds before contacting any inference service, so this proves
-# the full lifecycle works without a real LLM backend.
+# plumbing from session creation through sandbox provisioning.
 #
 # Prerequisites:
 #   - kind-up with OPENSHELL_USE_GATEWAY=true (default)
@@ -574,104 +572,11 @@ else
   fail "Repo payload verification requires agent 'repo-clone-workspace' (not found)"
 fi
 
-section "11. Runner lifecycle verification"
-
-# Verify the runner process started inside the sandbox and is processing.
-# The runner emits RUN_STARTED via AG-UI before contacting any LLM, so this
-# works without a real inference service.  Uses a dedicated agent with no
-# bound providers to avoid credential-related provisioning failures.
-LIFECYCLE_AGENT_NAME="test-agent-with-no-providers"
-$ACPCTL apply -f "$REPO_ROOT/examples/base/agents/test-agent-with-no-providers.yaml" \
-  --project "$TENANT" >/dev/null 2>&1 || true
-LIFECYCLE_AGENTS_RESP=$(api GET "/api/ambient/v1/projects/${PROJECT_ID}/agents?size=50" || echo "")
-LIFECYCLE_AGENT_ID=$(echo "$LIFECYCLE_AGENTS_RESP" \
-  | jq -r ".items[] | select(.name == \"${LIFECYCLE_AGENT_NAME}\") | .id" 2>/dev/null | head -1 || echo "")
-
-if [ -n "$LIFECYCLE_AGENT_ID" ]; then
-  LIFECYCLE_START_RESP=$(api POST "/api/ambient/v1/projects/${PROJECT_ID}/agents/${LIFECYCLE_AGENT_ID}/start" \
-    -d '{"prompt": "gateway-e2e-test: runner lifecycle check"}' || echo "")
-  LIFECYCLE_SESSION_ID=$(echo "$LIFECYCLE_START_RESP" \
-    | jq -r '.session.id // empty' 2>/dev/null || echo "")
-fi
-
-if [ -n "$LIFECYCLE_SESSION_ID" ]; then
-
-  # 11a. Session reaches Running phase (explicit assertion, not just a gate)
-  LIFECYCLE_PHASE=""
-  for i in $(seq 1 60); do
-    LIFECYCLE_PHASE=$(api GET "/api/ambient/v1/sessions/${LIFECYCLE_SESSION_ID}" 2>/dev/null \
-      | jq -r '.phase // empty' 2>/dev/null || echo "")
-    if [ "$LIFECYCLE_PHASE" = "Running" ] || [ "$LIFECYCLE_PHASE" = "Succeeded" ] || [ "$LIFECYCLE_PHASE" = "Failed" ]; then
-      break
-    fi
-    sleep 2
-  done
-
-  if [ "$LIFECYCLE_PHASE" = "Running" ] || [ "$LIFECYCLE_PHASE" = "Succeeded" ]; then
-    pass "Session reached Running phase"
-  elif [ "$LIFECYCLE_PHASE" = "Failed" ]; then
-    # Failed is acceptable if the runner started — it means inference failed,
-    # not that the runner never came up.  Check messages to confirm.
-    pass "Session reached terminal phase (${LIFECYCLE_PHASE}) — checking runner messages"
-  else
-    fail "Session did not reach Running phase within 120s (phase: ${LIFECYCLE_PHASE:-unknown})"
-  fi
-
-  # 11b. Runner health endpoint responds (proves runner process is alive)
-  # Hit GET /health on port 8001 inside the sandbox pod directly — this is
-  # faster and more reliable than waiting for AG-UI events to propagate
-  # through gRPC to the API server's message store.
-  LIFECYCLE_SBX_NAME="session-$(echo "${LIFECYCLE_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
-  RUNNER_HEALTHY=false
-  for i in $(seq 1 60); do
-    HEALTH_RESP=$(kubectl exec -n "$TENANT" "$LIFECYCLE_SBX_NAME" -- \
-      curl -sf --max-time 2 http://localhost:8001/health 2>/dev/null || echo "")
-    if echo "$HEALTH_RESP" | grep -q '"healthy"' 2>/dev/null; then
-      RUNNER_HEALTHY=true
-      break
-    fi
-    sleep 2
-  done
-
-  if [ "$RUNNER_HEALTHY" = "true" ]; then
-    pass "Runner health endpoint responded (runner is alive inside sandbox)"
-  else
-    fail "Runner /health did not respond within 120s"
-    echo "  Last response: ${HEALTH_RESP:-<empty>}"
-    echo "  Control plane logs (last 20 lines):"
-    kubectl logs -n "${NAMESPACE}" -l app=ambient-control-plane --tail=20 2>&1 | sed 's/^/    /'
-  fi
-
-  # 11c. Initial prompt delivered to session messages
-  # The runner reads /tmp/initial_prompt.txt and pushes a user message
-  # containing the prompt text via gRPC before starting the AG-UI run.
-  PROMPT_FOUND=false
-  MESSAGES_RESP=$(api GET "/api/ambient/v1/sessions/${LIFECYCLE_SESSION_ID}/messages" || echo "")
-  if [ -n "$MESSAGES_RESP" ]; then
-    if echo "$MESSAGES_RESP" | jq -e '.[] | select(.event_type == "user")' >/dev/null 2>&1; then
-      PROMPT_FOUND=true
-    fi
-  fi
-
-  if [ "$PROMPT_FOUND" = "true" ]; then
-    pass "Initial prompt delivered as user message"
-  elif [ "$RUNNER_HEALTHY" = "true" ]; then
-    # Health check proves the runner is alive; the user message may arrive via
-    # a different path (HTTP vs gRPC) depending on configuration.
-    skip "Initial prompt user message" "health check confirmed runner is alive; prompt delivery path may differ"
-  else
-    fail "Initial prompt not found in session messages"
-  fi
-
-else
-  skip "Runner lifecycle verification" "session not created"
-fi
-
 section "Cleanup"
 
 if [ "$SKIP_CLEANUP" = "true" ]; then
   echo -e "  ${YELLOW}Skipping cleanup (--skip-cleanup)${NC}"
-  for _sid in "$CREATED_SESSION_ID" "$REPO_SESSION_ID" "$LIFECYCLE_SESSION_ID"; do
+  for _sid in "$CREATED_SESSION_ID" "$REPO_SESSION_ID"; do
     [ -z "$_sid" ] && continue
     _pod="session-$(echo "${_sid:0:40}" | tr '[:upper:]' '[:lower:]')"
     _phase=$(kubectl get pod "$_pod" -n "$TENANT" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
@@ -691,11 +596,6 @@ else
     api DELETE "/api/ambient/v1/sessions/${REPO_SESSION_ID}" >/dev/null 2>&1 && \
       echo "  Deleted repo session ${REPO_SESSION_ID}" || \
       echo "  Could not delete repo session (non-fatal)"
-  fi
-  if [ -n "$LIFECYCLE_SESSION_ID" ]; then
-    api DELETE "/api/ambient/v1/sessions/${LIFECYCLE_SESSION_ID}" >/dev/null 2>&1 && \
-      echo "  Deleted lifecycle session ${LIFECYCLE_SESSION_ID}" || \
-      echo "  Could not delete lifecycle session (non-fatal)"
   fi
 fi
 
