@@ -8,7 +8,7 @@
 
 ## Purpose
 
-The `ScheduledSession` kind defines a recurring cron schedule that ignites an Agent at specified times. Today the kind is CRUD-only — nothing evaluates cron expressions, computes `next_run_at`, or creates sessions at the scheduled time. This spec defines the execution semantics: how schedules are evaluated, how sessions are created, how failures and edge cases are handled, and how the creator's identity is preserved across triggered runs.
+The `ScheduledSession` kind defines a recurring cron schedule that ignites an Agent at specified times. Today the kind is CRUD-only — nothing evaluates cron expressions, computes `next_run_at`, or creates sessions at the scheduled time. This spec defines the execution semantics: how schedules are evaluated, how sessions are created, and how failures and edge cases are handled.
 
 The scheduler runs inside the API server process. The control plane requires no changes — it picks up triggered sessions through the existing gRPC watch stream and reconciles them into Kubernetes Jobs exactly as it does today.
 
@@ -95,48 +95,23 @@ The API server SHALL run a background polling controller that evaluates due sche
 
 ---
 
-### Requirement: Creator Identity Propagation
+### Requirement: Pre-Trigger Validation
 
-The `ScheduledSession` model SHALL include a `created_by_user_id` field that records who created the schedule. Sessions created by the scheduler SHALL inherit this identity. The field SHALL be extracted from the authenticated JWT username via `auth.GetUsernameFromContext(ctx)` — the same pattern used by the session handler (`sessions/handler.go:88-89`).
+Before creating a session from a schedule, the scheduler SHALL verify that the schedule's referenced resources are still valid. The scheduler runs as internal API server code and uses its own service identity for session creation.
 
-#### Scenario: Creator identity set on create
-- GIVEN a user with ID `user-abc` creates a ScheduledSession
-- WHEN the API server persists the record
-- THEN `created_by_user_id` SHALL be set to `user-abc` from `auth.GetUsernameFromContext(ctx)`
-- AND `created_by_user_id` SHALL be immutable (ignored on PATCH)
-
-#### Scenario: Triggered session inherits creator identity
-- GIVEN a ScheduledSession with `created_by_user_id = "user-abc"`
-- WHEN the scheduler fires and creates a Session
-- THEN the new Session's `created_by_user_id` SHALL be set to `user-abc`
-- AND the scheduler SHALL call the session service layer's `Create` method directly (same code path as `ignite_handler.go:72`), setting `CreatedByUserId` on the session model before creation
-
----
-
-### Requirement: Pre-Trigger Authorization Check
-
-Before creating a session from a schedule, the scheduler SHALL verify that the schedule's creator still has permission to create sessions in the schedule's project. The scheduler runs as internal API server code (not as a user request), so it SHALL call the RBAC evaluator directly: `evaluator.Evaluate(ctx, createdByUserId, "session", "create", projectScope)`.
-
-#### Scenario: Creator still authorized
-- GIVEN a ScheduledSession with `created_by_user_id = "user-abc"` in project `my-project`
-- AND user `user-abc` has `session:create` permission on `my-project` (via `project:editor` or higher role)
+#### Scenario: Project still exists
+- GIVEN a ScheduledSession in project `my-project`
+- AND the project still exists and is not soft-deleted
 - WHEN the scheduler fires
 - THEN a Session SHALL be created normally
 
-#### Scenario: Creator no longer authorized
-- GIVEN a ScheduledSession with `created_by_user_id = "user-abc"` in project `my-project`
-- AND user `user-abc` no longer has `session:create` permission on `my-project`
+#### Scenario: Project no longer exists
+- GIVEN a ScheduledSession in project `my-project`
+- AND the project has been soft-deleted
 - WHEN the scheduler fires
 - THEN no Session SHALL be created
 - AND the schedule SHALL be set to `enabled = false`
-- AND a status message SHALL be recorded indicating the creator no longer has permission
-
-#### Scenario: Creator identity is NULL (pre-migration schedule)
-- GIVEN an existing ScheduledSession where `created_by_user_id` is NULL (created before the migration)
-- WHEN the scheduler evaluates this schedule
-- THEN the scheduler SHALL skip the schedule
-- AND set `enabled = false`
-- AND record a status message: "Schedule disabled: no creator identity. Re-create to enable."
+- AND a status message SHALL be recorded indicating the project no longer exists
 
 ---
 
@@ -238,7 +213,6 @@ When the scheduler or manual trigger creates a session, it SHALL copy template f
   - `agent_id` = `"agent-1"`
   - `source_scheduled_session_id` = the ScheduledSession's ID
   - `scheduled_for` = the cron tick time
-  - `created_by_user_id` = the ScheduledSession's `created_by_user_id`
 
 ---
 
@@ -285,10 +259,10 @@ Triggered sessions SHALL follow the existing session lifecycle for completion an
 
 ### Requirement: No Token Storage
 
-The scheduler SHALL NOT store user OAuth tokens, refresh tokens, or any credentials. Only the `created_by_user_id` (a user identifier) SHALL be stored on the `ScheduledSession`.
+The scheduler SHALL NOT store user OAuth tokens, refresh tokens, or any credentials on the `ScheduledSession`.
 
 #### Scenario: Credential resolution at trigger time
-- GIVEN a ScheduledSession with `created_by_user_id = "user-abc"`
+- GIVEN a ScheduledSession in project `my-project`
 - WHEN the scheduler fires
 - THEN credentials for the session SHALL be resolved at trigger time through the existing RBAC and credential-binding infrastructure
 - AND no stored tokens from the ScheduledSession record SHALL be used
@@ -346,7 +320,6 @@ The scheduler SHALL run inside the API server process. The control plane SHALL N
 
 | Field | Type | Nullable | Default | Notes |
 |-------|------|----------|---------|-------|
-| `created_by_user_id` | `string` | yes | `NULL` | Logical reference to users table (no FK constraint — matches Session.created_by_user_id pattern). Set from JWT on create. Immutable (ignored on PATCH). |
 | `overlap_policy` | `string` | no | `"skip"` | `"skip"` or `"allow"`. Validated at application level. |
 
 ### Session — New Fields
@@ -365,22 +338,20 @@ The scheduler SHALL run inside the API server process. The control plane SHALL N
 
 ### Migration Steps (ordered)
 
-1. Add `created_by_user_id` column to `scheduled_sessions` (nullable, no default)
-2. Add `overlap_policy` column to `scheduled_sessions` with default `"skip"`
-3. Add `source_scheduled_session_id` column to `sessions` (nullable)
-4. Add `scheduled_for` column to `sessions` (nullable)
-5. Create partial unique index `idx_sessions_schedule_idempotency`
-6. Create partial index `idx_ss_due`
-7. Backfill `next_run_at` for existing enabled scheduled sessions:
+1. Add `overlap_policy` column to `scheduled_sessions` with default `"skip"`
+2. Add `source_scheduled_session_id` column to `sessions` (nullable)
+3. Add `scheduled_for` column to `sessions` (nullable)
+4. Create partial unique index `idx_sessions_schedule_idempotency`
+5. Create partial index `idx_ss_due`
+6. Backfill `next_run_at` for existing enabled scheduled sessions:
    - Parse each schedule's cron expression using its `timezone` field
    - On parse failure, set `enabled = false` and `next_run_at = NULL`, log a warning
    - On success, compute `next_run_at` from `now()`
-8. Existing scheduled sessions with NULL `created_by_user_id` are left as-is — the scheduler skips and disables them on first evaluation (see Pre-Trigger Authorization Check)
 
 ### Cross-Spec Updates Required
 
 The following specs SHALL be updated to reflect these changes:
-- **`specs/platform/data-model.spec.md`**: Add `created_by_user_id`, `overlap_policy` to the ScheduledSession ERD and field table. Add `source_scheduled_session_id`, `scheduled_for` to the Session ERD and field table. Update trigger semantics (line 534) to reference `overlap_policy` instead of unconditional skip.
+- **`specs/platform/data-model.spec.md`**: Add `overlap_policy` to the ScheduledSession ERD and field table. Add `source_scheduled_session_id`, `scheduled_for` to the Session ERD and field table. Update trigger semantics to reference `overlap_policy` instead of unconditional skip.
 - **OpenAPI spec** (`openapi/openapi.yaml`): Add new fields to `ScheduledSession` and `Session` schemas. Update trigger response to return the created Session.
 - **SDKs** (Go, Python, TypeScript): Regenerate from updated OpenAPI spec. The `Trigger()` method return type changes from `error` to `(Session, error)`. The `Runs()` method return type changes from untyped map to `SessionList`.
 
@@ -413,9 +384,9 @@ The advisory lock ensures only one replica executes this query at a time. The `L
 | At-least-once with idempotency over at-most-once | Missing a scheduled session is worse than a harmless duplicate attempt rejected by a database constraint. The `UNIQUE(source_scheduled_session_id, scheduled_for)` constraint makes at-least-once operationally equivalent to exactly-once. |
 | Catch-up fires once, not all missed | AI sessions act on current repository state. Replaying N missed intervals after downtime wastes compute with no benefit. One catch-up run per schedule is sufficient. |
 | Skip-on-overlap as default | Concurrent AI sessions from the same schedule risk resource exhaustion and conflicting side effects. Skipping is the safe default; `allow` is opt-in per schedule. |
-| `created_by_user_id` over token storage | Storing user tokens creates a high-value attack target and requires rotation infrastructure. Storing only the user ID and resolving credentials at trigger time through existing RBAC is simpler and more secure. |
-| Pre-trigger auth check | Schedule creation time is not trigger time. A deprovisioned user should not continue spawning sessions indefinitely. The scheduler verifies the creator's permissions before every trigger. |
+| No token storage | Storing user tokens creates a high-value attack target and requires rotation infrastructure. Resolving credentials at trigger time through existing RBAC and credential-binding infrastructure is simpler and more secure. |
+| Pre-trigger validation, not auth check | The scheduler validates that referenced resources (project, agent) still exist before firing. Ownership and audit are handled at the REST middleware layer, not on individual Kind schemas (see data-model.spec.md Design Decisions). |
 | No gRPC watch for scheduled_sessions as prerequisite | The scheduler lives in the same process as the database. Watch streams for `scheduled_sessions` provide UI reactivity (live `next_run_at` updates) but are not required for scheduling and can be added later. |
-| Logical references, not FK constraints | `created_by_user_id` and `source_scheduled_session_id` are logical references (matching the existing `Session.created_by_user_id` pattern) rather than DB-level foreign keys. This avoids cascade complications with soft-deleted records and keeps the migration simple. |
+| Logical references, not FK constraints | `source_scheduled_session_id` is a logical reference rather than a DB-level foreign key. This avoids cascade complications with soft-deleted records and keeps the migration simple. |
 | Advisory lock over `FOR UPDATE SKIP LOCKED` | A single advisory lock per polling tick is simpler than per-row locking. At <1000 schedules the entire polling loop completes in milliseconds, so per-row contention is not a concern. If the API server scales to many replicas, the advisory lock ensures exactly one runs the scheduler. |
 | Partial unique index for idempotency | The unique index on `(source_scheduled_session_id, scheduled_for)` is partial (`WHERE source_scheduled_session_id IS NOT NULL`) to avoid PostgreSQL's NULL-pair uniqueness behavior. Non-scheduled sessions (NULL, NULL) are excluded from the constraint. |

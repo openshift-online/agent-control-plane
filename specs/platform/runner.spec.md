@@ -480,6 +480,7 @@ All env vars are injected by the CP at pod creation time.
 | `AMBIENT_MCP_URL` | Ambient MCP sidecar URL (SSE transport) |
 | `REPOS_JSON` | JSON array of `{url, branch, autoPush}` repo configs |
 | `ACTIVE_WORKFLOW_GIT_URL` | Active workflow repo URL (overrides REPOS_JSON workspace setup) |
+| `SESSION_CONFIG_PATH` | Existing absolute path to a mounted session-config harness repo; appended to Claude SDK `add_dirs` and enables SDK skills |
 | `AGUI_TOKEN` | Session-scoped bearer token; when set, all non-health endpoints require `X-Ambient-Session-Token` header (constant-time comparison) |
 | `PAYLOAD_MCP_CONFIG_FILE` | Path to payload `.mcp.json` (default `/sandbox/.mcp.json`); merged on top of baked-in MCP config |
 | `SDK_OPTIONS` | JSON string of additional Claude SDK options |
@@ -515,6 +516,23 @@ Priority order:
 ```
 
 The resolved `(cwd_path, add_dirs)` tuple is passed to the Claude SDK via `ClaudeAgentAdapter`. Claude Code sees `cwd_path` as its working directory and `add_dirs` as additional indexed directories.
+
+If `SESSION_CONFIG_PATH` is set to an existing absolute directory, the runner
+SHALL append it to `add_dirs` without replacing `cwd_path`. This supports
+Git-backed session-config harness repositories mounted by sandbox payloads:
+
+```yaml
+payloads:
+  - sandbox_path: /sandbox/session-config
+    repo_url: https://github.com/example/team-session-config
+    ref: main
+environment:
+  SESSION_CONFIG_PATH: /sandbox/session-config
+```
+
+For Claude sessions, the bridge SHALL also enable SDK skills when
+`SESSION_CONFIG_PATH` resolves successfully so skills in the mounted harness can
+be discovered and activated by semantic prompt intent.
 
 ---
 

@@ -170,6 +170,49 @@ On the cluster, when the operator copies `ambient-admin-mlflow-observability-sec
 
 - `MCP_CONFIG_FILE` - Path to MCP servers config (default: `/app/claude-runner/.mcp.json`)
 
+### Session Config Harness
+
+`SESSION_CONFIG_PATH` points the runner at a mounted session-config repository.
+Use this when an Agent should bring its own Claude skills or reusable harness
+content without making that repository the work repo.
+
+Declare the session-config repo as a sandbox payload and set the matching
+environment variable on the Agent:
+
+```yaml
+payloads:
+  - sandbox_path: /sandbox/session-config
+    repo_url: https://github.com/example/team-session-config
+    ref: main
+environment:
+  SESSION_CONFIG_PATH: /sandbox/session-config
+```
+
+At runtime:
+
+- The primary workflow or work repo remains Claude's `cwd`.
+- `/sandbox/session-config` is passed to the Claude SDK as an additional
+  directory.
+- Claude SDK skills are enabled so skills under the mounted harness can be
+  discovered and invoked semantically.
+
+A typical session-config repo can contain native Claude Code surfaces:
+
+```text
+.
+|-- AGENTS.md
+|-- .claude/
+|   `-- skills/
+|       `-- my-skill/
+|           `-- SKILL.md
+|-- skills/
+`-- library/
+```
+
+`SESSION_CONFIG_PATH` must be an existing absolute directory. If it is unset,
+relative, missing, or not a directory, the runner ignores it and starts with the
+normal workspace behavior.
+
 ### Google Workspace Integration
 
 - `USER_GOOGLE_EMAIL` - User's Google email for authentication (set by operator)

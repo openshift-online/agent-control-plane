@@ -29,8 +29,10 @@ def test_all_env_vars_present_activates():
     mock_mlflow = MagicMock()
     mock_mlflow.anthropic = MagicMock()
 
-    with patch.dict(os.environ, FULL_ENV, clear=True), \
-         patch.dict("sys.modules", {"mlflow": mock_mlflow}):
+    with (
+        patch.dict(os.environ, FULL_ENV, clear=True),
+        patch.dict("sys.modules", {"mlflow": mock_mlflow}),
+    ):
         assert activate_mlflow_autologging() is True
 
     mock_mlflow.set_tracking_uri.assert_called_once_with("https://mlflow.example.com")
@@ -73,8 +75,10 @@ def test_mlflow_required_with_all_vars_activates():
     mock_mlflow.anthropic = MagicMock()
     env = {**FULL_ENV, "MLFLOW_REQUIRED": "true"}
 
-    with patch.dict(os.environ, env, clear=True), \
-         patch.dict("sys.modules", {"mlflow": mock_mlflow}):
+    with (
+        patch.dict(os.environ, env, clear=True),
+        patch.dict("sys.modules", {"mlflow": mock_mlflow}),
+    ):
         assert activate_mlflow_autologging() is True
 
 
@@ -82,8 +86,10 @@ def test_activation_exception_is_best_effort():
     mock_mlflow = MagicMock()
     mock_mlflow.set_tracking_uri.side_effect = Exception("network error")
 
-    with patch.dict(os.environ, FULL_ENV, clear=True), \
-         patch.dict("sys.modules", {"mlflow": mock_mlflow}):
+    with (
+        patch.dict(os.environ, FULL_ENV, clear=True),
+        patch.dict("sys.modules", {"mlflow": mock_mlflow}),
+    ):
         assert activate_mlflow_autologging() is False
 
 
@@ -91,8 +97,10 @@ def test_idempotent_second_call():
     mock_mlflow = MagicMock()
     mock_mlflow.anthropic = MagicMock()
 
-    with patch.dict(os.environ, FULL_ENV, clear=True), \
-         patch.dict("sys.modules", {"mlflow": mock_mlflow}):
+    with (
+        patch.dict(os.environ, FULL_ENV, clear=True),
+        patch.dict("sys.modules", {"mlflow": mock_mlflow}),
+    ):
         assert activate_mlflow_autologging() is True
         assert activate_mlflow_autologging() is True
 

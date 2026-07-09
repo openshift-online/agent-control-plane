@@ -1,0 +1,116 @@
+name: vTeam Catalog Lab E2E
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/vteam-catalog-lab-e2e.yml'
+      - 'Makefile'
+      - 'examples/vteam-catalog/**'
+      - 'tests/e2e/vteam-catalog-lab-test.sh'
+      - 'tests/infra/**'
+      - 'components/manifests/**'
+      - 'scripts/setup-kind-openshell.sh'
+      - 'scripts/setup-kind-sso.sh'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vteam-catalog-lab-e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lab-markdown-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    env:
+      KUBECTL_VERSION: v1.31.4
+      KIND_VERSION: v0.31.0
+      GOOGLE_APPLICATION_CREDENTIALS: /tmp/vertex.json
+      ANTHROPIC_VERTEX_PROJECT_ID: test-project
+      CLOUD_ML_REGION: global
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+
+      - name: Cleanup diskspace
+        if: (!cancelled())
+        run: |
+          docker system prune -f
+          df -h
+
+      - name: Cache kubectl and kind
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8
+        with:
+          path: |
+            ~/k8s-tools/kubectl
+            ~/k8s-tools/kind
+          key: k8s-tools-${{ runner.os }}-kubectl-${{ env.KUBECTL_VERSION }}-kind-${{ env.KIND_VERSION }}
+
+      - name: Install kind and kubectl
+        run: |
+          mkdir -p ~/k8s-tools
+
+          if [[ ! -f ~/k8s-tools/kubectl ]]; then
+            curl -sLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+            chmod +x kubectl
+            mv kubectl ~/k8s-tools/
+          fi
+          sudo cp ~/k8s-tools/kubectl /usr/local/bin/kubectl
+
+          if [[ ! -f ~/k8s-tools/kind ]]; then
+            curl -sLO "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+            chmod +x kind-linux-amd64
+            mv kind-linux-amd64 ~/k8s-tools/kind
+          fi
+          sudo cp ~/k8s-tools/kind /usr/local/bin/kind
+
+          kubectl version --client
+          kind version
+
+      - name: Create dummy Vertex credentials
+        run: |
+          cat > /tmp/vertex.json <<'JSON'
+          {"type":"service_account","project_id":"test","private_key_id":"dummy","private_key":"-----BEGIN RSA PRIVATE KEY-----\nMIIBogIBAAJBALRiMLAH\n-----END RSA PRIVATE KEY-----\n","client_email":"test@test.iam.gserviceaccount.com","client_id":"0","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token"}
+          JSON
+
+      - name: Bring up ACP lab cluster
+        run: |
+          make kind-up CONTAINER_ENGINE=docker CI_MODE=true VERTEX_CRED=/tmp/vertex.json OPENSHELL_USE_GATEWAY=true
+
+      - name: Run vTeam Catalog lab markdown e2e
+        run: |
+          make test-vteam-catalog-lab CONTAINER_ENGINE=docker
+
+      - name: Show deployment status
+        if: always()
+        run: |
+          echo "=== Kind clusters ==="
+          kind get clusters 2>&1 || true
+
+          echo ""
+          echo "=== Namespaces ==="
+          kubectl get namespaces 2>&1 || true
+
+          echo ""
+          echo "=== ambient-code pods ==="
+          kubectl get pods -n ambient-code -o wide 2>&1 || true
+
+          echo ""
+          echo "=== vTeam project records ==="
+          acpctl get project vteam-product-swarm 2>&1 || true
+          acpctl agent list --project-id vteam-product-swarm 2>&1 || true
+          acpctl provider list --project-id vteam-product-swarm 2>&1 || true
+
+          echo ""
+          echo "=== Recent ambient-code events ==="
+          kubectl get events -n ambient-code --sort-by='.lastTimestamp' 2>&1 | tail -40 || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          make kind-down CONTAINER_ENGINE=docker 2>&1 || true

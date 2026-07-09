@@ -1,0 +1,13 @@
+kind: Agent
+name: repo-clone-workspace
+prompt: "Describe the repository you have access to"
+providers:
+  - vertex
+payloads:
+  - sandbox_path: /sandbox/CLAUDE.md
+    content: "You have a cloned repository at /sandbox/workspace. Explore it."
+  - sandbox_path: /sandbox/workspace
+    repo_url: https://github.com/octocat/Hello-World.git
+    ref: master
+labels:
+  purpose: testing

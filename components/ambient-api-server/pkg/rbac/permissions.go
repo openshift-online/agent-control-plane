@@ -14,6 +14,8 @@ const (
 	ResourceRole            Resource = "role"
 	ResourceRoleBinding     Resource = "role_binding"
 	ResourceCredential      Resource = "credential"
+	ResourceProvider        Resource = "provider"
+	ResourceGateway         Resource = "gateway"
 )
 
 type Action string
@@ -108,4 +110,16 @@ var (
 	PermCredentialDelete     = Permission{ResourceCredential, ActionDelete}
 	PermCredentialList       = Permission{ResourceCredential, ActionList}
 	PermCredentialFetchToken = Permission{ResourceCredential, ActionFetchToken}
+
+	PermProviderCreate = Permission{ResourceProvider, ActionCreate}
+	PermProviderRead   = Permission{ResourceProvider, ActionRead}
+	PermProviderUpdate = Permission{ResourceProvider, ActionUpdate}
+	PermProviderDelete = Permission{ResourceProvider, ActionDelete}
+	PermProviderList   = Permission{ResourceProvider, ActionList}
+
+	PermGatewayCreate = Permission{ResourceGateway, ActionCreate}
+	PermGatewayRead   = Permission{ResourceGateway, ActionRead}
+	PermGatewayUpdate = Permission{ResourceGateway, ActionUpdate}
+	PermGatewayDelete = Permission{ResourceGateway, ActionDelete}
+	PermGatewayList   = Permission{ResourceGateway, ActionList}
 )

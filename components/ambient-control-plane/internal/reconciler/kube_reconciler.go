@@ -387,6 +387,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	if policyErr != nil {
 		return fmt.Errorf("resolving sandbox policy: %w", policyErr)
 	}
+	sandboxPolicy = ensureACPInternalPolicy(sandboxPolicy, r.cfg.CPRuntimeNamespace)
 
 	req := &openshellpb.CreateSandboxRequest{
 		Name: sbxName,
@@ -609,7 +610,12 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		now := time.Now()
-		condJSON, _ := json.Marshal([]map[string]string{{"type": "SandboxFailure", "reason": reason}})
+		condJSON, _ := json.Marshal([]map[string]string{{
+			"type":    "SandboxFailure",
+			"status":  "False",
+			"reason":  "SetupFailed",
+			"message": reason,
+		}})
 		if _, err := sdk.Sessions().UpdateStatus(ctx, sessionID, map[string]interface{}{
 			"phase":           PhaseFailed,
 			"completion_time": &now,
@@ -731,20 +737,25 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			execCtx := context.Background()
 
 			if len(payloads) > 0 {
-				var sshPayloads []openshell.Payload
-				for _, p := range payloads {
-					if p.SandboxPath != "" && p.Content != "" {
-						sshPayloads = append(sshPayloads, openshell.Payload{Path: p.SandboxPath, Content: p.Content})
-					}
-				}
+				sshPayloads, hasRepo := convertPayloads(payloads, r.logger, sbxName)
 				if len(sshPayloads) > 0 {
-					if uploadErr := r.gateway.UploadPayloads(execCtx, namespace, sandboxID, sshPayloads); uploadErr != nil {
+					uploadCtx := execCtx
+					if hasRepo {
+						var cancel context.CancelFunc
+						uploadCtx, cancel = context.WithTimeout(execCtx, 5*time.Minute)
+						defer cancel()
+					}
+					if uploadErr := r.gateway.UploadPayloads(uploadCtx, namespace, sandboxID, sshPayloads); uploadErr != nil {
 						r.logger.Error().Err(uploadErr).Str("sandbox", sbxName).Msg("failed to upload payloads via SSH")
 						failSession(fmt.Sprintf("payload upload failed: %v", uploadErr))
 						return
 					}
 					for _, p := range sshPayloads {
-						r.logger.Info().Str("sandbox", sbxName).Str("path", p.Path).Msg("payload written to sandbox")
+						if p.RepoURL != "" {
+							r.logger.Info().Str("sandbox", sbxName).Str("path", p.Path).Str("repo_url", p.RepoURL).Str("ref", p.Ref).Msg("repo payload cloned to sandbox")
+						} else {
+							r.logger.Info().Str("sandbox", sbxName).Str("path", p.Path).Msg("payload written to sandbox")
+						}
 					}
 				}
 			}
@@ -769,6 +780,29 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			return
 		}
 	}
+}
+
+func convertPayloads(payloads []types.Payload, logger zerolog.Logger, sandbox string) ([]openshell.Payload, bool) {
+	var result []openshell.Payload
+	hasRepo := false
+	for _, p := range payloads {
+		if p.SandboxPath == "" {
+			continue
+		}
+		switch {
+		case p.Content != "" && p.RepoURL != "":
+			logger.Warn().
+				Str("sandbox", sandbox).
+				Str("path", p.SandboxPath).
+				Msg("payload has both content and repo_url set, skipping")
+		case p.Content != "":
+			result = append(result, openshell.Payload{Path: p.SandboxPath, Content: p.Content})
+		case p.RepoURL != "":
+			result = append(result, openshell.Payload{Path: p.SandboxPath, RepoURL: p.RepoURL, Ref: p.Ref})
+			hasRepo = true
+		}
+	}
+	return result, hasRepo
 }
 
 func (r *SimpleKubeReconciler) enableProvidersV2(ctx context.Context, namespace string) error {
@@ -854,7 +888,11 @@ func (r *SimpleKubeReconciler) ensureVertexCredentialRefresh(ctx context.Context
 		CredentialKey: credKey,
 	})
 	if err != nil {
-		return fmt.Errorf("rotating credential: %w", err)
+		r.logger.Warn().Err(err).
+			Str("provider", provName).
+			Str("credential_key", credKey).
+			Msg("initial credential rotation failed; gateway will retry on demand")
+		return nil
 	}
 
 	r.logger.Info().

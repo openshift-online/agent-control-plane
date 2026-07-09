@@ -9,11 +9,40 @@ import json as _json
 import logging
 import os
 from pathlib import Path
+from typing import Final
 
 from ambient_runner.platform.context import RunnerContext
 from ambient_runner.platform.utils import parse_owner_repo
 
 logger = logging.getLogger(__name__)
+
+SESSION_CONFIG_PATH_ENV: Final = "SESSION_CONFIG_PATH"
+
+
+def get_session_config_path() -> str | None:
+    raw_path = os.getenv(SESSION_CONFIG_PATH_ENV, "").strip()
+    if not raw_path:
+        return None
+
+    session_config_path = Path(raw_path)
+    if not session_config_path.is_absolute():
+        logger.warning("%s must be absolute: %s", SESSION_CONFIG_PATH_ENV, raw_path)
+        return None
+    if not session_config_path.exists():
+        logger.warning(
+            "%s does not exist: %s",
+            SESSION_CONFIG_PATH_ENV,
+            session_config_path,
+        )
+        return None
+    if not session_config_path.is_dir():
+        logger.warning(
+            "%s is not a directory: %s",
+            SESSION_CONFIG_PATH_ENV,
+            session_config_path,
+        )
+        return None
+    return str(session_config_path)
 
 
 def load_ambient_config(cwd_path: str) -> dict:

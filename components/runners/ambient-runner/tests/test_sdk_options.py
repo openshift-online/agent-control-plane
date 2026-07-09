@@ -114,6 +114,7 @@ class TestParseSdkOptionsDenylist:
             "add_dirs",
             "cli_path",
             "env",
+            "skills",
         }
         assert _SDK_OPTIONS_DENYLIST == expected
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/gateway"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell"
 	pb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
@@ -428,6 +429,98 @@ func TestUseMCPSidecar_GatewayModeDisablesMCP(t *testing.T) {
 	}
 }
 
+func TestConvertPayloads(t *testing.T) {
+	logger := zerolog.Nop()
+
+	tests := []struct {
+		name        string
+		payloads    []types.Payload
+		wantCount   int
+		wantHasRepo bool
+		wantPaths   []string
+	}{
+		{
+			name: "inline content only",
+			payloads: []types.Payload{
+				{SandboxPath: "/sandbox/file.txt", Content: "hello"},
+			},
+			wantCount:   1,
+			wantHasRepo: false,
+			wantPaths:   []string{"/sandbox/file.txt"},
+		},
+		{
+			name: "repo url only",
+			payloads: []types.Payload{
+				{SandboxPath: "/sandbox/workspace", RepoURL: "https://github.com/foo/bar.git", Ref: "main"},
+			},
+			wantCount:   1,
+			wantHasRepo: true,
+			wantPaths:   []string{"/sandbox/workspace"},
+		},
+		{
+			name: "mixed content and repo payloads",
+			payloads: []types.Payload{
+				{SandboxPath: "/sandbox/config.yaml", Content: "key: value"},
+				{SandboxPath: "/sandbox/src", RepoURL: "https://github.com/foo/bar.git"},
+			},
+			wantCount:   2,
+			wantHasRepo: true,
+			wantPaths:   []string{"/sandbox/config.yaml", "/sandbox/src"},
+		},
+		{
+			name: "both content and repo_url set — skipped",
+			payloads: []types.Payload{
+				{SandboxPath: "/sandbox/bad", Content: "inline", RepoURL: "https://github.com/foo/bar.git"},
+			},
+			wantCount:   0,
+			wantHasRepo: false,
+			wantPaths:   nil,
+		},
+		{
+			name: "empty sandbox_path — skipped",
+			payloads: []types.Payload{
+				{Content: "orphan"},
+			},
+			wantCount:   0,
+			wantHasRepo: false,
+			wantPaths:   nil,
+		},
+		{
+			name: "neither content nor repo_url — skipped",
+			payloads: []types.Payload{
+				{SandboxPath: "/sandbox/empty"},
+			},
+			wantCount:   0,
+			wantHasRepo: false,
+			wantPaths:   nil,
+		},
+		{
+			name:        "empty list",
+			payloads:    nil,
+			wantCount:   0,
+			wantHasRepo: false,
+			wantPaths:   nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, hasRepo := convertPayloads(tt.payloads, logger, "test-sandbox")
+			if len(result) != tt.wantCount {
+				t.Errorf("got %d payloads, want %d", len(result), tt.wantCount)
+			}
+			if hasRepo != tt.wantHasRepo {
+				t.Errorf("hasRepo = %v, want %v", hasRepo, tt.wantHasRepo)
+			}
+			for i, p := range result {
+				if i < len(tt.wantPaths) && p.Path != tt.wantPaths[i] {
+					t.Errorf("payload[%d].Path = %q, want %q", i, p.Path, tt.wantPaths[i])
+				}
+			}
+		})
+	}
+}
+
 type mockProvisioner struct{}
 
 func (m *mockProvisioner) NamespaceName(projectID string) string {
@@ -460,19 +553,18 @@ func TestMergeAgentEnvironment_ImmutableKeys(t *testing.T) {
 
 	agent := &types.Agent{
 		Environment: map[string]string{
-			"AMBIENT_CP_TOKEN_URL":        "http://evil:9999",
-			"ANTHROPIC_BASE_URL":          "https://evil.example.com",
-			"ANTHROPIC_API_KEY":           "stolen",
-			"ACP_OPENSHELL_INFERENCE":     "false",
-			"AMBIENT_GRPC_URL":            "grpc://evil:1234",
-			"MLFLOW_EXPERIMENT_NAME":      "my-experiment",
-			"CUSTOM_VAR":                  "allowed",
+			"AMBIENT_CP_TOKEN_URL":    "http://evil:9999",
+			"ANTHROPIC_BASE_URL":      "https://evil.example.com",
+			"ANTHROPIC_API_KEY":       "stolen",
+			"ACP_OPENSHELL_INFERENCE": "false",
+			"AMBIENT_GRPC_URL":        "grpc://evil:1234",
+			"MLFLOW_EXPERIMENT_NAME":  "my-experiment",
+			"CUSTOM_VAR":              "allowed",
 		},
 	}
 
 	r.mergeAgentEnvironment(env, agent)
 
-	// Platform-critical keys must NOT be overwritten
 	if env["AMBIENT_CP_TOKEN_URL"] != "http://cp:8080" {
 		t.Errorf("AMBIENT_CP_TOKEN_URL was overwritten: %s", env["AMBIENT_CP_TOKEN_URL"])
 	}
@@ -489,7 +581,6 @@ func TestMergeAgentEnvironment_ImmutableKeys(t *testing.T) {
 		t.Errorf("AMBIENT_GRPC_URL was overwritten: %s", env["AMBIENT_GRPC_URL"])
 	}
 
-	// Non-platform keys MUST be overwritten
 	if env["MLFLOW_EXPERIMENT_NAME"] != "my-experiment" {
 		t.Errorf("MLFLOW_EXPERIMENT_NAME should be overridden, got: %s", env["MLFLOW_EXPERIMENT_NAME"])
 	}
@@ -502,13 +593,13 @@ func TestBuildSandboxEnv_MLflowInjection(t *testing.T) {
 	mlflowProviderName := openshell.ProviderName("test-project", "mlflow")
 
 	tests := []struct {
-		name             string
-		trackingURI      string
-		experimentName   string
-		providerNames    []string
-		wantURI          string
-		wantExperiment   string
-		wantTracingFlag  bool
+		name            string
+		trackingURI     string
+		experimentName  string
+		providerNames   []string
+		wantURI         string
+		wantExperiment  string
+		wantTracingFlag bool
 	}{
 		{
 			name:            "MLflow provider present with config values",
@@ -575,6 +666,44 @@ func TestBuildSandboxEnv_MLflowInjection(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestConvertPayloads_RepoFieldsPreserved(t *testing.T) {
+	logger := zerolog.Nop()
+	payloads := []types.Payload{
+		{SandboxPath: "/sandbox/code", RepoURL: "https://github.com/org/repo.git", Ref: "v1.2.3"},
+	}
+	result, _ := convertPayloads(payloads, logger, "test-sandbox")
+	if len(result) != 1 {
+		t.Fatalf("expected 1 payload, got %d", len(result))
+	}
+	p := result[0]
+	if p.RepoURL != "https://github.com/org/repo.git" {
+		t.Errorf("RepoURL = %q, want %q", p.RepoURL, "https://github.com/org/repo.git")
+	}
+	if p.Ref != "v1.2.3" {
+		t.Errorf("Ref = %q, want %q", p.Ref, "v1.2.3")
+	}
+	if p.Content != "" {
+		t.Errorf("Content should be empty for repo payload, got %q", p.Content)
+	}
+}
+
+func TestPayloadStructFields(t *testing.T) {
+	p := openshell.Payload{
+		Path:    "/sandbox/workspace",
+		RepoURL: "https://github.com/test/repo.git",
+		Ref:     "main",
+	}
+	if p.Path != "/sandbox/workspace" {
+		t.Error("Path field not set")
+	}
+	if p.RepoURL != "https://github.com/test/repo.git" {
+		t.Error("RepoURL field not set")
+	}
+	if p.Ref != "main" {
+		t.Error("Ref field not set")
 	}
 }
 
@@ -700,7 +829,6 @@ func TestVerifyAndFixDNSConfig(t *testing.T) {
 				t.Errorf("err = %v, wantErr = %v", err, tt.wantErr)
 			}
 
-			// Verify pod was deleted when expected
 			if tt.wantDeleted {
 				_, getErr := kube.DynamicClient().Resource(kubeclient.PodGVR).Namespace("test-ns").Get(context.Background(), "test-sandbox", metav1.GetOptions{})
 				if !k8serrors.IsNotFound(getErr) {
@@ -714,5 +842,27 @@ func TestVerifyAndFixDNSConfig(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestReconcileGateway_NamespacePlaceholderSubstitution(t *testing.T) {
+	input := []string{
+		"openshell-gateway.NAMESPACE_PLACEHOLDER.svc.cluster.local",
+	}
+	gatewayName := "tenant-a"
+
+	resolved := make([]string, len(input))
+	for i, dns := range input {
+		resolved[i] = strings.ReplaceAll(dns, "NAMESPACE_PLACEHOLDER", gatewayName)
+	}
+
+	if resolved[0] != "openshell-gateway.tenant-a.svc.cluster.local" {
+		t.Errorf("expected substituted DNS name, got %q", resolved[0])
+	}
+
+	for _, dns := range resolved {
+		if err := gateway.ValidateDNSName(dns); err != nil {
+			t.Errorf("resolved DNS name %q failed validation: %v", dns, err)
+		}
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/gateway"
+	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/rs/zerolog"
@@ -26,6 +27,7 @@ type GatewayReconciler struct {
 	factory             *SDKClientFactory
 	dynamicClient       dynamic.Interface
 	clientset           *kubernetes.Clientset
+	provisioner         kubeclient.NamespaceProvisioner
 	logger              zerolog.Logger
 	manifests           map[string][]*unstructured.Unstructured
 	defaultGatewayImage string
@@ -35,6 +37,7 @@ func NewGatewayReconciler(
 	factory *SDKClientFactory,
 	dynamicClient dynamic.Interface,
 	clientset *kubernetes.Clientset,
+	provisioner kubeclient.NamespaceProvisioner,
 	logger zerolog.Logger,
 ) *GatewayReconciler {
 	defaultImage := os.Getenv("OPENSHELL_GATEWAY_IMAGE")
@@ -45,6 +48,7 @@ func NewGatewayReconciler(
 		factory:             factory,
 		dynamicClient:       dynamicClient,
 		clientset:           clientset,
+		provisioner:         provisioner,
 		logger:              logger.With().Str("component", "gateway-reconciler").Logger(),
 		defaultGatewayImage: defaultImage,
 	}
@@ -92,7 +96,7 @@ func (r *GatewayReconciler) reconcileOnce(ctx context.Context) {
 
 	var totalGateways, failedGateways int
 	for _, project := range projects {
-		count, failures, reconcileErr := r.reconcileProjectGateways(ctx, project.ID)
+		count, failures, reconcileErr := r.reconcileProjectGateways(ctx, project)
 		if reconcileErr != nil {
 			r.logger.Error().Err(reconcileErr).Str("project_id", project.ID).Msg("failed to reconcile project gateways")
 			continue
@@ -134,26 +138,28 @@ func (r *GatewayReconciler) listAllProjects(ctx context.Context, client *sdkclie
 	return all, nil
 }
 
-func (r *GatewayReconciler) reconcileProjectGateways(ctx context.Context, projectID string) (int, int, error) {
-	projectClient, err := r.factory.ForProject(ctx, projectID)
+func (r *GatewayReconciler) reconcileProjectGateways(ctx context.Context, project types.Project) (int, int, error) {
+	projectClient, err := r.factory.ForProject(ctx, project.ID)
 	if err != nil {
-		return 0, 0, fmt.Errorf("create SDK client for project %s: %w", projectID, err)
+		return 0, 0, fmt.Errorf("create SDK client for project %s: %w", project.ID, err)
 	}
 
 	gateways, err := r.listAllGateways(ctx, projectClient)
 	if err != nil {
-		return 0, 0, fmt.Errorf("list gateways in project %s: %w", projectID, err)
+		return 0, 0, fmt.Errorf("list gateways in project %s: %w", project.ID, err)
 	}
+
+	namespace := r.provisioner.NamespaceName(project.ID)
 
 	var failures int
 	for i := range gateways {
 		gw := &gateways[i]
-		if reconcileErr := r.reconcileGateway(ctx, projectClient, gw); reconcileErr != nil {
+		if reconcileErr := r.reconcileGateway(ctx, projectClient, gw, namespace); reconcileErr != nil {
 			failures++
 			r.logger.Error().Err(reconcileErr).
 				Str("gateway_id", gw.ID).
 				Str("gateway_name", gw.Name).
-				Str("project_id", projectID).
+				Str("project_id", project.ID).
 				Msg("failed to reconcile gateway")
 			r.updateGatewayAnnotation(ctx, projectClient, gw, "ambient.ai/reconcile-status", "Failed: "+sanitizeAnnotationValue(reconcileErr.Error()))
 		}
@@ -180,10 +186,15 @@ func (r *GatewayReconciler) listAllGateways(ctx context.Context, client *sdkclie
 	return all, nil
 }
 
-func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway) error {
+func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway, namespace string) error {
+	resolvedDnsNames := make([]string, len(gw.ServerDnsNames))
+	for i, dns := range gw.ServerDnsNames {
+		resolvedDnsNames[i] = strings.ReplaceAll(dns, "NAMESPACE_PLACEHOLDER", namespace)
+	}
+
 	gwConfig := gateway.GatewayConfig{
 		Image:          gw.Image,
-		ServerDnsNames: gw.ServerDnsNames,
+		ServerDnsNames: resolvedDnsNames,
 		Config:         gw.Config,
 	}
 
@@ -196,7 +207,7 @@ func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient 
 	}
 
 	nsConfig := gateway.NamespaceConfig{
-		Name:    gw.Name,
+		Name:    namespace,
 		Gateway: gwConfig,
 	}
 

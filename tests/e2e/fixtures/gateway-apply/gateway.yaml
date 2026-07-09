@@ -1,0 +1,4 @@
+kind: Gateway
+name: openshell-gateway
+server_dns_names:
+  - openshell-gateway.e2e-gateway-apply.svc.cluster.local

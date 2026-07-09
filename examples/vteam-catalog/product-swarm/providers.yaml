@@ -1,0 +1,20 @@
+kind: Provider
+name: vertex
+type: vertex
+secret: vertex-sa-key
+labels:
+  vteam.acp.dev/team: product-swarm
+---
+kind: Provider
+name: github
+type: github
+secret: github-creds
+labels:
+  vteam.acp.dev/team: product-swarm
+---
+kind: Provider
+name: jira
+type: generic
+secret: jira
+labels:
+  vteam.acp.dev/team: product-swarm

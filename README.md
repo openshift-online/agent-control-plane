@@ -28,8 +28,26 @@ The Agent Control Plane (ACP) lets teams create and manage AI agentic sessions �
 
 ```bash
 make kind-up
-make kind-port-forward   # ports shown in output
+make kind-port-forward           # ports shown in output
+make kind-setup-openshell-cli    # optional: port-forward to OpenShell gateways
 ```
+
+**Optional — pre-load the runner image into the kind cluster** to speed up the first sandbox creation:
+
+```bash
+# Podman (used by default)
+podman pull quay.io/ambient_code/acp_claude_runner:latest && \
+podman save quay.io/ambient_code/acp_claude_runner:latest | \
+podman exec -i $(kind get clusters | grep '^ambient-' | head -1)-control-plane \
+ctr --namespace=k8s.io images import -
+
+# Docker
+docker pull quay.io/ambient_code/acp_claude_runner:latest && \
+kind load docker-image quay.io/ambient_code/acp_claude_runner:latest \
+  --name $(kind get clusters | grep '^ambient-' | head -1)
+```
+
+Once the cluster is running, see [examples/README.md](examples/README.md) to deploy starter agents and vTeam lab environments.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md#local-development-setup) for full local development setup.
 
@@ -47,6 +65,10 @@ Override defaults with:
 After the sandbox reaches Ready, the control plane executes commands inside it via the `ExecSandbox` gRPC RPC — the runner starts through exec, not the container entrypoint.
 
 See [OpenShell Sandbox Provisioning Spec](specs/platform/openshell-sandbox-provisioning.spec.md) for full details on gateway mode, CRD version compatibility, and configuration.
+
+## vTeam Lab
+
+The [examples/](examples/) directory contains starter agents and multi-agent virtual team definitions. See the [examples README](examples/README.md) for prerequisites, tenant setup, and the full vTeam catalog.
 
 ## Architecture
 

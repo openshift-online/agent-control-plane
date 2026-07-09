@@ -1,6 +1,11 @@
 package openshell
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
 	"testing"
 )
 
@@ -172,6 +177,118 @@ func TestDetectGoogleCredentialType(t *testing.T) {
 			}
 		})
 	}
+}
+
+func generateTestRSAKeyPKCS1(t *testing.T) string {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generating RSA key: %v", err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	}))
+}
+
+func generateTestRSAKeyPKCS8(t *testing.T) string {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generating RSA key: %v", err)
+	}
+	pkcs8Bytes, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatalf("marshaling PKCS8: %v", err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: pkcs8Bytes,
+	}))
+}
+
+func saKeyJSON(email, key string) string {
+	b, _ := json.Marshal(map[string]string{"client_email": email, "private_key": key})
+	return string(b)
+}
+
+func TestExtractServiceAccountJWTMaterial(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr string
+	}{
+		{
+			name:  "valid PKCS1 RSA key",
+			input: saKeyJSON("sa@proj.iam.gserviceaccount.com", generateTestRSAKeyPKCS1(t)),
+		},
+		{
+			name:  "valid PKCS8 RSA key",
+			input: saKeyJSON("sa@proj.iam.gserviceaccount.com", generateTestRSAKeyPKCS8(t)),
+		},
+		{
+			name:    "missing client_email",
+			input:   saKeyJSON("", generateTestRSAKeyPKCS1(t)),
+			wantErr: "missing client_email or private_key",
+		},
+		{
+			name:    "missing private_key",
+			input:   `{"client_email":"sa@proj.iam"}`,
+			wantErr: "missing client_email or private_key",
+		},
+		{
+			name:    "truncated PEM key",
+			input:   saKeyJSON("sa@proj.iam", "-----BEGIN RSA PRIVATE KEY-----\nMIIBogIBAAJBALRiMLAH\n-----END RSA PRIVATE KEY-----\n"),
+			wantErr: "not valid RSA PEM",
+		},
+		{
+			name:    "no PEM block at all",
+			input:   saKeyJSON("sa@proj.iam", "not-a-pem-key"),
+			wantErr: "no PEM block found",
+		},
+		{
+			name:    "invalid JSON",
+			input:   "not-json",
+			wantErr: "invalid character",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ExtractServiceAccountJWTMaterial(tt.input)
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+				}
+				if !contains(err.Error(), tt.wantErr) {
+					t.Fatalf("error %q does not contain %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got.ClientEmail != "sa@proj.iam.gserviceaccount.com" {
+				t.Errorf("ClientEmail = %q, want sa@proj.iam.gserviceaccount.com", got.ClientEmail)
+			}
+			if got.PrivateKey == "" {
+				t.Error("PrivateKey is empty")
+			}
+		})
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && searchSubstring(s, substr)
+}
+
+func searchSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 func TestOpenShellProviderType_MLflow(t *testing.T) {
