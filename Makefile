@@ -73,7 +73,7 @@ CONTROL_PLANE_IMAGE ?= acp_control_plane:$(IMAGE_TAG)
 MCP_IMAGE ?= acp_mcp:$(IMAGE_TAG)
 
 # Quay runner image reference and tag for kind pre-loading
-RUNNER_QUAY_IMAGE ?= quay.io/ambient_code/acp_claude_runner
+RUNNER_QUAY_IMAGE ?= quay.io/ambient_code/acp_runner_openshell
 RUNNER_PRELOAD_TAG ?= kind-preloaded
 
 # kind-local overlay always references localhost/acp_* images.
@@ -922,7 +922,7 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 		$(MAKE) --no-print-directory _kind-preload-runner; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching control plane to use pre-loaded runner image..."; \
 		kubectl set env deployment/ambient-control-plane -n $(NAMESPACE) \
-			RUNNER_IMAGE=$(RUNNER_QUAY_IMAGE):$(RUNNER_PRELOAD_TAG) $(QUIET_REDIRECT); \
+			OPENSHELL_RUNNER_IMAGE=$(RUNNER_QUAY_IMAGE):$(RUNNER_PRELOAD_TAG) $(QUIET_REDIRECT); \
 	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods..."
 	@./tests/infra/wait-for-ready.sh
