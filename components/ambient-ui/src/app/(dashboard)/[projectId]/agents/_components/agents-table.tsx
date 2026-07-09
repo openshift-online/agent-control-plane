@@ -24,7 +24,7 @@ import type { DomainAgent } from '@/domain/types'
 import { formatRelativeTime } from '@/lib/format-timestamp'
 import { useTableKeyboardNav } from '@/hooks/use-table-keyboard-nav'
 import { cn } from '@/lib/utils'
-import { LifecycleBadge, getAgentLifecycle } from './lifecycle-badge'
+import { LifecycleBadge, getResourceLifecycle } from './lifecycle-badge'
 
 const col = createColumnHelper<DomainAgent>()
 
@@ -47,7 +47,7 @@ const agentColumns = [
     id: 'source',
     header: 'Source',
     cell: ({ row }) => {
-      const lifecycle = getAgentLifecycle(row.original.annotations)
+      const lifecycle = getResourceLifecycle(row.original.annotations)
       return <LifecycleBadge lifecycle={lifecycle} />
     },
   }),
@@ -79,10 +79,9 @@ const agentColumns = [
       )
     },
   }),
-  col.display({
-    id: 'lastActive',
-    header: 'Last Active',
-    enableSorting: true,
+  col.accessor('updatedAt', {
+    id: 'lastUpdated',
+    header: 'Last Updated',
     sortingFn: (rowA, rowB) => {
       return new Date(rowA.original.updatedAt).getTime() - new Date(rowB.original.updatedAt).getTime()
     },
@@ -105,7 +104,7 @@ export function AgentsTable({
   const { projectId } = useParams<{ projectId: string }>()
   const containerRef = useRef<HTMLDivElement>(null)
   const [sorting, setSorting] = useState<SortingState>([
-    { id: 'lastActive', desc: true },
+    { id: 'lastUpdated', desc: true },
   ])
 
   const table = useReactTable({

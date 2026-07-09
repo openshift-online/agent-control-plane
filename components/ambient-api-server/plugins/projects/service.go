@@ -2,6 +2,7 @@ package projects
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/logger"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
+	"gorm.io/gorm"
 )
 
 // roleBindingRow is a local struct for creating role_bindings rows via GORM,
@@ -56,6 +58,8 @@ type ProjectService interface {
 	All(ctx context.Context) (ProjectList, *errors.ServiceError)
 
 	FindByIDs(ctx context.Context, ids []string) (ProjectList, *errors.ServiceError)
+
+	TransferOwnership(ctx context.Context, projectID, callerUsername, targetUserID string, callerIsAdmin bool) *errors.ServiceError
 
 	OnUpsert(ctx context.Context, id string) error
 	OnDelete(ctx context.Context, id string) error
@@ -199,6 +203,111 @@ func (s *sqlProjectService) Replace(ctx context.Context, project *Project) (*Pro
 	}
 
 	return project, nil
+}
+
+func (s *sqlProjectService) TransferOwnership(ctx context.Context, projectID, callerUsername, targetUserID string, callerIsAdmin bool) *errors.ServiceError {
+	// Acquire advisory lock on the project to prevent concurrent transfers.
+	lockOwnerID, lockErr := s.lockFactory.NewAdvisoryLock(ctx, projectID, projectsLockType)
+	if lockErr != nil {
+		return errors.DatabaseAdvisoryLock(lockErr)
+	}
+	defer s.lockFactory.Unlock(ctx, lockOwnerID)
+
+	g := (*s.sessionFactory).New(ctx)
+
+	// Look up the project:owner role ID.
+	var ownerRoleID string
+	if dbErr := g.Table("roles").Select("id").
+		Where("name = 'project:owner' AND deleted_at IS NULL").
+		Scan(&ownerRoleID).Error; dbErr != nil || ownerRoleID == "" {
+		return errors.GeneralError("failed to find project:owner role")
+	}
+
+	// Look up the project:editor role ID (for downgrade).
+	var editorRoleID string
+	if dbErr := g.Table("roles").Select("id").
+		Where("name = 'project:editor' AND deleted_at IS NULL").
+		Scan(&editorRoleID).Error; dbErr != nil || editorRoleID == "" {
+		return errors.GeneralError("failed to find project:editor role")
+	}
+
+	// Verify target user exists.
+	var targetUserCount int64
+	if dbErr := g.Table("users").
+		Where("id = ? AND deleted_at IS NULL", targetUserID).
+		Count(&targetUserCount).Error; dbErr != nil {
+		return errors.GeneralError("failed to verify target user")
+	}
+	if targetUserCount == 0 {
+		return errors.NotFound("target user not found")
+	}
+
+	// Check if target is already project:owner on this project.
+	var existingOwnerCount int64
+	if dbErr := g.Table("role_bindings").
+		Where("user_id = ? AND role_id = ? AND project_id = ? AND deleted_at IS NULL",
+			targetUserID, ownerRoleID, projectID).
+		Count(&existingOwnerCount).Error; dbErr != nil {
+		return errors.GeneralError("failed to check existing ownership")
+	}
+	if existingOwnerCount > 0 {
+		return errors.Conflict("target user is already project owner")
+	}
+
+	// Execute the transfer in a single transaction.
+	// Order: create new owner binding first, then downgrade old owner.
+	// This ensures the project always has at least one owner.
+	txErr := g.Transaction(func(tx *gorm.DB) error {
+		// 1. Create project:owner binding for target user.
+		now := time.Now()
+		newBinding := roleBindingRow{
+			ID:        api.NewID(),
+			RoleId:    ownerRoleID,
+			Scope:     "project",
+			UserId:    &targetUserID,
+			ProjectId: &projectID,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		if err := tx.Create(&newBinding).Error; err != nil {
+			return fmt.Errorf("failed to create owner binding for target: %w", err)
+		}
+
+		// 2. If caller is the current owner (not admin acting externally),
+		//    downgrade their binding to project:editor.
+		if !callerIsAdmin {
+			result := tx.Table("role_bindings").
+				Where("user_id = ? AND role_id = ? AND project_id = ? AND deleted_at IS NULL",
+					callerUsername, ownerRoleID, projectID).
+				Updates(map[string]interface{}{
+					"role_id":    editorRoleID,
+					"updated_at": now,
+				})
+			if result.Error != nil {
+				return fmt.Errorf("failed to downgrade caller binding: %w", result.Error)
+			}
+		} else {
+			// Admin transfer: find the current owner and downgrade them.
+			result := tx.Table("role_bindings").
+				Where("role_id = ? AND project_id = ? AND user_id != ? AND deleted_at IS NULL",
+					ownerRoleID, projectID, targetUserID).
+				Updates(map[string]interface{}{
+					"role_id":    editorRoleID,
+					"updated_at": now,
+				})
+			if result.Error != nil {
+				return fmt.Errorf("failed to downgrade previous owner binding: %w", result.Error)
+			}
+		}
+
+		return nil
+	})
+
+	if txErr != nil {
+		return errors.GeneralError("ownership transfer failed: %v", txErr)
+	}
+
+	return nil
 }
 
 func (s *sqlProjectService) Delete(ctx context.Context, id string) *errors.ServiceError {

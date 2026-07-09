@@ -70,7 +70,7 @@ fi
 
 VERTEX_SOURCE_NS="${VERTEX_SOURCE_NS:-}"
 USE_VERTEX=0
-VERTEX_KEY_FILE="${VERTEX_KEY_FILE:-unused}"
+VERTEX_CRED="${VERTEX_CRED:-unused}"
 VERTEX_PROJECT_ID="${VERTEX_PROJECT_ID:-}"
 VERTEX_REGION="${VERTEX_REGION:-global}"
 
@@ -84,9 +84,9 @@ if [[ -n "$VERTEX_SOURCE_NS" ]]; then
     echo "    Secret OK: ambient-vertex"
   fi
   USE_VERTEX=1
-  VERTEX_KEY_FILE=$($CLI get secret ambient-vertex -n "$NAMESPACE" -o jsonpath='{.data}' | python3 -c "import json,sys; print(list(json.load(sys.stdin).keys())[0])")
+  VERTEX_CRED=$($CLI get secret ambient-vertex -n "$NAMESPACE" -o jsonpath='{.data}' | python3 -c "import json,sys; print(list(json.load(sys.stdin).keys())[0])")
   if [[ -z "$VERTEX_PROJECT_ID" ]]; then
-    VERTEX_PROJECT_ID=$(echo "$VERTEX_KEY_FILE" | sed 's/\.json$//')-claude
+    VERTEX_PROJECT_ID=$(echo "$VERTEX_CRED" | sed 's/\.json$//')-claude
     echo "    Auto-detected VERTEX_PROJECT_ID=$VERTEX_PROJECT_ID (override with VERTEX_PROJECT_ID env var)"
   fi
 elif [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
@@ -590,7 +590,7 @@ spec:
         - name: CLOUD_ML_REGION
           value: "${VERTEX_REGION:-global}"
         - name: GOOGLE_APPLICATION_CREDENTIALS
-          value: "/app/vertex/${VERTEX_KEY_FILE:-unused}"
+          value: "/app/vertex/${VERTEX_CRED:-unused}"
         - name: VERTEX_SECRET_NAME
           value: "ambient-vertex"
         - name: VERTEX_SECRET_NAMESPACE

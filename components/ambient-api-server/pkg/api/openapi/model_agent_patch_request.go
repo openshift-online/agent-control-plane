@@ -24,13 +24,19 @@ type AgentPatchRequest struct {
 	DisplayName *string `json:"display_name,omitempty"`
 	Description *string `json:"description,omitempty"`
 	// Update agent prompt (access controlled by RBAC)
-	Prompt         *string  `json:"prompt,omitempty"`
-	RepoUrl        *string  `json:"repo_url,omitempty"`
-	LlmModel       *string  `json:"llm_model,omitempty"`
-	LlmTemperature *float64 `json:"llm_temperature,omitempty"`
-	LlmMaxTokens   *int32   `json:"llm_max_tokens,omitempty"`
-	Labels         *string  `json:"labels,omitempty"`
-	Annotations    *string  `json:"annotations,omitempty"`
+	Prompt          *string            `json:"prompt,omitempty"`
+	RepoUrl         *string            `json:"repo_url,omitempty"`
+	LlmModel        *string            `json:"llm_model,omitempty"`
+	LlmTemperature  *float64           `json:"llm_temperature,omitempty"`
+	LlmMaxTokens    *int32             `json:"llm_max_tokens,omitempty"`
+	Entrypoint      *string            `json:"entrypoint,omitempty"`
+	Providers       []string           `json:"providers,omitempty"`
+	Payloads        []Payload          `json:"payloads,omitempty"`
+	Environment     *map[string]string `json:"environment,omitempty"`
+	SandboxTemplate *SandboxTemplate   `json:"sandbox_template,omitempty"`
+	SandboxPolicy   *string            `json:"sandbox_policy,omitempty"`
+	Labels          *string            `json:"labels,omitempty"`
+	Annotations     *string            `json:"annotations,omitempty"`
 }
 
 // NewAgentPatchRequest instantiates a new AgentPatchRequest object
@@ -306,6 +312,198 @@ func (o *AgentPatchRequest) SetLlmMaxTokens(v int32) {
 	o.LlmMaxTokens = &v
 }
 
+// GetEntrypoint returns the Entrypoint field value if set, zero value otherwise.
+func (o *AgentPatchRequest) GetEntrypoint() string {
+	if o == nil || IsNil(o.Entrypoint) {
+		var ret string
+		return ret
+	}
+	return *o.Entrypoint
+}
+
+// GetEntrypointOk returns a tuple with the Entrypoint field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentPatchRequest) GetEntrypointOk() (*string, bool) {
+	if o == nil || IsNil(o.Entrypoint) {
+		return nil, false
+	}
+	return o.Entrypoint, true
+}
+
+// HasEntrypoint returns a boolean if a field has been set.
+func (o *AgentPatchRequest) HasEntrypoint() bool {
+	if o != nil && !IsNil(o.Entrypoint) {
+		return true
+	}
+
+	return false
+}
+
+// SetEntrypoint gets a reference to the given string and assigns it to the Entrypoint field.
+func (o *AgentPatchRequest) SetEntrypoint(v string) {
+	o.Entrypoint = &v
+}
+
+// GetProviders returns the Providers field value if set, zero value otherwise.
+func (o *AgentPatchRequest) GetProviders() []string {
+	if o == nil || IsNil(o.Providers) {
+		var ret []string
+		return ret
+	}
+	return o.Providers
+}
+
+// GetProvidersOk returns a tuple with the Providers field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentPatchRequest) GetProvidersOk() ([]string, bool) {
+	if o == nil || IsNil(o.Providers) {
+		return nil, false
+	}
+	return o.Providers, true
+}
+
+// HasProviders returns a boolean if a field has been set.
+func (o *AgentPatchRequest) HasProviders() bool {
+	if o != nil && !IsNil(o.Providers) {
+		return true
+	}
+
+	return false
+}
+
+// SetProviders gets a reference to the given []string and assigns it to the Providers field.
+func (o *AgentPatchRequest) SetProviders(v []string) {
+	o.Providers = v
+}
+
+// GetPayloads returns the Payloads field value if set, zero value otherwise.
+func (o *AgentPatchRequest) GetPayloads() []Payload {
+	if o == nil || IsNil(o.Payloads) {
+		var ret []Payload
+		return ret
+	}
+	return o.Payloads
+}
+
+// GetPayloadsOk returns a tuple with the Payloads field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentPatchRequest) GetPayloadsOk() ([]Payload, bool) {
+	if o == nil || IsNil(o.Payloads) {
+		return nil, false
+	}
+	return o.Payloads, true
+}
+
+// HasPayloads returns a boolean if a field has been set.
+func (o *AgentPatchRequest) HasPayloads() bool {
+	if o != nil && !IsNil(o.Payloads) {
+		return true
+	}
+
+	return false
+}
+
+// SetPayloads gets a reference to the given []Payload and assigns it to the Payloads field.
+func (o *AgentPatchRequest) SetPayloads(v []Payload) {
+	o.Payloads = v
+}
+
+// GetEnvironment returns the Environment field value if set, zero value otherwise.
+func (o *AgentPatchRequest) GetEnvironment() map[string]string {
+	if o == nil || IsNil(o.Environment) {
+		var ret map[string]string
+		return ret
+	}
+	return *o.Environment
+}
+
+// GetEnvironmentOk returns a tuple with the Environment field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentPatchRequest) GetEnvironmentOk() (*map[string]string, bool) {
+	if o == nil || IsNil(o.Environment) {
+		return nil, false
+	}
+	return o.Environment, true
+}
+
+// HasEnvironment returns a boolean if a field has been set.
+func (o *AgentPatchRequest) HasEnvironment() bool {
+	if o != nil && !IsNil(o.Environment) {
+		return true
+	}
+
+	return false
+}
+
+// SetEnvironment gets a reference to the given map[string]string and assigns it to the Environment field.
+func (o *AgentPatchRequest) SetEnvironment(v map[string]string) {
+	o.Environment = &v
+}
+
+// GetSandboxTemplate returns the SandboxTemplate field value if set, zero value otherwise.
+func (o *AgentPatchRequest) GetSandboxTemplate() SandboxTemplate {
+	if o == nil || IsNil(o.SandboxTemplate) {
+		var ret SandboxTemplate
+		return ret
+	}
+	return *o.SandboxTemplate
+}
+
+// GetSandboxTemplateOk returns a tuple with the SandboxTemplate field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentPatchRequest) GetSandboxTemplateOk() (*SandboxTemplate, bool) {
+	if o == nil || IsNil(o.SandboxTemplate) {
+		return nil, false
+	}
+	return o.SandboxTemplate, true
+}
+
+// HasSandboxTemplate returns a boolean if a field has been set.
+func (o *AgentPatchRequest) HasSandboxTemplate() bool {
+	if o != nil && !IsNil(o.SandboxTemplate) {
+		return true
+	}
+
+	return false
+}
+
+// SetSandboxTemplate gets a reference to the given SandboxTemplate and assigns it to the SandboxTemplate field.
+func (o *AgentPatchRequest) SetSandboxTemplate(v SandboxTemplate) {
+	o.SandboxTemplate = &v
+}
+
+// GetSandboxPolicy returns the SandboxPolicy field value if set, zero value otherwise.
+func (o *AgentPatchRequest) GetSandboxPolicy() string {
+	if o == nil || IsNil(o.SandboxPolicy) {
+		var ret string
+		return ret
+	}
+	return *o.SandboxPolicy
+}
+
+// GetSandboxPolicyOk returns a tuple with the SandboxPolicy field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *AgentPatchRequest) GetSandboxPolicyOk() (*string, bool) {
+	if o == nil || IsNil(o.SandboxPolicy) {
+		return nil, false
+	}
+	return o.SandboxPolicy, true
+}
+
+// HasSandboxPolicy returns a boolean if a field has been set.
+func (o *AgentPatchRequest) HasSandboxPolicy() bool {
+	if o != nil && !IsNil(o.SandboxPolicy) {
+		return true
+	}
+
+	return false
+}
+
+// SetSandboxPolicy gets a reference to the given string and assigns it to the SandboxPolicy field.
+func (o *AgentPatchRequest) SetSandboxPolicy(v string) {
+	o.SandboxPolicy = &v
+}
+
 // GetLabels returns the Labels field value if set, zero value otherwise.
 func (o *AgentPatchRequest) GetLabels() string {
 	if o == nil || IsNil(o.Labels) {
@@ -403,6 +601,24 @@ func (o AgentPatchRequest) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.LlmMaxTokens) {
 		toSerialize["llm_max_tokens"] = o.LlmMaxTokens
+	}
+	if !IsNil(o.Entrypoint) {
+		toSerialize["entrypoint"] = o.Entrypoint
+	}
+	if !IsNil(o.Providers) {
+		toSerialize["providers"] = o.Providers
+	}
+	if !IsNil(o.Payloads) {
+		toSerialize["payloads"] = o.Payloads
+	}
+	if !IsNil(o.Environment) {
+		toSerialize["environment"] = o.Environment
+	}
+	if !IsNil(o.SandboxTemplate) {
+		toSerialize["sandbox_template"] = o.SandboxTemplate
+	}
+	if !IsNil(o.SandboxPolicy) {
+		toSerialize["sandbox_policy"] = o.SandboxPolicy
 	}
 	if !IsNil(o.Labels) {
 		toSerialize["labels"] = o.Labels

@@ -1,0 +1,379 @@
+// SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Vendored from github.com/NVIDIA/OpenShell/proto/openshell.proto
+// Subset: sandbox lifecycle, exec, provider management, and log streaming RPCs needed by the control plane.
+
+syntax = "proto3";
+
+package openshell.v1;
+
+import "openshell/datamodel/v1/datamodel.proto";
+import "openshell/sandbox/v1/sandbox.proto";
+
+option go_package = "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1;openshell_v1";
+
+service OpenShell {
+  rpc CreateSandbox(CreateSandboxRequest) returns (SandboxResponse);
+  rpc GetSandbox(GetSandboxRequest) returns (SandboxResponse);
+  rpc DeleteSandbox(DeleteSandboxRequest) returns (DeleteSandboxResponse);
+  rpc CreateSshSession(CreateSshSessionRequest) returns (CreateSshSessionResponse);
+  rpc ExecSandbox(ExecSandboxRequest) returns (stream ExecSandboxEvent);
+  rpc ForwardTcp(stream TcpForwardFrame) returns (stream TcpForwardFrame);
+  rpc CreateProvider(CreateProviderRequest) returns (ProviderResponse);
+  rpc UpdateProvider(UpdateProviderRequest) returns (ProviderResponse);
+  rpc GetProvider(GetProviderRequest) returns (ProviderResponse);
+  rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
+  rpc UpdateConfig(UpdateConfigRequest) returns (UpdateConfigResponse);
+  rpc ConfigureProviderRefresh(ConfigureProviderRefreshRequest) returns (ConfigureProviderRefreshResponse);
+  rpc RotateProviderCredential(RotateProviderCredentialRequest) returns (RotateProviderCredentialResponse);
+  rpc WatchSandbox(WatchSandboxRequest) returns (stream SandboxStreamEvent);
+  rpc GetSandboxLogs(GetSandboxLogsRequest) returns (GetSandboxLogsResponse);
+}
+
+message Sandbox {
+  openshell.datamodel.v1.ObjectMeta metadata = 1;
+  SandboxSpec spec = 2;
+  SandboxStatus status = 3;
+  reserved 4, 5;
+  reserved "phase", "current_policy_version";
+}
+
+message SandboxSpec {
+  string log_level = 1;
+  map<string, string> environment = 5;
+  SandboxTemplate template = 6;
+  openshell.sandbox.v1.SandboxPolicy policy = 7;
+  repeated string providers = 8;
+  bool gpu = 9;
+  reserved 10, 11;
+  reserved "gpu_device", "proposal_approval_mode";
+}
+
+message SandboxTemplate {
+  string image = 1;
+  string runtime_class_name = 2;
+  string agent_socket = 3;
+  map<string, string> labels = 4;
+  map<string, string> annotations = 5;
+  map<string, string> environment = 6;
+}
+
+message SandboxStatus {
+  string sandbox_name = 1;
+  string agent_pod = 2;
+  string agent_fd = 3;
+  string sandbox_fd = 4;
+  repeated SandboxCondition conditions = 5;
+  SandboxPhase phase = 6;
+  uint32 current_policy_version = 7;
+}
+
+message SandboxCondition {
+  string type = 1;
+  string status = 2;
+  string reason = 3;
+  string message = 4;
+  string last_transition_time = 5;
+}
+
+enum SandboxPhase {
+  SANDBOX_PHASE_UNSPECIFIED = 0;
+  SANDBOX_PHASE_PROVISIONING = 1;
+  SANDBOX_PHASE_READY = 2;
+  SANDBOX_PHASE_ERROR = 3;
+  SANDBOX_PHASE_DELETING = 4;
+  SANDBOX_PHASE_UNKNOWN = 5;
+}
+
+message CreateSandboxRequest {
+  SandboxSpec spec = 1;
+  string name = 2;
+  map<string, string> labels = 3;
+}
+
+message GetSandboxRequest {
+  string name = 1;
+}
+
+message DeleteSandboxRequest {
+  string name = 1;
+}
+
+message SandboxResponse {
+  Sandbox sandbox = 1;
+}
+
+message DeleteSandboxResponse {
+  bool deleted = 1;
+}
+
+message CreateProviderRequest {
+  openshell.datamodel.v1.Provider provider = 1;
+}
+
+message GetProviderRequest {
+  string name = 1;
+}
+
+message ListProvidersRequest {
+  uint32 limit = 1;
+  uint32 offset = 2;
+}
+
+message UpdateProviderRequest {
+  openshell.datamodel.v1.Provider provider = 1;
+  map<string, int64> credential_expires_at_ms = 2;
+}
+
+message ProviderResponse {
+  openshell.datamodel.v1.Provider provider = 1;
+}
+
+message ListProvidersResponse {
+  repeated openshell.datamodel.v1.Provider providers = 1;
+}
+
+message DeleteProviderRequest {
+  string name = 1;
+}
+
+message DeleteProviderResponse {
+  bool deleted = 1;
+}
+
+message ExecSandboxRequest {
+  string sandbox_id = 1;
+  repeated string command = 2;
+  string workdir = 3;
+  map<string, string> environment = 4;
+  uint32 timeout_seconds = 5;
+  bytes stdin = 6;
+  bool tty = 7;
+  uint32 cols = 8;
+  uint32 rows = 9;
+}
+
+message ExecSandboxEvent {
+  oneof payload {
+    ExecSandboxStdout stdout = 1;
+    ExecSandboxStderr stderr = 2;
+    ExecSandboxExit exit = 3;
+  }
+}
+
+message ExecSandboxStdout {
+  bytes data = 1;
+}
+
+message ExecSandboxStderr {
+  bytes data = 1;
+}
+
+message ExecSandboxExit {
+  int32 exit_code = 1;
+}
+
+message UpdateConfigRequest {
+  string name = 1;
+  openshell.sandbox.v1.SandboxPolicy policy = 2;
+  string setting_key = 3;
+  openshell.sandbox.v1.SettingValue setting_value = 4;
+  bool delete_setting = 5;
+  bool global = 6;
+  repeated PolicyMergeOperation merge_operations = 7;
+  uint64 expected_resource_version = 8;
+}
+
+message PolicyMergeOperation {
+  oneof operation {
+    AddNetworkRule add_rule = 1;
+    RemoveNetworkEndpoint remove_endpoint = 2;
+    RemoveNetworkRule remove_rule = 3;
+    AddDenyRules add_deny_rules = 4;
+    AddAllowRules add_allow_rules = 5;
+    RemoveNetworkBinary remove_binary = 6;
+  }
+}
+
+message AddNetworkRule {
+  string rule_name = 1;
+  openshell.sandbox.v1.NetworkPolicyRule rule = 2;
+}
+
+message RemoveNetworkEndpoint {
+  string rule_name = 1;
+  string host = 2;
+  uint32 port = 3;
+}
+
+message RemoveNetworkRule {
+  string rule_name = 1;
+}
+
+message AddDenyRules {
+  string host = 1;
+  uint32 port = 2;
+  repeated openshell.sandbox.v1.L7DenyRule deny_rules = 3;
+}
+
+message AddAllowRules {
+  string host = 1;
+  uint32 port = 2;
+  repeated openshell.sandbox.v1.L7Rule rules = 3;
+}
+
+message RemoveNetworkBinary {
+  string rule_name = 1;
+  string binary_path = 2;
+}
+
+message UpdateConfigResponse {
+  uint32 version = 1;
+  string policy_hash = 2;
+  uint64 settings_revision = 3;
+  bool deleted = 4;
+}
+
+enum ProviderCredentialRefreshStrategy {
+  PROVIDER_CREDENTIAL_REFRESH_STRATEGY_UNSPECIFIED = 0;
+  PROVIDER_CREDENTIAL_REFRESH_STRATEGY_STATIC = 1;
+  PROVIDER_CREDENTIAL_REFRESH_STRATEGY_EXTERNAL = 2;
+  PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_REFRESH_TOKEN = 3;
+  PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_CLIENT_CREDENTIALS = 4;
+  PROVIDER_CREDENTIAL_REFRESH_STRATEGY_GOOGLE_SERVICE_ACCOUNT_JWT = 5;
+}
+
+message ProviderCredentialRefreshStatus {
+  string provider_name = 1;
+  string provider_id = 2;
+  string credential_key = 3;
+  ProviderCredentialRefreshStrategy strategy = 4;
+  string status = 5;
+  int64 expires_at_ms = 6;
+  int64 next_refresh_at_ms = 7;
+  int64 last_refresh_at_ms = 8;
+  string last_error = 9;
+}
+
+message ConfigureProviderRefreshRequest {
+  string provider = 1;
+  string credential_key = 2;
+  ProviderCredentialRefreshStrategy strategy = 3;
+  map<string, string> material = 4;
+  repeated string secret_material_keys = 5;
+  optional int64 expires_at_ms = 6;
+}
+
+message ConfigureProviderRefreshResponse {
+  ProviderCredentialRefreshStatus status = 1;
+}
+
+message RotateProviderCredentialRequest {
+  string provider = 1;
+  string credential_key = 2;
+}
+
+message RotateProviderCredentialResponse {
+  ProviderCredentialRefreshStatus status = 1;
+}
+
+message CreateSshSessionRequest {
+  string sandbox_id = 1;
+}
+
+message CreateSshSessionResponse {
+  string sandbox_id = 1;
+  string token = 2;
+  string gateway_host = 3;
+  uint32 gateway_port = 4;
+  string gateway_scheme = 5;
+  string host_key_fingerprint = 7;
+  int64 expires_at_ms = 8;
+}
+
+message TcpForwardInit {
+  string sandbox_id = 1;
+  string service_id = 4;
+  oneof target {
+    SshRelayTarget ssh = 5;
+    TcpRelayTarget tcp = 6;
+  }
+  string authorization_token = 7;
+}
+
+message TcpForwardFrame {
+  oneof payload {
+    TcpForwardInit init = 1;
+    bytes data = 2;
+  }
+}
+
+message SshRelayTarget {}
+
+message TcpRelayTarget {
+  string host = 1;
+  uint32 port = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Sandbox log streaming (vendored for sandbox observability)
+// ---------------------------------------------------------------------------
+
+message WatchSandboxRequest {
+  string id = 1;
+  bool follow_status = 2;
+  bool follow_logs = 3;
+  bool follow_events = 4;
+  uint32 log_tail_lines = 5;
+  uint32 event_tail = 6;
+  bool stop_on_terminal = 7;
+  int64 log_since_ms = 8;
+  repeated string log_sources = 9;
+  string log_min_level = 10;
+}
+
+message SandboxStreamEvent {
+  oneof payload {
+    Sandbox sandbox = 1;
+    SandboxLogLine log = 2;
+    PlatformEvent event = 3;
+    SandboxStreamWarning warning = 4;
+  }
+}
+
+message SandboxLogLine {
+  string sandbox_id = 1;
+  int64 timestamp_ms = 2;
+  string level = 3;
+  string target = 4;
+  string message = 5;
+  string source = 6;
+  map<string, string> fields = 7;
+}
+
+message PlatformEvent {
+  int64 timestamp_ms = 1;
+  string source = 2;
+  string type = 3;
+  string reason = 4;
+  string message = 5;
+  map<string, string> metadata = 6;
+}
+
+message SandboxStreamWarning {
+  string message = 1;
+}
+
+message GetSandboxLogsRequest {
+  string sandbox_id = 1;
+  uint32 lines = 2;
+  int64 since_ms = 3;
+  repeated string sources = 4;
+  string min_level = 5;
+}
+
+message GetSandboxLogsResponse {
+  repeated SandboxLogLine logs = 1;
+  uint32 buffer_total = 2;
+}

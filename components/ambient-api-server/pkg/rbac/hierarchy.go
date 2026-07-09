@@ -19,8 +19,7 @@ var RoleLevel = map[string]int{
 }
 
 var InternalRoles = map[string]bool{
-	RoleAgentRunner:           true,
-	RoleCredentialTokenReader: true,
+	RoleAgentRunner: true,
 }
 
 // CanGrant returns true if callerLevel can grant targetRole.

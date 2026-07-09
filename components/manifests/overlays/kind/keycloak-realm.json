@@ -1,6 +1,7 @@
 {
   "realm": "ambient-code",
   "enabled": true,
+  "loginTheme": "acp",
   "sslRequired": "none",
   "registrationAllowed": false,
   "accessTokenLifespan": 300,

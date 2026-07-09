@@ -14,6 +14,8 @@ Name | Type | Description | Notes
 **ReconciledWorkflow** | Pointer to **string** |  | [optional] 
 **KubeCrUid** | Pointer to **string** |  | [optional] 
 **KubeNamespace** | Pointer to **string** |  | [optional] 
+**SandboxLogsSnapshot** | Pointer to **string** |  | [optional] 
+**SandboxPolicySnapshot** | Pointer to **string** |  | [optional] 
 
 ## Methods
 
@@ -283,6 +285,56 @@ SetKubeNamespace sets KubeNamespace field to given value.
 `func (o *SessionStatusPatchRequest) HasKubeNamespace() bool`
 
 HasKubeNamespace returns a boolean if a field has been set.
+
+### GetSandboxLogsSnapshot
+
+`func (o *SessionStatusPatchRequest) GetSandboxLogsSnapshot() string`
+
+GetSandboxLogsSnapshot returns the SandboxLogsSnapshot field if non-nil, zero value otherwise.
+
+### GetSandboxLogsSnapshotOk
+
+`func (o *SessionStatusPatchRequest) GetSandboxLogsSnapshotOk() (*string, bool)`
+
+GetSandboxLogsSnapshotOk returns a tuple with the SandboxLogsSnapshot field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetSandboxLogsSnapshot
+
+`func (o *SessionStatusPatchRequest) SetSandboxLogsSnapshot(v string)`
+
+SetSandboxLogsSnapshot sets SandboxLogsSnapshot field to given value.
+
+### HasSandboxLogsSnapshot
+
+`func (o *SessionStatusPatchRequest) HasSandboxLogsSnapshot() bool`
+
+HasSandboxLogsSnapshot returns a boolean if a field has been set.
+
+### GetSandboxPolicySnapshot
+
+`func (o *SessionStatusPatchRequest) GetSandboxPolicySnapshot() string`
+
+GetSandboxPolicySnapshot returns the SandboxPolicySnapshot field if non-nil, zero value otherwise.
+
+### GetSandboxPolicySnapshotOk
+
+`func (o *SessionStatusPatchRequest) GetSandboxPolicySnapshotOk() (*string, bool)`
+
+GetSandboxPolicySnapshotOk returns a tuple with the SandboxPolicySnapshot field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetSandboxPolicySnapshot
+
+`func (o *SessionStatusPatchRequest) SetSandboxPolicySnapshot(v string)`
+
+SetSandboxPolicySnapshot sets SandboxPolicySnapshot field to given value.
+
+### HasSandboxPolicySnapshot
+
+`func (o *SessionStatusPatchRequest) HasSandboxPolicySnapshot() bool`
+
+HasSandboxPolicySnapshot returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

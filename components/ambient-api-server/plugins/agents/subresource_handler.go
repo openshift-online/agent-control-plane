@@ -56,7 +56,7 @@ func (h *agentSubresourceHandler) ListRoleBindings(w http.ResponseWriter, r *htt
 			}
 
 			listArgs := services.NewListArguments(r.URL.Query())
-			scopeFilter, valErr := pkgrbac.TSLEqual("scope_id", agentID)
+			scopeFilter, valErr := pkgrbac.TSLEqual("agent_id", agentID)
 			if valErr != nil {
 				return nil, pkgerrors.Validation("invalid agent id")
 			}

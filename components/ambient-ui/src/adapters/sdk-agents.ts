@@ -40,6 +40,12 @@ function mapDomainCreateToSdk(request: DomainAgentCreateRequest): AgentCreateReq
   if (request.prompt) sdkReq.prompt = request.prompt
   if (request.repoUrl) sdkReq.repo_url = request.repoUrl
   if (request.description) sdkReq.description = request.description
+  if (request.entrypoint) sdkReq.entrypoint = request.entrypoint
+  if (request.providers) sdkReq.providers = request.providers
+  if (request.payloads) sdkReq.payloads = request.payloads
+  if (request.environment) sdkReq.environment = JSON.stringify(request.environment)
+  if (request.sandboxTemplate) sdkReq.sandbox_template = request.sandboxTemplate
+  if (request.sandboxPolicy) sdkReq.sandbox_policy = request.sandboxPolicy
   return sdkReq
 }
 
@@ -50,6 +56,12 @@ function mapDomainUpdateToSdk(request: DomainAgentUpdateRequest): AgentPatchRequ
   if (request.prompt !== undefined) sdkReq.prompt = request.prompt
   if (request.repoUrl !== undefined) sdkReq.repo_url = request.repoUrl
   if (request.description !== undefined) sdkReq.description = request.description
+  if (request.entrypoint !== undefined) sdkReq.entrypoint = request.entrypoint
+  if (request.providers !== undefined) sdkReq.providers = request.providers
+  if (request.payloads !== undefined) sdkReq.payloads = request.payloads
+  if (request.environment !== undefined) sdkReq.environment = JSON.stringify(request.environment)
+  if (request.sandboxTemplate !== undefined) sdkReq.sandbox_template = request.sandboxTemplate
+  if (request.sandboxPolicy !== undefined) sdkReq.sandbox_policy = request.sandboxPolicy
   return sdkReq
 }
 

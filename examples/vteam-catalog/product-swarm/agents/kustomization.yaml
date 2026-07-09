@@ -1,0 +1,8 @@
+kind: Kustomization
+resources:
+  - amber.yaml
+  - parker.yaml
+  - ryan.yaml
+  - stella.yaml
+  - steve.yaml
+  - terry.yaml

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -113,4 +114,78 @@ func (c *Client) Patch(ctx context.Context, path string, body interface{}, resul
 		return fmt.Errorf("marshal body: %w", err)
 	}
 	return c.do(ctx, http.MethodPatch, path, b, result, http.StatusOK)
+}
+
+type SSEEvent struct {
+	ID   string
+	Data string
+}
+
+func (c *Client) StreamSSE(ctx context.Context, path string) (<-chan SSEEvent, <-chan error) {
+	events := make(chan SSEEvent, 64)
+	errs := make(chan error, 1)
+
+	go func() {
+		defer close(events)
+		defer close(errs)
+
+		reqURL := c.baseURL + "/api/ambient/v1" + path
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+		if err != nil {
+			errs <- fmt.Errorf("create request: %w", err)
+			return
+		}
+		req.Header.Set("Authorization", "Bearer "+c.Token())
+		req.Header.Set("Accept", "text/event-stream")
+
+		sseClient := &http.Client{Transport: c.httpClient.Transport}
+		resp, err := sseClient.Do(req)
+		if err != nil {
+			errs <- fmt.Errorf("SSE connect failed: %w", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			errs <- fmt.Errorf("SSE HTTP %d: %s", resp.StatusCode, string(body))
+			return
+		}
+
+		scanner := bufio.NewScanner(resp.Body)
+		var currentID string
+		var dataLines []string
+
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			if line == "" {
+				if len(dataLines) > 0 {
+					data := strings.Join(dataLines, "\n")
+					select {
+					case events <- SSEEvent{ID: currentID, Data: data}:
+					case <-ctx.Done():
+						return
+					}
+					currentID = ""
+					dataLines = nil
+				}
+				continue
+			}
+
+			if strings.HasPrefix(line, "data:") {
+				dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+			} else if strings.HasPrefix(line, "id:") {
+				currentID = strings.TrimSpace(strings.TrimPrefix(line, "id:"))
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			if ctx.Err() == nil {
+				errs <- fmt.Errorf("SSE stream read: %w", err)
+			}
+		}
+	}()
+
+	return events, errs
 }

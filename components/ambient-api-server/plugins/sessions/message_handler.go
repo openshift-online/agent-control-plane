@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/gateway"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 )
@@ -57,9 +58,16 @@ func (h *messageHandler) PushMessage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := mux.Vars(r)["id"]
 
-	if _, err := h.session.Get(ctx, id); err != nil {
+	sess, getErr := h.session.Get(ctx, id)
+	if getErr != nil {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
+	}
+	if sess.ProjectId != nil {
+		if tierErr := gateway.CheckEditorTier(ctx, *sess.ProjectId); tierErr != nil {
+			http.Error(w, tierErr.Reason, http.StatusForbidden)
+			return
+		}
 	}
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))

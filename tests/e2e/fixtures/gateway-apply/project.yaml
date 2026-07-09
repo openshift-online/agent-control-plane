@@ -1,0 +1,3 @@
+kind: Project
+name: e2e-gateway-apply
+description: Ephemeral project for gateway-apply e2e test

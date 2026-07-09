@@ -59,6 +59,9 @@ export type DomainSession = {
   repos: DomainRepo[]
   reconciledRepos: DomainReconciledRepo[]
   conditions: DomainCondition[]
+  kubeNamespace: string | null
+  sandboxLogsSnapshot: SandboxLogEntry[] | null
+  sandboxPolicySnapshot: SandboxPolicyResponse | null
 }
 
 export type DomainProject = {
@@ -105,6 +108,41 @@ export type DomainSessionMessage = {
   createdAt: string
 }
 
+export type DomainSessionEvent = {
+  id: string
+  sessionId: string
+  seq: number
+  eventType: string
+  payload: string
+  createdAt: string
+  completedAt: string | null
+  eventCount: number
+}
+
+export type DomainPayload = {
+  sandbox_path: string
+  content?: string
+  repo_url?: string
+  ref?: string
+}
+
+export type DomainResourceRequirements = {
+  cpu?: string
+  memory?: string
+}
+
+export type DomainGpuRequirements = {
+  count?: number
+}
+
+export type DomainSandboxTemplate = {
+  image?: string
+  resources?: DomainResourceRequirements
+  gpu?: DomainGpuRequirements
+  runtime_class_name?: string
+  log_level?: string
+}
+
 export type DomainAgent = {
   id: string
   name: string
@@ -117,6 +155,12 @@ export type DomainAgent = {
   prompt: string | null
   repoUrl: string | null
   workflowId: string | null
+  entrypoint: string | null
+  providers: string[]
+  payloads: DomainPayload[]
+  environment: Record<string, string>
+  sandboxTemplate: DomainSandboxTemplate | null
+  sandboxPolicy: string | null
   annotations: Record<string, string>
   labels: Record<string, string>
   createdAt: string
@@ -143,6 +187,12 @@ export type DomainAgentCreateRequest = {
   prompt?: string
   repoUrl?: string
   description?: string
+  entrypoint?: string
+  providers?: string[]
+  payloads?: DomainPayload[]
+  environment?: Record<string, string>
+  sandboxTemplate?: DomainSandboxTemplate
+  sandboxPolicy?: string
 }
 
 export type DomainAgentUpdateRequest = {
@@ -151,6 +201,12 @@ export type DomainAgentUpdateRequest = {
   prompt?: string
   repoUrl?: string
   description?: string
+  entrypoint?: string
+  providers?: string[]
+  payloads?: DomainPayload[]
+  environment?: Record<string, string>
+  sandboxTemplate?: DomainSandboxTemplate
+  sandboxPolicy?: string
 }
 
 export type FeedbackItem = {
@@ -223,4 +279,207 @@ export type DomainRoleBindingCreateRequest = {
   agentId?: string
   credentialId?: string
   sessionId?: string
+}
+
+export type DomainRoleBindingPatchRequest = {
+  roleId?: string
+}
+
+export type DomainUserSearchResult = {
+  id: string
+  username: string
+  name: string
+}
+
+export type OverlapPolicy = 'skip' | 'allow'
+
+export type DomainScheduledSession = {
+  id: string
+  name: string
+  description: string | null
+  projectId: string
+  agentId: string | null
+  createdByUserId: string | null
+  schedule: string
+  timezone: string
+  enabled: boolean
+  overlapPolicy: OverlapPolicy
+  sessionPrompt: string | null
+  lastRunAt: string | null
+  nextRunAt: string | null
+  timeout: number | null
+  inactivityTimeout: number | null
+  stopOnRunFinished: boolean | null
+  runnerType: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type DomainScheduledSessionCreateRequest = {
+  name: string
+  projectId: string
+  agentId?: string
+  schedule: string
+  timezone?: string
+  enabled?: boolean
+  overlapPolicy?: OverlapPolicy
+  sessionPrompt?: string
+  timeout?: number
+  inactivityTimeout?: number
+  stopOnRunFinished?: boolean
+  runnerType?: string
+  description?: string
+}
+
+export type DomainScheduledSessionUpdateRequest = {
+  name?: string
+  description?: string
+  agentId?: string
+  schedule?: string
+  timezone?: string
+  enabled?: boolean
+  overlapPolicy?: OverlapPolicy
+  sessionPrompt?: string
+  timeout?: number
+  inactivityTimeout?: number
+  stopOnRunFinished?: boolean
+  runnerType?: string
+}
+
+export type DomainProvider = {
+  id: string
+  name: string
+  type: string
+  secret: string
+  namespace: string
+  projectId: string
+  annotations: Record<string, string>
+  labels: Record<string, string>
+  createdAt: string
+  updatedAt: string
+}
+
+export type DomainPolicy = {
+  id: string
+  name: string
+  namespace: string
+  projectId: string
+  spec: Record<string, unknown>
+  annotations: Record<string, string>
+  labels: Record<string, string>
+  createdAt: string
+  updatedAt: string
+}
+
+export type SandboxLogEntry = {
+  timestamp: number
+  source: 'gateway' | 'sandbox'
+  level: string
+  module: string
+  message: string
+  category?: string
+  denied?: boolean
+}
+
+export type SandboxNetworkEndpoint = {
+  host: string
+  port: number
+  protocol?: string
+  tls?: string
+  enforcement?: string
+  access?: string
+}
+
+export type SandboxNetworkBinary = {
+  path: string
+}
+
+export type SandboxNetworkPolicy = {
+  name: string
+  endpoints: SandboxNetworkEndpoint[]
+  binaries?: SandboxNetworkBinary[]
+}
+
+export type SandboxPolicyData = {
+  version: number
+  filesystem_policy: {
+    include_workdir: boolean
+    read_only: string[]
+    read_write: string[]
+  }
+  landlock: {
+    compatibility: string
+  }
+  process: {
+    run_as_user: string
+    run_as_group: string
+  }
+  network_policies: Record<string, SandboxNetworkPolicy>
+}
+
+export type SandboxPolicyResponse = {
+  version: number
+  hash: string
+  status: string
+  source: string
+  config_revision: string
+  policy: SandboxPolicyData
+}
+
+export type DomainApplication = {
+  id: string
+  name: string
+  sourceRepoUrl: string
+  sourceTargetRevision: string | null
+  sourcePath: string
+  destinationAmbientUrl: string | null
+  destinationProject: string
+  credentialId: string | null
+  autoSync: boolean
+  autoPrune: boolean
+  selfHeal: boolean
+  syncOptions: string | null
+  retryLimit: number
+  syncStatus: string | null
+  healthStatus: string | null
+  syncRevision: string | null
+  operationPhase: string | null
+  operationMessage: string | null
+  resourceStatus: string | null
+  conditions: string | null
+  annotations: Record<string, string>
+  labels: Record<string, string>
+  lastSyncedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type DomainApplicationCreateRequest = {
+  name: string
+  sourceRepoUrl: string
+  sourcePath: string
+  destinationProject: string
+  sourceTargetRevision?: string
+  destinationAmbientUrl?: string
+  credentialId?: string
+  autoSync?: boolean
+  autoPrune?: boolean
+  selfHeal?: boolean
+  syncOptions?: string
+  retryLimit?: number
+}
+
+export type DomainApplicationUpdateRequest = {
+  name?: string
+  sourceRepoUrl?: string
+  sourcePath?: string
+  destinationProject?: string
+  sourceTargetRevision?: string
+  destinationAmbientUrl?: string
+  credentialId?: string
+  autoSync?: boolean
+  autoPrune?: boolean
+  selfHeal?: boolean
+  syncOptions?: string
+  retryLimit?: number
 }

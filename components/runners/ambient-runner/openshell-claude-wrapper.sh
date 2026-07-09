@@ -1,35 +1,29 @@
 #!/bin/bash
-set -euo pipefail
+# Claude-specific wrapper for OpenShell sandboxes.
+#
+# ANTHROPIC_BASE_URL, ANTHROPIC_API_KEY, HTTPS_PROXY, NODE_EXTRA_CA_CERTS,
+# and other proxy/TLS vars are set at the sandbox level by the control plane
+# reconciler and the OpenShell supervisor — they apply to all tools, not just
+# Claude. This wrapper only handles Claude Code-specific setup.
+# Guard against infinite recursion: this script is installed as /usr/local/bin/claude,
+# so when Claude Code spawns subagents that invoke `claude` by name, PATH resolves
+# back here. A file-based guard is used instead of an env var because the sandbox
+# supervisor spawns each command in a clean environment that does not inherit exports.
+export HOME=/sandbox
+export CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1
 
-CLAUDE_BIN="${CLAUDE_CLI_PATH:-/usr/local/bin/claude}"
-
-if [[ "${OPENSHELL_ENABLED:-}" == "true" ]]; then
-  # Clean up stale sandbox network namespaces left by a previous session.
-  # OpenShell uses hardcoded 10.200.0.0/24 for its veth pair; leftover
-  # namespaces from crashed/killed supervisors poison the routing table
-  # and prevent the new sandbox's proxy from receiving connections.
-  for ns in /var/run/netns/sandbox-*; do
-    [[ -e "$ns" ]] || continue
-    ns_name="$(basename "$ns")"
-    echo "Cleaning stale sandbox netns: $ns_name" >&2
-    ip link del "veth-h-${ns_name#sandbox-}" 2>/dev/null || true
-    ip netns del "$ns_name" 2>/dev/null || true
-  done
-
-  # Disable reverse-path filtering so ARP resolves on veth interfaces created
-  # by the supervisor. New interfaces inherit net.ipv4.conf.default.rp_filter.
-  # Requires SYS_ADMIN capability; /proc/sys is mounted read-only by the
-  # container runtime so we remount it read-write first.
-  mount -o remount,rw /proc/sys 2>/dev/null || true
-  for rp in default all; do
-    echo 0 > "/proc/sys/net/ipv4/conf/${rp}/rp_filter" 2>/dev/null || true
-  done
-
-  exec /openshell-sandbox \
-    --policy-rules "${OPENSHELL_POLICY_RULES:-/etc/openshell/policy.rego}" \
-    --policy-data "${OPENSHELL_POLICY_DATA:-/etc/openshell/policy.yaml}" \
-    --log-level "${OPENSHELL_LOG_LEVEL:-warn}" \
-    -- "$CLAUDE_BIN" "$@"
-else
-  exec "$CLAUDE_BIN" "$@"
+GUARD="/tmp/.claude-wrapper-initialized"
+if [ -f "$GUARD" ]; then
+    exec /opt/claude/bin/claude --bare "$@"
 fi
+touch "$GUARD"
+
+OPENSHELL_CA="/etc/openshell-tls/openshell-ca.pem"
+if [ -f "$OPENSHELL_CA" ] && [ -z "$ANTHROPIC_BASE_URL" ]; then
+    export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-inference-routing}"
+    export ANTHROPIC_BASE_URL="https://inference.local"
+    export HTTPS_PROXY="http://10.200.0.1:3128"
+    export NODE_EXTRA_CA_CERTS="$OPENSHELL_CA"
+fi
+
+exec /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe --bare "$@"

@@ -1,0 +1,180 @@
+# syntax=docker/dockerfile:1.4
+
+# ACP Runner image
+#
+# Layer 1: openshell-sandboxes-engprod/sandboxes/base  (UBI10 + dev toolchain)
+# Layer 2: openshell-sandboxes-engprod/sandboxes/claude-code  (Claude Code CLI)
+# Layer 3: ambient-runner  (uvicorn + FastAPI AG-UI server)
+
+ARG BASE_IMAGE=registry.access.redhat.com/ubi10/ubi@sha256:516ef28e78e388d12e31618326da68e21dcfc40f767f0c37c3b57059c642a4f0
+
+# ============================================================
+# Stage 1 — System base (openshell base)
+# ============================================================
+FROM ${BASE_IMAGE} AS system
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /sandbox
+
+# Core system dependencies
+RUN dnf install -y --allowerasing --nodocs \
+        ca-certificates \
+        curl \
+        bind-utils \
+        iproute \
+        nftables \
+        iputils \
+        net-tools \
+        nmap-ncat \
+        openssh-server \
+        procps-ng \
+    && dnf clean all
+
+# Red Hat IT Root CA — required for MLflow tracking servers
+# on Red Hat infrastructure that use certificates signed by this CA
+COPY 2022-IT-Root-CA.pem /etc/pki/ca-trust/source/anchors/2022-IT-Root-CA.pem
+RUN update-ca-trust
+
+# Create supervisor and sandbox users/groups
+RUN groupadd -r supervisor && useradd -r -g supervisor -s /usr/sbin/nologin supervisor && \
+    groupadd -r sandbox && useradd -r -g sandbox -d /sandbox -s /bin/bash sandbox
+
+# ============================================================
+# Stage 2 — Developer tools (openshell base)
+# ============================================================
+FROM system AS devtools
+
+# Node.js 22 (UBI AppStream) + build toolchain
+RUN dnf install -y --allowerasing --nodocs \
+        nodejs \
+        npm \
+        gcc \
+        gcc-c++ \
+        make \
+        git \
+        vim-minimal \
+        nano \
+    && dnf clean all
+
+# TODO: separate runner images for each of these
+# Global npm packages (multi-agent sandbox toolset: alternative coding agents
+# available alongside Claude Code for user selection via Agent spec)
+#RUN npm install -g \
+        #tar@7.5.11 \
+        #@hono/node-server@1.19.11 \
+        #opencode-ai@1.2.18 \
+        #@openai/codex@0.117.0 \
+        #@github/copilot@1.0.16
+
+# GitHub CLI (pinned binary download with pre-committed SHA256 checksums)
+ARG GH_VERSION=2.74.0
+ARG GH_CHECKSUM_AMD64=e55c9d49dc49c0b0fef0a9acd3510482fd9e27ff52ae80f8a6e838cd25b4cd89
+ARG GH_CHECKSUM_ARM64=221222bd00281ab993f7e2c19b9f3f2482d66fa759baedcd8668785c940c8df7
+ARG TARGETARCH
+RUN TARBALL="gh_${GH_VERSION}_linux_${TARGETARCH}.tar.gz" && \
+    CHECKSUM=$(eval echo \$GH_CHECKSUM_$(echo ${TARGETARCH} | tr '[:lower:]' '[:upper:]')) && \
+    curl -fsSL -o "/tmp/${TARBALL}" "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${TARBALL}" && \
+    echo "${CHECKSUM}  /tmp/${TARBALL}" | sha256sum -c - && \
+    tar -xzf "/tmp/${TARBALL}" -C /usr/local/bin --strip-components=2 "${TARBALL%.tar.gz}/bin/gh" && \
+    chmod +x /usr/local/bin/gh && \
+    rm -f "/tmp/${TARBALL}"
+
+# uv (Python package/project manager)
+COPY --from=ghcr.io/astral-sh/uv@sha256:3d868e555f8f1dbc324afa005066cd11e1053fc4743b9808ca8025283e65efa5 /uv /usr/local/bin/uv
+ENV UV_PYTHON_INSTALL_DIR="/sandbox/.uv/python"
+RUN uv python install 3.14.3 && \
+    ln -s $(uv python find 3.14.3) /usr/local/bin/python3 && \
+    ln -s $(uv python find 3.14.3) /usr/local/bin/python && \
+    uv cache clean
+
+# ============================================================
+# Stage 3 — Final image
+# ============================================================
+FROM devtools AS final
+
+# PATH and venv setup (openshell base)
+ENV PATH="/sandbox/.venv/bin:/usr/local/bin:/usr/bin:/bin" \
+    VIRTUAL_ENV="/sandbox/.venv"
+
+# Set up sandbox user home, venv, and shell init (openshell base)
+RUN mkdir -p /sandbox/.claude/skills /sandbox/.agents/skills && \
+    uv venv --python 3.14.3 --seed /sandbox/.venv && \
+    uv pip install --python /sandbox/.venv/bin/python cloudpickle && \
+    uv cache clean && \
+    chown -R sandbox:sandbox /sandbox/.venv && \
+    printf '%s\n' \
+        'export PATH="/sandbox/.venv/bin:/usr/local/bin:/usr/bin:/bin"' \
+        'export VIRTUAL_ENV="/sandbox/.venv"' \
+        'export UV_PYTHON_INSTALL_DIR="/sandbox/.uv/python"' \
+        'export PS1="\u@\h:\w\$ "' \
+        > /sandbox/.bashrc && \
+    printf '%s\n' \
+        '[ -f ~/.bashrc ] && . ~/.bashrc' \
+        > /sandbox/.profile && \
+    chown sandbox:sandbox /sandbox/.bashrc /sandbox/.profile && \
+    chown -R sandbox:sandbox /sandbox/.claude /sandbox/.agents /sandbox
+
+# ------------------------------------------------------------
+# Claude Code CLI (pinned npm package instead of curl|bash)
+# ------------------------------------------------------------
+ARG CLAUDE_CODE_VERSION=2.1.205
+RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
+    && mkdir -p /opt/claude/bin \
+    && ln -sf /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe /opt/claude/bin/claude \
+    && mkdir -p /sandbox/.local/bin \
+    && ln -sf /opt/claude/bin/claude /sandbox/.local/bin/claude \
+    && chown -R sandbox:sandbox /sandbox/.local \
+    && rm -f /usr/local/bin/claude
+
+# Atlassian mcp
+RUN uv tool install atlassian-mcp==1.0.0 && uv cache clean
+
+# ------------------------------------------------------------
+# Ambient runner (Layer 3)
+# ------------------------------------------------------------
+COPY --chmod=755 openshell-claude-wrapper.sh /usr/local/bin/claude
+
+COPY policy.yaml /etc/openshell/policy.yaml
+COPY claude.json /sandbox/.claude.json
+COPY claude-settings.json /sandbox/.claude/settings.json
+COPY claude-settings-local.json /sandbox/.claude/settings.local.json
+COPY mcp.json /sandbox/.mcp.json
+
+RUN dnf install -y --allowerasing --nodocs jq unzip && dnf clean all
+
+COPY . /runner/ambient-runner
+
+RUN uv pip install --python /sandbox/.venv/bin/python '/runner/ambient-runner[all]'
+
+RUN mkdir -p /sandbox/workspace/artifacts /sandbox/workspace/file-uploads && \
+    chown -R sandbox:sandbox /sandbox/workspace
+
+# OpenShift compatibility: the sandbox runs under the restricted-v2 SCC with an
+# arbitrarily-assigned UID that is always a member of GID 0 (the root group).
+# Every directory and file the agent writes to under $HOME (/sandbox) must
+# therefore be owned by group 0 and be group-writable. Without this, repo
+# payload extraction into /sandbox/* (e.g. session-config) fails with
+# "tar: ...: Cannot mkdir: Permission denied" because the arbitrary UID owns
+# none of the pre-created sandbox-user dirs. This mirrors the "chmod -R g=u"
+# treatment in the file-mode Dockerfile. See:
+# https://docs.redhat.com/en/documentation/openshift_container_platform/latest/html/images/creating-images#use-uid
+RUN chgrp -R 0 /sandbox && chmod -R g=u /sandbox
+
+ENV RUNNER_TYPE=claude-agent-sdk \
+    HOME=/sandbox \
+    SHELL=/bin/bash \
+    TERM=xterm-256color \
+    AGUI_PORT=8001
+
+ARG GIT_COMMIT=unknown
+LABEL org.opencontainers.image.revision=$GIT_COMMIT
+
+EXPOSE 8001
+
+COPY --chmod=755 entrypoint.sh /runner/entrypoint.sh
+
+WORKDIR /sandbox
+
+CMD ["/runner/entrypoint.sh"]

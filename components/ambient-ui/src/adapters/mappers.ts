@@ -1,8 +1,9 @@
-import type { Session, Project, Agent, Credential, RoleBinding } from 'ambient-sdk'
+import type { Session, Project, Agent, Application, Credential, RoleBinding } from 'ambient-sdk'
 import type {
-  DomainSession, DomainProject, DomainSessionMessage, DomainAgent, SessionPhase, SessionEventType,
+  DomainSession, DomainProject, DomainSessionMessage, DomainSessionEvent, DomainAgent, DomainApplication, SessionPhase, SessionEventType,
   DomainRepo, DomainReconciledRepo, DomainCondition, ReconciledRepoStatus, ConditionStatus,
-  DomainCredential, DomainRoleBinding,
+  DomainCredential, DomainRoleBinding, DomainPayload, DomainSandboxTemplate,
+  SandboxLogEntry, SandboxPolicyResponse,
 } from '@/domain/types'
 
 const VALID_PHASES: ReadonlySet<string> = new Set<string>([
@@ -22,50 +23,60 @@ function parsePhase(raw: string): SessionPhase {
   return 'Pending'
 }
 
-function parseAnnotations(raw: string): Record<string, string> {
+function parseAnnotations(raw: string | Record<string, unknown> | unknown): Record<string, string> {
   if (!raw) {
     return {}
   }
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-      const result: Record<string, string> = {}
-      for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-        result[key] = String(value)
-      }
-      return result
+  let obj: unknown = raw
+  if (typeof raw === 'string') {
+    try {
+      obj = JSON.parse(raw)
+    } catch {
+      return {}
     }
-    return {}
-  } catch {
-    return {}
   }
+  if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
+    const result: Record<string, string> = {}
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+      result[key] = String(value)
+    }
+    return result
+  }
+  return {}
 }
 
-function parseJsonArray(raw: string): unknown[] {
+function parseJsonArray(raw: string | unknown[] | unknown): unknown[] {
   if (!raw) return []
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
+  if (Array.isArray(raw)) return raw
+  if (typeof raw === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(raw)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
   }
+  return []
 }
 
-function parseJsonObject(raw: string): Record<string, string> {
+function parseJsonObject(raw: string | Record<string, unknown> | unknown): Record<string, string> {
   if (!raw) return {}
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-      const result: Record<string, string> = {}
-      for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-        result[key] = String(value)
-      }
-      return result
+  let obj: unknown = raw
+  if (typeof raw === 'string') {
+    try {
+      obj = JSON.parse(raw)
+    } catch {
+      return {}
     }
-    return {}
-  } catch {
-    return {}
   }
+  if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
+    const result: Record<string, string> = {}
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+      result[key] = String(value)
+    }
+    return result
+  }
+  return {}
 }
 
 const VALID_REPO_STATUSES: ReadonlySet<string> = new Set(['Cloning', 'Ready', 'Failed'])
@@ -125,6 +136,11 @@ function numberOrNull(value: number | null | undefined): number | null {
   return value === undefined || value === null ? null : value
 }
 
+function parseJsonSnapshot<T>(raw: string | undefined | null): T | null {
+  if (!raw) return null
+  try { return JSON.parse(raw) as T } catch { return null }
+}
+
 function positiveNumberOrNull(value: number | null | undefined): number | null {
   return value === undefined || value === null || value === 0 ? null : value
 }
@@ -155,6 +171,9 @@ export function mapSdkSessionToDomain(sdk: Session): DomainSession {
     repos: parseRepos(sdk.repos),
     reconciledRepos: parseReconciledRepos(sdk.reconciled_repos),
     conditions: parseConditions(sdk.conditions),
+    kubeNamespace: emptyToNull(sdk.kube_namespace),
+    sandboxLogsSnapshot: parseJsonSnapshot<SandboxLogEntry[]>(sdk.sandbox_logs_snapshot),
+    sandboxPolicySnapshot: parseJsonSnapshot<SandboxPolicyResponse>(sdk.sandbox_policy_snapshot),
   }
 }
 
@@ -167,6 +186,64 @@ export function mapSdkProjectToDomain(sdk: Project): DomainProject {
     createdAt: sdk.created_at ?? '',
     updatedAt: sdk.updated_at ?? '',
   }
+}
+
+function parseProviders(raw: string | string[] | unknown): string[] {
+  if (!raw) return []
+  if (Array.isArray(raw)) {
+    return raw.filter((v): v is string => typeof v === 'string')
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        return parsed.filter((v): v is string => typeof v === 'string')
+      }
+      return []
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+function parsePayloads(raw: string | unknown[] | unknown): DomainPayload[] {
+  if (!raw) return []
+  let arr: unknown
+  if (Array.isArray(raw)) {
+    arr = raw
+  } else if (typeof raw === 'string') {
+    try {
+      arr = JSON.parse(raw)
+    } catch {
+      return []
+    }
+  } else {
+    return []
+  }
+  if (!Array.isArray(arr)) return []
+  return arr
+    .filter((v): v is Record<string, unknown> => typeof v === 'object' && v !== null)
+    .map((v) => ({
+      sandbox_path: String(v.sandbox_path ?? ''),
+      ...(v.content ? { content: String(v.content) } : {}),
+      ...(v.repo_url ? { repo_url: String(v.repo_url) } : {}),
+      ...(v.ref ? { ref: String(v.ref) } : {}),
+    }))
+}
+
+function parseSandboxTemplate(raw: string | Record<string, unknown> | unknown): DomainSandboxTemplate | null {
+  if (!raw) return null
+  let obj: unknown = raw
+  if (typeof raw === 'string') {
+    try {
+      obj = JSON.parse(raw)
+    } catch {
+      return null
+    }
+  }
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return null
+  return obj as DomainSandboxTemplate
 }
 
 export function mapSdkAgentToDomain(sdk: Agent): DomainAgent {
@@ -182,6 +259,12 @@ export function mapSdkAgentToDomain(sdk: Agent): DomainAgent {
     prompt: emptyToNull(sdk.prompt),
     repoUrl: emptyToNull(sdk.repo_url),
     workflowId: emptyToNull(sdk.workflow_id),
+    entrypoint: emptyToNull(sdk.entrypoint),
+    providers: parseProviders(sdk.providers),
+    payloads: parsePayloads(sdk.payloads),
+    environment: parseJsonObject(sdk.environment),
+    sandboxTemplate: parseSandboxTemplate(sdk.sandbox_template),
+    sandboxPolicy: emptyToNull(sdk.sandbox_policy),
     annotations: parseAnnotations(sdk.annotations),
     labels: parseJsonObject(sdk.labels),
     createdAt: sdk.created_at ?? '',
@@ -221,6 +304,30 @@ export function mapSessionMessageToDomain(sdk: SdkSessionMessageShape): DomainSe
   }
 }
 
+export type SdkSessionEventShape = {
+  id: string
+  session_id: string
+  seq: number
+  event_type: string
+  payload: string
+  created_at: string | null
+  completed_at: string | null
+  event_count: number
+}
+
+export function mapSessionEventToDomain(sdk: SdkSessionEventShape): DomainSessionEvent {
+  return {
+    id: sdk.id,
+    sessionId: sdk.session_id,
+    seq: sdk.seq,
+    eventType: sdk.event_type,
+    payload: sdk.payload,
+    createdAt: sdk.created_at ?? '',
+    completedAt: sdk.completed_at ?? null,
+    eventCount: sdk.event_count ?? 1,
+  }
+}
+
 export function mapSdkCredentialToDomain(sdk: Credential): DomainCredential {
   return {
     id: sdk.id,
@@ -246,6 +353,36 @@ export function mapSdkRoleBindingToDomain(sdk: RoleBinding): DomainRoleBinding {
     agentId: emptyToNull(sdk.agent_id ?? ''),
     credentialId: emptyToNull(sdk.credential_id ?? ''),
     sessionId: emptyToNull(sdk.session_id ?? ''),
+    createdAt: sdk.created_at ?? '',
+    updatedAt: sdk.updated_at ?? '',
+  }
+}
+
+export function mapSdkApplicationToDomain(sdk: Application): DomainApplication {
+  return {
+    id: sdk.id,
+    name: sdk.name,
+    sourceRepoUrl: sdk.source_repo_url,
+    sourceTargetRevision: emptyToNull(sdk.source_target_revision),
+    sourcePath: sdk.source_path,
+    destinationAmbientUrl: emptyToNull(sdk.destination_ambient_url),
+    destinationProject: sdk.destination_project,
+    credentialId: emptyToNull(sdk.credential_id),
+    autoSync: sdk.auto_sync,
+    autoPrune: sdk.auto_prune,
+    selfHeal: sdk.self_heal,
+    syncOptions: emptyToNull(sdk.sync_options),
+    retryLimit: sdk.retry_limit,
+    syncStatus: emptyToNull(sdk.sync_status),
+    healthStatus: emptyToNull(sdk.health_status),
+    syncRevision: emptyToNull(sdk.sync_revision),
+    operationPhase: emptyToNull(sdk.operation_phase),
+    operationMessage: emptyToNull(sdk.operation_message),
+    resourceStatus: emptyToNull(sdk.resource_status),
+    conditions: emptyToNull(sdk.conditions),
+    annotations: parseAnnotations(sdk.annotations),
+    labels: parseJsonObject(sdk.labels),
+    lastSyncedAt: emptyToNull(sdk.last_synced_at),
     createdAt: sdk.created_at ?? '',
     updatedAt: sdk.updated_at ?? '',
   }

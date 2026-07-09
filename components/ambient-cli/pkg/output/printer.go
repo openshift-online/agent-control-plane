@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Format string
@@ -13,20 +15,21 @@ type Format string
 const (
 	FormatTable Format = "table"
 	FormatJSON  Format = "json"
+	FormatYAML  Format = "yaml"
 	FormatWide  Format = "wide"
 )
 
 func ParseFormat(s string) (Format, error) {
 	switch Format(s) {
-	case FormatTable, FormatJSON, "":
+	case FormatTable, FormatJSON, FormatYAML, "":
 		if s == "" {
 			return FormatTable, nil
 		}
 		return Format(s), nil
 	case FormatWide:
-		return "", fmt.Errorf("wide output format is not yet implemented; use table or json")
+		return "", fmt.Errorf("wide output format is not yet implemented; use table, json, or yaml")
 	default:
-		return "", fmt.Errorf("unknown output format %q: valid formats are table, json", s)
+		return "", fmt.Errorf("unknown output format %q: valid formats are table, json, yaml", s)
 	}
 }
 
@@ -60,5 +63,14 @@ func (p *Printer) PrintJSON(v any) error {
 		return fmt.Errorf("marshal JSON: %w", err)
 	}
 	_, err = fmt.Fprintln(p.writer, string(data))
+	return err
+}
+
+func (p *Printer) PrintYAML(v any) error {
+	data, err := yaml.Marshal(v)
+	if err != nil {
+		return fmt.Errorf("marshal YAML: %w", err)
+	}
+	_, err = fmt.Fprint(p.writer, string(data))
 	return err
 }

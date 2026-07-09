@@ -2,6 +2,7 @@ package scheduledSessions
 
 import (
 	"context"
+	"time"
 
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
 	"gorm.io/gorm"
@@ -13,6 +14,8 @@ type ScheduledSessionDao interface {
 	Replace(ctx context.Context, ss *ScheduledSession) (*ScheduledSession, error)
 	Delete(ctx context.Context, id string) error
 	ListByProject(ctx context.Context, projectId string) (ScheduledSessionList, error)
+	DueSchedules(ctx context.Context, now time.Time, limit int) (ScheduledSessionList, error)
+	UpdateScheduleState(ctx context.Context, ss *ScheduledSession) error
 }
 
 type sqlScheduledSessionDao struct {
@@ -60,4 +63,18 @@ func (d *sqlScheduledSessionDao) ListByProject(ctx context.Context, projectId st
 	var list ScheduledSessionList
 	err := d.db(ctx).Where("project_id = ? AND deleted_at IS NULL", projectId).Find(&list).Error
 	return list, err
+}
+
+func (d *sqlScheduledSessionDao) DueSchedules(ctx context.Context, now time.Time, limit int) (ScheduledSessionList, error) {
+	var list ScheduledSessionList
+	err := d.db(ctx).
+		Where("enabled = true AND next_run_at <= ? AND deleted_at IS NULL", now).
+		Order("next_run_at").
+		Limit(limit).
+		Find(&list).Error
+	return list, err
+}
+
+func (d *sqlScheduledSessionDao) UpdateScheduleState(ctx context.Context, ss *ScheduledSession) error {
+	return d.db(ctx).Model(ss).Select("last_run_at", "next_run_at", "enabled").Updates(ss).Error
 }

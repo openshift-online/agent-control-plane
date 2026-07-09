@@ -5,57 +5,7 @@ import { Copy, Download, Check } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import type { DomainAgent } from '@/domain/types'
-
-function agentToYaml(agent: DomainAgent): string {
-  const lines: string[] = [
-    'apiVersion: ambient-code.io/v1',
-    'kind: Agent',
-    'metadata:',
-    `  name: ${agent.name}`,
-  ]
-
-  const annotationEntries = Object.entries(agent.annotations)
-  if (annotationEntries.length > 0) {
-    lines.push('  annotations:')
-    for (const [key, value] of annotationEntries) {
-      lines.push(`    ${key}: "${value}"`)
-    }
-  }
-
-  const labelEntries = Object.entries(agent.labels)
-  if (labelEntries.length > 0) {
-    lines.push('  labels:')
-    for (const [key, value] of labelEntries) {
-      lines.push(`    ${key}: "${value}"`)
-    }
-  }
-
-  lines.push('spec:')
-
-  if (agent.displayName) {
-    lines.push(`  displayName: "${agent.displayName}"`)
-  }
-  if (agent.description) {
-    lines.push(`  description: "${agent.description}"`)
-  }
-  if (agent.model) {
-    lines.push(`  model: ${agent.model}`)
-  }
-  if (agent.repoUrl) {
-    lines.push(`  repoUrl: ${agent.repoUrl}`)
-  }
-  if (agent.workflowId) {
-    lines.push(`  workflowId: ${agent.workflowId}`)
-  }
-  if (agent.prompt) {
-    lines.push('  prompt: |')
-    for (const promptLine of agent.prompt.split('\n')) {
-      lines.push(`    ${promptLine}`)
-    }
-  }
-
-  return lines.join('\n') + '\n'
-}
+import { agentToYaml } from '@/lib/agent-yaml'
 
 export function AgentConfigTab({ agent }: { agent: DomainAgent }) {
   const [copied, setCopied] = useState(false)

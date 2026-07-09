@@ -42,13 +42,6 @@ func NewStandardNamespaceProvisioner(kube *KubeClient, logger zerolog.Logger) *S
 }
 
 func (p *StandardNamespaceProvisioner) ProvisionNamespace(ctx context.Context, name string, labels map[string]string) error {
-	if _, err := p.kube.GetNamespace(ctx, name); err == nil {
-		p.logger.Debug().Str("namespace", name).Msg("namespace already exists")
-		return nil
-	} else if !k8serrors.IsNotFound(err) {
-		return fmt.Errorf("checking namespace %s: %w", name, err)
-	}
-
 	labelMap := make(map[string]interface{}, len(labels))
 	for k, v := range labels {
 		labelMap[k] = v
@@ -65,10 +58,22 @@ func (p *StandardNamespaceProvisioner) ProvisionNamespace(ctx context.Context, n
 		},
 	}
 
-	if _, err := p.kube.CreateNamespace(ctx, ns); err != nil && !k8serrors.IsAlreadyExists(err) {
-		return fmt.Errorf("creating namespace %s: %w", name, err)
+	existing, err := p.kube.GetNamespace(ctx, name)
+	if err == nil {
+		ns.SetResourceVersion(existing.GetResourceVersion())
+		if _, err := p.kube.UpdateNamespace(ctx, ns); err != nil {
+			return fmt.Errorf("updating namespace %s: %w", name, err)
+		}
+		p.logger.Debug().Str("namespace", name).Msg("namespace already exists")
+		return nil
+	}
+	if !k8serrors.IsNotFound(err) {
+		return fmt.Errorf("checking namespace %s: %w", name, err)
 	}
 
+	if _, err := p.kube.CreateNamespace(ctx, ns); err != nil {
+		return fmt.Errorf("creating namespace %s: %w", name, err)
+	}
 	p.logger.Info().Str("namespace", name).Msg("namespace created")
 	return nil
 }

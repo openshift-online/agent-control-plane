@@ -57,8 +57,16 @@ func TestInternalRoles(t *testing.T) {
 	if !InternalRoles[RoleAgentRunner] {
 		t.Error("agent:runner should be internal")
 	}
-	if !InternalRoles[RoleCredentialTokenReader] {
-		t.Error("credential:token-reader should be internal")
+	// credential:token-reader is NOT internal. It grants fetch_token on a
+	// single credential (always credential-scoped, never global). Credential
+	// owners already have full access to their own credential's token, so
+	// delegating read access to another user is an owner-level decision.
+	// The GetToken handler enforces a second scope check (AuthResult.
+	// CredentialIDs) as defense-in-depth. Keeping it non-internal lets
+	// credential:owner users grant it via acpctl credential bind without
+	// requiring platform:admin.
+	if InternalRoles[RoleCredentialTokenReader] {
+		t.Error("credential:token-reader should not be internal")
 	}
 	if InternalRoles[RoleProjectOwner] {
 		t.Error("project:owner should not be internal")

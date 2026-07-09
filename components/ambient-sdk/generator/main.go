@@ -498,17 +498,17 @@ func loadTemplate(path string) (*template.Template, error) {
 			r[0] = []rune(strings.ToUpper(string(r[0])))[0]
 			return string(r)
 		},
-		"goName":        toGoName,
-		"pythonDefault":    func(f Field) string { return pythonDefault(f.Type, f.Format, f.Nullable) },
-		"goBuilderParam":   goBuilderParam,
-		"goBuilderAssign":  goBuilderAssign,
-		"isNullablePtr":    func(f Field) bool { return f.GoType == "*string" || f.GoType == "*time.Time" },
-		"isDateTime":    isDateTimeField,
-		"isWritable":    func(f Field) bool { return !f.ReadOnly },
-		"camelCase":     toCamelCase,
-		"pluralize":     pluralize,
-		"lowerFirst":    lowerFirst,
-		"tsDefault":     func(f Field) string { return tsDefault(f.Type, f.Format) },
+		"goName":          toGoName,
+		"pythonDefault":   func(f Field) string { return pythonDefault(f.Type, f.Format, f.Nullable) },
+		"goBuilderParam":  goBuilderParam,
+		"goBuilderAssign": goBuilderAssign,
+		"isNullablePtr":   func(f Field) bool { return f.GoType == "*string" || f.GoType == "*time.Time" },
+		"isDateTime":      isDateTimeField,
+		"isWritable":      func(f Field) bool { return !f.ReadOnly },
+		"camelCase":       toCamelCase,
+		"pluralize":       pluralize,
+		"lowerFirst":      lowerFirst,
+		"tsDefault":       func(f Field) string { return tsDefault(f.Type, f.Format) },
 		"hasTimeImport": func(fields []Field) bool {
 			for _, f := range fields {
 				if f.Format == "date-time" {

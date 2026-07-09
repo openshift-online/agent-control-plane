@@ -1,0 +1,5 @@
+kind: Kustomization
+resources:
+  - vertex.yaml
+  - github.yaml
+  - jira.yaml

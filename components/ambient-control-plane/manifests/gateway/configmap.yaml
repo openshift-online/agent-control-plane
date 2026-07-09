@@ -1,0 +1,49 @@
+---
+# Gateway configuration - TOML format
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openshell-gateway-config
+  namespace: NAMESPACE_PLACEHOLDER
+  labels:
+    app.kubernetes.io/name: openshell
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: agent-control-plane
+data:
+  gateway.toml: |
+    [openshell]
+    version = 1
+
+    [openshell.gateway]
+    bind_address          = "0.0.0.0:8080"
+    health_bind_address   = "0.0.0.0:8081"
+    metrics_bind_address  = "0.0.0.0:9090"
+    log_level             = "info"
+    sandbox_namespace     = "NAMESPACE_PLACEHOLDER"
+    default_image         = "ghcr.io/nvidia/openshell-community/sandboxes/base:latest"
+    supervisor_image      = "ghcr.io/nvidia/openshell/supervisor:0.0.74"
+    client_tls_secret_name = "openshell-client-tls"
+    enable_loopback_service_http = true
+    server_sans = ["openshell-gateway.NAMESPACE_PLACEHOLDER.svc.cluster.local"]
+
+    [openshell.gateway.tls]
+    cert_path             = "/etc/openshell-tls/server/tls.crt"
+    key_path              = "/etc/openshell-tls/server/tls.key"
+    client_ca_path        = "/etc/openshell-tls/client-ca/ca.crt"
+
+    [openshell.gateway.auth]
+    allow_unauthenticated_users = true
+
+    [openshell.gateway.gateway_jwt]
+    signing_key_path = "/etc/openshell-jwt/signing.pem"
+    public_key_path  = "/etc/openshell-jwt/public.pem"
+    kid_path         = "/etc/openshell-jwt/kid"
+    gateway_id       = "openshell-gateway"
+    ttl_secs         = 3600
+
+    [openshell.drivers.kubernetes]
+    grpc_endpoint                = "https://openshell-gateway.NAMESPACE_PLACEHOLDER.svc.cluster.local:8080"
+    service_account_name         = "openshell-gateway-sandbox"
+    supervisor_sideload_method   = "image-volume"
+    sa_token_ttl_secs            = 3600
+    app_armor_profile            = "Unconfined"

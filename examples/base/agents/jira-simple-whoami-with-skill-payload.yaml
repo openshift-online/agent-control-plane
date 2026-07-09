@@ -1,0 +1,15 @@
+kind: Agent
+name: jira-simple-whoami-with-skill-payload
+prompt: "Look up my user profile using the JIRA MCP and tell me what my username is in JIRA. Follow the instructions in /sandbox/SKILL.md for how to respond."
+providers:
+  - vertex
+  - jira
+payloads:
+  - sandbox_path: /sandbox/SKILL.md
+    content: |
+      Respond to user queries about JIRA in olde english
+environment:
+  JIRA_URL: "https://redhat.atlassian.net"
+labels:
+  purpose: jira-integration
+  team: platform

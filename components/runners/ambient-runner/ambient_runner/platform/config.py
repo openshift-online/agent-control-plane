@@ -9,11 +9,40 @@ import json as _json
 import logging
 import os
 from pathlib import Path
+from typing import Final
 
 from ambient_runner.platform.context import RunnerContext
-from ambient_runner.platform.utils import expand_env_vars, parse_owner_repo
+from ambient_runner.platform.utils import parse_owner_repo
 
 logger = logging.getLogger(__name__)
+
+SESSION_CONFIG_PATH_ENV: Final = "SESSION_CONFIG_PATH"
+
+
+def get_session_config_path() -> str | None:
+    raw_path = os.getenv(SESSION_CONFIG_PATH_ENV, "").strip()
+    if not raw_path:
+        return None
+
+    session_config_path = Path(raw_path)
+    if not session_config_path.is_absolute():
+        logger.warning("%s must be absolute: %s", SESSION_CONFIG_PATH_ENV, raw_path)
+        return None
+    if not session_config_path.exists():
+        logger.warning(
+            "%s does not exist: %s",
+            SESSION_CONFIG_PATH_ENV,
+            session_config_path,
+        )
+        return None
+    if not session_config_path.is_dir():
+        logger.warning(
+            "%s is not a directory: %s",
+            SESSION_CONFIG_PATH_ENV,
+            session_config_path,
+        )
+        return None
+    return str(session_config_path)
 
 
 def load_ambient_config(cwd_path: str) -> dict:
@@ -43,17 +72,24 @@ def load_ambient_config(cwd_path: str) -> dict:
 
 
 def load_mcp_config(context: RunnerContext, cwd_path: str) -> dict | None:
-    """Load MCP server configuration from default .mcp.json, then merge
-    project-level and session-level custom servers.
+    """Load MCP server configuration from baked-in and payload .mcp.json files.
 
     Merge order (later wins):
         1. Default .mcp.json (baked into runner image)
-        2. Project-level custom servers (PROJECT_MCP_SERVERS env)
-        3. Session-level custom servers (CUSTOM_MCP_SERVERS env)
-        4. Disabled servers are removed last
+        2. Payload .mcp.json (platform-controlled path, NOT the workspace)
+
+    The payload path defaults to ``/sandbox/.mcp.json`` and can be overridden
+    via ``PAYLOAD_MCP_CONFIG_FILE``.  It intentionally does NOT read from
+    ``cwd_path`` — that directory contains user-provided repo content, and a
+    crafted ``.mcp.json`` there would gain platform-level tool permissions.
+
+    Env vars in server configs (e.g. ``${JIRA_USERNAME}``) are NOT expanded
+    here — they are passed through as-is so that MCP subprocesses inherit
+    values from the sandbox environment at runtime. This is critical for
+    OpenShell gateway mode where credentials are lazily resolved.
 
     Returns:
-        Dict of MCP server configs with env vars expanded, or None.
+        Dict of MCP server configs, or None.
     """
     try:
         mcp_config_file = context.get_env(
@@ -70,53 +106,28 @@ def load_mcp_config(context: RunnerContext, cwd_path: str) -> dict | None:
         else:
             logger.info(f"No MCP config file found at: {runner_mcp_file}")
 
-        # Merge project-level custom MCP servers
-        disabled: list[str] = []
-        project_mcp_raw = context.get_env("PROJECT_MCP_SERVERS", "")
-        if project_mcp_raw:
+        # Merge payload .mcp.json from a platform-controlled path (not cwd).
+        payload_mcp_file = Path(
+            context.get_env("PAYLOAD_MCP_CONFIG_FILE", "/sandbox/.mcp.json")
+        )
+        if payload_mcp_file.exists() and payload_mcp_file != runner_mcp_file:
             try:
-                project_mcp = _json.loads(project_mcp_raw)
-                if isinstance(project_mcp, dict):
-                    custom = project_mcp.get("custom", {})
-                    if isinstance(custom, dict):
-                        mcp_servers.update(custom)
+                with open(payload_mcp_file, "r") as f:
+                    payload_config = _json.load(f)
+                    payload_servers = payload_config.get("mcpServers", {})
+                    if payload_servers:
+                        mcp_servers.update(payload_servers)
                         logger.info(
-                            f"Merged {len(custom)} project-level custom MCP server(s)"
+                            f"Merged {len(payload_servers)} payload MCP server(s) "
+                            f"from {payload_mcp_file}"
                         )
-                    proj_disabled = project_mcp.get("disabled", [])
-                    if isinstance(proj_disabled, list):
-                        disabled.extend(proj_disabled)
             except _json.JSONDecodeError as e:
-                logger.error(f"Failed to parse PROJECT_MCP_SERVERS: {e}")
+                logger.error(
+                    f"Failed to parse payload .mcp.json at {payload_mcp_file}: {e}"
+                )
 
-        # Merge session-level custom MCP servers (takes precedence)
-        custom_mcp_raw = context.get_env("CUSTOM_MCP_SERVERS", "")
-        if custom_mcp_raw:
-            try:
-                custom_mcp = _json.loads(custom_mcp_raw)
-                if isinstance(custom_mcp, dict):
-                    custom = custom_mcp.get("custom", {})
-                    if isinstance(custom, dict):
-                        mcp_servers.update(custom)
-                        logger.info(
-                            f"Merged {len(custom)} session-level custom MCP server(s)"
-                        )
-                    sess_disabled = custom_mcp.get("disabled", [])
-                    if isinstance(sess_disabled, list):
-                        disabled.extend(sess_disabled)
-            except _json.JSONDecodeError as e:
-                logger.error(f"Failed to parse CUSTOM_MCP_SERVERS: {e}")
-
-        # Remove disabled servers
-        if disabled:
-            for name in disabled:
-                if name in mcp_servers:
-                    del mcp_servers[name]
-                    logger.info(f"Disabled MCP server: {name}")
-
-        expanded = expand_env_vars(mcp_servers)
-        logger.info(f"Expanded MCP config env vars for {len(expanded)} servers")
-        return expanded if expanded else None
+        logger.info(f"Loaded MCP config with {len(mcp_servers)} server(s)")
+        return mcp_servers if mcp_servers else None
 
     except _json.JSONDecodeError as e:
         logger.error(f"Failed to parse MCP config: {e}")

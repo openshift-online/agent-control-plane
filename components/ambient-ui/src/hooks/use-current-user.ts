@@ -5,6 +5,7 @@ export type CurrentUser = {
   name: string
   email: string
   initials: string
+  groups: string[]
 }
 
 type MeResponse = {
@@ -13,6 +14,7 @@ type MeResponse = {
   name?: string
   email?: string
   initials?: string
+  groups?: string[]
 }
 
 async function fetchCurrentUser(): Promise<CurrentUser | null> {
@@ -29,6 +31,7 @@ async function fetchCurrentUser(): Promise<CurrentUser | null> {
     name: data.name ?? "",
     email: data.email ?? "",
     initials: data.initials ?? "?",
+    groups: data.groups ?? [],
   }
 }
 

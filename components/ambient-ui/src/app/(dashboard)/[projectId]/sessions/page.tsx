@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useParams } from 'next/navigation'
-import { Monitor, Plus, FlaskConical } from 'lucide-react'
+import { Monitor, Plus, FlaskConical, FolderTree } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -10,9 +10,13 @@ import { EmptyState } from '@/components/empty-state'
 import { useSessions } from '@/queries/use-sessions'
 import { useAgentNames } from '@/queries/use-agents'
 import type { SessionPhase } from '@/domain/types'
+import { buildFolderTree } from '@/domain/folder-tree'
 import { FleetTable } from './_components/fleet-table'
 import { FleetSummary } from './_components/fleet-summary'
+import { FolderTreePanel } from './_components/folder-tree-panel'
 import { CreateSessionSheet } from './_components/create-session-sheet'
+
+const PAGE_SIZE = 20
 
 export default function FleetPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -21,12 +25,24 @@ export default function FleetPage() {
   const [filteredCount, setFilteredCount] = useState<number | undefined>(undefined)
   const [createOpen, setCreateOpen] = useState(false)
   const [showTestRuns, setShowTestRuns] = useState(false)
-  const { data, isLoading, error } = useSessions(projectId)
+  const [showFolderTree, setShowFolderTree] = useState(false)
+  const [pathFilter, setPathFilter] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const { data, isLoading, error } = useSessions(projectId, { page: currentPage, size: PAGE_SIZE, orderBy: 'created_at desc' })
   const { data: agentNames } = useAgentNames(projectId)
 
   const handleFilteredCountChange = useCallback((count: number) => {
     setFilteredCount(count)
   }, [])
+
+  const sessions = data?.items ?? []
+  const serverTotal = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(serverTotal / PAGE_SIZE))
+  const testSessionCount = sessions.filter(
+    (s) => s.annotations['ambient-code.io/ui/test-session'] === 'true',
+  ).length
+  const folderTree = useMemo(() => buildFolderTree(sessions), [sessions])
+  const hasFolders = folderTree.length > 0
 
   if (error) {
     return (
@@ -51,12 +67,7 @@ export default function FleetPage() {
     )
   }
 
-  const sessions = data?.items ?? []
-  const testSessionCount = sessions.filter(
-    (s) => s.annotations['ambient-code.io/ui/test-session'] === 'true',
-  ).length
-
-  if (sessions.length === 0) {
+  if (sessions.length === 0 && currentPage === 1) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold tracking-tight">Sessions</h1>
@@ -78,9 +89,31 @@ export default function FleetPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Sessions</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">Sessions</h1>
+          <Input
+            placeholder="Filter by name, agent, or model..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-80"
+          />
+        </div>
         <div className="flex items-center gap-2">
+          {hasFolders && (
+            <Button
+              variant={showFolderTree ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => {
+                setShowFolderTree((prev) => !prev)
+                if (showFolderTree) setPathFilter(null)
+              }}
+              className="text-xs text-muted-foreground"
+            >
+              <FolderTree className="mr-1 size-3.5" />
+              Folders
+            </Button>
+          )}
           {testSessionCount > 0 && (
             <Button
               variant={showTestRuns ? 'secondary' : 'ghost'}
@@ -94,12 +127,6 @@ export default function FleetPage() {
                 : `Show test runs (${testSessionCount})`}
             </Button>
           )}
-          <Input
-            placeholder="Filter by name, agent, or model..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="max-w-xs"
-          />
           <Button onClick={() => setCreateOpen(true)} size="sm">
             <Plus className="mr-1.5 size-4" />
             New Session
@@ -108,18 +135,36 @@ export default function FleetPage() {
       </div>
       <FleetSummary
         sessions={sessions}
+        serverTotal={serverTotal}
         filteredCount={filteredCount}
         activePhase={phaseFilter}
         onPhaseFilter={setPhaseFilter}
       />
-      <FleetTable
-        sessions={sessions}
-        searchFilter={search}
-        agentNames={agentNames}
-        phaseFilter={phaseFilter}
-        showTestRuns={showTestRuns}
-        onFilteredCountChange={handleFilteredCountChange}
-      />
+      <div className="flex gap-4">
+        {showFolderTree && (
+          <FolderTreePanel
+            tree={folderTree}
+            selectedPath={pathFilter}
+            onSelect={setPathFilter}
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <FleetTable
+            sessions={sessions}
+            searchFilter={search}
+            agentNames={agentNames}
+            phaseFilter={phaseFilter}
+            showTestRuns={showTestRuns}
+            pathFilter={pathFilter}
+            onFilteredCountChange={handleFilteredCountChange}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={PAGE_SIZE}
+            serverTotal={serverTotal}
+            onPageChange={setCurrentPage}
+          />
+        </div>
+      </div>
       <CreateSessionSheet open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   )

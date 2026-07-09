@@ -81,13 +81,13 @@ def refresh_bot_token() -> str:
     if not cp_token_url:
         return get_bot_token()
 
-    public_key_pem = os.getenv("AMBIENT_CP_TOKEN_PUBLIC_KEY", "")
+    from ambient_runner._grpc_client import _decode_public_key, _fetch_token_from_cp
+
+    public_key_pem = _decode_public_key(os.getenv("AMBIENT_CP_TOKEN_PUBLIC_KEY", ""))
     session_id = os.getenv("SESSION_ID", "")
     if not public_key_pem or not session_id:
         logger.warning("refresh_bot_token: CP env vars incomplete, skipping refresh")
         return get_bot_token()
-
-    from ambient_runner._grpc_client import _fetch_token_from_cp
 
     return _fetch_token_from_cp(cp_token_url, public_key_pem, session_id)
 
@@ -145,9 +145,19 @@ _REDACT_PATTERNS = [
     (re.compile(r"AIza[a-zA-Z0-9\-_]{30,}"), "AIza***REDACTED***"),
     (
         re.compile(
-            r"(ANTHROPIC_API_KEY|LANGFUSE_SECRET_KEY|LANGFUSE_PUBLIC_KEY|BOT_TOKEN|GIT_TOKEN|GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*[^\s\'\"]+",
+            r"(ANTHROPIC_API_KEY|LANGFUSE_SECRET_KEY|LANGFUSE_PUBLIC_KEY|BOT_TOKEN|GIT_TOKEN|GEMINI_API_KEY|GOOGLE_API_KEY|MLFLOW_TRACKING_TOKEN)\s*=\s*[^\s\'\"]+",
         ),
         r"\1=***REDACTED***",
+    ),
+    (
+        re.compile(
+            r"Bearer\s+[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}",
+        ),
+        "Bearer ***REDACTED***",
+    ),
+    (
+        re.compile(r"\b[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
+        "***REDACTED_JWT***",
     ),
 ]
 
@@ -252,24 +262,6 @@ def parse_owner_repo(url: str) -> tuple[str, str, str]:
     except Exception:
         return "", "", host
     return "", "", host
-
-
-def expand_env_vars(value: Any) -> Any:
-    """Recursively expand ${VAR} and ${VAR:-default} patterns in config values."""
-    if isinstance(value, str):
-        pattern = r"\$\{([^}:]+)(?::-([^}]*))?\}"
-
-        def replace_var(match):
-            var_name = match.group(1)
-            default_val = match.group(2) if match.group(2) is not None else ""
-            return os.environ.get(var_name, default_val)
-
-        return re.sub(pattern, replace_var, value)
-    elif isinstance(value, dict):
-        return {k: expand_env_vars(v) for k, v in value.items()}
-    elif isinstance(value, list):
-        return [expand_env_vars(item) for item in value]
-    return value
 
 
 async def run_cmd(

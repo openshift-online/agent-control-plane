@@ -21,6 +21,26 @@ spec:
                   key: clientSecret
                   optional: true
             - name: AMBIENT_API_SERVER_URL
-              value: "http://ambient-api-server.ambient-code.svc:8000"
+              value: "http://ambient-api-server.ambient-code.svc.cluster.local:8000"
             - name: AMBIENT_GRPC_USE_TLS
               value: "false"
+            - name: OPENSHELL_USE_GATEWAY
+              value: "true"
+            - name: LOCAL_IMAGES
+              value: "true"
+            - name: USE_VERTEX
+              value: "1"
+              valueFrom: null
+            - name: CLOUD_ML_REGION
+              value: "us-east5"
+              valueFrom: null
+            - name: ANTHROPIC_VERTEX_PROJECT_ID
+              value: "itpc-gcp-hcm-pe-eng-claude"
+              valueFrom: null
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: ""
+              valueFrom: null
+            - name: MLFLOW_TRACKING_URI
+              value: "https://mlflow.apps.int.spoke.prod.us-west-2.aws.paas.redhat.com/"
+            - name: MLFLOW_EXPERIMENT_NAME
+              value: "acp-general"

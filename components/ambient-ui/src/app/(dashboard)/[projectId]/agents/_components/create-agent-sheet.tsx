@@ -1,7 +1,6 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useState, useMemo, useCallback } from 'react'
 import {
   Sheet,
   SheetContent,
@@ -20,9 +19,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { useCreateAgent } from '@/queries/use-agents'
-import type { DomainAgentCreateRequest } from '@/domain/types'
+import type { DomainPayload } from '@/domain/types'
+import type { AgentYamlInput } from '@/lib/agent-yaml'
 import { MODEL_OPTIONS } from '@/domain/models'
+import { agentToYaml } from '@/lib/agent-yaml'
+import { SandboxConfigFields, INITIAL_SANDBOX_CONFIG } from './sandbox-config-fields'
+import type { SandboxConfigState } from './sandbox-config-fields'
+import { YamlPreview } from './yaml-preview'
 
 export function CreateAgentSheet({
   open,
@@ -31,10 +34,6 @@ export function CreateAgentSheet({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const router = useRouter()
-  const { projectId } = useParams<{ projectId: string }>()
-  const createAgent = useCreateAgent()
-
   const [name, setName] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [model, setModel] = useState('')
@@ -42,6 +41,9 @@ export function CreateAgentSheet({
   const [repoUrl, setRepoUrl] = useState('')
   const [description, setDescription] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  const [sandboxConfig, setSandboxConfig] = useState<SandboxConfigState>(INITIAL_SANDBOX_CONFIG)
+  const [generatedYaml, setGeneratedYaml] = useState<string | null>(null)
 
   function resetForm() {
     setName('')
@@ -51,9 +53,44 @@ export function CreateAgentSheet({
     setRepoUrl('')
     setDescription('')
     setError(null)
+    setSandboxConfig(INITIAL_SANDBOX_CONFIG)
+    setGeneratedYaml(null)
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  const buildAgentForYaml = useCallback((): AgentYamlInput => {
+    const providers = sandboxConfig.providers
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean)
+
+    const environment: Record<string, string> = {}
+    for (const row of sandboxConfig.envRows) {
+      if (row.key.trim()) {
+        environment[row.key.trim()] = row.value
+      }
+    }
+
+    const payloads: DomainPayload[] = sandboxConfig.payloadRows
+      .filter((row) => row.sandboxPath.trim())
+      .map((row) => ({
+        sandbox_path: row.sandboxPath.trim(),
+        ...(row.repoUrl.trim() ? { repo_url: row.repoUrl.trim() } : {}),
+        ...(row.ref.trim() ? { ref: row.ref.trim() } : {}),
+        ...(!row.repoUrl.trim() && row.content.trim() ? { content: row.content.trim() } : {}),
+      }))
+
+    return {
+      name: name.trim(),
+      prompt: prompt.trim() || null,
+      providers,
+      payloads,
+      environment,
+      annotations: {},
+      labels: {},
+    }
+  }, [name, prompt, sandboxConfig])
+
+  function handleGenerateYaml(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
 
@@ -61,40 +98,33 @@ export function CreateAgentSheet({
       setError('Name is required.')
       return
     }
-
-    const request: DomainAgentCreateRequest = {
-      name: name.trim(),
-      projectId,
-    }
-
-    if (displayName.trim()) request.displayName = displayName.trim()
-    if (model) request.model = model
-    if (prompt.trim()) request.prompt = prompt.trim()
-    if (repoUrl.trim()) request.repoUrl = repoUrl.trim()
-    if (description.trim()) request.description = description.trim()
-
-    try {
-      const agent = await createAgent.mutateAsync({ projectId, request })
-      resetForm()
-      onOpenChange(false)
-      router.push(`/${projectId}/agents/${agent.id}`)
-    } catch (err) {
-      console.error('create agent failed', err)
-      setError('Failed to create agent. Please try again.')
-    }
+    const yaml = agentToYaml(buildAgentForYaml())
+    setGeneratedYaml(yaml)
   }
+
+  const previewYaml = useMemo(() => {
+    if (!name.trim()) return null
+    try {
+      return agentToYaml(buildAgentForYaml())
+    } catch {
+      return null
+    }
+  }, [name, buildAgentForYaml])
 
   return (
     <Sheet open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v) }}>
       <SheetContent side="right" className="sm:max-w-lg overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>New Agent</SheetTitle>
+          <SheetTitle>Generate Agent Manifest</SheetTitle>
           <SheetDescription>
-            Create a new agent definition in this project.
+            Define an agent and generate its manifest.
           </SheetDescription>
         </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-4 pb-4">
+        <form
+          onSubmit={handleGenerateYaml}
+          className="flex flex-col gap-4 px-4 pb-4"
+        >
           <div className="space-y-1.5">
             <label htmlFor="agent-name" className="text-sm font-medium">
               Name <span className="text-destructive">*</span>
@@ -176,8 +206,17 @@ export function CreateAgentSheet({
             />
           </div>
 
+          <SandboxConfigFields
+            state={sandboxConfig}
+            onChange={setSandboxConfig}
+          />
+
           {error && (
             <p className="text-sm text-destructive">{error}</p>
+          )}
+
+          {generatedYaml && (
+            <YamlPreview yaml={generatedYaml} agentName={name.trim()} />
           )}
 
           <SheetFooter className="px-0">
@@ -188,11 +227,8 @@ export function CreateAgentSheet({
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={createAgent.isPending || !name.trim()}
-            >
-              {createAgent.isPending ? 'Creating...' : 'Create Agent'}
+            <Button type="submit" disabled={!name.trim()}>
+              Generate Manifest
             </Button>
           </SheetFooter>
         </form>

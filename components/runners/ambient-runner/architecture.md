@@ -55,10 +55,10 @@ There are two delivery modes. The **HTTP path** is the original design: the back
    - Builds `RunnerContext` from `SESSION_ID` / `WORKSPACE_PATH` env vars
    - Calls `bridge.set_context(context)`
    - If `AMBIENT_GRPC_ENABLED=true` and `AMBIENT_GRPC_URL` are set: calls `bridge.start_grpc_listener(url)` and awaits `listener.ready` (10s timeout) before proceeding — ensures the watch stream is open before the initial prompt fires
-   - If `IS_RESUME` is not set and a prompt exists: fires `_auto_execute_initial_prompt()` as a background `asyncio.Task`
+   - If `IS_RESUME` is not set: reads initial prompt from `/tmp/initial_prompt.txt` (gateway file upload) or `INITIAL_PROMPT` env var (operator Job fallback). If a prompt exists, fires `_auto_execute_initial_prompt()` as a background `asyncio.Task`
    - On shutdown: calls `bridge.shutdown()`
 3. **Auto-prompt** (`_auto_execute_initial_prompt`):
-   - **gRPC mode**: calls `_push_initial_prompt_via_grpc()` — pushes a `PushSessionMessage(event_type="user")` to the control plane; the listener picks it up and drives `bridge.run()` directly
+   - **gRPC mode**: calls `_push_initial_prompt_via_grpc()` — pushes a `PushSessionMessage(event_type="user")` to the API server; the listener picks it up and drives `bridge.run()` directly. The prompt is visible in the UI chat history.
    - **HTTP mode**: calls `_push_initial_prompt_via_http()` — POSTs to `BACKEND_API_URL/projects/{project}/agentic-sessions/{session}/agui/run` with exponential backoff (8 retries, 2s→30s) because K8s DNS may not propagate before the pod is ready
 
 ---

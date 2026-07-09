@@ -1,5 +1,5 @@
 import type { ProjectAPI } from 'ambient-sdk'
-import type { ProjectsPort, ProjectCreateInput } from '@/ports/projects'
+import type { ProjectsPort, ProjectCreateInput, ProjectPatchInput } from '@/ports/projects'
 import type { DomainProject, ListParams, PaginatedResult } from '@/domain/types'
 import { mapSdkProjectToDomain } from './mappers'
 import { getProjectAPI } from './sdk-client'
@@ -38,6 +38,18 @@ function createSdkProjectsAdapter(api: ProjectAPI): ProjectsPort {
     async create(input: ProjectCreateInput): Promise<DomainProject> {
       const project = await api.create({ name: input.name, description: input.description })
       return mapSdkProjectToDomain(project)
+    },
+
+    async patch(projectId: string, input: ProjectPatchInput): Promise<DomainProject> {
+      const project = await api.update(projectId, {
+        name: input.name,
+        description: input.description,
+      })
+      return mapSdkProjectToDomain(project)
+    },
+
+    async delete(projectId: string): Promise<void> {
+      await api.delete(projectId)
     },
   }
 }

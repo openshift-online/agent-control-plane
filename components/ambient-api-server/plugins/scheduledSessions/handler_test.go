@@ -12,7 +12,10 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	. "github.com/ambient-code/platform/components/ambient-api-server/plugins/scheduledSessions"
+	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
+	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 )
 
 // ---------------------------------------------------------------------------
@@ -21,9 +24,17 @@ import (
 
 func setupRouter(svc ScheduledSessionService) *mux.Router {
 	r := mux.NewRouter()
-	h := NewScheduledSessionHandler(svc)
+	sessionSvc := sessions.NewInMemorySessionService()
+	h := NewScheduledSessionHandler(svc, sessionSvc)
 
 	sub := r.PathPrefix("/api/ambient/v1/projects/{project_id}/scheduled-sessions").Subrouter()
+	sub.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := auth.SetUsernameContext(r.Context(), "test-user")
+			ctx = rbac.SetAuthResult(ctx, &rbac.AuthResult{Username: "test-user", IsGlobalAdmin: true})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	})
 	sub.HandleFunc("", h.List).Methods(http.MethodGet)
 	sub.HandleFunc("", h.Create).Methods(http.MethodPost)
 	sub.HandleFunc("/{id}", h.Get).Methods(http.MethodGet)
@@ -321,8 +332,8 @@ func TestTrigger_Success(t *testing.T) {
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rr.Code, rr.Body)
 	}
 }
 
@@ -469,8 +480,8 @@ func TestFullCRUDLifecycle(t *testing.T) {
 		fmt.Sprintf("/api/ambient/v1/projects/%s/scheduled-sessions/%s/trigger", projectId, id), nil)
 	triggerRR := httptest.NewRecorder()
 	router.ServeHTTP(triggerRR, triggerReq)
-	if triggerRR.Code != http.StatusOK {
-		t.Fatalf("trigger: expected 200, got %d", triggerRR.Code)
+	if triggerRR.Code != http.StatusCreated {
+		t.Fatalf("trigger: expected 201, got %d", triggerRR.Code)
 	}
 
 	// Runs

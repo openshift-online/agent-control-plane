@@ -1,0 +1,42 @@
+[
+  {
+    "input": "reconcile everything",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "reconcile"
+    },
+    "description": "Triggers full reconciliation across all specs"
+  },
+  {
+    "input": "what's the gap across all specs?",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "reconcile"
+    },
+    "description": "Triggers gap analysis in dry-run mode"
+  },
+  {
+    "input": "run full reconciliation on the platform domain",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "reconcile"
+    },
+    "description": "Triggers domain-scoped reconciliation"
+  },
+  {
+    "input": "what's left to implement?",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "reconcile"
+    },
+    "description": "Triggers gap analysis to show implementation status"
+  },
+  {
+    "input": "resume the reconciliation run",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "reconcile"
+    },
+    "description": "Resumes from last checkpoint"
+  }
+]

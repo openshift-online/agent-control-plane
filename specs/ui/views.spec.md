@@ -116,9 +116,26 @@ Condition colors SHALL reflect semantic health, not literal True/False values. "
 
 - GIVEN a running session with AG-UI events
 - WHEN the Logs tab renders
-- THEN it displays a structured log view of events: timestamps, event type badges (text, tool call, error, lifecycle), content
+- THEN it displays a structured log view with aligned columns: timestamp (fixed width), event type badge (fixed width), and content
 - AND filter chips allow filtering by event type
 - AND errors are visually prominent
+
+### Scenario: Logs tab collapsible rows
+
+- GIVEN a session with tool_use and system events
+- WHEN the Logs tab renders
+- THEN Tool Call rows are collapsed by default, showing only the tool name with a chevron toggle
+- AND System rows are collapsed by default, showing "System" with a chevron toggle
+- AND clicking a collapsed row expands it to reveal the formatted payload
+- AND clicking an expanded row collapses it again
+
+### Scenario: Logs tab tool result truncation
+
+- GIVEN a session with tool_result events containing multi-line content
+- WHEN the Logs tab renders
+- THEN Tool Result rows truncate content to 4 lines with a "Show more" button
+- AND clicking "Show more" reveals the full content and changes to "Show less"
+- AND tool result payloads with multiply-encoded JSON are recursively unwrapped and pretty-printed
 
 ### Scenario: Resources tab
 
@@ -143,7 +160,7 @@ Condition colors SHALL reflect semantic health, not literal True/False values. "
 - THEN it displays a full AG-UI chat interface with messages
 - AND user messages are styled distinctly from assistant messages
 - AND assistant messages render as Markdown (headings, lists, code blocks, tables, links)
-- AND tool calls render as collapsible blocks showing tool name, arguments (when available), and result
+- AND tool calls render as collapsible blocks showing tool name, arguments (when available), and result (with multiply-encoded JSON recursively unwrapped and pretty-printed, depth-guarded to 5 levels)
 - AND the user can send messages via an input field (Enter to send, Shift+Enter for newline)
 - AND the agent's current status is displayed as a phase badge near the input
 - AND the input is disabled when the session is not in Running phase

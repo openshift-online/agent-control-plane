@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"path"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/gateway"
 	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/ambient-code/platform/components/ambient-api-server/plugins/common"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
@@ -228,6 +230,15 @@ func (h sessionHandler) Stop(w http.ResponseWriter, r *http.Request) {
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
 			id := mux.Vars(r)["id"]
+			sess, getErr := h.session.Get(ctx, id)
+			if getErr != nil {
+				return nil, getErr
+			}
+			if sess.ProjectId != nil {
+				if tierErr := gateway.CheckEditorTier(ctx, *sess.ProjectId); tierErr != nil {
+					return nil, tierErr
+				}
+			}
 			sessionModel, err := h.session.Stop(ctx, id)
 			if err != nil {
 				return nil, err
@@ -704,6 +715,12 @@ func (h sessionHandler) AGUIRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
+	if session.ProjectId != nil {
+		if tierErr := gateway.CheckEditorTier(ctx, *session.ProjectId); tierErr != nil {
+			http.Error(w, tierErr.Reason, http.StatusForbidden)
+			return
+		}
+	}
 	base := runnerBaseURL(session)
 	if base == "" {
 		http.Error(w, "session runner not available", http.StatusServiceUnavailable)
@@ -721,6 +738,12 @@ func (h sessionHandler) AGUIInterrupt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
+	if session.ProjectId != nil {
+		if tierErr := gateway.CheckEditorTier(ctx, *session.ProjectId); tierErr != nil {
+			http.Error(w, tierErr.Reason, http.StatusForbidden)
+			return
+		}
+	}
 	base := runnerBaseURL(session)
 	if base == "" {
 		http.Error(w, "session runner not available", http.StatusServiceUnavailable)
@@ -737,6 +760,12 @@ func (h sessionHandler) AGUIFeedback(w http.ResponseWriter, r *http.Request) {
 	if svcErr != nil {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
+	}
+	if session.ProjectId != nil {
+		if tierErr := gateway.CheckEditorTier(ctx, *session.ProjectId); tierErr != nil {
+			http.Error(w, tierErr.Reason, http.StatusForbidden)
+			return
+		}
 	}
 	base := runnerBaseURL(session)
 	if base == "" {
@@ -779,6 +808,12 @@ func (h sessionHandler) AGUITaskStop(w http.ResponseWriter, r *http.Request) {
 	if svcErr != nil {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
+	}
+	if session.ProjectId != nil {
+		if tierErr := gateway.CheckEditorTier(ctx, *session.ProjectId); tierErr != nil {
+			http.Error(w, tierErr.Reason, http.StatusForbidden)
+			return
+		}
 	}
 	base := runnerBaseURL(session)
 	if base == "" {
@@ -1074,6 +1109,151 @@ func (h sessionHandler) WorkflowMetadata(w http.ResponseWriter, r *http.Request)
 // This is a K8s-backed endpoint requiring secrets access; returning 501 until natively implemented.
 func (h sessionHandler) OAuthProviderURL(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "oauth provider URL generation not yet implemented natively", http.StatusNotImplemented)
+}
+
+// ---------------------------------------------------------------------------
+// Sandbox observability (OpenShell gateway proxy)
+// ---------------------------------------------------------------------------
+
+// ControlPlaneURL is the base URL of the control plane's HTTP server.
+// Configurable via CONTROL_PLANE_URL env var.
+var ControlPlaneURL = controlPlaneURLFromEnv()
+
+func controlPlaneURLFromEnv() string {
+	if u := os.Getenv("CONTROL_PLANE_URL"); u != "" {
+		return u
+	}
+	return "http://ambient-control-plane:8080"
+}
+
+// sandboxName mirrors the control plane's openshell.SandboxName() derivation.
+func sandboxName(sessionID string) string {
+	name := sessionID
+	if len(name) > 40 {
+		name = name[:40]
+	}
+	result := make([]byte, len(name))
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		result[i] = c
+	}
+	return "session-" + string(result)
+}
+
+// SandboxLogs proxies sandbox log SSE from the control plane.
+func (h sessionHandler) SandboxLogs(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := mux.Vars(r)["id"]
+
+	session, err := h.session.Get(ctx, id)
+	if err != nil {
+		http.Error(w, "session not found", http.StatusNotFound)
+		return
+	}
+
+	if session.KubeNamespace == nil || *session.KubeNamespace == "" {
+		http.Error(w, "session has no sandbox", http.StatusNotFound)
+		return
+	}
+
+	sbxName := sandboxName(session.ID)
+	cpURL := fmt.Sprintf("%s/sandbox/%s/logs?namespace=%s",
+		ControlPlaneURL, sbxName, *session.KubeNamespace)
+
+	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, cpURL, nil)
+	if reqErr != nil {
+		glog.Errorf("SandboxLogs: build request for session %s: %v", id, reqErr)
+		http.Error(w, "failed to build upstream request", http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Accept", "text/event-stream")
+
+	resp, doErr := EventsHTTPClient.Do(req)
+	if doErr != nil {
+		glog.Warningf("SandboxLogs: CP unreachable for session %s: %v", id, doErr)
+		http.Error(w, "control plane not reachable", http.StatusBadGateway)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		glog.Warningf("SandboxLogs: CP returned %d for session %s", resp.StatusCode, id)
+		http.Error(w, "control plane returned non-OK status", http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	rc := http.NewResponseController(w)
+	_ = rc.Flush()
+
+	buf := make([]byte, 4096)
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				glog.V(4).Infof("SandboxLogs: write error for session %s: %v", id, writeErr)
+				return
+			}
+			_ = rc.Flush()
+		}
+		if readErr != nil {
+			if readErr != io.EOF {
+				glog.V(4).Infof("SandboxLogs: read error for session %s: %v", id, readErr)
+			}
+			return
+		}
+	}
+}
+
+// SandboxPolicy proxies sandbox policy from the control plane.
+func (h sessionHandler) SandboxPolicy(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := mux.Vars(r)["id"]
+
+	session, err := h.session.Get(ctx, id)
+	if err != nil {
+		http.Error(w, "session not found", http.StatusNotFound)
+		return
+	}
+
+	if session.KubeNamespace == nil || *session.KubeNamespace == "" {
+		http.Error(w, "session has no sandbox", http.StatusNotFound)
+		return
+	}
+
+	sbxName := sandboxName(session.ID)
+	cpURL := fmt.Sprintf("%s/sandbox/%s/policy?namespace=%s",
+		ControlPlaneURL, sbxName, *session.KubeNamespace)
+
+	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, cpURL, nil)
+	if reqErr != nil {
+		glog.Errorf("SandboxPolicy: build request for session %s: %v", id, reqErr)
+		http.Error(w, "failed to build upstream request", http.StatusInternalServerError)
+		return
+	}
+
+	resp, doErr := EventsHTTPClient.Do(req)
+	if doErr != nil {
+		glog.Warningf("SandboxPolicy: CP unreachable for session %s: %v", id, doErr)
+		http.Error(w, "control plane not reachable", http.StatusBadGateway)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	for _, k := range []string{"Content-Type", "Content-Length"} {
+		if v := resp.Header.Get(k); v != "" {
+			w.Header().Set(k, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
 }
 
 // ExportSession returns the session data as an exportable JSON envelope.

@@ -23,6 +23,7 @@ ARG GIT_COMMIT=unknown
 WORKDIR /app
 
 COPY --from=builder /workspace/ambient-control-plane/ambient-control-plane /usr/local/bin/
+COPY ambient-control-plane/manifests/ /manifests/
 
 RUN chmod +x /usr/local/bin/ambient-control-plane
 
@@ -31,11 +32,8 @@ USER 1001
 ENTRYPOINT ["/usr/local/bin/ambient-control-plane"]
 
 LABEL name="ambient-control-plane" \
-      vendor="Ambient" \
+      vendor="Red Hat, Inc." \
       version="0.0.1" \
       summary="Ambient Control Plane" \
       description="Kubernetes reconciler for the Ambient Code Platform" \
       org.opencontainers.image.revision=$GIT_COMMIT
-
-ARG IMAGE_EXPIRY=
-LABEL quay.expires-after=${IMAGE_EXPIRY}

@@ -1,0 +1,19 @@
+# Override runner image references in control plane env vars for kind-local
+# Sets imagePullPolicy to IfNotPresent via localhost/ prefix (see kube_reconciler.go:1190)
+# Gateway image_pull_policy is set by LOCAL_IMAGES env var (see gateway/manifests.go)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-control-plane
+spec:
+  template:
+    spec:
+      containers:
+        - name: ambient-control-plane
+          env:
+            - name: RUNNER_IMAGE
+              value: "localhost/acp_claude_runner:latest"
+            - name: OPENSHELL_RUNNER_IMAGE
+              value: "localhost/acp_runner_openshell:latest"
+            - name: MCP_IMAGE
+              value: "localhost/acp_mcp:latest"

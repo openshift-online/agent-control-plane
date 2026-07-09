@@ -108,6 +108,11 @@ func toGoType(openAPIType, format string, nullable bool) string {
 	}
 }
 
+func refToTypeName(ref string) string {
+	parts := strings.Split(ref, "/")
+	return parts[len(parts)-1]
+}
+
 func goBuilderParam(goType string) string {
 	if goType == "*string" {
 		return "string"

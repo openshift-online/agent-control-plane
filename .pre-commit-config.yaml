@@ -6,14 +6,16 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
+        exclude: 'components/ambient-api-server/pkg/api/openapi/'
       - id: end-of-file-fixer
+        exclude: 'components/ambient-api-server/pkg/api/openapi/'
       - id: check-yaml
         args: ['--allow-multiple-documents']
       - id: check-added-large-files
         args: ['--maxkb=1000']
       - id: check-merge-conflict
       - id: detect-private-key
-        exclude: 'components/manifests/overlays/production/github-app-secret\.yaml'
+        exclude: 'components/manifests/overlays/production/github-app-secret\.yaml|\.github/workflows/test-local-dev\.yml|\.github/workflows/vteam-catalog-lab-e2e\.yml|provider_mapping_test\.go'
 
   # ── Python (ruff) ────────────────────────────────────────────────────
   - repo: https://github.com/astral-sh/ruff-pre-commit

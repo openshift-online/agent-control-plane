@@ -23,41 +23,42 @@ const (
 )
 
 type Session struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	Metadata             *ObjectReference       `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	Name                 string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	RepoUrl              *string                `protobuf:"bytes,3,opt,name=repo_url,json=repoUrl,proto3,oneof" json:"repo_url,omitempty"`
-	Prompt               *string                `protobuf:"bytes,4,opt,name=prompt,proto3,oneof" json:"prompt,omitempty"`
-	CreatedByUserId      *string                `protobuf:"bytes,5,opt,name=created_by_user_id,json=createdByUserId,proto3,oneof" json:"created_by_user_id,omitempty"`
-	AssignedUserId       *string                `protobuf:"bytes,6,opt,name=assigned_user_id,json=assignedUserId,proto3,oneof" json:"assigned_user_id,omitempty"`
-	WorkflowId           *string                `protobuf:"bytes,7,opt,name=workflow_id,json=workflowId,proto3,oneof" json:"workflow_id,omitempty"`
-	Repos                *string                `protobuf:"bytes,8,opt,name=repos,proto3,oneof" json:"repos,omitempty"`
-	Timeout              *int32                 `protobuf:"varint,10,opt,name=timeout,proto3,oneof" json:"timeout,omitempty"`
-	LlmModel             *string                `protobuf:"bytes,11,opt,name=llm_model,json=llmModel,proto3,oneof" json:"llm_model,omitempty"`
-	LlmTemperature       *float64               `protobuf:"fixed64,12,opt,name=llm_temperature,json=llmTemperature,proto3,oneof" json:"llm_temperature,omitempty"`
-	LlmMaxTokens         *int32                 `protobuf:"varint,13,opt,name=llm_max_tokens,json=llmMaxTokens,proto3,oneof" json:"llm_max_tokens,omitempty"`
-	ParentSessionId      *string                `protobuf:"bytes,14,opt,name=parent_session_id,json=parentSessionId,proto3,oneof" json:"parent_session_id,omitempty"`
-	BotAccountName       *string                `protobuf:"bytes,15,opt,name=bot_account_name,json=botAccountName,proto3,oneof" json:"bot_account_name,omitempty"`
-	ResourceOverrides    *string                `protobuf:"bytes,16,opt,name=resource_overrides,json=resourceOverrides,proto3,oneof" json:"resource_overrides,omitempty"`
-	EnvironmentVariables *string                `protobuf:"bytes,17,opt,name=environment_variables,json=environmentVariables,proto3,oneof" json:"environment_variables,omitempty"`
-	Labels               *string                `protobuf:"bytes,18,opt,name=labels,proto3,oneof" json:"labels,omitempty"`
-	Annotations          *string                `protobuf:"bytes,19,opt,name=annotations,proto3,oneof" json:"annotations,omitempty"`
-	ProjectId            *string                `protobuf:"bytes,20,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
-	Phase                *string                `protobuf:"bytes,21,opt,name=phase,proto3,oneof" json:"phase,omitempty"`
-	StartTime            *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=start_time,json=startTime,proto3,oneof" json:"start_time,omitempty"`
-	CompletionTime       *timestamppb.Timestamp `protobuf:"bytes,23,opt,name=completion_time,json=completionTime,proto3,oneof" json:"completion_time,omitempty"`
-	SdkSessionId         *string                `protobuf:"bytes,24,opt,name=sdk_session_id,json=sdkSessionId,proto3,oneof" json:"sdk_session_id,omitempty"`
-	SdkRestartCount      *int32                 `protobuf:"varint,25,opt,name=sdk_restart_count,json=sdkRestartCount,proto3,oneof" json:"sdk_restart_count,omitempty"`
-	Conditions           *string                `protobuf:"bytes,26,opt,name=conditions,proto3,oneof" json:"conditions,omitempty"`
-	ReconciledRepos      *string                `protobuf:"bytes,27,opt,name=reconciled_repos,json=reconciledRepos,proto3,oneof" json:"reconciled_repos,omitempty"`
-	ReconciledWorkflow   *string                `protobuf:"bytes,28,opt,name=reconciled_workflow,json=reconciledWorkflow,proto3,oneof" json:"reconciled_workflow,omitempty"`
-	KubeCrName           *string                `protobuf:"bytes,29,opt,name=kube_cr_name,json=kubeCrName,proto3,oneof" json:"kube_cr_name,omitempty"`
-	KubeCrUid            *string                `protobuf:"bytes,30,opt,name=kube_cr_uid,json=kubeCrUid,proto3,oneof" json:"kube_cr_uid,omitempty"`
-	KubeNamespace        *string                `protobuf:"bytes,31,opt,name=kube_namespace,json=kubeNamespace,proto3,oneof" json:"kube_namespace,omitempty"`
-	AgentId              *string                `protobuf:"bytes,32,opt,name=agent_id,json=agentId,proto3,oneof" json:"agent_id,omitempty"`
-	LastActivityAt       *timestamppb.Timestamp `protobuf:"bytes,33,opt,name=last_activity_at,json=lastActivityAt,proto3,oneof" json:"last_activity_at,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	Metadata                 *ObjectReference       `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	Name                     string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	RepoUrl                  *string                `protobuf:"bytes,3,opt,name=repo_url,json=repoUrl,proto3,oneof" json:"repo_url,omitempty"`
+	Prompt                   *string                `protobuf:"bytes,4,opt,name=prompt,proto3,oneof" json:"prompt,omitempty"`
+	CreatedByUserId          *string                `protobuf:"bytes,5,opt,name=created_by_user_id,json=createdByUserId,proto3,oneof" json:"created_by_user_id,omitempty"`
+	AssignedUserId           *string                `protobuf:"bytes,6,opt,name=assigned_user_id,json=assignedUserId,proto3,oneof" json:"assigned_user_id,omitempty"`
+	WorkflowId               *string                `protobuf:"bytes,7,opt,name=workflow_id,json=workflowId,proto3,oneof" json:"workflow_id,omitempty"`
+	Repos                    *string                `protobuf:"bytes,8,opt,name=repos,proto3,oneof" json:"repos,omitempty"`
+	Timeout                  *int32                 `protobuf:"varint,10,opt,name=timeout,proto3,oneof" json:"timeout,omitempty"`
+	LlmModel                 *string                `protobuf:"bytes,11,opt,name=llm_model,json=llmModel,proto3,oneof" json:"llm_model,omitempty"`
+	LlmTemperature           *float64               `protobuf:"fixed64,12,opt,name=llm_temperature,json=llmTemperature,proto3,oneof" json:"llm_temperature,omitempty"`
+	LlmMaxTokens             *int32                 `protobuf:"varint,13,opt,name=llm_max_tokens,json=llmMaxTokens,proto3,oneof" json:"llm_max_tokens,omitempty"`
+	ParentSessionId          *string                `protobuf:"bytes,14,opt,name=parent_session_id,json=parentSessionId,proto3,oneof" json:"parent_session_id,omitempty"`
+	BotAccountName           *string                `protobuf:"bytes,15,opt,name=bot_account_name,json=botAccountName,proto3,oneof" json:"bot_account_name,omitempty"`
+	ResourceOverrides        *string                `protobuf:"bytes,16,opt,name=resource_overrides,json=resourceOverrides,proto3,oneof" json:"resource_overrides,omitempty"`
+	EnvironmentVariables     *string                `protobuf:"bytes,17,opt,name=environment_variables,json=environmentVariables,proto3,oneof" json:"environment_variables,omitempty"`
+	Labels                   *string                `protobuf:"bytes,18,opt,name=labels,proto3,oneof" json:"labels,omitempty"`
+	Annotations              *string                `protobuf:"bytes,19,opt,name=annotations,proto3,oneof" json:"annotations,omitempty"`
+	ProjectId                *string                `protobuf:"bytes,20,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
+	Phase                    *string                `protobuf:"bytes,21,opt,name=phase,proto3,oneof" json:"phase,omitempty"`
+	StartTime                *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=start_time,json=startTime,proto3,oneof" json:"start_time,omitempty"`
+	CompletionTime           *timestamppb.Timestamp `protobuf:"bytes,23,opt,name=completion_time,json=completionTime,proto3,oneof" json:"completion_time,omitempty"`
+	SdkSessionId             *string                `protobuf:"bytes,24,opt,name=sdk_session_id,json=sdkSessionId,proto3,oneof" json:"sdk_session_id,omitempty"`
+	SdkRestartCount          *int32                 `protobuf:"varint,25,opt,name=sdk_restart_count,json=sdkRestartCount,proto3,oneof" json:"sdk_restart_count,omitempty"`
+	Conditions               *string                `protobuf:"bytes,26,opt,name=conditions,proto3,oneof" json:"conditions,omitempty"`
+	ReconciledRepos          *string                `protobuf:"bytes,27,opt,name=reconciled_repos,json=reconciledRepos,proto3,oneof" json:"reconciled_repos,omitempty"`
+	ReconciledWorkflow       *string                `protobuf:"bytes,28,opt,name=reconciled_workflow,json=reconciledWorkflow,proto3,oneof" json:"reconciled_workflow,omitempty"`
+	KubeCrName               *string                `protobuf:"bytes,29,opt,name=kube_cr_name,json=kubeCrName,proto3,oneof" json:"kube_cr_name,omitempty"`
+	KubeCrUid                *string                `protobuf:"bytes,30,opt,name=kube_cr_uid,json=kubeCrUid,proto3,oneof" json:"kube_cr_uid,omitempty"`
+	KubeNamespace            *string                `protobuf:"bytes,31,opt,name=kube_namespace,json=kubeNamespace,proto3,oneof" json:"kube_namespace,omitempty"`
+	AgentId                  *string                `protobuf:"bytes,32,opt,name=agent_id,json=agentId,proto3,oneof" json:"agent_id,omitempty"`
+	LastActivityAt           *timestamppb.Timestamp `protobuf:"bytes,33,opt,name=last_activity_at,json=lastActivityAt,proto3,oneof" json:"last_activity_at,omitempty"`
+	SourceScheduledSessionId *string                `protobuf:"bytes,34,opt,name=source_scheduled_session_id,json=sourceScheduledSessionId,proto3,oneof" json:"source_scheduled_session_id,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *Session) Reset() {
@@ -312,6 +313,13 @@ func (x *Session) GetLastActivityAt() *timestamppb.Timestamp {
 		return x.LastActivityAt
 	}
 	return nil
+}
+
+func (x *Session) GetSourceScheduledSessionId() string {
+	if x != nil && x.SourceScheduledSessionId != nil {
+		return *x.SourceScheduledSessionId
+	}
+	return ""
 }
 
 type CreateSessionRequest struct {
@@ -1318,12 +1326,240 @@ func (x *WatchSessionMessagesRequest) GetAfterSeq() int64 {
 	return 0
 }
 
+type SessionEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Seq           int64                  `protobuf:"varint,3,opt,name=seq,proto3" json:"seq,omitempty"`
+	EventType     string                 `protobuf:"bytes,4,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
+	Payload       string                 `protobuf:"bytes,5,opt,name=payload,proto3" json:"payload,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	CompletedAt   *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=completed_at,json=completedAt,proto3,oneof" json:"completed_at,omitempty"`
+	EventCount    int32                  `protobuf:"varint,8,opt,name=event_count,json=eventCount,proto3" json:"event_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SessionEvent) Reset() {
+	*x = SessionEvent{}
+	mi := &file_ambient_v1_sessions_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SessionEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SessionEvent) ProtoMessage() {}
+
+func (x *SessionEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_ambient_v1_sessions_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SessionEvent.ProtoReflect.Descriptor instead.
+func (*SessionEvent) Descriptor() ([]byte, []int) {
+	return file_ambient_v1_sessions_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *SessionEvent) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SessionEvent) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *SessionEvent) GetSeq() int64 {
+	if x != nil {
+		return x.Seq
+	}
+	return 0
+}
+
+func (x *SessionEvent) GetEventType() string {
+	if x != nil {
+		return x.EventType
+	}
+	return ""
+}
+
+func (x *SessionEvent) GetPayload() string {
+	if x != nil {
+		return x.Payload
+	}
+	return ""
+}
+
+func (x *SessionEvent) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *SessionEvent) GetCompletedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CompletedAt
+	}
+	return nil
+}
+
+func (x *SessionEvent) GetEventCount() int32 {
+	if x != nil {
+		return x.EventCount
+	}
+	return 0
+}
+
+type PushSessionEventRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	EventType     string                 `protobuf:"bytes,2,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
+	Payload       string                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	CompletedAt   *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=completed_at,json=completedAt,proto3,oneof" json:"completed_at,omitempty"`
+	EventCount    int32                  `protobuf:"varint,5,opt,name=event_count,json=eventCount,proto3" json:"event_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PushSessionEventRequest) Reset() {
+	*x = PushSessionEventRequest{}
+	mi := &file_ambient_v1_sessions_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PushSessionEventRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PushSessionEventRequest) ProtoMessage() {}
+
+func (x *PushSessionEventRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ambient_v1_sessions_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PushSessionEventRequest.ProtoReflect.Descriptor instead.
+func (*PushSessionEventRequest) Descriptor() ([]byte, []int) {
+	return file_ambient_v1_sessions_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *PushSessionEventRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *PushSessionEventRequest) GetEventType() string {
+	if x != nil {
+		return x.EventType
+	}
+	return ""
+}
+
+func (x *PushSessionEventRequest) GetPayload() string {
+	if x != nil {
+		return x.Payload
+	}
+	return ""
+}
+
+func (x *PushSessionEventRequest) GetCompletedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CompletedAt
+	}
+	return nil
+}
+
+func (x *PushSessionEventRequest) GetEventCount() int32 {
+	if x != nil {
+		return x.EventCount
+	}
+	return 0
+}
+
+type WatchSessionEventsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	AfterSeq      int64                  `protobuf:"varint,2,opt,name=after_seq,json=afterSeq,proto3" json:"after_seq,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchSessionEventsRequest) Reset() {
+	*x = WatchSessionEventsRequest{}
+	mi := &file_ambient_v1_sessions_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchSessionEventsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchSessionEventsRequest) ProtoMessage() {}
+
+func (x *WatchSessionEventsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ambient_v1_sessions_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchSessionEventsRequest.ProtoReflect.Descriptor instead.
+func (*WatchSessionEventsRequest) Descriptor() ([]byte, []int) {
+	return file_ambient_v1_sessions_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *WatchSessionEventsRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *WatchSessionEventsRequest) GetAfterSeq() int64 {
+	if x != nil {
+		return x.AfterSeq
+	}
+	return 0
+}
+
 var File_ambient_v1_sessions_proto protoreflect.FileDescriptor
 
 const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\n" +
 	"\x19ambient/v1/sessions.proto\x12\n" +
-	"ambient.v1\x1a\x17ambient/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x94\x0f\n" +
+	"ambient.v1\x1a\x17ambient/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf8\x0f\n" +
 	"\aSession\x127\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x1b.ambient.v1.ObjectReferenceR\bmetadata\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1e\n" +
@@ -1364,7 +1600,8 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\vkube_cr_uid\x18\x1e \x01(\tH\x1aR\tkubeCrUid\x88\x01\x01\x12*\n" +
 	"\x0ekube_namespace\x18\x1f \x01(\tH\x1bR\rkubeNamespace\x88\x01\x01\x12\x1e\n" +
 	"\bagent_id\x18  \x01(\tH\x1cR\aagentId\x88\x01\x01\x12I\n" +
-	"\x10last_activity_at\x18! \x01(\v2\x1a.google.protobuf.TimestampH\x1dR\x0elastActivityAt\x88\x01\x01B\v\n" +
+	"\x10last_activity_at\x18! \x01(\v2\x1a.google.protobuf.TimestampH\x1dR\x0elastActivityAt\x88\x01\x01\x12B\n" +
+	"\x1bsource_scheduled_session_id\x18\" \x01(\tH\x1eR\x18sourceScheduledSessionId\x88\x01\x01B\v\n" +
 	"\t_repo_urlB\t\n" +
 	"\a_promptB\x15\n" +
 	"\x13_created_by_user_idB\x13\n" +
@@ -1396,7 +1633,8 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\f_kube_cr_uidB\x11\n" +
 	"\x0f_kube_namespaceB\v\n" +
 	"\t_agent_idB\x13\n" +
-	"\x11_last_activity_atJ\x04\b\t\x10\n" +
+	"\x11_last_activity_atB\x1e\n" +
+	"\x1c_source_scheduled_session_idJ\x04\b\t\x10\n" +
 	"R\vinteractive\"\x91\b\n" +
 	"\x14CreateSessionRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1e\n" +
@@ -1544,7 +1782,35 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\x1bWatchSessionMessagesRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1b\n" +
-	"\tafter_seq\x18\x02 \x01(\x03R\bafterSeq2\xeb\x05\n" +
+	"\tafter_seq\x18\x02 \x01(\x03R\bafterSeq\"\xb9\x02\n" +
+	"\fSessionEvent\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x10\n" +
+	"\x03seq\x18\x03 \x01(\x03R\x03seq\x12\x1d\n" +
+	"\n" +
+	"event_type\x18\x04 \x01(\tR\teventType\x12\x18\n" +
+	"\apayload\x18\x05 \x01(\tR\apayload\x129\n" +
+	"\n" +
+	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12B\n" +
+	"\fcompleted_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampH\x00R\vcompletedAt\x88\x01\x01\x12\x1f\n" +
+	"\vevent_count\x18\b \x01(\x05R\n" +
+	"eventCountB\x0f\n" +
+	"\r_completed_at\"\xe7\x01\n" +
+	"\x17PushSessionEventRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n" +
+	"\n" +
+	"event_type\x18\x02 \x01(\tR\teventType\x12\x18\n" +
+	"\apayload\x18\x03 \x01(\tR\apayload\x12B\n" +
+	"\fcompleted_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\vcompletedAt\x88\x01\x01\x12\x1f\n" +
+	"\vevent_count\x18\x05 \x01(\x05R\n" +
+	"eventCountB\x0f\n" +
+	"\r_completed_at\"W\n" +
+	"\x19WatchSessionEventsRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1b\n" +
+	"\tafter_seq\x18\x02 \x01(\x03R\bafterSeq2\x97\a\n" +
 	"\x0eSessionService\x12@\n" +
 	"\n" +
 	"GetSession\x12\x1d.ambient.v1.GetSessionRequest\x1a\x13.ambient.v1.Session\x12F\n" +
@@ -1555,7 +1821,9 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\fListSessions\x12\x1f.ambient.v1.ListSessionsRequest\x1a .ambient.v1.ListSessionsResponse\x12R\n" +
 	"\rWatchSessions\x12 .ambient.v1.WatchSessionsRequest\x1a\x1d.ambient.v1.SessionWatchEvent0\x01\x12W\n" +
 	"\x12PushSessionMessage\x12%.ambient.v1.PushSessionMessageRequest\x1a\x1a.ambient.v1.SessionMessage\x12]\n" +
-	"\x14WatchSessionMessages\x12'.ambient.v1.WatchSessionMessagesRequest\x1a\x1a.ambient.v1.SessionMessage0\x01BcZagithub.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1b\x06proto3"
+	"\x14WatchSessionMessages\x12'.ambient.v1.WatchSessionMessagesRequest\x1a\x1a.ambient.v1.SessionMessage0\x01\x12Q\n" +
+	"\x10PushSessionEvent\x12#.ambient.v1.PushSessionEventRequest\x1a\x18.ambient.v1.SessionEvent\x12W\n" +
+	"\x12WatchSessionEvents\x12%.ambient.v1.WatchSessionEventsRequest\x1a\x18.ambient.v1.SessionEvent0\x01BcZagithub.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1b\x06proto3"
 
 var (
 	file_ambient_v1_sessions_proto_rawDescOnce sync.Once
@@ -1569,7 +1837,7 @@ func file_ambient_v1_sessions_proto_rawDescGZIP() []byte {
 	return file_ambient_v1_sessions_proto_rawDescData
 }
 
-var file_ambient_v1_sessions_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_ambient_v1_sessions_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_ambient_v1_sessions_proto_goTypes = []any{
 	(*Session)(nil),                     // 0: ambient.v1.Session
 	(*CreateSessionRequest)(nil),        // 1: ambient.v1.CreateSessionRequest
@@ -1585,46 +1853,56 @@ var file_ambient_v1_sessions_proto_goTypes = []any{
 	(*SessionMessage)(nil),              // 11: ambient.v1.SessionMessage
 	(*PushSessionMessageRequest)(nil),   // 12: ambient.v1.PushSessionMessageRequest
 	(*WatchSessionMessagesRequest)(nil), // 13: ambient.v1.WatchSessionMessagesRequest
-	(*ObjectReference)(nil),             // 14: ambient.v1.ObjectReference
-	(*timestamppb.Timestamp)(nil),       // 15: google.protobuf.Timestamp
-	(*ListMeta)(nil),                    // 16: ambient.v1.ListMeta
-	(EventType)(0),                      // 17: ambient.v1.EventType
+	(*SessionEvent)(nil),                // 14: ambient.v1.SessionEvent
+	(*PushSessionEventRequest)(nil),     // 15: ambient.v1.PushSessionEventRequest
+	(*WatchSessionEventsRequest)(nil),   // 16: ambient.v1.WatchSessionEventsRequest
+	(*ObjectReference)(nil),             // 17: ambient.v1.ObjectReference
+	(*timestamppb.Timestamp)(nil),       // 18: google.protobuf.Timestamp
+	(*ListMeta)(nil),                    // 19: ambient.v1.ListMeta
+	(EventType)(0),                      // 20: ambient.v1.EventType
 }
 var file_ambient_v1_sessions_proto_depIdxs = []int32{
-	14, // 0: ambient.v1.Session.metadata:type_name -> ambient.v1.ObjectReference
-	15, // 1: ambient.v1.Session.start_time:type_name -> google.protobuf.Timestamp
-	15, // 2: ambient.v1.Session.completion_time:type_name -> google.protobuf.Timestamp
-	15, // 3: ambient.v1.Session.last_activity_at:type_name -> google.protobuf.Timestamp
-	15, // 4: ambient.v1.UpdateSessionStatusRequest.start_time:type_name -> google.protobuf.Timestamp
-	15, // 5: ambient.v1.UpdateSessionStatusRequest.completion_time:type_name -> google.protobuf.Timestamp
+	17, // 0: ambient.v1.Session.metadata:type_name -> ambient.v1.ObjectReference
+	18, // 1: ambient.v1.Session.start_time:type_name -> google.protobuf.Timestamp
+	18, // 2: ambient.v1.Session.completion_time:type_name -> google.protobuf.Timestamp
+	18, // 3: ambient.v1.Session.last_activity_at:type_name -> google.protobuf.Timestamp
+	18, // 4: ambient.v1.UpdateSessionStatusRequest.start_time:type_name -> google.protobuf.Timestamp
+	18, // 5: ambient.v1.UpdateSessionStatusRequest.completion_time:type_name -> google.protobuf.Timestamp
 	0,  // 6: ambient.v1.ListSessionsResponse.items:type_name -> ambient.v1.Session
-	16, // 7: ambient.v1.ListSessionsResponse.metadata:type_name -> ambient.v1.ListMeta
-	17, // 8: ambient.v1.SessionWatchEvent.type:type_name -> ambient.v1.EventType
+	19, // 7: ambient.v1.ListSessionsResponse.metadata:type_name -> ambient.v1.ListMeta
+	20, // 8: ambient.v1.SessionWatchEvent.type:type_name -> ambient.v1.EventType
 	0,  // 9: ambient.v1.SessionWatchEvent.session:type_name -> ambient.v1.Session
-	15, // 10: ambient.v1.SessionMessage.created_at:type_name -> google.protobuf.Timestamp
-	2,  // 11: ambient.v1.SessionService.GetSession:input_type -> ambient.v1.GetSessionRequest
-	1,  // 12: ambient.v1.SessionService.CreateSession:input_type -> ambient.v1.CreateSessionRequest
-	3,  // 13: ambient.v1.SessionService.UpdateSession:input_type -> ambient.v1.UpdateSessionRequest
-	4,  // 14: ambient.v1.SessionService.UpdateSessionStatus:input_type -> ambient.v1.UpdateSessionStatusRequest
-	5,  // 15: ambient.v1.SessionService.DeleteSession:input_type -> ambient.v1.DeleteSessionRequest
-	6,  // 16: ambient.v1.SessionService.ListSessions:input_type -> ambient.v1.ListSessionsRequest
-	9,  // 17: ambient.v1.SessionService.WatchSessions:input_type -> ambient.v1.WatchSessionsRequest
-	12, // 18: ambient.v1.SessionService.PushSessionMessage:input_type -> ambient.v1.PushSessionMessageRequest
-	13, // 19: ambient.v1.SessionService.WatchSessionMessages:input_type -> ambient.v1.WatchSessionMessagesRequest
-	0,  // 20: ambient.v1.SessionService.GetSession:output_type -> ambient.v1.Session
-	0,  // 21: ambient.v1.SessionService.CreateSession:output_type -> ambient.v1.Session
-	0,  // 22: ambient.v1.SessionService.UpdateSession:output_type -> ambient.v1.Session
-	0,  // 23: ambient.v1.SessionService.UpdateSessionStatus:output_type -> ambient.v1.Session
-	8,  // 24: ambient.v1.SessionService.DeleteSession:output_type -> ambient.v1.DeleteSessionResponse
-	7,  // 25: ambient.v1.SessionService.ListSessions:output_type -> ambient.v1.ListSessionsResponse
-	10, // 26: ambient.v1.SessionService.WatchSessions:output_type -> ambient.v1.SessionWatchEvent
-	11, // 27: ambient.v1.SessionService.PushSessionMessage:output_type -> ambient.v1.SessionMessage
-	11, // 28: ambient.v1.SessionService.WatchSessionMessages:output_type -> ambient.v1.SessionMessage
-	20, // [20:29] is the sub-list for method output_type
-	11, // [11:20] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	18, // 10: ambient.v1.SessionMessage.created_at:type_name -> google.protobuf.Timestamp
+	18, // 11: ambient.v1.SessionEvent.created_at:type_name -> google.protobuf.Timestamp
+	18, // 12: ambient.v1.SessionEvent.completed_at:type_name -> google.protobuf.Timestamp
+	18, // 13: ambient.v1.PushSessionEventRequest.completed_at:type_name -> google.protobuf.Timestamp
+	2,  // 14: ambient.v1.SessionService.GetSession:input_type -> ambient.v1.GetSessionRequest
+	1,  // 15: ambient.v1.SessionService.CreateSession:input_type -> ambient.v1.CreateSessionRequest
+	3,  // 16: ambient.v1.SessionService.UpdateSession:input_type -> ambient.v1.UpdateSessionRequest
+	4,  // 17: ambient.v1.SessionService.UpdateSessionStatus:input_type -> ambient.v1.UpdateSessionStatusRequest
+	5,  // 18: ambient.v1.SessionService.DeleteSession:input_type -> ambient.v1.DeleteSessionRequest
+	6,  // 19: ambient.v1.SessionService.ListSessions:input_type -> ambient.v1.ListSessionsRequest
+	9,  // 20: ambient.v1.SessionService.WatchSessions:input_type -> ambient.v1.WatchSessionsRequest
+	12, // 21: ambient.v1.SessionService.PushSessionMessage:input_type -> ambient.v1.PushSessionMessageRequest
+	13, // 22: ambient.v1.SessionService.WatchSessionMessages:input_type -> ambient.v1.WatchSessionMessagesRequest
+	15, // 23: ambient.v1.SessionService.PushSessionEvent:input_type -> ambient.v1.PushSessionEventRequest
+	16, // 24: ambient.v1.SessionService.WatchSessionEvents:input_type -> ambient.v1.WatchSessionEventsRequest
+	0,  // 25: ambient.v1.SessionService.GetSession:output_type -> ambient.v1.Session
+	0,  // 26: ambient.v1.SessionService.CreateSession:output_type -> ambient.v1.Session
+	0,  // 27: ambient.v1.SessionService.UpdateSession:output_type -> ambient.v1.Session
+	0,  // 28: ambient.v1.SessionService.UpdateSessionStatus:output_type -> ambient.v1.Session
+	8,  // 29: ambient.v1.SessionService.DeleteSession:output_type -> ambient.v1.DeleteSessionResponse
+	7,  // 30: ambient.v1.SessionService.ListSessions:output_type -> ambient.v1.ListSessionsResponse
+	10, // 31: ambient.v1.SessionService.WatchSessions:output_type -> ambient.v1.SessionWatchEvent
+	11, // 32: ambient.v1.SessionService.PushSessionMessage:output_type -> ambient.v1.SessionMessage
+	11, // 33: ambient.v1.SessionService.WatchSessionMessages:output_type -> ambient.v1.SessionMessage
+	14, // 34: ambient.v1.SessionService.PushSessionEvent:output_type -> ambient.v1.SessionEvent
+	14, // 35: ambient.v1.SessionService.WatchSessionEvents:output_type -> ambient.v1.SessionEvent
+	25, // [25:36] is the sub-list for method output_type
+	14, // [14:25] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_ambient_v1_sessions_proto_init() }
@@ -1637,13 +1915,15 @@ func file_ambient_v1_sessions_proto_init() {
 	file_ambient_v1_sessions_proto_msgTypes[1].OneofWrappers = []any{}
 	file_ambient_v1_sessions_proto_msgTypes[3].OneofWrappers = []any{}
 	file_ambient_v1_sessions_proto_msgTypes[4].OneofWrappers = []any{}
+	file_ambient_v1_sessions_proto_msgTypes[14].OneofWrappers = []any{}
+	file_ambient_v1_sessions_proto_msgTypes[15].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ambient_v1_sessions_proto_rawDesc), len(file_ambient_v1_sessions_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

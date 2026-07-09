@@ -12,6 +12,12 @@ Name | Type | Description | Notes
 **LlmModel** | Pointer to **string** |  | [optional] 
 **LlmTemperature** | Pointer to **float64** |  | [optional] 
 **LlmMaxTokens** | Pointer to **int32** |  | [optional] 
+**Entrypoint** | Pointer to **string** |  | [optional] 
+**Providers** | Pointer to **[]string** |  | [optional] 
+**Payloads** | Pointer to [**[]Payload**](Payload.md) |  | [optional] 
+**Environment** | Pointer to **map[string]string** |  | [optional] 
+**SandboxTemplate** | Pointer to [**SandboxTemplate**](SandboxTemplate.md) |  | [optional] 
+**SandboxPolicy** | Pointer to **string** |  | [optional] 
 **Labels** | Pointer to **string** |  | [optional] 
 **Annotations** | Pointer to **string** |  | [optional] 
 
@@ -233,6 +239,156 @@ SetLlmMaxTokens sets LlmMaxTokens field to given value.
 `func (o *AgentPatchRequest) HasLlmMaxTokens() bool`
 
 HasLlmMaxTokens returns a boolean if a field has been set.
+
+### GetEntrypoint
+
+`func (o *AgentPatchRequest) GetEntrypoint() string`
+
+GetEntrypoint returns the Entrypoint field if non-nil, zero value otherwise.
+
+### GetEntrypointOk
+
+`func (o *AgentPatchRequest) GetEntrypointOk() (*string, bool)`
+
+GetEntrypointOk returns a tuple with the Entrypoint field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetEntrypoint
+
+`func (o *AgentPatchRequest) SetEntrypoint(v string)`
+
+SetEntrypoint sets Entrypoint field to given value.
+
+### HasEntrypoint
+
+`func (o *AgentPatchRequest) HasEntrypoint() bool`
+
+HasEntrypoint returns a boolean if a field has been set.
+
+### GetProviders
+
+`func (o *AgentPatchRequest) GetProviders() []string`
+
+GetProviders returns the Providers field if non-nil, zero value otherwise.
+
+### GetProvidersOk
+
+`func (o *AgentPatchRequest) GetProvidersOk() (*[]string, bool)`
+
+GetProvidersOk returns a tuple with the Providers field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetProviders
+
+`func (o *AgentPatchRequest) SetProviders(v []string)`
+
+SetProviders sets Providers field to given value.
+
+### HasProviders
+
+`func (o *AgentPatchRequest) HasProviders() bool`
+
+HasProviders returns a boolean if a field has been set.
+
+### GetPayloads
+
+`func (o *AgentPatchRequest) GetPayloads() []Payload`
+
+GetPayloads returns the Payloads field if non-nil, zero value otherwise.
+
+### GetPayloadsOk
+
+`func (o *AgentPatchRequest) GetPayloadsOk() (*[]Payload, bool)`
+
+GetPayloadsOk returns a tuple with the Payloads field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetPayloads
+
+`func (o *AgentPatchRequest) SetPayloads(v []Payload)`
+
+SetPayloads sets Payloads field to given value.
+
+### HasPayloads
+
+`func (o *AgentPatchRequest) HasPayloads() bool`
+
+HasPayloads returns a boolean if a field has been set.
+
+### GetEnvironment
+
+`func (o *AgentPatchRequest) GetEnvironment() map[string]string`
+
+GetEnvironment returns the Environment field if non-nil, zero value otherwise.
+
+### GetEnvironmentOk
+
+`func (o *AgentPatchRequest) GetEnvironmentOk() (*map[string]string, bool)`
+
+GetEnvironmentOk returns a tuple with the Environment field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetEnvironment
+
+`func (o *AgentPatchRequest) SetEnvironment(v map[string]string)`
+
+SetEnvironment sets Environment field to given value.
+
+### HasEnvironment
+
+`func (o *AgentPatchRequest) HasEnvironment() bool`
+
+HasEnvironment returns a boolean if a field has been set.
+
+### GetSandboxTemplate
+
+`func (o *AgentPatchRequest) GetSandboxTemplate() SandboxTemplate`
+
+GetSandboxTemplate returns the SandboxTemplate field if non-nil, zero value otherwise.
+
+### GetSandboxTemplateOk
+
+`func (o *AgentPatchRequest) GetSandboxTemplateOk() (*SandboxTemplate, bool)`
+
+GetSandboxTemplateOk returns a tuple with the SandboxTemplate field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetSandboxTemplate
+
+`func (o *AgentPatchRequest) SetSandboxTemplate(v SandboxTemplate)`
+
+SetSandboxTemplate sets SandboxTemplate field to given value.
+
+### HasSandboxTemplate
+
+`func (o *AgentPatchRequest) HasSandboxTemplate() bool`
+
+HasSandboxTemplate returns a boolean if a field has been set.
+
+### GetSandboxPolicy
+
+`func (o *AgentPatchRequest) GetSandboxPolicy() string`
+
+GetSandboxPolicy returns the SandboxPolicy field if non-nil, zero value otherwise.
+
+### GetSandboxPolicyOk
+
+`func (o *AgentPatchRequest) GetSandboxPolicyOk() (*string, bool)`
+
+GetSandboxPolicyOk returns a tuple with the SandboxPolicy field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetSandboxPolicy
+
+`func (o *AgentPatchRequest) SetSandboxPolicy(v string)`
+
+SetSandboxPolicy sets SandboxPolicy field to given value.
+
+### HasSandboxPolicy
+
+`func (o *AgentPatchRequest) HasSandboxPolicy() bool`
+
+HasSandboxPolicy returns a boolean if a field has been set.
 
 ### GetLabels
 

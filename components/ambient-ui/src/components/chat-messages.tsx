@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { User, Bot, Wrench, Send, ChevronDown, ChevronRight } from 'lucide-react'
+import { User, Bot, Wrench, Send, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -20,9 +20,41 @@ export const CHAT_EVENT_TYPES: ReadonlySet<SessionEventType> = new Set([
   'assistant',
   'tool_use',
   'tool_result',
+  'error',
 ])
 
 // ---- Payload Parsing Helpers ----
+
+// Bounded unwrapping: max 5 recursive {result} wrappers × 10 iterative JSON.parse
+// layers = 50 parse calls worst-case. Both limits are well above real-world nesting.
+function unwrapNestedJson(value: unknown, depth = 0): unknown {
+  if (depth > 5 || typeof value !== 'string') return value
+
+  let current: unknown = value
+  for (let i = 0; i < 10; i++) {
+    if (typeof current !== 'string') break
+    try {
+      current = JSON.parse(current)
+    } catch {
+      break
+    }
+  }
+
+  if (typeof current === 'object' && current !== null && !Array.isArray(current)) {
+    const obj = current as Record<string, unknown>
+    if ('result' in obj && Object.keys(obj).every(k => k === 'result' || k === 'tool_call_id')) {
+      return unwrapNestedJson(obj.result, depth + 1)
+    }
+  }
+
+  return current
+}
+
+export function deepUnwrapJson(value: string): string {
+  const unwrapped = unwrapNestedJson(value)
+  if (typeof unwrapped === 'string') return unwrapped
+  return JSON.stringify(unwrapped, null, 2)
+}
 
 type ToolPayload = {
   name: string
@@ -66,10 +98,8 @@ export function tryParseToolResult(payload: string): ToolResultPayload | null {
       return null
     }
     const obj = parsed as Record<string, unknown>
-    let result = typeof obj.result === 'string' ? obj.result : payload
-    if (result.startsWith('"') && result.endsWith('"')) {
-      result = result.slice(1, -1)
-    }
+    const raw = typeof obj.result === 'string' ? obj.result : payload
+    const result = deepUnwrapJson(raw)
     return {
       result,
       toolCallId: typeof obj.tool_call_id === 'string' ? obj.tool_call_id : '',
@@ -86,6 +116,21 @@ export function tryFormatJson(payload: string): string {
   } catch {
     return payload
   }
+}
+
+// ---- Error Payload Parsing ----
+
+function parseErrorPayload(payload: string): string {
+  try {
+    const parsed: unknown = JSON.parse(payload)
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      const obj = parsed as Record<string, unknown>
+      if (typeof obj.error === 'string') return obj.error
+    }
+  } catch {
+    // plain string payload
+  }
+  return payload
 }
 
 // ---- Message Filtering ----
@@ -198,6 +243,33 @@ export function AssistantMessage({ message }: { message: DomainSessionMessage })
   )
 }
 
+export function ErrorMessage({ message }: { message: DomainSessionMessage }) {
+  const errorText = parseErrorPayload(message.payload)
+  return (
+    <article
+      aria-label={`Error, ${formatRelativeTime(message.createdAt)}`}
+      className="flex gap-3 px-4 py-3"
+    >
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-status-error/20">
+        <AlertTriangle className="h-4 w-4 text-status-error-foreground" aria-hidden="true" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-sm font-medium text-status-error-foreground">Error</span>
+          <span className="text-xs text-muted-foreground">
+            {formatRelativeTime(message.createdAt)}
+          </span>
+        </div>
+        <div className="rounded-lg border border-status-error-foreground/20 bg-status-error/10 px-3 py-2 text-sm text-foreground">
+          <pre className="whitespace-pre-wrap break-words font-mono text-xs">
+            {errorText}
+          </pre>
+        </div>
+      </div>
+    </article>
+  )
+}
+
 export function ToolCallBlock({ group }: { group: ToolCallGroup }) {
   const [expanded, setExpanded] = useState(false)
   const toolPayload = tryParseToolPayload(group.toolUse.payload)
@@ -272,6 +344,8 @@ function SimpleChatMessage({ message }: { message: DomainSessionMessage }) {
       return <UserMessage message={message} />
     case 'assistant':
       return <AssistantMessage message={message} />
+    case 'error':
+      return <ErrorMessage message={message} />
     default:
       return null
   }

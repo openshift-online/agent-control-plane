@@ -47,6 +47,7 @@ _SDK_OPTIONS_DENYLIST = frozenset(
         "cwd",
         "resume",
         "mcp_servers",
+        "allowed_tools",
         "setting_sources",
         "stderr",
         "continue_conversation",
@@ -54,6 +55,7 @@ _SDK_OPTIONS_DENYLIST = frozenset(
         "api_key",
         "cli_path",
         "env",
+        "skills",
     }
 )
 
@@ -145,6 +147,7 @@ class ClaudeBridge(PlatformBridge):
         self._configured_model: str = ""
         self._cwd_path: str = ""
         self._add_dirs: list[str] = []
+        self._session_config_path: str | None = None
         self._mcp_servers: dict = {}
         self._allowed_tools: list[str] = []
         self._system_prompt: dict = {}
@@ -199,7 +202,6 @@ class ClaudeBridge(PlatformBridge):
         client if the user changed (so MCP servers pick up new creds).
         """
         from ambient_runner.platform.auth import (
-            clear_runtime_credentials,
             populate_mcp_server_credentials,
             populate_runtime_credentials,
         )
@@ -212,8 +214,6 @@ class ClaudeBridge(PlatformBridge):
 
         await self._ensure_ready()
 
-        # Fresh credentials for this user on every run
-        clear_runtime_credentials()
         await populate_runtime_credentials(self._context)
         await populate_mcp_server_credentials(self._context)
         self._last_creds_refresh = time.monotonic()
@@ -324,15 +324,6 @@ class ClaudeBridge(PlatformBridge):
                 # Clear caller token immediately — never persist between turns.
                 if self._context:
                     self._context.caller_token = ""
-
-                # Clear credentials after turn completes (shared session security).
-                # In finally to ensure cleanup even on errors/cancellation.
-                if (
-                    self._context.get_env("KEEP_CREDENTIALS_PERSISTENT") or ""
-                ).lower() != "true":
-                    from ambient_runner.platform.auth import clear_runtime_credentials
-
-                    clear_runtime_credentials()
 
         self._first_run = False
 
@@ -700,6 +691,7 @@ class ClaudeBridge(PlatformBridge):
         self._configured_model = configured_model
         self._cwd_path = cwd_path
         self._add_dirs = add_dirs
+        self._session_config_path = self._context.session_config_path
         self._mcp_servers = mcp_servers
         self._allowed_tools = allowed_tools
         self._system_prompt = system_prompt
@@ -742,17 +734,19 @@ class ClaudeBridge(PlatformBridge):
             "permission_mode": "acceptEdits",
             "allowed_tools": self._allowed_tools,
             "mcp_servers": self._mcp_servers,
-            "setting_sources": ["project"],
+            "setting_sources": ["user", "project", "local"],
             "system_prompt": self._system_prompt,
             "include_partial_messages": True,
             "stderr": _stderr_handler,
         }
 
         if os.getenv("OPENSHELL_ENABLED") == "true":
-            options["cli_path"] = "/app/openshell-claude-wrapper.sh"
+            options["cli_path"] = "/app/standard-claude-wrapper.sh"
 
         if self._add_dirs:
             options["add_dirs"] = self._add_dirs
+        if self._session_config_path:
+            options["skills"] = "all"
         if self._configured_model:
             options["model"] = self._configured_model
 

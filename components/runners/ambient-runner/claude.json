@@ -1,0 +1,9 @@
+{
+  "trustedFolders": ["/sandbox"],
+  "hasCompletedOnboarding": true,
+  "projects": {
+    "/sandbox": {
+      "hasTrustDialogAccepted": true
+    }
+  }
+}

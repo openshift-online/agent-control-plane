@@ -43,6 +43,7 @@ func TestProjectGet(t *testing.T) {
 }
 
 func TestProjectPost(t *testing.T) {
+
 	h, client := test.RegisterIntegration(t)
 
 	account := h.NewRandAccount()
@@ -72,6 +73,7 @@ func TestProjectPost(t *testing.T) {
 }
 
 func TestProjectPatch(t *testing.T) {
+
 	h, client := test.RegisterIntegration(t)
 
 	account := h.NewRandAccount()

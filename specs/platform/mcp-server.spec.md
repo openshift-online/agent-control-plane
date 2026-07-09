@@ -543,7 +543,6 @@ Lists agents visible to the caller.
     {
       "id": "agent-uuid-1",
       "name": "code-review",
-      "owner_user_id": "user-uuid",
       "version": 3
     }
   ]
@@ -1197,7 +1196,7 @@ func main() {
 | `INVALID_REQUEST` | 400 | Missing required field or malformed input |
 | `INVALID_LABEL_KEY` | 400 | Label key contains `=` or whitespace |
 | `INVALID_LABEL_VALUE` | 400 | Label value is empty |
-| `AGENT_NAME_CONFLICT` | 409 | Agent name already exists for this owner |
+| `AGENT_NAME_CONFLICT` | 409 | Agent name already exists in this project |
 | `SUBSCRIPTION_NOT_FOUND` | 404 | No active subscription with the given ID |
 | `TRANSPORT_NOT_SUPPORTED` | 400 | Operation requires SSE transport; caller is on stdio |
 | `ANNOTATION_VALUE_TOO_LARGE` | 400 | Annotation value exceeds 4096 bytes |

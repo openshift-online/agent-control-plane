@@ -1,6 +1,6 @@
 # OpenShell Sandbox
 
-**Date:** 2026-06-04
+**Date:** 2026-07-05
 **Status:** Implemented — validated end-to-end on ROSA OpenShift (kernel 5.14.0-570.99.1.el9_6)
 **Related:** `specs/platform/runner.spec.md` § OpenShell Sandbox Isolation, `specs/platform/control-plane.spec.md`
 
@@ -116,7 +116,7 @@ Landlock LSM.
 
 #### Scenario: Read-only paths
 
-- GIVEN the policy declares `/usr`, `/lib`, `/proc`, `/dev/urandom`, `/app`, `/etc`, `/var/log`, `/home/sandbox` as read-only
+- GIVEN the policy declares `/usr`, `/lib`, `/proc`, `/dev/urandom`, `/app`, `/etc`, `/var/log`, `/home/sandbox`, `/runner` as read-only
 - WHEN the agent attempts to write to any of these paths
 - THEN the write SHALL be denied by the kernel
 
@@ -252,7 +252,7 @@ operation.
   - `/var/run/netns` directory with mode 777 (for network namespace mount points)
   - `/workspace` directory owned by `sandbox:sandbox`
   - `/usr/local/bin/claude` symlink to the bundled Claude CLI binary
-  - `/app/openshell-claude-wrapper.sh` wrapper script
+  - `/app/standard-claude-wrapper.sh` wrapper script
 
 ---
 

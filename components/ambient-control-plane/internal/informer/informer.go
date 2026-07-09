@@ -92,6 +92,8 @@ type retryEvent struct {
 	fireAt       time.Time
 }
 
+type FailureHandler func(ctx context.Context, event ResourceEvent, err error)
+
 type Informer struct {
 	sdk          *sdkclient.Client
 	watchManager *watcher.WatchManager
@@ -100,6 +102,9 @@ type Informer struct {
 	logger       zerolog.Logger
 	eventCh      chan ResourceEvent
 	retryCh      chan retryEvent
+
+	// Single handler; set during init before Run() is called.
+	OnMaxRetriesExceeded FailureHandler
 
 	sessionCache         map[string]types.Session
 	projectCache         map[string]types.Project
@@ -127,14 +132,14 @@ func (inf *Informer) RegisterHandler(resource string, handler EventHandler) {
 }
 
 func (inf *Informer) Run(ctx context.Context) error {
+	go inf.dispatchLoop(ctx)
+	go inf.retryLoop(ctx)
+
 	inf.logger.Info().Msg("performing initial list sync")
 
 	if err := inf.initialSync(ctx); err != nil {
 		inf.logger.Warn().Err(err).Msg("initial sync failed, will rely on watch events")
 	}
-
-	go inf.dispatchLoop(ctx)
-	go inf.retryLoop(ctx)
 
 	inf.wireWatchHandlers()
 
@@ -228,6 +233,10 @@ func (inf *Informer) scheduleRetry(ctx context.Context, event ResourceEvent, han
 			Int("handler", handlerIndex).
 			Int("attempts", attempt+1).
 			Msg("handler failed after max retries")
+
+		if inf.OnMaxRetriesExceeded != nil {
+			inf.OnMaxRetriesExceeded(ctx, event, err)
+		}
 	}
 }
 
@@ -485,34 +494,35 @@ func protoSessionToSDK(s *pb.Session) types.Session {
 		return types.Session{}
 	}
 	session := types.Session{
-		Name:                 s.GetName(),
-		Prompt:               s.GetPrompt(),
-		RepoURL:              s.GetRepoUrl(),
-		Repos:                s.GetRepos(),
-		LlmModel:             s.GetLlmModel(),
-		LlmTemperature:       s.GetLlmTemperature(),
-		LlmMaxTokens:         int(s.GetLlmMaxTokens()),
-		Timeout:              int(s.GetTimeout()),
-		ProjectID:            s.GetProjectId(),
-		AgentID:              s.GetAgentId(),
-		WorkflowID:           s.GetWorkflowId(),
-		BotAccountName:       s.GetBotAccountName(),
-		Labels:               s.GetLabels(),
-		Annotations:          s.GetAnnotations(),
-		ResourceOverrides:    s.GetResourceOverrides(),
-		EnvironmentVariables: s.GetEnvironmentVariables(),
-		CreatedByUserID:      s.GetCreatedByUserId(),
-		AssignedUserID:       s.GetAssignedUserId(),
-		ParentSessionID:      s.GetParentSessionId(),
-		Phase:                s.GetPhase(),
-		KubeCrName:           s.GetKubeCrName(),
-		KubeCrUid:            s.GetKubeCrUid(),
-		KubeNamespace:        s.GetKubeNamespace(),
-		SdkSessionID:         s.GetSdkSessionId(),
-		SdkRestartCount:      int(s.GetSdkRestartCount()),
-		Conditions:           s.GetConditions(),
-		ReconciledRepos:      s.GetReconciledRepos(),
-		ReconciledWorkflow:   s.GetReconciledWorkflow(),
+		Name:                     s.GetName(),
+		Prompt:                   s.GetPrompt(),
+		RepoURL:                  s.GetRepoUrl(),
+		Repos:                    s.GetRepos(),
+		LlmModel:                 s.GetLlmModel(),
+		LlmTemperature:           s.GetLlmTemperature(),
+		LlmMaxTokens:             int(s.GetLlmMaxTokens()),
+		Timeout:                  int(s.GetTimeout()),
+		ProjectID:                s.GetProjectId(),
+		AgentID:                  s.GetAgentId(),
+		WorkflowID:               s.GetWorkflowId(),
+		BotAccountName:           s.GetBotAccountName(),
+		Labels:                   s.GetLabels(),
+		Annotations:              s.GetAnnotations(),
+		ResourceOverrides:        s.GetResourceOverrides(),
+		EnvironmentVariables:     s.GetEnvironmentVariables(),
+		CreatedByUserID:          s.GetCreatedByUserId(),
+		SourceScheduledSessionID: s.GetSourceScheduledSessionId(),
+		AssignedUserID:           s.GetAssignedUserId(),
+		ParentSessionID:          s.GetParentSessionId(),
+		Phase:                    s.GetPhase(),
+		KubeCrName:               s.GetKubeCrName(),
+		KubeCrUid:                s.GetKubeCrUid(),
+		KubeNamespace:            s.GetKubeNamespace(),
+		SdkSessionID:             s.GetSdkSessionId(),
+		SdkRestartCount:          int(s.GetSdkRestartCount()),
+		Conditions:               s.GetConditions(),
+		ReconciledRepos:          s.GetReconciledRepos(),
+		ReconciledWorkflow:       s.GetReconciledWorkflow(),
 	}
 	if m := s.GetMetadata(); m != nil {
 		session.ID = m.GetId()

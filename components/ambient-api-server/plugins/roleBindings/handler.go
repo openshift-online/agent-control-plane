@@ -213,19 +213,31 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			{
 				g := (*h.sessionFactory).New(ctx)
 
-				var callerRoleNames []string
-				if dbErr := g.Table("role_bindings rb").
+				// Fetch caller's roles scoped to the binding's project (+ global)
+				// so the level check reflects project-scoped authority.
+				callerQuery := g.Table("role_bindings rb").
 					Select("r.name").
 					Joins("JOIN roles r ON r.id = rb.role_id").
-					Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username).
-					Scan(&callerRoleNames).Error; dbErr != nil {
+					Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username)
+				if found.Scope == "project" && found.ProjectId != nil {
+					callerQuery = callerQuery.Where("rb.project_id = ? OR rb.scope = 'global'", *found.ProjectId)
+				}
+				var callerRoleNames []string
+				if dbErr := callerQuery.Scan(&callerRoleNames).Error; dbErr != nil {
 					return nil, errors.GeneralError("authorization check failed")
 				}
 				callerLevel := pkgrbac.HighestLevel(callerRoleNames)
 
-				// Non-admin callers can only PATCH their own bindings.
+				// Authorization: allow if caller is admin, owns the binding,
+				// or has project:owner+ on the same project as the binding.
 				isOwner := found.UserId != nil && *found.UserId == username
-				if callerLevel != 0 && !isOwner {
+				isProjectOwnerPlus := false
+				if found.Scope == "project" && found.ProjectId != nil && callerLevel <= 1 {
+					// callerLevel <= 1 means project:owner or platform:admin
+					// (roles already scoped to this project via the query above)
+					isProjectOwnerPlus = true
+				}
+				if callerLevel != 0 && !isOwner && !isProjectOwnerPlus {
 					return nil, errors.Forbidden("Forbidden")
 				}
 
@@ -333,7 +345,7 @@ func (h roleBindingHandler) List(w http.ResponseWriter, r *http.Request) {
 				// 1. user_id matches caller (own bindings), OR
 				// 2. project_id is in caller's authorized projects (team bindings), OR
 				// 3. credential_id is in caller's authorized credentials
-				userFilter, err := pkgrbac.TSLEqual("user_id", username)
+				userFilter, err := pkgrbac.TSLEqualUsername("user_id", username)
 				if err != nil {
 					return nil, errors.Forbidden("invalid username")
 				}
@@ -386,6 +398,90 @@ func (h roleBindingHandler) List(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
+	handlers.HandleList(w, r, cfg)
+}
+
+func (h roleBindingHandler) ListByUser(w http.ResponseWriter, r *http.Request) {
+	h.listByScope(w, r, "user_id", mux.Vars(r)["id"])
+}
+
+func (h roleBindingHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
+	h.listByScope(w, r, "project_id", mux.Vars(r)["id"])
+}
+
+func (h roleBindingHandler) ListBySession(w http.ResponseWriter, r *http.Request) {
+	h.listByScope(w, r, "session_id", mux.Vars(r)["id"])
+}
+
+func (h roleBindingHandler) ListByCredential(w http.ResponseWriter, r *http.Request) {
+	h.listByScope(w, r, "credential_id", mux.Vars(r)["cred_id"])
+}
+
+func (h roleBindingHandler) listByScope(w http.ResponseWriter, r *http.Request, column, scopeID string) {
+	cfg := &handlers.HandlerConfig{
+		Action: func() (interface{}, *errors.ServiceError) {
+			ctx := r.Context()
+			listArgs := services.NewListArguments(r.URL.Query())
+
+			scopeFilter, valErr := pkgrbac.TSLEqual(column, scopeID)
+			if valErr != nil {
+				return nil, errors.Validation("invalid id")
+			}
+			pkgrbac.PrependTSLFilter(listArgs, scopeFilter)
+
+			authResult := pkgrbac.GetAuthResult(ctx)
+			if authResult != nil && !authResult.IsGlobalAdmin {
+				username := auth.GetUsernameFromContext(ctx)
+				userFilter, err := pkgrbac.TSLEqualUsername("user_id", username)
+				if err != nil {
+					return nil, errors.Forbidden("invalid username")
+				}
+				visibilityFilter := userFilter
+
+				if len(authResult.ProjectIDs) > 0 {
+					projFilter, err := pkgrbac.TSLIn("project_id", authResult.ProjectIDs)
+					if err != nil {
+						return nil, errors.Forbidden("invalid project id")
+					}
+					visibilityFilter = pkgrbac.TSLOr(visibilityFilter, projFilter)
+				}
+
+				if len(authResult.CredentialIDs) > 0 {
+					credFilter, err := pkgrbac.TSLIn("credential_id", authResult.CredentialIDs)
+					if err != nil {
+						return nil, errors.Forbidden("invalid credential id")
+					}
+					visibilityFilter = pkgrbac.TSLOr(visibilityFilter, credFilter)
+				}
+
+				pkgrbac.AppendTSLFilter(listArgs, visibilityFilter)
+			}
+
+			var roleBindings []RoleBinding
+			paging, err := h.generic.List(ctx, "id", listArgs, &roleBindings)
+			if err != nil {
+				return nil, err
+			}
+			roleBindingList := openapi.RoleBindingList{
+				Kind:  "RoleBindingList",
+				Page:  int32(paging.Page),
+				Size:  int32(paging.Size),
+				Total: int32(paging.Total),
+				Items: []openapi.RoleBinding{},
+			}
+			for _, rb := range roleBindings {
+				roleBindingList.Items = append(roleBindingList.Items, PresentRoleBinding(&rb))
+			}
+			if listArgs.Fields != nil {
+				filteredItems, err := presenters.SliceFilter(listArgs.Fields, roleBindingList.Items)
+				if err != nil {
+					return nil, err
+				}
+				return filteredItems, nil
+			}
+			return roleBindingList, nil
+		},
+	}
 	handlers.HandleList(w, r, cfg)
 }
 

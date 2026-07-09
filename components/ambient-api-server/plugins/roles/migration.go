@@ -69,7 +69,7 @@ func seedBuiltInRoles(tx *gorm.DB) error {
 			name:        "project:viewer",
 			displayName: "Project Viewer",
 			description: "Read-only access to a specific project",
-			permissions: []string{"project:read", "agent:read", "agent:list", "session:read", "session:list", "session_message:read", "session_message:list", "project_document:read", "project_document:list", "blackboard:read"},
+			permissions: []string{"project:read", "agent:read", "agent:list", "session:read", "session:list", "session_message:read", "session_message:list", "project_document:read", "project_document:list", "blackboard:read", "role_binding:read", "role_binding:list"},
 		},
 		{
 			name:        "agent:operator",
@@ -112,6 +112,37 @@ func seedBuiltInRoles(tx *gorm.DB) error {
 	return nil
 }
 
+func viewerRoleBindingReadMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202606220100",
+		Migrate: func(tx *gorm.DB) error {
+			var perms string
+			if err := tx.Raw(`SELECT permissions FROM roles WHERE name = 'project:viewer' AND deleted_at IS NULL`).Scan(&perms).Error; err != nil {
+				return err
+			}
+			var permList []string
+			if err := json.Unmarshal([]byte(perms), &permList); err != nil {
+				return err
+			}
+			// Check if already present (idempotent)
+			for _, p := range permList {
+				if p == "role_binding:read" {
+					return nil
+				}
+			}
+			permList = append(permList, "role_binding:read", "role_binding:list")
+			updated, err := json.Marshal(permList)
+			if err != nil {
+				return err
+			}
+			return tx.Exec(`UPDATE roles SET permissions = ?, updated_at = NOW() WHERE name = 'project:viewer' AND deleted_at IS NULL`, string(updated)).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return nil
+		},
+	}
+}
+
 func editorCredentialUnbindMigration() *gormigrate.Migration {
 	return &gormigrate.Migration{
 		ID: "202606091900",
@@ -135,6 +166,62 @@ func editorCredentialUnbindMigration() *gormigrate.Migration {
 				return err
 			}
 			return tx.Exec(`UPDATE roles SET permissions = ?, updated_at = NOW() WHERE name = 'project:editor' AND deleted_at IS NULL`, string(updated)).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return nil
+		},
+	}
+}
+
+func providerGatewayPermissionsMigration() *gormigrate.Migration {
+	type rolePerms struct {
+		roleName    string
+		newPerms    []string
+		idempotentK string
+	}
+
+	grants := []rolePerms{
+		{"project:owner", []string{"provider:*", "gateway:*"}, "provider:*"},
+		{"project:editor", []string{"provider:create", "provider:read", "provider:update", "provider:list", "gateway:create", "gateway:read", "gateway:update", "gateway:list"}, "provider:create"}, // delete intentionally omitted — only owners may delete providers/gateways
+		{"project:viewer", []string{"provider:read", "provider:list", "gateway:read", "gateway:list"}, "provider:read"},
+		{"platform:viewer", []string{"provider:read", "provider:list", "gateway:read", "gateway:list"}, "provider:read"},
+	}
+
+	return &gormigrate.Migration{
+		ID: "202607080002",
+		Migrate: func(tx *gorm.DB) error {
+			for _, g := range grants {
+				var perms string
+				if err := tx.Raw(`SELECT permissions FROM roles WHERE name = ? AND deleted_at IS NULL`, g.roleName).Scan(&perms).Error; err != nil {
+					return err
+				}
+				if perms == "" {
+					continue
+				}
+				var permList []string
+				if err := json.Unmarshal([]byte(perms), &permList); err != nil {
+					return err
+				}
+				alreadyPresent := false
+				for _, p := range permList {
+					if p == g.idempotentK {
+						alreadyPresent = true
+						break
+					}
+				}
+				if alreadyPresent {
+					continue
+				}
+				permList = append(permList, g.newPerms...)
+				updated, err := json.Marshal(permList)
+				if err != nil {
+					return err
+				}
+				if err := tx.Exec(`UPDATE roles SET permissions = ?, updated_at = NOW() WHERE name = ? AND deleted_at IS NULL`, string(updated), g.roleName).Error; err != nil {
+					return err
+				}
+			}
+			return nil
 		},
 		Rollback: func(tx *gorm.DB) error {
 			return nil

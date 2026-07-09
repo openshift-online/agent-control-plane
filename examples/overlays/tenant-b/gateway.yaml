@@ -1,0 +1,8 @@
+kind: Gateway
+name: openshell-gateway
+image: ghcr.io/nvidia/openshell/gateway:0.0.74
+server_dns_names:
+  - openshell-gateway.tenant-b.svc.cluster.local
+labels:
+  purpose: openshell
+  env: staging

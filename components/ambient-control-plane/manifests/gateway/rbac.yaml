@@ -1,0 +1,101 @@
+---
+# ClusterRole for gateway - node reading and token validation
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: openshell-gateway-node-reader
+  labels:
+    app.kubernetes.io/name: openshell
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: agent-control-plane
+rules:
+  - apiGroups:
+      - authentication.k8s.io
+    resources:
+      - tokenreviews
+    verbs:
+      - create
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+---
+# ClusterRoleBinding for gateway
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: openshell-gateway-node-reader
+  labels:
+    app.kubernetes.io/name: openshell
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: agent-control-plane
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: openshell-gateway-node-reader
+subjects:
+  - kind: ServiceAccount
+    name: openshell-gateway
+    namespace: NAMESPACE_PLACEHOLDER
+---
+# Role for gateway - sandbox management
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: openshell-gateway-sandbox
+  namespace: NAMESPACE_PLACEHOLDER
+  labels:
+    app.kubernetes.io/name: openshell
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: agent-control-plane
+rules:
+  - apiGroups:
+      - agents.x-k8s.io
+    resources:
+      - sandboxes
+      - sandboxes/status
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+---
+# RoleBinding for gateway
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openshell-gateway-sandbox
+  namespace: NAMESPACE_PLACEHOLDER
+  labels:
+    app.kubernetes.io/name: openshell
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: agent-control-plane
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: openshell-gateway-sandbox
+subjects:
+  - kind: ServiceAccount
+    name: openshell-gateway
+    namespace: NAMESPACE_PLACEHOLDER

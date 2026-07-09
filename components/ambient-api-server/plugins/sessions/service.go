@@ -25,6 +25,8 @@ type SessionService interface {
 	Start(ctx context.Context, id string) (*Session, *errors.ServiceError)
 	Stop(ctx context.Context, id string) (*Session, *errors.ServiceError)
 	ActiveByAgentID(ctx context.Context, agentID string) (*Session, *errors.ServiceError)
+	ByScheduledSessionID(ctx context.Context, scheduledSessionID string) (SessionList, *errors.ServiceError)
+	ActiveByScheduledSessionID(ctx context.Context, scheduledSessionID string) (*Session, *errors.ServiceError)
 
 	FindByIDs(ctx context.Context, ids []string) (SessionList, *errors.ServiceError)
 
@@ -173,8 +175,9 @@ func (s *sqlSessionService) UpdateStatus(ctx context.Context, id string, patch *
 	if patch.Phase == nil && patch.StartTime == nil && patch.CompletionTime == nil &&
 		patch.SdkSessionId == nil && patch.SdkRestartCount == nil && patch.Conditions == nil &&
 		patch.ReconciledRepos == nil && patch.ReconciledWorkflow == nil &&
-		patch.KubeCrUid == nil && patch.KubeNamespace == nil {
-		return nil, errors.Validation("status patch body must set at least one field: phase, start_time, completion_time, sdk_session_id, sdk_restart_count, conditions, reconciled_repos, reconciled_workflow, kube_cr_uid, kube_namespace")
+		patch.KubeCrUid == nil && patch.KubeNamespace == nil &&
+		patch.SandboxLogsSnapshot == nil && patch.SandboxPolicySnapshot == nil {
+		return nil, errors.Validation("status patch body must set at least one field: phase, start_time, completion_time, sdk_session_id, sdk_restart_count, conditions, reconciled_repos, reconciled_workflow, kube_cr_uid, kube_namespace, sandbox_logs_snapshot, sandbox_policy_snapshot")
 	}
 
 	session, err := s.sessionDao.Get(ctx, id)
@@ -214,6 +217,12 @@ func (s *sqlSessionService) UpdateStatus(ctx context.Context, id string, patch *
 	}
 	if patch.KubeNamespace != nil {
 		session.KubeNamespace = patch.KubeNamespace
+	}
+	if patch.SandboxLogsSnapshot != nil {
+		session.SandboxLogsSnapshot = patch.SandboxLogsSnapshot
+	}
+	if patch.SandboxPolicySnapshot != nil {
+		session.SandboxPolicySnapshot = patch.SandboxPolicySnapshot
 	}
 
 	session, err = s.sessionDao.Replace(ctx, session)
@@ -275,6 +284,25 @@ func (s *sqlSessionService) ActiveByAgentID(ctx context.Context, agentID string)
 			return nil, nil
 		}
 		return nil, errors.GeneralError("unable to look up active session for agent %s: %s", agentID, err)
+	}
+	return session, nil
+}
+
+func (s *sqlSessionService) ByScheduledSessionID(ctx context.Context, scheduledSessionID string) (SessionList, *errors.ServiceError) {
+	list, err := s.sessionDao.ByScheduledSessionID(ctx, scheduledSessionID)
+	if err != nil {
+		return nil, errors.GeneralError("unable to list sessions for schedule %s: %s", scheduledSessionID, err)
+	}
+	return list, nil
+}
+
+func (s *sqlSessionService) ActiveByScheduledSessionID(ctx context.Context, scheduledSessionID string) (*Session, *errors.ServiceError) {
+	session, err := s.sessionDao.ActiveByScheduledSessionID(ctx, scheduledSessionID)
+	if err != nil {
+		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, errors.GeneralError("unable to look up active session for schedule %s: %s", scheduledSessionID, err)
 	}
 	return session, nil
 }

@@ -37,7 +37,14 @@ Start the agent with a task prompt. ACP creates or reuses an active session for 
 
 The control plane then creates a runner Pod. When the runner is reachable, the session moves toward `Running` and starts streaming messages and AG-UI events.
 
-## 6. Work with the session
+## 6. Add a session-config harness
+
+Use a [session-config repo](../session-config/) when an agent needs shared team
+instructions, Claude skills, reusable review checklists, or curated Library
+content. The day-0 path mounts that repo into `/sandbox/session-config` through
+Agent YAML applied with `acpctl apply`.
+
+## 7. Work with the session
 
 Use the session view to follow the conversation, send more messages, inspect events, and review available file, Git, repository, workspace, and MCP status panels. These panels are backed by runner endpoints and are most useful while the session Pod is running.
 

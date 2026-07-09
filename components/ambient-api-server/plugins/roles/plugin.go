@@ -81,5 +81,7 @@ func init() {
 	presenters.RegisterKind(&Role{}, "Role")
 
 	db.RegisterMigration(migration())
+	db.RegisterMigration(viewerRoleBindingReadMigration())
 	db.RegisterMigration(editorCredentialUnbindMigration())
+	db.RegisterMigration(providerGatewayPermissionsMigration())
 }

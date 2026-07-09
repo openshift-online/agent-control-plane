@@ -1,0 +1,20 @@
+kind: Provider
+name: vertex
+type: vertex
+secret: vertex-sa-key
+labels:
+  vteam.acp.dev/team: codebase-maintainers
+---
+kind: Provider
+name: github
+type: github
+secret: github-creds
+labels:
+  vteam.acp.dev/team: codebase-maintainers
+---
+kind: Provider
+name: kubeconfig
+type: kubeconfig
+secret: runtime-kubeconfig
+labels:
+  vteam.acp.dev/team: codebase-maintainers

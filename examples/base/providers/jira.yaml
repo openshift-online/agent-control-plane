@@ -1,0 +1,4 @@
+kind: Provider
+name: jira
+type: generic
+secret: jira

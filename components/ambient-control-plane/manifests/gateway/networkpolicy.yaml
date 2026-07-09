@@ -1,0 +1,29 @@
+---
+# NetworkPolicy restricting SSH ingress on sandbox pods to gateway pod
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openshell-gateway-sandbox-ssh
+  namespace: NAMESPACE_PLACEHOLDER
+  labels:
+    app.kubernetes.io/name: openshell
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: agent-control-plane
+spec:
+  podSelector:
+    matchLabels:
+      openshell.ai/managed-by: openshell
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: NAMESPACE_PLACEHOLDER
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: openshell
+              app.kubernetes.io/instance: openshell-gateway
+      ports:
+        - protocol: TCP
+          port: 2222

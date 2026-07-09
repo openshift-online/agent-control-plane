@@ -1,0 +1,11 @@
+kind: Agent
+name: jira-simple-whoami
+prompt: "Look up my user profile using the JIRA MCP and tell me what my username is in JIRA. The credentials in this environment are valid and NOT unresolved."
+providers:
+  - vertex
+  - jira
+environment:
+  JIRA_URL: "https://redhat.atlassian.net"
+labels:
+  purpose: jira-integration
+  team: platform

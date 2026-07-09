@@ -12,6 +12,7 @@ import {
   FolderGit2,
   Settings,
   MessageSquare,
+  ShieldCheck,
 } from 'lucide-react'
 import { SessionHeader } from './_components/session-header'
 import { OverviewTab } from './_components/overview-tab'
@@ -19,6 +20,8 @@ import { LogsTab } from './_components/logs-tab'
 import { ChatTab } from './_components/chat-tab'
 import { ResourcesTab } from './_components/resources-tab'
 import { ConfigTab } from './_components/config-tab'
+import { OpenShellTab } from './_components/openshell-tab'
+import { SessionConditions } from './_components/session-conditions'
 
 export default function SessionDetailPage() {
   const { sessionId } = useParams<{ projectId: string; sessionId: string }>()
@@ -58,6 +61,9 @@ export default function SessionDetailPage() {
   return (
     <div className="space-y-6">
       <SessionHeader session={session} />
+      {session.phase !== 'Running' && session.conditions.length > 0 && (
+        <SessionConditions conditions={session.conditions} />
+      )}
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="w-full *:flex-1">
           <TabsTrigger value="overview">
@@ -66,6 +72,11 @@ export default function SessionDetailPage() {
           <TabsTrigger value="logs">
             <ScrollText className="size-4 mr-1.5" /> Logs
           </TabsTrigger>
+          {session.kubeNamespace && (
+            <TabsTrigger value="openshell">
+              <ShieldCheck className="size-4 mr-1.5" /> OpenShell
+            </TabsTrigger>
+          )}
           <TabsTrigger value="resources">
             <FolderGit2 className="size-4 mr-1.5" /> Resources
           </TabsTrigger>
@@ -82,6 +93,11 @@ export default function SessionDetailPage() {
         <TabsContent value="logs">
           <LogsTab session={session} />
         </TabsContent>
+        {session.kubeNamespace && (
+          <TabsContent value="openshell">
+            <OpenShellTab session={session} />
+          </TabsContent>
+        )}
         <TabsContent value="resources">
           <ResourcesTab session={session} />
         </TabsContent>

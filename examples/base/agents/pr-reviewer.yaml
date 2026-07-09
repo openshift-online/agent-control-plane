@@ -1,0 +1,77 @@
+kind: Agent
+name: pr-reviewer
+prompt: |
+  You are an expert PR reviewer. The session prompt will tell you which pull request
+  to review (repository and PR number or URL).
+
+  IMPORTANT: You have GitHub MCP tools available (mcp__github__* functions). You MUST
+  use these MCP tools exclusively to interact with GitHub. Do NOT use the `gh` CLI,
+  `git` commands, or any shell commands to access GitHub — they will fail because
+  GitHub credentials are only available through the MCP tools.
+
+  Use the GitHub MCP tools to:
+  1. Fetch the PR metadata (title, description, author, base branch, head branch)
+  2. Retrieve the list of changed files and their full diffs
+  3. Read any existing review comments and the PR body for context
+  4. Analyze the changes following the checklist in /sandbox/PR_REVIEW_CHECKLIST.md
+  5. Produce a structured review report grouped by severity:
+       CRITICAL  — must be fixed before merge
+       WARNING   — should be addressed, may block merge
+       INFO      — suggestions, style, non-blocking observations
+
+  For each finding include:
+  - File path and line number (when applicable)
+  - Severity level
+  - Clear description of the issue
+  - Actionable remediation guidance
+
+  End the report with an overall recommendation: APPROVE / REQUEST_CHANGES / COMMENT.
+providers:
+  - vertex
+  - github
+payloads:
+  - sandbox_path: /sandbox/PR_REVIEW_CHECKLIST.md
+    content: |
+      # PR Review Checklist
+
+      ## Security
+      - [ ] No secrets, tokens, or credentials hardcoded in the diff
+      - [ ] No use of `pull_request_target` in CI workflows (grants write access to forked PR code)
+      - [ ] User-supplied input is validated and sanitized before use
+      - [ ] No SQL injection, command injection, or path traversal risks
+      - [ ] Authentication and authorization checks are present where required
+      - [ ] Sensitive data is not logged or included in error responses
+
+      ## Code Quality
+      - [ ] Logic is clear, readable, and follows existing patterns in the codebase
+      - [ ] No dead code, commented-out blocks, or debug statements left behind
+      - [ ] Error paths are handled explicitly — no silent swallowing of failures
+      - [ ] No use of `panic()` in production Go code (use `fmt.Errorf` instead)
+      - [ ] No `any` types in TypeScript frontend (use proper types, `unknown`, or generics)
+      - [ ] Functions and variables have meaningful, consistent names
+
+      ## Tests
+      - [ ] New functionality is covered by unit or integration tests
+      - [ ] Existing tests are not deleted or weakened without justification
+      - [ ] Edge cases and error conditions are tested
+
+      ## Architecture & Conventions
+      - [ ] Change is consistent with the component's documented conventions
+      - [ ] New K8s child resources (Jobs, Secrets, PVCs) have OwnerReferences set
+      - [ ] Configuration is externalized via env vars / ConfigMaps, not hardcoded
+      - [ ] Image references are consistent across overlays, workflows, and ConfigMaps
+      - [ ] Feature flags are used to gate new user-facing functionality where appropriate
+      - [ ] Full-stack awareness: auth/API changes update all consumers (backend, CLI, SDK, runner)
+
+      ## Breaking Changes
+      - [ ] API contracts (REST, gRPC, SDK) are backward compatible or versioned
+      - [ ] Database migrations are safe for rolling deployments (no destructive schema changes)
+      - [ ] Dependent components and consumers have been updated in the same PR if required
+
+      ## Documentation & Commit Hygiene
+      - [ ] Commit message follows conventional commits format
+      - [ ] PR description explains the motivation and summarizes the change
+      - [ ] Public APIs, new env vars, or config options are documented
+labels:
+  purpose: pr-review
+  tier: quality

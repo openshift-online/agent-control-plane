@@ -1,0 +1,46 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "Glob",
+      "Grep",
+      "Bash",
+      "Skill",
+      "Agent",
+      "WebFetch",
+      "WebSearch",
+      "NotebookEdit",
+      "TaskCreate",
+      "TaskUpdate",
+      "TaskList",
+      "TaskGet",
+      "mcp__mcp-atlassian__*",
+      "mcp__session__*",
+      "mcp__rubric__*",
+      "mcp__corrections__*",
+      "mcp__acp__*",
+      "mcp__ambient__*",
+      "mcp__gerrit__*",
+      "mcp__openshift__*",
+      "mcp__google-workspace__*",
+      "mcp__github__*",
+      "mcp__context7__*",
+      "mcp__deepwiki__*",
+      "mcp__webfetch__*"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(sudo:*)",
+      "Bash(chmod 777:*)",
+      "Bash(chmod 0777:*)",
+      "Bash(chmod -R 777:*)",
+      "Bash(chmod -R 0777:*)",
+      "Bash(chown:*)",
+      "Bash(curl * --upload-file:*)",
+      "Bash(curl * -T :*)"
+    ]
+  }
+}

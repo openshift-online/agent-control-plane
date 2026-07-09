@@ -1,0 +1,322 @@
+paths:
+  /api/ambient/v1/projects/{id}/providers:
+    get:
+      summary: Returns a list of providers in a project
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: A JSON array of provider objects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderList'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No project with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/size'
+        - $ref: '#/components/parameters/search'
+        - $ref: '#/components/parameters/orderBy'
+        - $ref: '#/components/parameters/fields'
+    post:
+      summary: Create a provider in a project (internal — used by control plane reconciler)
+      security:
+        - Bearer: []
+      requestBody:
+        description: Provider data
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Provider'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provider'
+        '400':
+          description: Validation errors occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '409':
+          description: Provider already exists in this project
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: An unexpected error occurred creating the provider
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    parameters:
+      - $ref: '#/components/parameters/id'
+  /api/ambient/v1/projects/{id}/providers/{provider_id}:
+    get:
+      summary: Get a provider by id
+      security:
+        - Bearer: []
+      responses:
+        '200':
+          description: Provider found by id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provider'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No provider with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    patch:
+      summary: Update a provider (internal — used by control plane reconciler)
+      security:
+        - Bearer: []
+      requestBody:
+        description: Updated provider data
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderPatchRequest'
+      responses:
+        '200':
+          description: Provider updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provider'
+        '400':
+          description: Validation errors occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No provider with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error updating provider
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    delete:
+      summary: Delete a provider from a project (internal — used by control plane reconciler)
+      security:
+        - Bearer: []
+      responses:
+        '204':
+          description: Provider deleted successfully
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: No provider with specified id exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '500':
+          description: Unexpected error occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+    parameters:
+      - $ref: '#/components/parameters/id'
+      - name: provider_id
+        in: path
+        description: The id of the provider
+        required: true
+        schema:
+          type: string
+components:
+  schemas:
+    Provider:
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/ObjectReference'
+        - type: object
+          required:
+            - project_id
+            - name
+          properties:
+            project_id:
+              type: string
+              description: The project this provider belongs to
+            name:
+              type: string
+              description: Human-readable identifier; unique within the project
+            type:
+              type: string
+              description: Provider type (e.g., github, anthropic, jira)
+            secret:
+              type: string
+              description: Name of the Kubernetes Secret containing credentials for this provider
+            namespace:
+              type: string
+              description: Source namespace where this provider was declared
+            labels:
+              type: string
+            annotations:
+              type: string
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+    ProviderList:
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/List'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Provider'
+    ProviderPatchRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        secret:
+          type: string
+        namespace:
+          type: string
+        labels:
+          type: string
+        annotations:
+          type: string
+  parameters:
+    id:
+      name: id
+      in: path
+      description: The id of the project
+      required: true
+      schema:
+        type: string
+    page:
+      name: page
+      in: query
+      description: Page number of record list when record list exceeds specified page size
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+      required: false
+    size:
+      name: size
+      in: query
+      description: Maximum number of records to return
+      schema:
+        type: integer
+        default: 100
+        minimum: 0
+      required: false
+    search:
+      name: search
+      in: query
+      required: false
+      description: Specifies the search criteria
+      schema:
+        type: string
+    orderBy:
+      name: orderBy
+      in: query
+      required: false
+      description: Specifies the order by criteria
+      schema:
+        type: string
+    fields:
+      name: fields
+      in: query
+      required: false
+      description: Supplies a comma-separated list of fields to be returned
+      schema:
+        type: string

@@ -30,6 +30,7 @@ export async function GET() {
     let username = "unknown"
     let name = ""
     let email = ""
+    let groups: string[] = []
 
     // Token was verified at OIDC callback; safe to decode without re-verification.
     try {
@@ -47,6 +48,9 @@ export async function GET() {
               .filter(v => typeof v === "string")
               .join(" ")
         email = typeof payload.email === "string" ? payload.email : ""
+        if (Array.isArray(payload.groups)) {
+          groups = payload.groups.filter((g): g is string => typeof g === "string")
+        }
       }
     } catch {
       // Not a JWT or malformed — use defaults
@@ -60,6 +64,7 @@ export async function GET() {
       name,
       email,
       initials,
+      groups,
     })
   } catch (err) {
     console.error("[/api/me] session read failed:", err)

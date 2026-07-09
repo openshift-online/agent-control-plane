@@ -308,15 +308,12 @@ paths:
       security:
         - Bearer: []
       responses:
-        '200':
-          description: Scheduled session triggered
+        '201':
+          description: Session created from trigger
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
+                $ref: 'openapi.sessions.yaml#/components/schemas/Session'
         '401':
           description: Auth token is invalid
           content:
@@ -427,6 +424,14 @@ components:
             enabled:
               type: boolean
               description: Whether the schedule is active
+            overlap_policy:
+              type: string
+              enum: [skip, allow]
+              description: Behavior when a previous session from this schedule is still active. Defaults to skip.
+            created_by_user_id:
+              type: string
+              readOnly: true
+              description: User who created this schedule. Set from JWT on create. Immutable.
             session_prompt:
               type: string
               description: Prompt passed to each triggered session
@@ -474,6 +479,9 @@ components:
           type: string
         enabled:
           type: boolean
+        overlap_policy:
+          type: string
+          enum: [skip, allow]
         session_prompt:
           type: string
         timeout:

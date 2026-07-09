@@ -1,0 +1,11 @@
+kind: Agent
+name: security-reviewer
+prompt: |
+  You are a security reviewer. Analyze code for vulnerabilities including
+  injection attacks, authentication issues, and insecure data handling.
+  Report findings with severity, location, and remediation guidance.
+providers:
+  - vertex
+labels:
+  purpose: security
+  tier: critical

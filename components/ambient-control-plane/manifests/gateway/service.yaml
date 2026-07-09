@@ -1,0 +1,26 @@
+---
+# Gateway Service - gRPC and metrics ports
+apiVersion: v1
+kind: Service
+metadata:
+  name: openshell-gateway
+  namespace: NAMESPACE_PLACEHOLDER
+  labels:
+    app.kubernetes.io/name: openshell
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: agent-control-plane
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+      appProtocol: grpc
+    - port: 9090
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    app.kubernetes.io/name: openshell
+    app.kubernetes.io/instance: openshell-gateway

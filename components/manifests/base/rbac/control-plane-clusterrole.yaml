@@ -11,6 +11,10 @@ rules:
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["roles", "rolebindings"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# ConfigMaps (read agent/provider/policy declarations from tenant namespaces)
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
 # Session runner resources (provision/deprovision per-session workloads in project namespaces)
 - apiGroups: [""]
   resources: ["secrets", "serviceaccounts", "services", "pods"]
@@ -21,3 +25,35 @@ rules:
 - apiGroups: ["batch"]
   resources: ["jobs"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# ConfigMaps (watch platform-config and create gateway configs)
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "watch", "list", "create", "update", "patch"]
+# Deployments, StatefulSets (gateway provisioning)
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets"]
+  verbs: ["create", "get", "update", "patch"]
+# NetworkPolicies (gateway isolation)
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["create", "get", "update", "patch"]
+# ClusterRoles and ClusterRoleBindings (gateway RBAC)
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterroles", "clusterrolebindings"]
+  verbs: ["create", "get", "update", "patch", "escalate", "bind"]
+# Nodes (for gateway to read node info)
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+# TokenReviews (for gateway authentication)
+- apiGroups: ["authentication.k8s.io"]
+  resources: ["tokenreviews"]
+  verbs: ["create"]
+# Events (for gateway to watch events)
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "list", "watch"]
+# Sandboxes (OpenShell agent CRD)
+- apiGroups: ["agents.x-k8s.io"]
+  resources: ["sandboxes", "sandboxes/status"]
+  verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]

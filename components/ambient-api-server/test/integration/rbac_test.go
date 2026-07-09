@@ -137,7 +137,6 @@ func TestRBAC_UserAutoProvisioned(t *testing.T) {
 	ctx := h.NewAuthenticatedContext(account)
 
 	// Any authenticated request triggers auto-provisioning
-	// POST /projects is auth-exempt so it should work
 	projectInput := openapi.Project{Name: "auto-prov-test"}
 	_, resp, err := client.DefaultAPI.ApiAmbientV1ProjectsPost(ctx).Project(projectInput).Execute()
 	Expect(err).NotTo(HaveOccurred())

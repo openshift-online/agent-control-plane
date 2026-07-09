@@ -45,6 +45,32 @@ func Service(s *environments.Services) SessionService {
 	return nil
 }
 
+type EventServiceLocator func() EventService
+
+func NewEventServiceLocator(env *environments.Env) EventServiceLocator {
+	var (
+		once    sync.Once
+		svcInst EventService
+	)
+	return func() EventService {
+		once.Do(func() {
+			svcInst = NewEventService(NewEventDao(&env.Database.SessionFactory))
+		})
+		return svcInst
+	}
+}
+
+func EventSvc(s *environments.Services) EventService {
+	if s == nil {
+		return nil
+	}
+	if obj := s.GetService("SessionEvents"); obj != nil {
+		locator := obj.(EventServiceLocator)
+		return locator()
+	}
+	return nil
+}
+
 type MessageServiceLocator func() MessageService
 
 func NewMessageServiceLocator(env *environments.Env) MessageServiceLocator {
@@ -80,11 +106,16 @@ func init() {
 		return NewMessageServiceLocator(env.(*environments.Env))
 	})
 
+	registry.RegisterService("SessionEvents", func(env interface{}) interface{} {
+		return NewEventServiceLocator(env.(*environments.Env))
+	})
+
 	pkgserver.RegisterRoutes("sessions", func(apiV1Router *mux.Router, services pkgserver.ServicesInterface, authMiddleware environments.JWTMiddleware, authzMiddleware auth.AuthorizationMiddleware) {
 		envServices := services.(*environments.Services)
 		sessionSvc := Service(envServices)
 		sessionHandler := NewSessionHandler(sessionSvc, MessageSvc(envServices), generic.Service(envServices))
 		msgHandler := NewMessageHandler(sessionSvc, MessageSvc(envServices))
+		evtHandler := NewEventHandler(sessionSvc, EventSvc(envServices))
 
 		if dbAuthz := pkgrbac.Middleware(envServices); dbAuthz != nil {
 			authzMiddleware = dbAuthz
@@ -102,6 +133,7 @@ func init() {
 		sessionsRouter.HandleFunc("/{id}/events", sessionHandler.StreamRunnerEvents).Methods(http.MethodGet)
 		sessionsRouter.HandleFunc("/{id}/messages", msgHandler.GetMessages).Methods(http.MethodGet)
 		sessionsRouter.HandleFunc("/{id}/messages", msgHandler.PushMessage).Methods(http.MethodPost)
+		sessionsRouter.HandleFunc("/{id}/events/history", evtHandler.ListEvents).Methods(http.MethodGet)
 		sessionsRouter.HandleFunc("/{id}/clone", sessionHandler.Clone).Methods(http.MethodPost)
 		sessionsRouter.HandleFunc("/{id}/repos", sessionHandler.AddRepo).Methods(http.MethodPost)
 		sessionsRouter.HandleFunc("/{id}/repos/{repoName}", sessionHandler.RemoveRepo).Methods(http.MethodDelete)
@@ -130,6 +162,9 @@ func init() {
 		sessionsRouter.HandleFunc("/{id}/repos/status", sessionHandler.ReposStatus).Methods(http.MethodGet)
 		// Pod events (K8s stub)
 		sessionsRouter.HandleFunc("/{id}/pod-events", sessionHandler.PodEvents).Methods(http.MethodGet)
+		// Sandbox observability (OpenShell gateway proxy)
+		sessionsRouter.HandleFunc("/{id}/sandbox/logs", sessionHandler.SandboxLogs).Methods(http.MethodGet)
+		sessionsRouter.HandleFunc("/{id}/sandbox/policy", sessionHandler.SandboxPolicy).Methods(http.MethodGet)
 		// Operational sub-resources
 		sessionsRouter.HandleFunc("/{id}/displayname", sessionHandler.PatchDisplayName).Methods(http.MethodPatch)
 		sessionsRouter.HandleFunc("/{id}/workflow/metadata", sessionHandler.WorkflowMetadata).Methods(http.MethodGet)
@@ -162,13 +197,14 @@ func init() {
 		sessionService := Service(envServices)
 		genericService := generic.Service(envServices)
 		msgService := MessageSvc(envServices)
+		evtService := EventSvc(envServices)
 		brokerFunc := func() *pkgserver.EventBroker {
 			if obj := envServices.GetService("EventBroker"); obj != nil {
 				return obj.(*pkgserver.EventBroker)
 			}
 			return nil
 		}
-		pb.RegisterSessionServiceServer(grpcServer, NewSessionGRPCHandler(sessionService, genericService, brokerFunc, msgService))
+		pb.RegisterSessionServiceServer(grpcServer, NewSessionGRPCHandler(sessionService, genericService, brokerFunc, msgService, evtService))
 	})
 
 	db.RegisterMigration(migration())
@@ -177,4 +213,7 @@ func init() {
 	db.RegisterMigration(schemaExpansionMigration())
 	db.RegisterMigration(agentIDMigration())
 	db.RegisterMigration(lastActivityAtMigration())
+	db.RegisterMigration(scheduledSessionLinkMigration())
+	db.RegisterMigration(sessionEventsMigration())
+	db.RegisterMigration(sandboxSnapshotMigration())
 }

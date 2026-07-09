@@ -45,11 +45,11 @@ inference and the SDK loads them before the sandbox starts.
 Runner Pod (FastAPI + uvicorn) — runs UNSANDBOXED as UID 0
   │
   ├── bridge.py: _ensure_adapter() sets cli_path when OPENSHELL_ENABLED=true
-  │     options["cli_path"] = "/app/openshell-claude-wrapper.sh"
+  │     options["cli_path"] = "/app/standard-claude-wrapper.sh"
   │
   └── Claude Agent SDK spawns wrapper as subprocess
         │
-        └── /app/openshell-claude-wrapper.sh
+        └── /app/standard-claude-wrapper.sh
               │  reads: OPENSHELL_ENABLED, OPENSHELL_POLICY_RULES, OPENSHELL_POLICY_DATA
               │
               └── exec /openshell-sandbox \
@@ -90,8 +90,8 @@ Runner Pod (FastAPI + uvicorn) — runs UNSANDBOXED as UID 0
 | File | Component | What Changed |
 |------|-----------|-------------|
 | `Dockerfile` | Runner | Pin supervisor v0.0.56 from `ghcr.io/nvidia/openshell/supervisor:0.0.56`; add `iproute` (provides `ip netns`); create `sandbox` user/group; pre-create `/workspace` owned by sandbox; symlink bundled claude binary to `/usr/local/bin/claude`; set `/home/sandbox` to 755; create `/var/run/netns` with 777 |
-| `openshell-claude-wrapper.sh` | Runner | New file — shell script that dispatches to supervisor or direct claude based on `OPENSHELL_ENABLED` env var |
-| `bridges/claude/bridge.py` | Runner | 1 line added in `_ensure_adapter()`: `options["cli_path"] = "/app/openshell-claude-wrapper.sh"` when `OPENSHELL_ENABLED == "true"` |
+| `standard-claude-wrapper.sh` | Runner | Shell script that dispatches to supervisor or direct claude based on `OPENSHELL_ENABLED` env var |
+| `bridges/claude/bridge.py` | Runner | 1 line added in `_ensure_adapter()`: `options["cli_path"] = "/app/standard-claude-wrapper.sh"` when `OPENSHELL_ENABLED == "true"` |
 | `.openshell-ref/policy.rego` | Runner | Official OPA Rego policy from OpenShell repo (`package openshell.sandbox`, ~741 lines) |
 | `.openshell-ref/policy.yaml` | Runner | Policy data: filesystem allowlists, Landlock config, process identity, network ACLs for 6 endpoint groups |
 | `internal/reconciler/kube_reconciler.go` | Control Plane | `buildRunnerSecurityContext()`: 7 capabilities when OpenShell enabled; `buildVolumes()`: openshell-policy ConfigMap volume; `buildVolumeMounts()`: mount at `/etc/openshell`; `buildEnv()`: inject OPENSHELL_* env vars; `ensureOpenShellPolicy()`: copy ConfigMap from CP to runner namespace; `ensurePod()`: pod-level seccompProfile Unconfined |

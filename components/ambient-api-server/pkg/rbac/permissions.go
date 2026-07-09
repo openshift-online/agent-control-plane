@@ -9,10 +9,13 @@ const (
 	ResourceAgent           Resource = "agent"
 	ResourceSession         Resource = "session"
 	ResourceSessionMessage  Resource = "session_message"
+	ResourceSessionEvent    Resource = "session_event"
 	ResourceBlackboard      Resource = "blackboard"
 	ResourceRole            Resource = "role"
 	ResourceRoleBinding     Resource = "role_binding"
 	ResourceCredential      Resource = "credential"
+	ResourceProvider        Resource = "provider"
+	ResourceGateway         Resource = "gateway"
 )
 
 type Action string
@@ -85,6 +88,9 @@ var (
 
 	PermSessionMessageWatch = Permission{ResourceSessionMessage, ActionWatch}
 
+	PermSessionEventList  = Permission{ResourceSessionEvent, ActionList}
+	PermSessionEventWatch = Permission{ResourceSessionEvent, ActionWatch}
+
 	PermBlackboardWatch = Permission{ResourceBlackboard, ActionWatch}
 	PermBlackboardRead  = Permission{ResourceBlackboard, ActionRead}
 
@@ -104,4 +110,16 @@ var (
 	PermCredentialDelete     = Permission{ResourceCredential, ActionDelete}
 	PermCredentialList       = Permission{ResourceCredential, ActionList}
 	PermCredentialFetchToken = Permission{ResourceCredential, ActionFetchToken}
+
+	PermProviderCreate = Permission{ResourceProvider, ActionCreate}
+	PermProviderRead   = Permission{ResourceProvider, ActionRead}
+	PermProviderUpdate = Permission{ResourceProvider, ActionUpdate}
+	PermProviderDelete = Permission{ResourceProvider, ActionDelete}
+	PermProviderList   = Permission{ResourceProvider, ActionList}
+
+	PermGatewayCreate = Permission{ResourceGateway, ActionCreate}
+	PermGatewayRead   = Permission{ResourceGateway, ActionRead}
+	PermGatewayUpdate = Permission{ResourceGateway, ActionUpdate}
+	PermGatewayDelete = Permission{ResourceGateway, ActionDelete}
+	PermGatewayList   = Permission{ResourceGateway, ActionList}
 )

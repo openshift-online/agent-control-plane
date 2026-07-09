@@ -476,7 +476,9 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         logger.warning(f"Failed to refresh Google credentials: {google_creds}")
         if isinstance(google_creds, PermissionError):
             auth_failures.append(str(google_creds))
-    elif "google" not in sidecar_providers and (google_creds.get("token") or google_creds.get("accessToken")):
+    elif "google" not in sidecar_providers and (
+        google_creds.get("token") or google_creds.get("accessToken")
+    ):
         try:
             if google_creds.get("accessToken"):
                 _GOOGLE_WORKSPACE_CREDS_DIR.mkdir(parents=True, exist_ok=True)
@@ -538,7 +540,9 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         logger.warning(f"Failed to refresh Jira credentials: {jira_creds}")
         if isinstance(jira_creds, PermissionError):
             auth_failures.append(str(jira_creds))
-    elif "jira" not in sidecar_providers and (jira_creds.get("token") or jira_creds.get("apiToken")):
+    elif "jira" not in sidecar_providers and (
+        jira_creds.get("token") or jira_creds.get("apiToken")
+    ):
         os.environ["JIRA_URL"] = jira_creds.get("url", "")
         os.environ["JIRA_API_TOKEN"] = jira_creds.get("apiToken") or jira_creds.get(
             "token", ""
@@ -633,55 +637,6 @@ async def populate_runtime_credentials(context: RunnerContext) -> None:
         )
 
     logger.info("Runtime credentials populated successfully")
-
-
-def clear_runtime_credentials() -> None:
-    """Remove sensitive credentials from environment after turn completes.
-
-    Clears fixed credential keys, dynamically-injected MCP_* env vars,
-    and token files. Google credential files are preserved (issue #1222).
-    """
-    cleared = []
-    for key in [
-        "GITHUB_TOKEN",
-        "GITLAB_TOKEN",
-        "JIRA_API_TOKEN",
-        "JIRA_URL",
-        "JIRA_EMAIL",
-        "USER_GOOGLE_EMAIL",
-        "CODERABBIT_API_KEY",
-        "KUBECONFIG",
-    ]:
-        if os.environ.pop(key, None) is not None:
-            cleared.append(key)
-
-    # Clear dynamically-injected MCP credential env vars (set by populate_mcp_server_credentials).
-    # Only clear keys matching the MCP_{SERVER}_{FIELD} pattern, not static config like MCP_CONFIG_FILE.
-    mcp_cred_keys = [
-        k
-        for k in os.environ
-        if k.startswith("MCP_") and k.count("_") >= 2 and k != "MCP_CONFIG_FILE"
-    ]
-    for key in mcp_cred_keys:
-        os.environ.pop(key, None)
-        cleared.append(key)
-
-    # Remove token files used by the git credential helper.
-    for token_file in (_GITHUB_TOKEN_FILE, _GITLAB_TOKEN_FILE, _KUBECONFIG_FILE):
-        try:
-            token_file.unlink(missing_ok=True)
-            cleared.append(token_file.name)
-        except OSError as e:
-            logger.warning(f"Failed to remove token file {token_file}: {e}")
-
-    # NOTE: Google credential files (_GOOGLE_WORKSPACE_CREDS_FILE and
-    # GOOGLE_APPLICATION_CREDENTIALS) are intentionally NOT deleted here.
-    # The workspace-mcp process reads credentials from these files; deleting
-    # them between turns causes it to fall back to an inaccessible localhost
-    # OAuth flow (issue #1222).
-
-    if cleared:
-        logger.info(f"Cleared credentials: {', '.join(cleared)}")
 
 
 async def _fetch_mcp_credentials(context: RunnerContext, server_name: str) -> dict:

@@ -35,6 +35,13 @@ _CP_TOKEN_FETCH_ATTEMPTS = 3
 _CP_TOKEN_FETCH_TIMEOUT = 10
 
 
+def _decode_public_key(value: str) -> str:
+    """Decode base64-encoded PEM or return raw PEM as-is."""
+    if not value or value.startswith("-----"):
+        return value
+    return base64.b64decode(value).decode()
+
+
 def _encrypt_session_id(public_key_pem: str, session_id: str) -> str:
     """RSA-OAEP encrypt session_id with the CP public key, return base64-encoded ciphertext."""
     public_key = serialization.load_pem_public_key(public_key_pem.encode())
@@ -176,6 +183,7 @@ class AmbientGRPCClient:
         self._cp_token_url = cp_token_url
         self._channel: Optional[grpc.Channel] = None
         self._session_messages: Optional["SessionMessagesAPI"] = None  # noqa: F821
+        self._session_events: Optional["SessionEventsAPI"] = None  # noqa: F821
 
     @classmethod
     def from_env(cls) -> AmbientGRPCClient:
@@ -185,7 +193,9 @@ class AmbientGRPCClient:
         use_tls = os.environ.get(_ENV_USE_TLS, "").lower() in ("true", "1", "yes")
         ca_cert_file = os.environ.get(_ENV_CA_CERT)
         if cp_token_url:
-            public_key_pem = os.environ.get(_ENV_CP_TOKEN_PUBLIC_KEY, "")
+            public_key_pem = _decode_public_key(
+                os.environ.get(_ENV_CP_TOKEN_PUBLIC_KEY, "")
+            )
             session_id = os.environ.get(_ENV_SESSION_ID, "")
             if not public_key_pem:
                 raise RuntimeError(
@@ -219,7 +229,9 @@ class AmbientGRPCClient:
     def reconnect(self) -> None:
         """Close the existing channel and rebuild with a fresh token from the CP endpoint."""
         if self._cp_token_url:
-            public_key_pem = os.environ.get(_ENV_CP_TOKEN_PUBLIC_KEY, "")
+            public_key_pem = _decode_public_key(
+                os.environ.get(_ENV_CP_TOKEN_PUBLIC_KEY, "")
+            )
             session_id = os.environ.get(_ENV_SESSION_ID, "")
             fresh_token = _fetch_token_from_cp(
                 self._cp_token_url, public_key_pem, session_id
@@ -253,11 +265,24 @@ class AmbientGRPCClient:
             logger.info("[GRPC CLIENT] SessionMessagesAPI ready")
         return self._session_messages
 
+    @property
+    def session_events(self) -> "SessionEventsAPI":  # noqa: F821
+        if self._session_events is None:
+            logger.info("[GRPC CLIENT] Creating SessionEventsAPI stub")
+            from ._session_events_api import SessionEventsAPI
+
+            self._session_events = SessionEventsAPI(
+                self._get_channel(), token=self._token, grpc_client=self
+            )
+            logger.info("[GRPC CLIENT] SessionEventsAPI ready")
+        return self._session_events
+
     def close(self) -> None:
         if self._channel is not None:
             self._channel.close()
             self._channel = None
             self._session_messages = None
+            self._session_events = None
 
     def __enter__(self) -> AmbientGRPCClient:
         return self

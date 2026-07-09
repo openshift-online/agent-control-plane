@@ -2,8 +2,10 @@
 
 **Date:** 2026-03-20
 **Status:** Active
-**Last Updated:** 2026-06-03 — added Application (GitOps continuous sync for agent fleets); addressed review feedback: credential_id FK for remote auth, RoleBinding escalation rules, prune safety, health status semantics, gitops role grantability, sync engine kind filtering
-**Previous:** 2026-05-12 — migrate Credentials from project-scoped to global routes (`/credentials`); remove `project_id` from model, OpenAPI, and SDK; add drop-column migration; update coverage matrix
+**Last Updated:** 2026-07-08 — added `Policy` as supported kind in `acpctl apply` and Application sync; added `sandbox_policy`, `sandbox_template`, `entrypoint` to Agent apply fields; documented implementation gaps in acpctl apply resource struct
+**Previous:** 2026-07-03 — added Agent sandbox fields (entrypoint, providers, payloads, environment, sandbox_template, sandbox_policy) for OpenShell gateway integration; split SessionMessage from new SessionEvent (comprehensive AG-UI event stream with compression); added Events API endpoints, gRPC protocol, storage model, compression strategy, migration plan
+**Previous:** 2026-06-03 — added Application (GitOps continuous sync for agent fleets); addressed review feedback: credential_id FK for remote auth, RoleBinding escalation rules, prune safety, health status semantics, gitops role grantability, sync engine kind filtering
+**Previous-2:** 2026-05-12 — migrate Credentials from project-scoped to global routes (`/credentials`); remove `project_id` from model, OpenAPI, and SDK; add drop-column migration; update coverage matrix
 **Workflow:** *(merged into skills/build/full-stack-pipeline)* — implementation waves, gap table, build commands, run log
 **Design:** `credentials-session.md` — full Credential Kind design spec and rationale
 
@@ -21,6 +23,7 @@ The Ambient API server provides a coordination layer for orchestrating fleets of
 - **Credential** — a global secret. Stores a Personal Access Token or equivalent for an external provider (GitHub, GitLab, Jira, Google, Vertex AI, Kubeconfig). Consumed by runners at session start. Bound to Projects via RoleBindings — a single Credential can be shared across multiple Projects without duplication.
 - **RoleBinding** — binds a Role to a subject (user or project) at a given scope. Ownership and access for all Kinds is expressed through RoleBindings. The subject and scope are each represented as typed nullable FKs — exactly one FK is non-null, determined by `scope`.
 - **Application** — a GitOps binding that continuously syncs agent fleet definitions from a git repository to an Ambient instance. The Ambient equivalent of an Argo CD Application.
+- **Gateway** — a project-scoped declaration that an OpenShell gateway should be deployed in the project’s namespace. Specifies the gateway image, TLS DNS names, and TOML configuration. Applied via `acpctl apply -k` and reconciled by the GatewayReconciler into Kubernetes resources (StatefulSet, Service, RBAC, certgen Job). See [gateway-provisioning.spec.md](./gateway-provisioning.spec.md).
 
 The stable address of an agent is `{project_name}/{agent_name}`. It holds the inbox and links to the active session.
 
@@ -72,7 +75,6 @@ erDiagram
     Agent {
         string ID PK "KSUID"
         string project_id FK
-        string owner_user_id FK "user who owns this agent"
         string name "human-readable; unique within project"
         string display_name "nullable — human-friendly display label"
         string description "nullable — purpose description"
@@ -85,6 +87,12 @@ erDiagram
         string bot_account_name "nullable — service account for git ops"
         string resource_overrides "nullable — JSON pod resource overrides"
         string environment_variables "nullable — JSON extra env vars"
+        string entrypoint "nullable — CLI to invoke in sandbox (e.g. claude)"
+        jsonb  providers "nullable — provider names bound to this agent"
+        jsonb  payloads "nullable — files and repos staged into sandbox before start"
+        jsonb  environment "nullable — structured key-value env vars for sandbox"
+        jsonb  sandbox_template "nullable — sandbox container resource requests"
+        string sandbox_policy "nullable — name of a policy declaration to apply"
         string current_session_id FK "nullable — denormalized for fast reads"
         jsonb  labels
         jsonb  annotations
@@ -114,9 +122,9 @@ erDiagram
         string  name "human-readable display name"
         string  project_id FK "nullable — direct project context (no agent)"
         string  agent_id FK "nullable — set when started via agent ignite"
-        string  created_by_user_id FK "who created or started the session"
-        string  assigned_user_id FK "nullable — override for session ownership"
         string  parent_session_id FK "nullable — source session for clones"
+        string  source_scheduled_session_id "nullable — FK to ScheduledSession that triggered this"
+        time    scheduled_for "nullable — cron tick time; idempotency key with source_scheduled_session_id"
         string  prompt "task scope for this run"
         string  repo_url "nullable — primary repo for the session"
         string  repos "JSON array of RepoEntry (additional attached repos)"
@@ -141,12 +149,14 @@ erDiagram
         string  conditions
         string  reconciled_repos
         string  reconciled_workflow
+        string  sandbox_logs_snapshot "nullable — JSON array of SandboxLogEntry; last snapshot before stop"
+        string  sandbox_policy_snapshot "nullable — JSON SandboxPolicyResponse; last snapshot before stop"
         time    created_at
         time    updated_at
         time    deleted_at
     }
 
-    %% ── SessionMessage (AG-UI event stream — real LLM turns) ─────────────────
+    %% ── SessionMessage (high-level conversation — human-readable) ────────────
 
     SessionMessage {
         string ID PK
@@ -155,6 +165,19 @@ erDiagram
         string event_type "user | assistant | tool_use | tool_result | system | error"
         string payload "message body or JSON-encoded event"
         time   created_at
+    }
+
+    %% ── SessionEvent (comprehensive AG-UI event stream) ───────────────────────
+
+    SessionEvent {
+        string ID PK
+        string session_id FK
+        int64  seq "monotonic within session; gaps allowed after compression"
+        string event_type "AG-UI event type (33 types: TEXT_MESSAGE_START, TOOL_CALL_START, etc.)"
+        string payload "JSON-encoded event payload"
+        time   created_at
+        time   completed_at "nullable — last event timestamp for compressed events"
+        int32  event_count "number of raw events compressed; 1 = uncompressed"
     }
 
     %% ── RBAC ─────────────────────────────────────────────────────────────────
@@ -213,6 +236,7 @@ erDiagram
         string schedule "cron expression"
         string timezone "IANA timezone; default UTC"
         bool   enabled "false = suspended; schedule not evaluated"
+        string overlap_policy "skip (default) or allow"
         string session_prompt "injected as Session.prompt on each trigger"
         int32  timeout "nullable — max session duration in seconds for triggered sessions"
         int32  inactivity_timeout "nullable — idle timeout in seconds"
@@ -220,6 +244,22 @@ erDiagram
         string runner_type "nullable — override runner type for triggered sessions"
         time   last_run_at "nullable; wall-clock time of last trigger"
         time   next_run_at "nullable; computed from schedule + timezone"
+        time   created_at
+        time   updated_at
+        time   deleted_at
+    }
+
+    %% ── Gateway (project-scoped OpenShell gateway declaration) ──────────
+
+    Gateway {
+        string ID PK "KSUID"
+        string project_id FK "target project (= namespace)"
+        string name "resource name; typically openshell-gateway"
+        string image "nullable — gateway container image; defaults to OPENSHELL_GATEWAY_IMAGE"
+        jsonb  server_dns_names "DNS names for TLS certificate generation"
+        string config "nullable — OpenShell gateway TOML configuration"
+        jsonb  labels
+        jsonb  annotations
         time   created_at
         time   updated_at
         time   deleted_at
@@ -276,10 +316,13 @@ erDiagram
 
     Inbox           }o--o| Agent            : "sent_from"
 
+    Project         ||--o{ Gateway          : "owns"
+
     Application }o--o| Project        : "syncs_to"
     Application }o--o| Credential     : "credential_id"
 
     Session         ||--o{ SessionMessage   : "streams"
+    Session         ||--o{ SessionEvent     : "emits"
 
     Role            ||--o{ RoleBinding      : "granted_by"
 ```
@@ -314,9 +357,11 @@ An Application syncs **project-scoped fleet definitions** — a subset of resour
 | Kind | Sync Behavior |
 |---|---|
 | `Project` | Created if `CreateProject=true` in `sync_options`; patched (description, prompt, labels, annotations) on subsequent syncs |
-| `Agent` | Created or patched within the destination project; prompt, labels, annotations updated |
+| `Agent` | Created or patched within the destination project; prompt, providers, payloads, environment, entrypoint, sandbox_policy, sandbox_template, labels, annotations updated |
 | `Credential` | Created if not present; idempotent by name |
 | `RoleBinding` | Created if not present; idempotent by user+role+scope key. **Escalation-bound:** the sync engine can only create RoleBindings at or below the level of the service credential it uses (see Design Decisions). |
+| `Gateway` | Created or patched within the destination project; image, serverDnsNames, config updated. Reconciled into K8s gateway resources by the GatewayReconciler. |
+| `Policy` | Created or patched within the destination project; spec, labels, annotations updated. Contains the upstream OpenShell `SandboxPolicy` JSON. Referenced by agents via `sandbox_policy` field. |
 | `Inbox` (seed messages) | Idempotent delivery — only new messages (by `from_agent_id` + `body` content hash dedup) are posted. Uses immutable `from_agent_id` FK, not mutable `from_name`. |
 
 ### What Does NOT Get Synced
@@ -439,7 +484,6 @@ Agent is scoped to a Project. The stable address is `{project_name}/{agent_name}
 | `display_name` | Nullable. Human-friendly label for UI display; does not affect addressing. |
 | `description` | Nullable. Free-text purpose description. |
 | `prompt` | Defines who the agent is. Mutable via PATCH. Access controlled by RBAC (`agent:editor` or higher). |
-| `owner_user_id` | FK to the User who owns this agent. Set at creation; matches the authenticated caller. |
 | `repo_url` | Nullable. Primary repository URL cloned into every session the agent starts. Copied to `Session.repo_url` on ignite. |
 | `workflow_id` | Nullable. Default workflow identifier injected into sessions. Copied to `Session.workflow_id` on ignite. |
 | `llm_model` | Active LLM model name. Default: `claude-sonnet-4-6`. Copied to `Session.llm_model` on ignite. |
@@ -448,11 +492,19 @@ Agent is scoped to a Project. The stable address is `{project_name}/{agent_name}
 | `bot_account_name` | Nullable. Service account name for git operations inside sessions. Copied to `Session.bot_account_name` on ignite. |
 | `resource_overrides` | Nullable. JSON-encoded pod resource requests/limits override for sessions spawned by this agent. Copied to `Session.resource_overrides` on ignite. |
 | `environment_variables` | Nullable. JSON-encoded extra environment variables injected into session pods. Copied to `Session.environment_variables` on ignite. |
+| `entrypoint` | Nullable. The CLI binary to invoke inside the sandbox (e.g. `claude`). Consumed by the control plane reconciler when building the sandbox exec command. Not propagated to Session. |
+| `providers` | Nullable. JSONB array of provider names bound to this agent (e.g. `["vertex", "github"]`). References provider declarations in the same namespace. The control plane resolves provider secrets and configures credential sidecars or gateway providers at session start. Not propagated to Session. |
+| `payloads` | Nullable. JSONB array of file/repo payloads staged into the sandbox before the agent runs. Each entry specifies a `sandbox_path` and either inline `content` or a `repo_url` + `ref` to clone. Not propagated to Session. |
+| `environment` | Nullable. JSONB object of structured key-value environment variables injected into the sandbox container. Distinct from `environment_variables` (legacy string field). Not propagated to Session. |
+| `sandbox_template` | Nullable. JSONB object specifying sandbox container resource requests (e.g. `{"resources": {"cpu": "2", "memory": "4Gi"}}`). Consumed by the control plane when creating the sandbox via the gateway. Not propagated to Session. |
+| `sandbox_policy` | Nullable. Name of a policy declaration (ConfigMap with `ambient.ai/kind: policy` label) that defines network, filesystem, process, and landlock rules for the sandbox. Not propagated to Session. |
 | `current_session_id` | Denormalized FK to the active Session. Null when no session is running. Used by Project Home for fast reads. |
 
 **Agent is mutable.** PATCH updates in place. There is no versioning. If you need to track prompt history, use `labels`/`annotations` or an external audit log.
 
 **Field propagation on ignite:** When `POST /agents/{id}/start` creates a new Session, the `ignite_handler` copies `repo_url`, `workflow_id`, `llm_model`, `llm_temperature`, `llm_max_tokens`, `bot_account_name`, `resource_overrides`, and `environment_variables` from the Agent to the new Session. Fields set directly in the start request body override these defaults.
+
+**Sandbox fields (not propagated):** The six sandbox-related fields (`entrypoint`, `providers`, `payloads`, `environment`, `sandbox_template`, `sandbox_policy`) are consumed directly by the control plane reconciler when building the OpenShell gateway sandbox — they are not copied to the Session model. The control plane reads them from the Agent record at reconcile time. These fields can be declared via `acpctl apply -k` with native ACP kinds for declarative fleet management. The `sandbox_policy` field references a `Policy` resource by name within the same project — policies are applied separately via `acpctl apply` as `kind: Policy` documents.
 
 ```
 POST /projects/{id}/agents          → create agent in this project
@@ -495,24 +547,404 @@ Session.prompt  → "Implement the session messages handler. Repo: github.com/..
 
 All four are assembled into the start context in that order. Pokes roll downhill.
 
+### Sandbox Snapshot Fields
+
+| Field | Type | Written by | Purpose |
+|-------|------|-----------|---------|
+| `sandbox_logs_snapshot` | TEXT (nullable) | CP `PodStatusSyncer` + pre-delete snapshot | JSON array of `SandboxLogEntry` — the last 500 log lines from the OpenShell gateway |
+| `sandbox_policy_snapshot` | TEXT (nullable) | CP `PodStatusSyncer` + pre-delete snapshot | JSON `SandboxPolicyResponse` envelope — the full effective sandbox policy |
+
+Both fields are **read-only from the API perspective** — they are set exclusively by the control plane via `UpdateStatus` patches. The CP writes them on every 15s sync cycle and as a final snapshot before sandbox deletion. The UI reads them to display historical sandbox data for terminal sessions (Stopped, Completed, Failed). See `openshell-sandbox-observability.spec.md` § Sandbox Log and Policy Persistence for full requirements.
+
 ---
 
-## SessionMessage — AG-UI Event Stream
+## SessionMessage — High-Level Conversation (Messages API)
 
-SessionMessages are the real LLM conversation. They are appended by the runner via gRPC `PushSessionMessage` and streamed to clients via SSE.
+SessionMessages provide a **concise, human-readable** view of the conversation. This is the Messages API — prompts, replies, and high-level tool invocations summarized for human consumption.
 
-`seq` is monotonically increasing within a session. `event_type` follows the AG-UI protocol: `user`, `assistant`, `tool_use`, `tool_result`, `system`, `error`.
+`seq` is monotonically increasing within a session, using an **independent counter** from `SessionEvent.seq` (the two tables serve different APIs at different granularities and must not share a sequence). `event_type` uses **simplified legacy types** (distinct from AG-UI event types used in SessionEvent):
 
-SessionMessages are never deleted or edited. They are the canonical record of what happened in a session.
+**Messages API Event Types** (6 types):
+- `user` — User prompt or message
+- `assistant` — Agent reply or response
+- `tool_use` — Tool invocation summary
+- `tool_result` — Tool execution result summary
+- `system` — System notification or status
+- `error` — Error condition
 
-### Two Event Streams
+These are **not** AG-UI event types. For the complete AG-UI protocol with 33 granular event types, see SessionEvent below.
+
+SessionMessages are never deleted or edited. They represent the conversation summary — what the user asked, what the agent replied, which tools were used.
+
+**Examples:**
+- User message: `"Please review the PR and suggest improvements"`
+- Assistant message: `"I'll review the pull request. Let me read the files."`
+- Tool use: `Read(file_path="src/main.go")`
+- Tool result: Summary of file contents
+
+**REST API:**
+```
+GET    /api/ambient/v1/sessions/{id}/messages     # List conversation messages (paginated)
+POST   /api/ambient/v1/sessions/{id}/messages     # Push user message
+```
+
+**gRPC:**
+```
+rpc PushSessionMessage(PushSessionMessageRequest) returns (SessionMessage)
+rpc WatchSessionMessages(WatchSessionMessagesRequest) returns (stream SessionMessage)
+```
+
+---
+
+## SessionEvent — Comprehensive Event Stream (Events API)
+
+SessionEvents provide the **complete, granular** AG-UI event stream emitted during session execution. This is the Events API — every tool call, every thinking token, every content delta, every state transition.
+
+`seq` is monotonically increasing within a session (gaps allowed after compression), using an **independent counter** from `SessionMessage.seq`. The two tables serve different APIs at different granularities and compress at different rates — sharing a counter would create false ordering dependencies. `event_type` follows the full AG-UI protocol with 33 event types.
+
+SessionEvents are never deleted or edited. They are the canonical **audit trail** of everything that happened during a session — ideal for debugging, replays, analytics, and compliance.
+
+**Examples:**
+- `RUN_STARTED` — session execution began
+- `TEXT_MESSAGE_START` (role=assistant, message_id=msg_abc) — assistant started a message
+- `TEXT_MESSAGE_CONTENT` (content="Let me check") — assistant emitted text (compressed from many deltas)
+- `TOOL_CALL_START` (tool_name=Read, tool_call_id=tc_123) — tool invocation started
+- `TOOL_CALL_ARGS` (args='{"file_path":"/app/main.go"}') — tool arguments (compressed from fragments)
+- `TOOL_CALL_END` — tool invocation complete
+- `TOOL_CALL_RESULT` (result="package main...") — tool execution result
+- `THINKING_TEXT_MESSAGE_CONTENT` — extended thinking content (Claude 4+)
+- `REASONING_MESSAGE_CONTENT` — reasoning trace (Gemini Deep Research)
+- `RUN_FINISHED` — session execution completed
+
+### Messages API vs Events API
+
+| Aspect | Messages API (`session_messages`) | Events API (`session_events`) |
+|--------|-----------------------------------|-------------------------------|
+| **Purpose** | Human-readable conversation summary | Complete AG-UI event audit trail |
+| **Granularity** | Message-level (prompts, replies, tool summaries) | Token-level (every delta, every event) |
+| **Audience** | End users, conversation history UIs | Developers, debugging, analytics, compliance |
+| **Event Types** | 6 simplified types (user, assistant, tool_use, etc.) | 33 AG-UI event types (TEXT_MESSAGE_START, TOOL_CALL_ARGS, etc.) |
+| **Volume** | ~10-100 messages per session | ~1,000-20,000 events per session (compressed) |
+| **Compression** | No compression needed | Context-aware compression (5:1 to 20:1) |
+| **Streaming** | gRPC watch + replay from DB | SSE proxy to runner pod (ephemeral) + persisted compressed events |
+
+### Three Event Streams
 
 | Endpoint | Source | Persistence | Purpose |
 |---|---|---|---|
-| `GET /sessions/{id}/messages` | API server gRPC fan-out | Persisted in DB (replay from `seq=0`) | Durable stream; supports replay and history |
-| `GET /sessions/{id}/events` | Runner pod SSE (`GET /events/{thread_id}`) | Ephemeral; runner-local in-memory queue | Live AG-UI turn events during an active run |
+| `GET /sessions/{id}/messages` | gRPC `PushSessionMessage` | `session_messages` table | **Messages API** — human-readable conversation |
+| `GET /sessions/{id}/events` | Runner pod SSE (`/events/{thread_id}`) | Ephemeral in-memory queue | **Live Events** — real-time AG-UI events during active run |
+| `GET /sessions/{id}/events/history` | gRPC `PushSessionEvent` | `session_events` table | **Events API** — complete persisted event audit trail |
 
-The runner's `/events/{thread_id}` endpoint registers an asyncio queue into `bridge._active_streams[thread_id]` and streams every AG-UI event as SSE until `RUN_FINISHED` / `RUN_ERROR` or client disconnect. The API server's `/sessions/{id}/events` proxies this from the runner pod for the active session, routing via pod IP or session service. Keepalive pings fire every 30s to hold the connection open.
+The runner's `/events/{thread_id}` endpoint streams live AG-UI events via SSE during an active run. The API server proxies this from the runner pod (`GET /sessions/{id}/events`). These are **ephemeral** — disappear when the session ends.
+
+Simultaneously, the runner's gRPC client pushes **compressed events** to `session_events` table for durable storage. These power the **Events API** (`GET /sessions/{id}/events/history`) for post-session replay, debugging, and analysis.
+
+### Events API — Storage and Compression
+
+The Events API stores the complete AG-UI event stream in the `session_events` table. Events are the atomic units of session execution: text deltas, tool calls, thinking blocks, state updates, and control flow markers.
+
+#### AG-UI Event Types
+
+Events follow the [AG-UI protocol](https://github.com/anthropics/ag-ui), a streaming protocol for agentic UIs. The protocol defines 33 event types organized into semantic categories:
+
+| Category | Event Types | Purpose |
+|----------|-------------|--------|
+| **Run Lifecycle** | `RUN_STARTED`, `RUN_FINISHED`, `RUN_ERROR` | Session execution boundaries |
+| **Step Lifecycle** | `STEP_STARTED`, `STEP_FINISHED` | Multi-step execution boundaries (LangGraph pattern) |
+| **Text Messages** | `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END`, `TEXT_MESSAGE_CHUNK` | User or assistant text content |
+| **Tool Calls** | `TOOL_CALL_START`, `TOOL_CALL_ARGS`, `TOOL_CALL_END`, `TOOL_CALL_CHUNK`, `TOOL_CALL_RESULT` | Tool invocations and results |
+| **Thinking** | `THINKING_START`, `THINKING_END`, `THINKING_TEXT_MESSAGE_START`, `THINKING_TEXT_MESSAGE_CONTENT`, `THINKING_TEXT_MESSAGE_END` | Extended thinking blocks (Claude 4+ models) |
+| **Reasoning** | `REASONING_START`, `REASONING_END`, `REASONING_MESSAGE_START`, `REASONING_MESSAGE_CONTENT`, `REASONING_MESSAGE_END`, `REASONING_MESSAGE_CHUNK`, `REASONING_ENCRYPTED_VALUE` | Reasoning trace (Gemini 2.5+ Deep Research) |
+| **State** | `STATE_SNAPSHOT`, `STATE_DELTA`, `MESSAGES_SNAPSHOT`, `ACTIVITY_SNAPSHOT`, `ACTIVITY_DELTA` | Bidirectional state sync (LangGraph pattern) |
+| **Custom** | `RAW`, `CUSTOM` | Framework-specific or debug events |
+
+Each event carries:
+- `type` — event type from the enum above
+- `run_id` — AG-UI run identifier (scoped to a single execution turn)
+- `thread_id` — session identifier (maps to `session_id` in DB)
+- Payload fields specific to the event type (e.g., `message_id`, `tool_id`, `content`, `args`)
+
+**Note on Event Naming:** Thinking and Reasoning events are prefixed variants of base text message types. For example, `THINKING_TEXT_MESSAGE_CONTENT` is a distinct event type from `TEXT_MESSAGE_CONTENT`, emitted during extended thinking blocks. The prefixes indicate the semantic context (regular message vs thinking vs reasoning).
+
+**Start/End Pairing:** Events with `_START` / `_END` suffixes define stream boundaries. Content events (`_CONTENT`, `_ARGS`, `_CHUNK`) appear between their corresponding start/end markers.
+
+**Example sequence:**
+```
+RUN_STARTED
+├── TEXT_MESSAGE_START (role=assistant, message_id=msg_abc)
+│   ├── TEXT_MESSAGE_CONTENT (content="Let me")
+│   ├── TEXT_MESSAGE_CONTENT (content=" check")
+│   └── TEXT_MESSAGE_END
+├── TOOL_CALL_START (tool_name=Read, tool_call_id=tc_123)
+│   ├── TOOL_CALL_ARGS (args='{"file')
+│   ├── TOOL_CALL_ARGS (args='_path":')
+│   ├── TOOL_CALL_ARGS (args='"/app/file.txt"}')
+│   └── TOOL_CALL_END
+├── TOOL_CALL_RESULT (tool_call_id=tc_123, result="file contents...")
+└── RUN_FINISHED
+```
+
+#### Event Compression
+
+AG-UI events stream at **token-level granularity** — a single word or JSON fragment can emit one event. Without compression, sessions generate thousands of tiny rows (e.g., `TEXT_MESSAGE_CONTENT` with `"Let"`, then `" me"`, then `" check"`). This creates storage bloat and query overhead.
+
+**Compression Strategy — Context-Aware Accumulation:**
+
+Events are compressed **before persistence** by the runner's gRPC client. Compression groups consecutive events sharing the same **context** (message_id, tool_call_id, role). When the context changes or a boundary event arrives, the accumulated content is flushed as a single compressed event.
+
+**Compression Rules:**
+
+| Event Type | Compression Behavior |
+|------------|---------------------|
+| `TEXT_MESSAGE_START` | **Boundary** — flushes prior accumulated content; starts new message context |
+| `TEXT_MESSAGE_CONTENT` | **Accumulate** — append `content` to buffer within current message context |
+| `TEXT_MESSAGE_END` | **Boundary** — flushes accumulated content; ends message context |
+| `TOOL_CALL_START` | **Boundary** — starts new tool call context |
+| `TOOL_CALL_ARGS` | **Accumulate** — append `args` fragment to buffer within current tool context |
+| `TOOL_CALL_END` | **Boundary** — flushes accumulated args; ends tool context |
+| `TEXT_MESSAGE_CHUNK` | **Pass-through** — complete message in one event (no START/END wrapper); stored as-is |
+| `TOOL_CALL_CHUNK` | **Pass-through** — complete tool call in one event (no START/END wrapper); stored as-is |
+| `THINKING_TEXT_MESSAGE_CONTENT` | **Accumulate** — within thinking message context |
+| `REASONING_MESSAGE_CONTENT` | **Accumulate** — within reasoning message context |
+| All `_START`, `_END`, `_RESULT`, run/step lifecycle | **Never compressed** — stored as individual events |
+
+**Accumulation Assumption:** `_CONTENT` and `_ARGS` fragments are raw character slices of a single value, not semantically complete units. The compressor concatenates them verbatim. For `TOOL_CALL_ARGS`, the accumulated result MUST be valid JSON — the compressor SHOULD validate the accumulated string before flushing and reject malformed payloads rather than persisting silently invalid data.
+
+**Context Definition:**
+- Text messages: `(message_id, role)`
+- Tool calls: `(tool_call_id)`
+- Thinking: `(message_id, thinking_id)`
+- Reasoning: `(message_id, reasoning_id)`
+
+**Flush Triggers:**
+1. Context change (new message_id / tool_call_id)
+2. Boundary event (`_START`, `_END`)
+3. Event type transition (TEXT → TOOL, TOOL → TEXT)
+4. Buffer size threshold (optional; e.g., 10 KB per compressed event)
+5. Time threshold (optional; e.g., 5 seconds idle)
+
+**Metadata Preservation:**
+- `created_at` — timestamp of the **first** event in the compressed group
+- `completed_at` — timestamp of the **last** event (new field on `SessionMessage`)
+- `event_count` — number of raw events compressed into this row (new field)
+
+**Example — Before Compression:**
+```json
+{"seq":10, "event_type":"TEXT_MESSAGE_START", "payload":"{\"message_id\":\"msg_1\",\"role\":\"assistant\"}"}
+{"seq":11, "event_type":"TEXT_MESSAGE_CONTENT", "payload":"{\"content\":\"Let\"}"}
+{"seq":12, "event_type":"TEXT_MESSAGE_CONTENT", "payload":"{\"content\":\" me\"}"}
+{"seq":13, "event_type":"TEXT_MESSAGE_CONTENT", "payload":"{\"content\":\" check\"}"}
+{"seq":14, "event_type":"TEXT_MESSAGE_END", "payload":"{}"}
+```
+
+**After Compression (with gaps):**
+```json
+{"seq":10, "event_type":"TEXT_MESSAGE_START", "payload":"{\"message_id\":\"msg_1\",\"role\":\"assistant\"}"}
+{"seq":11, "event_type":"TEXT_MESSAGE_CONTENT", "payload":"{\"content\":\"Let me check\"}", "event_count":3, "completed_at":"2026-05-21T..."}
+{"seq":14, "event_type":"TEXT_MESSAGE_END", "payload":"{}"}
+```
+
+**Note:** Sequence numbers preserve gaps after compression (11 → 14) to avoid renumbering all subsequent events. This makes compression idempotent and prevents race conditions with concurrent event streams.
+
+**Space Savings:** Typical compression ratios range from **5:1** (simple text) to **20:1** (complex tool arguments with many JSON fragments).
+
+**Backward Compatibility:** Existing queries and APIs continue to work. Compression is transparent to readers — gaps in `seq` indicate compressed ranges.
+
+#### Storage Model
+
+Compressed events are stored in the `session_events` table:
+
+```sql
+CREATE TABLE session_events (
+    id           VARCHAR(36) PRIMARY KEY,
+    session_id   VARCHAR(36) NOT NULL REFERENCES sessions(id),
+    seq          BIGINT NOT NULL,
+    event_type   VARCHAR(255) NOT NULL,
+    payload      TEXT NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL,
+    completed_at TIMESTAMPTZ,          -- timestamp of last event in compressed group (NULL for uncompressed)
+    event_count  INT DEFAULT 1,        -- number of raw events compressed (1 = uncompressed, >1 = compressed)
+    UNIQUE(session_id, seq)
+);
+
+CREATE INDEX idx_session_events_session_id ON session_events(session_id);
+CREATE INDEX idx_session_events_event_type ON session_events(event_type);
+CREATE INDEX idx_session_events_created_at ON session_events(created_at);
+CREATE INDEX idx_session_events_completed_at ON session_events(completed_at);
+```
+
+The `completed_at` index supports time-range queries that filter on the end-timestamp of compressed groups (e.g., "all events active during window T1–T2" requires `WHERE created_at <= T2 AND completed_at >= T1`).
+
+#### Migration from Current State
+
+**Database Schema Changes** (API server):
+
+1. Create `session_events` table with compression fields:
+   ```sql
+   -- New table creation (no existing data to migrate)
+   CREATE TABLE session_events (
+       id           VARCHAR(36) PRIMARY KEY,
+       session_id   VARCHAR(36) NOT NULL REFERENCES sessions(id),
+       seq          BIGINT NOT NULL,
+       event_type   VARCHAR(255) NOT NULL,
+       payload      TEXT NOT NULL,
+       created_at   TIMESTAMPTZ NOT NULL,
+       completed_at TIMESTAMPTZ,
+       event_count  INT DEFAULT 1,
+       UNIQUE(session_id, seq)
+   );
+
+   CREATE INDEX idx_session_events_session_id ON session_events(session_id);
+   CREATE INDEX idx_session_events_event_type ON session_events(event_type);
+   CREATE INDEX idx_session_events_created_at ON session_events(created_at);
+   CREATE INDEX idx_session_events_completed_at ON session_events(completed_at);
+   ```
+
+2. No schema changes required for `session_messages` table (Messages API unchanged).
+
+**Backward Compatibility:**
+- Compression is opt-in at the runner gRPC client level
+- Legacy runners can continue pushing uncompressed events indefinitely (`event_count=1`, `completed_at=NULL`)
+- API server accepts both compressed and uncompressed events transparently
+- Existing `session_messages` table and Messages API remain unchanged
+
+**Field Semantics:**
+
+| Field | Description |
+|-------|-------------|
+| `seq` | Monotonic sequence within session; gaps allowed after compression |
+| `event_type` | AG-UI event type enum (33 types: RUN_STARTED, TEXT_MESSAGE_START, TOOL_CALL_ARGS, etc.) |
+| `payload` | JSON-encoded event payload; structure varies by event type |
+| `created_at` | First event timestamp (for compressed events) or single event timestamp |
+| `completed_at` | Last event timestamp for compressed events; `NULL` for uncompressed |
+| `event_count` | Number of raw events compressed; `1` = uncompressed, `>1` = compressed |
+
+#### API Endpoints
+
+**Messages API** (human-readable conversation):
+```
+GET    /api/ambient/v1/sessions/{id}/messages                # List conversation messages (paginated)
+POST   /api/ambient/v1/sessions/{id}/messages                # Push user message (HTTP; validated as event_type=user)
+```
+
+**Events API** (comprehensive AG-UI event stream):
+```
+GET    /api/ambient/v1/sessions/{id}/events                  # SSE proxy to runner pod (live, ephemeral, active sessions only)
+GET    /api/ambient/v1/sessions/{id}/events/history          # List persisted compressed events (paginated)
+```
+
+**Query Parameters (GET /events/history):**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `after_seq` | int64 | Return events with `seq > after_seq` (for replay/catch-up) |
+| `event_type` | string | Filter by AG-UI event type (e.g., `TOOL_CALL_START`, `TEXT_MESSAGE_CONTENT`) |
+| `limit` | int | Max events to return (default 100, max 1000) |
+| `start_time` | ISO8601 | Filter events created after this timestamp |
+| `end_time` | ISO8601 | Filter events created before this timestamp |
+
+**Response (GET /events/history):**
+```json
+{
+  "items": [
+    {
+      "id": "01HXY...",
+      "session_id": "2abc...",
+      "seq": 42,
+      "event_type": "TEXT_MESSAGE_CONTENT",
+      "payload": "{\"content\":\"Let me check the file\"}",
+      "created_at": "2026-05-21T10:00:00Z",
+      "completed_at": "2026-05-21T10:00:02Z",
+      "event_count": 8
+    },
+    {
+      "id": "01HXZ...",
+      "session_id": "2abc...",
+      "seq": 43,
+      "event_type": "TOOL_CALL_START",
+      "payload": "{\"tool_name\":\"Read\",\"tool_call_id\":\"tc_123\"}",
+      "created_at": "2026-05-21T10:00:02Z",
+      "completed_at": null,
+      "event_count": 1
+    }
+  ],
+  "page": 1,
+  "size": 100,
+  "total": 15234
+}
+```
+
+#### gRPC Protocol
+
+**Messages API** (concise conversation):
+```protobuf
+// Push a human-readable message to the conversation
+rpc PushSessionMessage(PushSessionMessageRequest) returns (SessionMessage)
+
+message PushSessionMessageRequest {
+  string session_id = 1;
+  string event_type = 2;  // Simplified: user | assistant | tool_use | tool_result | system | error
+  string payload = 3;     // Message body or summary
+}
+
+message SessionMessage {
+  string id = 1;
+  string session_id = 2;
+  int64 seq = 3;
+  string event_type = 4;
+  string payload = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+```
+
+**Events API** (comprehensive AG-UI stream):
+```protobuf
+// Push a compressed AG-UI event to the audit trail
+rpc PushSessionEvent(PushSessionEventRequest) returns (SessionEvent)
+
+message PushSessionEventRequest {
+  string session_id = 1;
+  string event_type = 2;                               // AG-UI event type (33 types)
+  string payload = 3;                                  // JSON-encoded event payload
+  optional google.protobuf.Timestamp completed_at = 4; // Last event timestamp (for compressed events)
+  optional int32 event_count = 5;                      // Number of events compressed (default 1)
+}
+
+message SessionEvent {
+  string id = 1;
+  string session_id = 2;
+  int64 seq = 3;
+  string event_type = 4;
+  string payload = 5;
+  google.protobuf.Timestamp created_at = 6;
+  optional google.protobuf.Timestamp completed_at = 7;
+  int32 event_count = 8;
+}
+```
+
+**Compression in gRPC Client:**
+
+The runner's gRPC client (`ambient-runner` Python package) implements compression **before** calling `PushSessionEvent`. The compressor maintains:
+- **Context stack** — tracks active message_id, tool_call_id, thinking_id, reasoning_id
+- **Accumulation buffer** — collects content/args fragments for current context
+- **Flush logic** — detects boundary events and context transitions
+
+When a flush occurs, the compressor:
+1. Concatenates accumulated fragments into a single payload
+2. Attaches `event_count` and `completed_at` metadata
+3. Calls `PushSessionEvent` once with the compressed event
+4. Resets the accumulation buffer
+
+**Dual Push Pattern:**
+
+Runners emit **both** messages and events:
+- `PushSessionMessage` — high-level conversation turns (user prompts, assistant replies, tool summaries)
+- `PushSessionEvent` — every AG-UI event (text deltas, tool args, thinking tokens, all compressed)
+
+This provides both human-readable conversation history and complete audit trail.
+
+**Implementation Note:** Compression is **opt-in per runner framework**. Legacy runners can push uncompressed events (stored with `event_count=1`). The API server and database accept both formats transparently.
 
 ---
 
@@ -523,15 +955,16 @@ A `ScheduledSession` is a project-scoped definition that ignites an Agent on a r
 | Field | Notes |
 |-------|-------|
 | `name` | Human-readable, unique within the project. |
-| `agent_id` | Which Agent to ignite. Must exist in the same project. |
-| `schedule` | Standard cron expression (e.g. `"0 9 * * 1-5"` = 9 AM on weekdays). |
+| `agent_id` | Which Agent to ignite. Nullable — if NULL, creates a project-scoped session. |
+| `schedule` | Standard cron expression (e.g. `"0 9 * * 1-5"` = 9 AM on weekdays). Validated at write time. |
 | `timezone` | IANA timezone string (e.g. `"America/New_York"`). Defaults to `UTC`. |
 | `enabled` | `false` suspends evaluation without deleting the schedule. |
+| `overlap_policy` | `"skip"` (default) or `"allow"`. Controls whether a new session is created when the previous run from this schedule is still active. |
 | `session_prompt` | Injected as `Session.prompt` on each trigger — the recurring task. |
 | `last_run_at` | Wall-clock time of the last trigger. Null if never triggered. |
-| `next_run_at` | Computed from `schedule` + `timezone`. Updated after each trigger. |
+| `next_run_at` | Computed from `schedule` + `timezone`. Updated after each trigger. NULL when `enabled = false`. |
 
-**Trigger semantics:** Each trigger calls `POST /projects/{id}/agents/{agent_id}/start`, which is idempotent. If the Agent already has an active Session at trigger time, the trigger is skipped and recorded as a missed run in the runs list.
+**Trigger semantics:** Each trigger creates a Session directly via the internal session service (same code path as `ignite_handler.go`). The `overlap_policy` field controls behavior when a previous session from the same schedule is still active: `skip` (default) advances `next_run_at` without creating a new session; `allow` creates a new session regardless. See [Scheduled Session Execution spec](scheduled-session-execution.spec.md) for full execution semantics.
 
 **Manual trigger:** `POST .../trigger` ignites the Agent immediately outside the cron schedule, using the same `session_prompt`. Useful for testing or one-off runs.
 
@@ -685,8 +1118,10 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | Kind | Fields applied |
 |---|---|
 | `Project` | `name`, `description`, `prompt`, `labels`, `annotations` |
-| `Agent` | `name`, `prompt`, `labels`, `annotations`, `inbox` (seed messages) |
+| `Agent` | `name`, `prompt`, `providers`, `payloads`, `environment`, `entrypoint`, `sandbox_policy`, `sandbox_template`, `labels`, `annotations`, `inbox` (seed messages) |
 | `Credential` | `name`, `description`, `provider`, `token` (env var reference), `url`, `email`, `labels`, `annotations` — global resource; use `credential bind` to grant project access |
+| `Gateway` | `name`, `project`, `image`, `serverDnsNames`, `config`, `labels`, `annotations` — project-scoped; declares an OpenShell gateway deployment in the project namespace |
+| `Policy` | `name`, `spec`, `labels`, `annotations` — project-scoped; declares a sandbox policy containing upstream OpenShell `SandboxPolicy` JSON. Referenced by agents via `sandbox_policy` field. See [agent-sandbox-config.spec.md](./agent-sandbox-config.spec.md) § Policy Declarations |
 
 `Agent` resources in `.ambient/teams/` files also carry an `inbox` list of seed messages. On apply, any message in the list is posted to the agent's inbox if an identical message (same `from_name` + `body`) does not already exist there.
 
@@ -702,7 +1137,8 @@ Each file may contain one or more YAML documents separated by `---`. Documents w
 
 Apply behaviour per resource:
 - **Project**: if a project with `name` already exists, `PATCH` it (description, prompt, labels, annotations). If it does not exist, `POST` to create it.
-- **Agent**: resolved within the current project context. If an agent with `name` already exists in the project, `PATCH` it (prompt, labels, annotations). If it does not exist, `POST` to create it. After upsert, post any inbox seed messages not already present.
+- **Agent**: resolved within the current project context. If an agent with `name` already exists in the project, `PATCH` it (prompt, providers, payloads, environment, entrypoint, sandbox_policy, sandbox_template, labels, annotations). If it does not exist, `POST` to create it. Payloads are stored as JSONB on the agent record and uploaded to the sandbox via SSH-over-gRPC before the entrypoint launches. After upsert, post any inbox seed messages not already present.
+- **Policy**: resolved within the current project context. If a policy with `name` already exists in the project, `PATCH` it (spec, labels, annotations). If it does not exist, `POST` to create it. The `spec` field contains the upstream OpenShell `SandboxPolicy` JSON — see [agent-sandbox-config.spec.md](./agent-sandbox-config.spec.md) § Policy Declarations.
 
 Output (default — one line per resource):
 
@@ -865,7 +1301,6 @@ GET    /api/ambient/v1/projects/{id}/agents/{agent_id}/role_bindings    RBAC bin
     "id": "2abc...",
     "agent_id": "1def...",
     "phase": "pending",
-    "created_by_user_id": "...",
     "created_at": "2026-03-20T00:00:00Z"
   },
   "start_context": "# Agent: API\n\nYou are API...\n\n## Inbox\n...\n\n## Task\n..."
@@ -1056,7 +1491,7 @@ DELETE /api/ambient/v1/credentials/{cred_id}                              soft d
 GET    /api/ambient/v1/credentials/{cred_id}/token                        fetch raw token — restricted to credential:token-reader
 ```
 
-> **Note:** `credential bind` (via `POST /role_bindings` with `scope=credential`, `credential_id`, and `project_id`) is planned but not yet implemented.
+> **Note:** `credential bind` uses `POST /role_bindings` with `scope=credential`, `credential_id`, and `project_id`.
 
 `token` is accepted on `POST` and `PATCH` but **never returned** by standard read endpoints.
 `GET .../token` is gated by `credential:token-reader`. See
@@ -1428,7 +1863,7 @@ This structure means you can define and compose bespoke agent suites — entire 
 |---|---|
 | Agent is project-scoped, not global | Simplicity. An agent's identity and prompt are contextual to the project it serves. No indirection via a global registry. |
 | Agent.prompt is mutable | Prompt editing is a routine operational task. RBAC controls who can change it. No versioning overhead. |
-| Agent ownership via RBAC, not a hardcoded FK | Ownership is expressed as a RoleBinding (`scope=agent`, `agent_id=<id>`, `user_id=<owner>`). Enables multi-owner and delegated ownership consistently across all Kinds. |
+| Ownership via RBAC, not hardcoded FKs | Ownership of all Kinds is expressed through RoleBindings, not `owner_user_id` FKs. For Agents: `RoleBinding(scope=agent, agent_id=<id>, user_id=<owner>)`. For Sessions: `RoleBinding(scope=session, session_id=<id>, user_id=<assignee>)`. Enables multi-owner, delegated ownership, and transfer — consistently across all Kinds. Audit fields (who created/modified a resource) belong at the REST middleware layer, not on individual Kind schemas. |
 | One active Session per Agent | Avoids concurrent conflicting runs; start is idempotent |
 | Inbox on Agent, not Session | Messages persist across re-ignitions; addressed to the agent, not the run |
 | Inbox drained at start | Unread messages become part of the start context; session picks up where things left off |
@@ -1521,15 +1956,18 @@ design rationale (storage, rotation, provider serialization, migration).
 
 ## Implementation Coverage Matrix
 
-_Last updated: 2026-04-28. Use this as the authoritative index — click into component source to verify._
+_Last updated: 2026-07-05. Use this as the authoritative index — click into component source to verify._
 
 | Area | API Server | Go SDK | CLI (`acpctl`) | Notes |
 |---|---|---|---|---|
 | **Sessions — CRUD** | ✅ | ✅ `SessionAPI.{Get,List,Create,Update,Delete}` | ✅ `get/create/delete session` | |
 | **Sessions — start/stop** | ✅ `/start` `/stop` | ✅ `SessionAPI.{Start,Stop}` | ✅ `start`/`stop` commands | |
-| **Sessions — messages (list/push/watch)** | ✅ `/messages` | ✅ `PushMessage`, `ListMessages`, `WatchSessionMessages` (gRPC) | ✅ `session messages`, `session send` | gRPC watch via `session_watch.go` |
+| **Messages API — list/push/watch** | ✅ `/messages` | ✅ `PushMessage`, `ListMessages`, `WatchSessionMessages` (gRPC) | ✅ `session messages`, `session send` | Human-readable conversation in `session_messages` table |
 | **Session messages (top-level)** | ✅ `GET /session_messages` | ✅ `SessionMessages().List()` | n/a | SDK/CP-internal; used by CP to resolve max seq on restart |
-| **Sessions — live events (SSE proxy)** | ✅ `/events` → runner pod | ✅ `SessionAPI.StreamEvents` → `io.ReadCloser` | ✅ `session events` | Runner must be Running; 502 if unreachable |
+| **Events API — live SSE stream** | ✅ `/events` → runner pod SSE | ✅ `SessionAPI.StreamEvents` → `io.ReadCloser` | ✅ `session events` | Ephemeral; runner must be Running; 502 if unreachable |
+| **Events API — persisted history** | ✅ `plugins/sessionEvents/` | ✅ `ListSessionEvents`, `PushSessionEvent` (gRPC) | ✅ `session events --history` | `session_events` table with compression schema |
+| **Events API — compression** | ✅ schema supports `completed_at`, `event_count` | ✅ `completed_at`, `event_count` fields in `SessionEvent` | ✅ fields in SDK | Runner-side compression not yet active (all events stored uncompressed) |
+| **Events API — 33 AG-UI event types** | ✅ runners emit AG-UI types | ✅ stored in `session_events.event_type` | ✅ query by event type | TEXT_MESSAGE_START, TOOL_CALL_ARGS, THINKING_*, REASONING_*, etc. |
 | **Sessions — labels/annotations** | ✅ PATCH accepts `labels`/`annotations` | ✅ fields on `Session` type; `SessionAPI.Update(patch map[string]any)` | ⚠️ no dedicated subcommand; use `acpctl get session -o json` + manual PATCH | |
 | **Sessions — workspace files** | ✅ sessions plugin; stubs empty list when no runner; 503 per-file-op | 🔲 | 🔲 `session workspace list/get/put/delete` | Requires running session for file ops |
 | **Sessions — pre-upload files** | ✅ sessions plugin; stubs empty list when no runner; 503 per-file-op | 🔲 | 🔲 `session files list/upload/delete` | S3-staged; available before session starts |
@@ -1548,7 +1986,7 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 | **RBAC — roles** | ✅ full CRUD | ✅ `RoleAPI` | ✅ `create role`, `get roles`, `get roles <id>`, `delete role` | |
 | **RBAC — role bindings** | ✅ full CRUD | ✅ `RoleBindingAPI` | ✅ `create role-binding`, `get role-bindings`, `get role-bindings <id>`, `delete role-binding` | |
 | **RBAC — scoped role_bindings queries** | ✅ agents only; 🔲 users/projects/sessions/credentials | n/a | n/a | `GET /projects/{id}/agents/{agent_id}/role_bindings` implemented; other 4 scoped endpoints not yet |
-| **Credentials — CRUD** | ✅ `plugins/credentials/` (global at `/credentials`) | ✅ `credential_api.go` + `credential_extensions.go` | ✅ `credential list/get/create/update/delete/token` | `credential bind` not yet implemented. |
+| **Credentials — CRUD** | ✅ `plugins/credentials/` (global at `/credentials`) | ✅ `credential_api.go` + `credential_extensions.go` | ✅ `credential list/get/create/update/delete/token/bind` | |
 | **Credentials — token fetch** | ✅ `GET /credentials/{cred_id}/token` | ✅ `GetToken()` in `credential_extensions.go` | ✅ `credential token <id>` | Gated by `credential:token-reader`; granted to runner SA by operator |
 | **ScheduledSessions — CRUD** | ✅ scheduledSessions plugin | ✅ `ScheduledSessionAPI.{List,Get,Create,Update,Delete,GetByName}` | ✅ `scheduled-session list/get/create/update/delete` | |
 | **ScheduledSessions — lifecycle** | ✅ suspend/resume/trigger/runs handlers | ✅ `ScheduledSessionAPI.{Suspend,Resume,Trigger,Runs}` | ✅ `scheduled-session suspend/resume/trigger/runs` | |
@@ -1558,10 +1996,12 @@ _Last updated: 2026-04-28. Use this as the authoritative index — click into co
 | **Generic proxy — cluster/platform** | ✅ proxy plugin | n/a | 🔲 `acpctl version`, `acpctl cluster-info` | cluster-info, version, health, LDAP, OOTB workflows |
 | **Declarative apply** | n/a | uses SDK | ✅ `apply -f`, `apply -k` | Upsert semantics; supports inbox seeding |
 | **Declarative apply — Credential kind** | n/a | uses SDK | ✅ `apply -f credential.yaml` | Global resource; token sourced from env var in YAML |
+| **Declarative apply — Policy kind** | ✅ `plugins/policies/` | ✅ `Policys()` (SDK) | 🔲 `apply -f policy.yaml` | Project-scoped; spec contains OpenShell SandboxPolicy JSON |
+| **Declarative apply — Agent sandbox fields** | ✅ PATCH accepts all fields | ✅ `AgentBuilder.SandboxPolicy()`, `.SandboxTemplate()` | 🔲 `acpctl apply` resource struct missing `sandbox_policy`, `sandbox_template`, `entrypoint` | Fields silently dropped during YAML parsing; only `prompt`, `providers`, `payloads`, `environment`, `labels`, `annotations` applied |
 | **Declarative apply — ScheduledSession kind** | n/a | 🔲 | 🔲 | Planned; schedule and agent reference in YAML |
-| **Applications — CRUD** | 🔲 planned | 🔲 planned | 🔲 planned | GitOps sync binding |
-| **Applications — sync/refresh** | 🔲 planned | 🔲 planned | 🔲 planned | Trigger sync or refresh operations |
-| **Applications — status** | 🔲 planned | 🔲 planned | 🔲 planned | Per-resource sync/health detail |
+| **Applications — CRUD** | ✅ `plugins/applications/` | ✅ `ApplicationAPI.{Get,List,Create,Update,Delete}` | ✅ `application list/get/create/update/delete` | GitOps sync binding |
+| **Applications — sync/refresh** | ✅ `sync`/`refresh` handlers | ✅ `ApplicationAPI.{Sync,Refresh}` | ⚠️ `application sync/refresh` (stub implementations) | Sync engine partial — only Agent kind synced |
+| **Applications — status** | ⚠️ status on main GET only | ✅ status fields in `Application` type | ✅ `application get` shows status | Dedicated `/status` endpoint not yet implemented |
 
 ### Labels/Annotations — SDK Ergonomics Gap
 
@@ -1576,7 +2016,7 @@ All Kinds with `labels`/`annotations` store them as JSON strings in the DB (`*st
 | Command | Status | Path to close |
 |---|---|---|
 | Project/Agent/Session label subcommands | 🔲 no `acpctl label`/`acpctl annotate` | add typed label helpers to SDK first, then CLI |
-| `acpctl credential bind` | 🔲 not implemented | `POST /role_bindings` with `scope=credential`; global migration complete, command not yet written |
+| `acpctl credential bind` | ✅ implemented | `POST /role_bindings` with `scope=credential`; global migration complete |
 | Session workspace/files/git/repos subcommands | 🔲 planned | see Session Operations table above |
 
 

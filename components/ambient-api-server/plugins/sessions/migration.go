@@ -142,6 +142,107 @@ func lastActivityAtMigration() *gormigrate.Migration {
 	}
 }
 
+func scheduledSessionLinkMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202606230002",
+		Migrate: func(tx *gorm.DB) error {
+			stmts := []string{
+				`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS source_scheduled_session_id TEXT`,
+				`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMPTZ`,
+				`CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_schedule_idempotency ON sessions(source_scheduled_session_id, scheduled_for) WHERE source_scheduled_session_id IS NOT NULL`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			tx.Exec(`DROP INDEX IF EXISTS idx_sessions_schedule_idempotency`)
+			return nil
+		},
+	}
+}
+
+func sandboxSnapshotMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202607070001",
+		Migrate: func(tx *gorm.DB) error {
+			stmts := []string{
+				`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS sandbox_logs_snapshot TEXT`,
+				`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS sandbox_policy_snapshot TEXT`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			stmts := []string{
+				`ALTER TABLE sessions DROP COLUMN IF EXISTS sandbox_logs_snapshot`,
+				`ALTER TABLE sessions DROP COLUMN IF EXISTS sandbox_policy_snapshot`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+}
+
+func sessionEventsMigration() *gormigrate.Migration {
+	migrateStatements := []string{
+		`CREATE TABLE IF NOT EXISTS session_events (
+			id           VARCHAR(36) PRIMARY KEY,
+			session_id   VARCHAR(36) NOT NULL,
+			seq          BIGSERIAL UNIQUE NOT NULL,
+			event_type   VARCHAR(255) NOT NULL,
+			payload      TEXT NOT NULL,
+			created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			completed_at TIMESTAMPTZ,
+			event_count  INT NOT NULL DEFAULT 1
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_session_events_session_id ON session_events(session_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_session_events_session_seq ON session_events(session_id, seq)`,
+		`CREATE INDEX IF NOT EXISTS idx_session_events_event_type ON session_events(event_type)`,
+		`CREATE INDEX IF NOT EXISTS idx_session_events_created_at ON session_events(created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_session_events_completed_at ON session_events(completed_at)`,
+	}
+	rollbackStatements := []string{
+		`DROP INDEX IF EXISTS idx_session_events_completed_at`,
+		`DROP INDEX IF EXISTS idx_session_events_created_at`,
+		`DROP INDEX IF EXISTS idx_session_events_event_type`,
+		`DROP INDEX IF EXISTS idx_session_events_session_seq`,
+		`DROP INDEX IF EXISTS idx_session_events_session_id`,
+		`DROP TABLE IF EXISTS session_events`,
+	}
+
+	return &gormigrate.Migration{
+		ID: "202607030001",
+		Migrate: func(tx *gorm.DB) error {
+			for _, stmt := range migrateStatements {
+				if err := tx.Exec(stmt).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			for _, stmt := range rollbackStatements {
+				if err := tx.Exec(stmt).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+}
+
 func schemaExpansionMigration() *gormigrate.Migration {
 	migrateStatements := []string{
 		`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS repos TEXT`,

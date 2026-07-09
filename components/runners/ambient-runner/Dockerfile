@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi10/ubi@sha256:0e04460ccf1ad68374b2f1ca28f8539f817fe8bb6107478df445e05dccb1995e
+FROM registry.access.redhat.com/ubi10/ubi@sha256:516ef28e78e388d12e31618326da68e21dcfc40f767f0c37c3b57059c642a4f0
 
 ARG GIT_COMMIT=unknown
 
@@ -13,7 +13,7 @@ ARG GEMINI_CLI_VERSION=0.1.17
 
 # Install system packages: Python 3.12, git, jq, Node.js, Go, unzip (needed by CodeRabbit install script)
 # iproute provides ip-netns for OpenShell network namespace setup
-RUN dnf install -y python3 python3-pip python3-devel \
+RUN dnf install -y --allowerasing --nodocs python3 python3-pip python3-devel \
     git jq nodejs npm go-toolset unzip iproute && \
     dnf clean all
 
@@ -34,7 +34,7 @@ RUN uv tool install mcp-server-fetch==2025.4.7
 
 # OpenShell supervisor binary for sandbox isolation (file mode, no Gateway required)
 # libcap used for setcap to grant NET_ADMIN file capability to non-root binary
-COPY --from=ghcr.io/nvidia/openshell/supervisor:0.0.66 /openshell-sandbox /openshell-sandbox
+COPY --from=ghcr.io/nvidia/openshell/supervisor:0.0.74 /openshell-sandbox /openshell-sandbox
 RUN chmod +x /openshell-sandbox && \
     mkdir -p /var/run/netns && chmod 777 /var/run/netns
 
@@ -50,8 +50,8 @@ WORKDIR /app
 COPY . /app/ambient-runner
 
 # OpenShell wrapper script (dispatches to supervisor or direct claude based on OPENSHELL_ENABLED)
-COPY openshell-claude-wrapper.sh /app/openshell-claude-wrapper.sh
-RUN chmod +x /app/openshell-claude-wrapper.sh
+COPY standard-claude-wrapper.sh /app/standard-claude-wrapper.sh
+RUN chmod +x /app/standard-claude-wrapper.sh
 
 # Install runner as a package, then remove build-only deps in same layer
 RUN pip3 install --break-system-packages --no-cache-dir '/app/ambient-runner[all]' && \
@@ -100,6 +100,3 @@ EXPOSE 8001
 LABEL org.opencontainers.image.revision=$GIT_COMMIT
 
 CMD ["/bin/bash", "-c", "umask 0022 && cd /app/ambient-runner && uvicorn main:app --host 0.0.0.0 --port 8001"]
-
-ARG IMAGE_EXPIRY=
-LABEL quay.expires-after=${IMAGE_EXPIRY}

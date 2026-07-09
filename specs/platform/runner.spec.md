@@ -1,7 +1,7 @@
 # Runner
 
 **Date:** 2026-04-05
-**Last Updated:** 2026-06-03
+**Last Updated:** 2026-07-05
 **Status:** Living Document — current state documented, desired state (OpenShell) appended
 **Related:** `control-plane.spec.md` — CP provisioning, token endpoint, start context assembly
 
@@ -68,7 +68,7 @@ ambient_runner/
 
   platform/
     context.py                    ← RunnerContext dataclass (shared runtime state)
-    config.py                     ← Config loaders (.ambient/ambient.json, .mcp.json, REPOS_JSON)
+    config.py                     ← Config loaders (.ambient/ambient.json, payload .mcp.json, REPOS_JSON)
     auth.py                       ← Credential fetching + git identity + env population
     workspace.py                  ← Working directory resolution (workflow / multi-repo / default)
     prompts.py                    ← System prompt constants + workspace context builder
@@ -92,6 +92,12 @@ ambient_runner/
 
   bridges/gemini_cli/             ← Gemini CLI bridge (separate impl, same ABC)
   bridges/langgraph/              ← LangGraph bridge (stub)
+
+  # Baked-in config files (copied into runner image at build time)
+  claude.json                     ← Claude Code onboarding state + trusted folders
+  claude-settings.json            ← Tool permissions (allow/deny lists) for standard mode
+  claude-settings-local.json      ← Tool permissions for local dev mode
+  mcp.json                        ← Baked-in MCP servers (e.g. mcp-atlassian with env var refs)
 
   endpoints/
     run.py                        ← POST / (AG-UI run endpoint)
@@ -142,7 +148,10 @@ ambient_runner/
      c. await listener.ready.wait()  ← blocks until stream confirmed open
      d. Pre-register SSE queue for SESSION_ID (prevents race with backend)
 
-6. If INITIAL_PROMPT set and not IS_RESUME:
+6. If not IS_RESUME, read initial prompt:
+     a. Try /tmp/initial_prompt.txt (gateway file upload path); on any OS-level read error (permissions, I/O), log a warning and fall back
+     b. Fall back to INITIAL_PROMPT env var (operator Job path)
+   If prompt found:
      _auto_execute_initial_prompt(prompt, session_id, grpc_url)
        In gRPC mode: push via PushSessionMessage("user", prompt)
          → listener receives its own push → triggers bridge.run()
@@ -163,6 +172,10 @@ bridge._setup_platform():
   4. resolve_workspace_paths(context)        ← CWD: workflow / multi-repo / artifacts
   5. setup_workspace(context)                ← log workspace state
   6. ObservabilityManager init               ← Langfuse (best-effort, no-op on failure)
+  6a. MLflow autologging activation           ← if MLFLOW_TRACKING_URI is set and MLFLOW_TRACING_ENABLED is not false:
+                                                 mlflow.set_tracking_uri(), mlflow.set_experiment(), mlflow.autolog(...),
+                                                 and configured GenAI autolog integrations
+                                                 Best-effort: log warning on failure, continue the session
   7. build_mcp_servers(context, cwd_path)    ← external + platform MCP servers
   8. build_sdk_system_prompt(...)            ← preset + workspace context string
 ```
@@ -250,10 +263,9 @@ bridge.run(input_data):
   5. wrap stream: tracing_middleware → secret_redaction_middleware
   6. yield events
   7. Detect HITL halt: _halted_by_thread[thread_id] = True → interrupt worker
-  finally: clear_runtime_credentials(context)
 ```
 
-Credentials are populated before step 1 and cleared in the `finally` block. This is intentional: each turn runs with a fresh credential set, and credentials are never retained between turns.
+Credentials are populated before step 1. They persist across turns within the same pod lifetime — credential isolation is enforced by sidecar containers, not by per-turn cleanup.
 
 ### Adapter Rebuild (`mark_dirty()`)
 
@@ -468,8 +480,18 @@ All env vars are injected by the CP at pod creation time.
 | `AMBIENT_MCP_URL` | Ambient MCP sidecar URL (SSE transport) |
 | `REPOS_JSON` | JSON array of `{url, branch, autoPush}` repo configs |
 | `ACTIVE_WORKFLOW_GIT_URL` | Active workflow repo URL (overrides REPOS_JSON workspace setup) |
+| `SESSION_CONFIG_PATH` | Existing absolute path to a mounted session-config harness repo; appended to Claude SDK `add_dirs` and enables SDK skills |
 | `AGUI_TOKEN` | Session-scoped bearer token; when set, all non-health endpoints require `X-Ambient-Session-Token` header (constant-time comparison) |
+| `PAYLOAD_MCP_CONFIG_FILE` | Path to payload `.mcp.json` (default `/sandbox/.mcp.json`); merged on top of baked-in MCP config |
 | `SDK_OPTIONS` | JSON string of additional Claude SDK options |
+| `MLFLOW_TRACKING_URI` | MLflow tracking server URL (HTTPS); platform-owned global default from control-plane env |
+| `MLFLOW_TRACKING_TOKEN` | MLflow tracking server auth token (secret — must not appear in logs); injected via `mlflow` credential provider |
+| `MLFLOW_EXPERIMENT_NAME` | MLflow experiment name for trace logging; global default from control-plane env, overridable per-agent |
+| `MLFLOW_CREDENTIAL_SECRET_NAME` | Control-plane-only source secret name for the global MLflow credential; defaults to `mlflow` |
+| `MLFLOW_CREDENTIAL_SECRET_NAMESPACE` | Control-plane-only source namespace for the global MLflow credential; defaults to the control-plane runtime namespace |
+| `MLFLOW_TRACING_ENABLED` | Optional kill switch; only `false` / `0` / `no` / `off` disables MLflow when a tracking URI is present |
+| `MLFLOW_AUTOLOG_EXCLUDE_FLAVORS` | Optional comma-separated generic MLflow autolog flavor exclusions |
+| `MLFLOW_GENAI_AUTOLOG_INTEGRATIONS` | Optional comma-separated provider autolog integrations; default `anthropic,openai` |
 
 ---
 
@@ -498,6 +520,23 @@ Priority order:
 ```
 
 The resolved `(cwd_path, add_dirs)` tuple is passed to the Claude SDK via `ClaudeAgentAdapter`. Claude Code sees `cwd_path` as its working directory and `add_dirs` as additional indexed directories.
+
+If `SESSION_CONFIG_PATH` is set to an existing absolute directory, the runner
+SHALL append it to `add_dirs` without replacing `cwd_path`. This supports
+Git-backed session-config harness repositories mounted by sandbox payloads:
+
+```yaml
+payloads:
+  - sandbox_path: /sandbox/session-config
+    repo_url: https://github.com/example/team-session-config
+    ref: main
+environment:
+  SESSION_CONFIG_PATH: /sandbox/session-config
+```
+
+For Claude sessions, the bridge SHALL also enable SDK skills when
+`SESSION_CONFIG_PATH` resolves successfully so skills in the mounted harness can
+be discovered and activated by semantic prompt intent.
 
 ---
 
@@ -538,11 +577,11 @@ Rego + YAML files mounted from a ConfigMap. No OpenShell Gateway is required.
 ```
 Runner Pod (FastAPI + uvicorn) — runs UNSANDBOXED
   │
-  └── bridge.py sets cli_path = /app/openshell-claude-wrapper.sh
+  └── bridge.py sets cli_path = /app/standard-claude-wrapper.sh
         │
         └── Claude Agent SDK spawns wrapper as subprocess
               │
-              └── openshell-claude-wrapper.sh
+              └── standard-claude-wrapper.sh
                     │
                     └── exec /openshell-sandbox \
                           --policy-rules /etc/openshell/policy.rego \
@@ -583,7 +622,7 @@ propagated to each runner namespace by the reconciler's `ensureOpenShellPolicy()
 
 | Access | Paths |
 |--------|-------|
-| Read-only | `/usr`, `/lib`, `/proc`, `/dev/urandom`, `/app`, `/etc`, `/var/log`, `/home/sandbox` |
+| Read-only | `/usr`, `/lib`, `/proc`, `/dev/urandom`, `/app`, `/runner`, `/etc`, `/var/log`, `/home/sandbox` |
 | Read-write | `/workspace`, `/tmp`, `/dev/null`, `/app/.claude` |
 
 **Network policy** (`policy.yaml`):
@@ -596,6 +635,7 @@ propagated to each runner namespace by the reconciler's `ensureOpenShellPolicy()
 | `npm-registry` | `registry.npmjs.org:443` | `npm`, `node`, `npx` |
 | `pypi` | `pypi.org:443`, `files.pythonhosted.org:443` | `pip3`, `python3` |
 | `gitlab` | `gitlab.com:443` | `git`, `glab` |
+| `atlassian` | `*.atlassian.net:443`, `*.atlassian.com:443`, `auth.atlassian.com:443`, `api.atlassian.com:443` | `/sandbox/.venv/bin/python`, `/sandbox/.venv/bin/python3`, `/sandbox/.uv/python/cpython-*/bin/python*` |
 
 **Rego rules** (`policy.rego`): Official policy from the OpenShell repository
 (`package openshell.sandbox`). Evaluates `allow_network`, `network_action`,
@@ -646,6 +686,81 @@ When enabled, the reconciler:
 4. Overrides the runner security context with elevated capabilities and root UID
 5. Sets pod-level seccomp profile to `Unconfined`
 
+### Gateway Mode (OpenShell Gateway)
+
+When `OPENSHELL_USE_GATEWAY=true`, the runner operates inside an OpenShell gateway-managed sandbox instead of a file-mode sandbox. The runner image is built from `Dockerfile.openshell` and uses a separate image (`OPENSHELL_RUNNER_IMAGE`, default `quay.io/ambient_code/acp_runner_openshell:latest`).
+
+Key differences from file mode:
+
+| Aspect | File Mode | Gateway Mode |
+|--------|-----------|--------------|
+| Image | `Dockerfile` (`RUNNER_IMAGE`) | `Dockerfile.openshell` (`OPENSHELL_RUNNER_IMAGE`) |
+| Runner path | `/app/ambient-runner` | `/runner/ambient-runner` |
+| Process start | Container `CMD` | `ExecSandbox` gRPC after sandbox reaches Ready |
+| Credentials | Sidecar containers | Gateway providers (egress proxy injection) |
+| Sandbox isolation | In-container Supervisor (file mode) | Gateway-managed Supervisor |
+| Inference routing | Runner env vars (`USE_VERTEX`, `CLAUDE_CODE_USE_VERTEX`, `ANTHROPIC_VERTEX_PROJECT_ID`) | Gateway `SetClusterInference` + `providers_v2_enabled` setting; `USE_VERTEX` and `CLAUDE_CODE_USE_VERTEX` are NOT set |
+
+#### Inference Configuration
+
+In gateway mode, the control plane configures the gateway's [inference routing](https://docs.nvidia.com/openshell/sandboxes/inference-routing) after creating credential providers. The gateway exposes an `inference.local` HTTPS endpoint inside each sandbox that strips sandbox credentials, injects backend credentials, and forwards requests to the configured LLM provider.
+
+Before configuring providers or inference, the control plane enables `providers_v2_enabled=true` on the gateway via `UpdateConfig`. This is required for gateway versions 0.0.72+ to proxy inference traffic correctly. The control plane then iterates all bound credentials and configures inference routing for every inference-capable provider type (e.g., `google-vertex-ai`, `claude`, `anthropic`, `nvidia`, `openai`, `aws-bedrock`). For each qualifying provider, it calls `SetClusterInference` with `provider_name`, `model_id` (derived from `session.LlmModel`, defaulting to `claude-sonnet-4-6`), and `no_verify=true`.
+
+The gateway's privacy router uses these settings to route inference requests through the configured provider, injecting credentials transparently. In gateway mode, the control plane sets `ACP_OPENSHELL_INFERENCE=true` for **all** provider types — not only Vertex. This ensures the runner activates inference routing mode regardless of which credential backend is configured (Vertex, Anthropic, NVIDIA, OpenAI, AWS Bedrock, etc.). The control plane does NOT set `USE_VERTEX`, `CLAUDE_CODE_USE_VERTEX`, or `ANTHROPIC_VERTEX_PROJECT_ID` in the sandbox environment — per the [OpenShell Vertex AI docs](https://docs.nvidia.com/openshell/providers/google-vertex-ai), setting these flags inside sandboxes causes Claude Code to bypass the gateway proxy and attempt direct connections with credential discovery, which fails because sandboxes don't expose provider credentials. The gateway handles routing transparently via the configured provider.
+
+See `openshell-sandbox-provisioning.spec.md` § Inference Configuration via SetClusterInference and § Providers V2 Enablement for the full requirements.
+
+#### Runner-Side Inference Routing (`ACP_OPENSHELL_INFERENCE`)
+
+When the control plane sets `ACP_OPENSHELL_INFERENCE=true` in the sandbox environment, the runner's `setup_sdk_authentication()` (`bridges/claude/auth.py`) activates inference routing mode instead of direct Vertex AI or Anthropic API key authentication.
+
+In inference routing mode, the runner sets:
+
+| Env Var | Value | Purpose |
+|---------|-------|---------|
+| `ANTHROPIC_API_KEY` | `"inference-routing"` | Placeholder — Claude SDK requires a non-empty key |
+| `ANTHROPIC_BASE_URL` | `https://inference.local` | Virtual hostname intercepted by the supervisor proxy |
+| `HTTPS_PROXY` | `http://10.200.0.1:3128` | Route all HTTPS through the supervisor's CONNECT proxy |
+| `SSL_CERT_FILE` | `/etc/openshell-tls/openshell-ca.pem` | Trust the sandbox's ephemeral CA (Python `ssl` module) |
+| `REQUESTS_CA_BUNDLE` | `/etc/openshell-tls/openshell-ca.pem` | Trust the sandbox's ephemeral CA (`requests` library) |
+| `NODE_EXTRA_CA_CERTS` | `/etc/openshell-tls/openshell-ca.pem` | Trust the sandbox's ephemeral CA (Node.js / Claude Code CLI) |
+
+The runner also clears `USE_VERTEX` and `CLAUDE_CODE_USE_VERTEX` — inference routing replaces direct Vertex API access with the proxy-mediated path. The model is set from `LLM_MODEL` env var or defaults to `claude-sonnet-4-6`.
+
+`inference.local` has no DNS entry. The supervisor proxy intercepts the CONNECT request by hostname and routes it to the upstream inference provider configured via `UpdateConfig`. The proxy terminates TLS using the sandbox's ephemeral self-signed CA.
+
+#### Sandbox Network Namespace and Proxy Routing
+
+In gateway mode, the runner process runs inside a sandbox network namespace with no direct route to cluster IPs or DNS. All traffic MUST traverse the supervisor's HTTP CONNECT proxy at `10.200.0.1:3128`.
+
+**Critical constraint — `NO_PROXY`:** The control plane sets `NO_PROXY=127.0.0.1,localhost` for gateway-mode sandboxes. `NO_PROXY` MUST NOT include `.svc.cluster.local` or any cluster-internal domain suffix. If it does, the runner's HTTP/gRPC clients will attempt direct connections to cluster services that fail because the sandbox namespace has no route to those IPs. This is different from non-gateway modes where the pod has direct cluster connectivity.
+
+**Automatic proxy/TLS injection:** The supervisor's SSH path (used by `ExecSandbox`) calls `env_clear()` on the child process and rebuilds the environment from:
+- `child_env::proxy_env_vars()` — 9 vars: `ALL_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, lowercase variants, `grpc_proxy`, `NODE_USE_ENV_PROXY=1`
+- `child_env::tls_env_vars()` — 6 vars: `NODE_EXTRA_CA_CERTS`, `DENO_CERT`, `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`
+- `user_environment` from the `CreateSandboxRequest`
+
+The runner does not need to set proxy or TLS CA vars for general cluster traffic — the supervisor handles this. The runner only sets inference-specific vars (`ANTHROPIC_BASE_URL`, `HTTPS_PROXY` for inference.local routing) via `setup_sdk_authentication()`.
+
+#### OPA Network Policy for ACP Internal Traffic
+
+The sandbox's OPA network policy MUST include an `_acp_internal` network policy rule that whitelists the control plane and API server endpoints for the runner's Python binaries. Without this, the supervisor proxy denies all cluster-internal traffic from the runner with `DENIED FORWARD`.
+
+The runner image bundles a default `policy.yaml` (via `Dockerfile.openshell`) that includes a static `_acp_internal` entry with hardcoded `ambient-code` namespace endpoints. In gateway mode, this baked-in policy becomes the sandbox's default policy. The control plane **overwrites** the `_acp_internal` entry after sandbox creation using OpenShell's `UpdateConfig` RPC with `merge_operations` (equivalent to `openshell policy update --add-allow`) to set the correct namespace-specific endpoints. All other rules in the baked-in default policy (e.g., `claude_code_vertex`, `github_ssh_over_https`, `pypi`) are preserved. See `agent-sandbox-config.spec.md` (ACP Internal Policy Injection) and `openshell-sandbox-provisioning.spec.md` (ACP Internal Network Policy Injection) for the injection mechanism.
+
+Required endpoints (namespace varies by deployment):
+
+| Host | Port | Purpose |
+|------|------|---------|
+| `ambient-control-plane.{namespace}.svc[.cluster.local]` | 8080 | CP token endpoint |
+| `ambient-api-server.{namespace}.svc[.cluster.local]` | 8000 | API server HTTP |
+| `ambient-api-server.{namespace}.svc[.cluster.local]` | 9000 | API server gRPC |
+
+Allowed binaries: `/sandbox/.venv/bin/python`, `/sandbox/.venv/bin/python3`, `/sandbox/.venv/bin/uvicorn`, `/sandbox/.uv/python/cpython-*/bin/python*`
+
+Both short (`svc`) and fully-qualified (`svc.cluster.local`) hostnames must be listed because the proxy matches on the exact hostname in the CONNECT request.
+
 ### Environment Variables (OpenShell-specific)
 
 | Var | Injected By | Purpose |
@@ -654,14 +769,15 @@ When enabled, the reconciler:
 | `OPENSHELL_POLICY_RULES` | CP reconciler | Path to Rego policy file (`/etc/openshell/policy.rego`) |
 | `OPENSHELL_POLICY_DATA` | CP reconciler | Path to YAML policy data (`/etc/openshell/policy.yaml`) |
 | `OPENSHELL_LOG_LEVEL` | Wrapper script default | Supervisor log level (`warn` default) |
+| `ACP_OPENSHELL_INFERENCE` | CP reconciler (gateway mode) | When `true`, activates runner-side inference routing via `inference.local` proxy instead of direct Vertex/Anthropic API |
 
 ### Files Modified
 
 | File | Component | Change |
 |------|-----------|--------|
 | `Dockerfile` | Runner | Added `openshell-sandbox` v0.0.56 binary, `sandbox` user, `/workspace` dir, `/usr/local/bin/claude` symlink, `iproute` package |
-| `openshell-claude-wrapper.sh` | Runner | Wrapper script: dispatches to supervisor or direct claude based on `OPENSHELL_ENABLED` |
-| `bridges/claude/bridge.py` | Runner | `cli_path = "/app/openshell-claude-wrapper.sh"` when OpenShell enabled |
+| `standard-claude-wrapper.sh` | Runner | Wrapper script: dispatches to supervisor or direct claude based on `OPENSHELL_ENABLED` |
+| `bridges/claude/bridge.py` | Runner | `cli_path = "/app/standard-claude-wrapper.sh"` when OpenShell enabled |
 | `.openshell-ref/policy.rego` | Runner | Official OPA Rego policy from OpenShell repository |
 | `.openshell-ref/policy.yaml` | Runner | Network + filesystem + process policy data |
 | `internal/reconciler/kube_reconciler.go` | Control Plane | `buildRunnerSecurityContext`, `buildVolumes`, `buildVolumeMounts`, `buildEnv`, `ensureOpenShellPolicy` |

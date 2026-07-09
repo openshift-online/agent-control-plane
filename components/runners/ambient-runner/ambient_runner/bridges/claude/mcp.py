@@ -243,11 +243,15 @@ def _build_sidecar_mcp_servers(credential_mcp_urls_raw: str) -> dict:
     try:
         credential_mcp_urls = json.loads(credential_mcp_urls_raw)
     except (json.JSONDecodeError, TypeError):
-        logger.warning("Failed to parse CREDENTIAL_MCP_URLS — skipping credential MCP servers")
+        logger.warning(
+            "Failed to parse CREDENTIAL_MCP_URLS — skipping credential MCP servers"
+        )
         return {}
 
     if not isinstance(credential_mcp_urls, dict):
-        logger.warning("CREDENTIAL_MCP_URLS is not a JSON object — skipping credential MCP servers")
+        logger.warning(
+            "CREDENTIAL_MCP_URLS is not a JSON object — skipping credential MCP servers"
+        )
         return {}
 
     servers: dict = {}
@@ -298,7 +302,11 @@ def _wait_for_sidecar_readiness(
     if not endpoints:
         return
 
-    logger.info("Waiting for %d credential sidecar(s) to become ready (timeout=%ds)", len(endpoints), int(timeout))
+    logger.info(
+        "Waiting for %d credential sidecar(s) to become ready (timeout=%ds)",
+        len(endpoints),
+        int(timeout),
+    )
     deadline = time.monotonic() + timeout
     pending = list(endpoints)
 
@@ -307,7 +315,9 @@ def _wait_for_sidecar_readiness(
         for name, host, port in pending:
             try:
                 with socket.create_connection((host, port), timeout=1.0):
-                    logger.info("Credential sidecar %s ready at %s:%d", name, host, port)
+                    logger.info(
+                        "Credential sidecar %s ready at %s:%d", name, host, port
+                    )
             except (ConnectionRefusedError, OSError, socket.timeout):
                 still_pending.append((name, host, port))
         pending = still_pending
@@ -316,7 +326,9 @@ def _wait_for_sidecar_readiness(
 
     if pending:
         names = [p[0] for p in pending]
-        logger.warning("Credential sidecar(s) not ready after %ds: %s", int(timeout), names)
+        logger.warning(
+            "Credential sidecar(s) not ready after %ds: %s", int(timeout), names
+        )
 
 
 def _build_subprocess_mcp_servers() -> dict:

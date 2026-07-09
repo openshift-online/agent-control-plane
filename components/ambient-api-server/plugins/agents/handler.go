@@ -1,12 +1,14 @@
 package agents
 
 import (
+	"encoding/json"
 	"net/http"
 	"regexp"
 
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/gateway"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
@@ -39,6 +41,9 @@ func (h agentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
 			projectID := mux.Vars(r)["id"]
+			if err := gateway.CheckEditorTier(ctx, projectID); err != nil {
+				return nil, err
+			}
 			agentModel := ConvertAgent(agent)
 			agentModel.ProjectId = projectID
 			agentModel, err := h.agent.Create(ctx, agentModel)
@@ -62,6 +67,9 @@ func (h agentHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
 			projectID := mux.Vars(r)["id"]
+			if err := gateway.CheckEditorTier(ctx, projectID); err != nil {
+				return nil, err
+			}
 			id := mux.Vars(r)["agent_id"]
 			found, err := h.agent.Get(ctx, id)
 			if err != nil {
@@ -94,6 +102,44 @@ func (h agentHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			}
 			if patch.LlmMaxTokens != nil {
 				found.LlmMaxTokens = *patch.LlmMaxTokens
+			}
+			if patch.Entrypoint != nil {
+				found.Entrypoint = patch.Entrypoint
+			}
+			if patch.Providers != nil {
+				raw, merr := json.Marshal(patch.Providers)
+				if merr != nil {
+					return nil, errors.GeneralError("failed to marshal providers: %v", merr)
+				}
+				s := string(raw)
+				found.Providers = &s
+			}
+			if patch.Payloads != nil {
+				raw, merr := json.Marshal(patch.Payloads)
+				if merr != nil {
+					return nil, errors.GeneralError("failed to marshal payloads: %v", merr)
+				}
+				s := string(raw)
+				found.Payloads = &s
+			}
+			if patch.Environment != nil {
+				raw, merr := json.Marshal(patch.Environment)
+				if merr != nil {
+					return nil, errors.GeneralError("failed to marshal environment: %v", merr)
+				}
+				s := string(raw)
+				found.Environment = &s
+			}
+			if patch.SandboxTemplate != nil {
+				raw, merr := json.Marshal(patch.SandboxTemplate)
+				if merr != nil {
+					return nil, errors.GeneralError("failed to marshal sandbox_template: %v", merr)
+				}
+				s := string(raw)
+				found.SandboxTemplate = &s
+			}
+			if patch.SandboxPolicy != nil {
+				found.SandboxPolicy = patch.SandboxPolicy
 			}
 			if patch.Labels != nil {
 				found.Labels = patch.Labels
@@ -188,8 +234,11 @@ func (h agentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
 			projectID := mux.Vars(r)["id"]
-			id := mux.Vars(r)["agent_id"]
 			ctx := r.Context()
+			if err := gateway.CheckEditorTier(ctx, projectID); err != nil {
+				return nil, err
+			}
+			id := mux.Vars(r)["agent_id"]
 			agent, getErr := h.agent.Get(ctx, id)
 			if getErr != nil {
 				return nil, getErr

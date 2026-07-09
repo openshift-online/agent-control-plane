@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -36,6 +37,8 @@ const (
 	PhaseStopped   = "Stopped"
 	PhaseCompleted = "Completed"
 	PhaseFailed    = "Failed"
+
+	emptyConditionsJSON = "[]"
 )
 
 var TerminalPhases = []string{
@@ -72,6 +75,10 @@ func (f *SDKClientFactory) Token(ctx context.Context) (string, error) {
 	return f.provider.Token(ctx)
 }
 
+func (f *SDKClientFactory) BaseURL() string {
+	return f.baseURL
+}
+
 func (f *SDKClientFactory) ForProject(ctx context.Context, project string) (*sdkclient.Client, error) {
 	token, err := f.provider.Token(ctx)
 	if err != nil {
@@ -99,3 +106,19 @@ const (
 	LabelProjectID = "ambient-code.io/project-id"
 	LabelManagedBy = "ambient-code.io/managed-by"
 )
+
+const (
+	annotationSource      = "ambient.ai/source"
+	annotationContentHash = "ambient.ai/content-hash"
+)
+
+func extractContentHash(annotationsJSON string) string {
+	if annotationsJSON == "" {
+		return ""
+	}
+	var ann map[string]string
+	if err := json.Unmarshal([]byte(annotationsJSON), &ann); err != nil {
+		return ""
+	}
+	return ann[annotationContentHash]
+}

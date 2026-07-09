@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
 	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
@@ -174,8 +175,31 @@ func (h credentialHandler) Delete(w http.ResponseWriter, r *http.Request) {
 func (h credentialHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {
-			id := mux.Vars(r)["cred_id"]
 			ctx := r.Context()
+			if !middleware.IsServiceCaller(ctx) {
+				authResult := pkgrbac.GetAuthResult(ctx)
+				if authResult == nil {
+					return nil, errors.Forbidden("token fetch restricted to authorized callers")
+				}
+				if !authResult.IsGlobalAdmin {
+					id := mux.Vars(r)["cred_id"]
+					authorized := false
+					if authResult.CredentialIDs == nil {
+						authorized = true
+					} else {
+						for _, cid := range authResult.CredentialIDs {
+							if cid == id {
+								authorized = true
+								break
+							}
+						}
+					}
+					if !authorized {
+						return nil, errors.Forbidden("token fetch restricted to authorized callers")
+					}
+				}
+			}
+			id := mux.Vars(r)["cred_id"]
 			credential, err := h.credential.Get(ctx, id)
 			if err != nil {
 				return nil, err

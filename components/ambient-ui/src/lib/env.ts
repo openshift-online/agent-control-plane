@@ -14,4 +14,5 @@ export const env = {
   SSO_CLIENT_SECRET: getOptionalEnv('SSO_CLIENT_SECRET'),
   SSO_REDIRECT_URI: getOptionalEnv('SSO_REDIRECT_URI'),
   SESSION_SECRET: getOptionalEnv('SESSION_SECRET'),
+  CONTROL_PLANE_URL: getOptionalEnv('CONTROL_PLANE_URL'),
 } as const

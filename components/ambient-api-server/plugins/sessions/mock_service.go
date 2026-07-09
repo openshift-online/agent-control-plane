@@ -150,6 +150,33 @@ func (s *InMemorySessionService) ActiveByAgentID(_ context.Context, agentID stri
 	return nil, errors.NotFound("no active session for agent '%s'", agentID)
 }
 
+func (s *InMemorySessionService) ByScheduledSessionID(_ context.Context, scheduledSessionID string) (SessionList, *errors.ServiceError) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var list SessionList
+	for _, ss := range s.data {
+		if ss.SourceScheduledSessionId != nil && *ss.SourceScheduledSessionId == scheduledSessionID {
+			cp := *ss
+			list = append(list, &cp)
+		}
+	}
+	return list, nil
+}
+
+func (s *InMemorySessionService) ActiveByScheduledSessionID(_ context.Context, scheduledSessionID string) (*Session, *errors.ServiceError) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, ss := range s.data {
+		if ss.SourceScheduledSessionId != nil && *ss.SourceScheduledSessionId == scheduledSessionID {
+			if ss.Phase != nil && *ss.Phase != "Completed" && *ss.Phase != "Failed" && *ss.Phase != "Stopped" {
+				cp := *ss
+				return &cp, nil
+			}
+		}
+	}
+	return nil, nil
+}
+
 func (s *InMemorySessionService) FindByIDs(_ context.Context, ids []string) (SessionList, *errors.ServiceError) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -3,6 +3,7 @@ package credentials
 import (
 	"context"
 
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
@@ -57,9 +58,13 @@ func (d *sqlCredentialDao) Replace(ctx context.Context, credential *Credential) 
 
 func (d *sqlCredentialDao) Delete(ctx context.Context, id string) error {
 	g2 := (*d.sessionFactory).New(ctx)
-	if err := g2.Omit(clause.Associations).Delete(&Credential{Meta: api.Meta{ID: id}}).Error; err != nil {
-		db.MarkForRollback(ctx, err)
-		return err
+	result := g2.Omit(clause.Associations).Delete(&Credential{Meta: api.Meta{ID: id}})
+	if result.Error != nil {
+		db.MarkForRollback(ctx, result.Error)
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
 	}
 	return nil
 }

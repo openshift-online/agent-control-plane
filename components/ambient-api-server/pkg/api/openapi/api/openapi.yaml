@@ -3831,12 +3831,12 @@ paths:
         schema:
           type: string
       responses:
-        "200":
+        "201":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/_api_ambient_v1_projects__id__scheduled_sessions__ss_id__trigger_post_200_response"
-          description: Scheduled session triggered
+                $ref: "#/components/schemas/Session"
+          description: Session created from trigger
         "401":
           content:
             application/json:
@@ -3936,6 +3936,1418 @@ paths:
       security:
       - Bearer: []
       summary: List sessions triggered by this scheduled session
+  /api/ambient/v1/projects/{id}/providers:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderList"
+          description: A JSON array of provider objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of providers in a project
+    post:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Provider"
+        description: Provider data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Provider"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Provider already exists in this project
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the provider
+      security:
+      - Bearer: []
+      summary: Create a provider in a project (internal — used by control plane reconciler)
+  /api/ambient/v1/projects/{id}/providers/{provider_id}:
+    delete:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the provider
+        in: path
+        name: provider_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Provider deleted successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No provider with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Delete a provider from a project (internal — used by control plane
+        reconciler)
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the provider
+        in: path
+        name: provider_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Provider"
+          description: Provider found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No provider with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get a provider by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the provider
+        in: path
+        name: provider_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderPatchRequest"
+        description: Updated provider data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Provider"
+          description: Provider updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No provider with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating provider
+      security:
+      - Bearer: []
+      summary: Update a provider (internal — used by control plane reconciler)
+  /api/ambient/v1/projects/{id}/policies:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyList"
+          description: A JSON array of policy objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No project with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of policies in a project
+    post:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Policy"
+        description: Policy data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Policy already exists in this project
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the policy
+      security:
+      - Bearer: []
+      summary: Create a policy in a project (internal — used by control plane reconciler)
+  /api/ambient/v1/projects/{id}/policies/{policy_id}:
+    delete:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the policy
+        in: path
+        name: policy_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Policy deleted successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No policy with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Delete a policy from a project (internal — used by control plane reconciler)
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the policy
+        in: path
+        name: policy_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+          description: Policy found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No policy with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get a policy by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the policy
+        in: path
+        name: policy_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicyPatchRequest"
+        description: Updated policy data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+          description: Policy updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No policy with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating policy
+      security:
+      - Bearer: []
+      summary: Update a policy (internal — used by control plane reconciler)
+  /api/ambient/v1/applications:
+    get:
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplicationList"
+          description: A JSON array of application objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of applications
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Application"
+        description: Application data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Application already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the application
+      security:
+      - Bearer: []
+      summary: Create a new application
+  /api/ambient/v1/applications/{app_id}:
+    delete:
+      parameters:
+      - description: The id of the application
+        in: path
+        name: app_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Application deleted successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No application with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error deleting application
+      security:
+      - Bearer: []
+      summary: Delete an application
+    get:
+      parameters:
+      - description: The id of the application
+        in: path
+        name: app_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+          description: Application found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No application with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get an application by id
+    patch:
+      parameters:
+      - description: The id of the application
+        in: path
+        name: app_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplicationPatchRequest"
+        description: Updated application data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+          description: Application updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No application with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating application
+      security:
+      - Bearer: []
+      summary: Update an application
+  /api/ambient/v1/applications/{app_id}/sync:
+    post:
+      description: Apply target state from git to live state in the destination project
+      parameters:
+      - description: The id of the application
+        in: path
+        name: app_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplicationSyncRequest"
+        description: Optional sync parameters
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+          description: Sync triggered successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No application with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error during sync
+      security:
+      - Bearer: []
+      summary: Trigger a sync operation
+  /api/ambient/v1/applications/{app_id}/refresh:
+    post:
+      description: "Fetch latest from git, render kustomize, diff against live state,\
+        \ update sync_status"
+      parameters:
+      - description: The id of the application
+        in: path
+        name: app_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+          description: Refresh completed
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No application with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error during refresh
+      security:
+      - Bearer: []
+      summary: Refresh application status
+  /api/ambient/v1/sessions/{id}/events:
+    get:
+      description: SSE stream proxied from the runner pod. Only available during an
+        active session run. Returns 502 if the runner has not been scheduled yet or
+        is unreachable.
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            text/event-stream:
+              schema:
+                type: string
+          description: SSE stream of AG-UI events
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Session not found
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Runner pod is not scheduled or not reachable
+      security:
+      - Bearer: []
+      summary: Stream live AG-UI events from the runner pod
+  /api/ambient/v1/sessions/{id}/events/history:
+    get:
+      description: |-
+        Returns the complete AG-UI event audit trail for a session, including
+        compressed events. Supports pagination, time-range filtering, and
+        event-type filtering. Events are ordered by seq ascending.
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Return only events with seq greater than this value (for replay/catch-up)
+        in: query
+        name: after_seq
+        required: false
+        schema:
+          default: 0
+          format: int64
+          type: integer
+      - description: "Filter by AG-UI event type (e.g. TEXT_MESSAGE_CONTENT, TOOL_CALL_START)"
+        in: query
+        name: event_type
+        required: false
+        schema:
+          type: string
+      - description: "Max events to return (default 100, max 1000)"
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          maximum: 1000
+          minimum: 1
+          type: integer
+      - description: Filter events created after this timestamp (ISO 8601)
+        in: query
+        name: start_time
+        required: false
+        schema:
+          format: date-time
+          type: string
+      - description: Filter events created before this timestamp (ISO 8601)
+        in: query
+        name: end_time
+        required: false
+        schema:
+          format: date-time
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionEventList"
+          description: Paginated list of compressed session events
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No session with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: List persisted compressed AG-UI events
+  /api/ambient/v1/projects/{id}/gateways:
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GatewayList"
+          description: A JSON array of gateway objects
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Returns a list of gateways for a project
+    post:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Gateway"
+        description: Gateway data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Gateway"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Gateway already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: An unexpected error occurred creating the gateway
+      security:
+      - Bearer: []
+      summary: Create a new gateway in a project
+  /api/ambient/v1/projects/{id}/gateways/{gateway_id}:
+    delete:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the gateway
+        in: path
+        name: gateway_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Gateway deleted successfully
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No gateway with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Delete a gateway
+    get:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the gateway
+        in: path
+        name: gateway_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Gateway"
+          description: Gateway found by id
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No gateway with specified id exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error occurred
+      security:
+      - Bearer: []
+      summary: Get a gateway by id
+    patch:
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The id of the gateway
+        in: path
+        name: gateway_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GatewayPatchRequest"
+        description: Updated gateway data
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Gateway"
+          description: Gateway updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: No gateway with specified id exists
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Gateway already exists
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unexpected error updating gateway
+      security:
+      - Bearer: []
+      summary: Update a gateway
 components:
   parameters:
     id:
@@ -4001,6 +5413,20 @@ components:
       description: The id of the credential
       in: path
       name: cred_id
+      required: true
+      schema:
+        type: string
+    app_id:
+      description: The id of the application
+      in: path
+      name: app_id
+      required: true
+      schema:
+        type: string
+    gateway_id:
+      description: The id of the gateway
+      in: path
+      name: gateway_id
       required: true
       schema:
         type: string
@@ -4089,6 +5515,15 @@ components:
             type: integer
           parent_session_id:
             type: string
+          source_scheduled_session_id:
+            description: ID of the ScheduledSession that created this session.
+            readOnly: true
+            type: string
+          scheduled_for:
+            description: The cron tick time this session was created for.
+            format: date-time
+            readOnly: true
+            type: string
           bot_account_name:
             type: string
           resource_overrides:
@@ -4146,6 +5581,16 @@ components:
             format: date-time
             readOnly: true
             type: string
+          sandbox_logs_snapshot:
+            description: JSON array of sandbox log entries; last snapshot before sandbox
+              stop.
+            readOnly: true
+            type: string
+          sandbox_policy_snapshot:
+            description: JSON sandbox policy response; last snapshot before sandbox
+              stop.
+            readOnly: true
+            type: string
         required:
         - name
         type: object
@@ -4154,8 +5599,12 @@ components:
         completion_time: 2000-01-23T04:56:07.000+00:00
         agent_id: agent_id
         created_at: 2000-01-23T04:56:07.000+00:00
+        source_scheduled_session_id: source_scheduled_session_id
+        scheduled_for: 2000-01-23T04:56:07.000+00:00
         annotations: annotations
+        sandbox_logs_snapshot: sandbox_logs_snapshot
         reconciled_workflow: reconciled_workflow
+        sandbox_policy_snapshot: sandbox_policy_snapshot
         timeout: 5
         environment_variables: environment_variables
         kube_cr_uid: kube_cr_uid
@@ -4205,8 +5654,12 @@ components:
           completion_time: 2000-01-23T04:56:07.000+00:00
           agent_id: agent_id
           created_at: 2000-01-23T04:56:07.000+00:00
+          source_scheduled_session_id: source_scheduled_session_id
+          scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
+          sandbox_logs_snapshot: sandbox_logs_snapshot
           reconciled_workflow: reconciled_workflow
+          sandbox_policy_snapshot: sandbox_policy_snapshot
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
@@ -4241,8 +5694,12 @@ components:
           completion_time: 2000-01-23T04:56:07.000+00:00
           agent_id: agent_id
           created_at: 2000-01-23T04:56:07.000+00:00
+          source_scheduled_session_id: source_scheduled_session_id
+          scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
+          sandbox_logs_snapshot: sandbox_logs_snapshot
           reconciled_workflow: reconciled_workflow
+          sandbox_policy_snapshot: sandbox_policy_snapshot
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
@@ -4334,9 +5791,11 @@ components:
         completion_time: 2000-01-23T04:56:07.000+00:00
         sdk_restart_count: 0
         sdk_session_id: sdk_session_id
+        sandbox_logs_snapshot: sandbox_logs_snapshot
         conditions: conditions
         kube_namespace: kube_namespace
         reconciled_workflow: reconciled_workflow
+        sandbox_policy_snapshot: sandbox_policy_snapshot
         reconciled_repos: reconciled_repos
       properties:
         phase:
@@ -4360,6 +5819,10 @@ components:
         kube_cr_uid:
           type: string
         kube_namespace:
+          type: string
+        sandbox_logs_snapshot:
+          type: string
+        sandbox_policy_snapshot:
           type: string
       type: object
     Project:
@@ -4897,6 +6360,34 @@ components:
             type: string
           environment_variables:
             type: string
+          entrypoint:
+            description: "CLI binary to launch inside the sandbox (e.g., claude, opencode,\
+              \ bash). Defaults to claude."
+            type: string
+          providers:
+            description: "Names of providers this agent requires, referencing provider\
+              \ declarations in the tenant namespace."
+            items:
+              type: string
+            type: array
+          payloads:
+            description: Content to upload into the sandbox filesystem before the
+              entrypoint launches.
+            items:
+              $ref: "#/components/schemas/Payload"
+            type: array
+          environment:
+            additionalProperties:
+              type: string
+            description: Environment variables injected into the sandbox at creation
+              time.
+            type: object
+          sandbox_template:
+            $ref: "#/components/schemas/SandboxTemplate"
+          sandbox_policy:
+            description: "Name of a policy declaration in the tenant namespace. When\
+              \ omitted, the platform default policy applies."
+            type: string
           current_session_id:
             description: "Denormalized for fast reads — the active session, if any"
             readOnly: true
@@ -4916,28 +6407,59 @@ components:
         - project_id
         type: object
       example:
-        repo_url: repo_url
         workflow_id: workflow_id
-        llm_model: llm_model
-        resource_overrides: resource_overrides
-        owner_user_id: owner_user_id
+        payloads:
+        - repo_url: repo_url
+          ref: ref
+          sandbox_path: sandbox_path
+          content: content
+        - repo_url: repo_url
+          ref: ref
+          sandbox_path: sandbox_path
+          content: content
         current_session_id: current_session_id
-        kind: kind
-        llm_temperature: 5.962133916683182
         created_at: 2000-01-23T04:56:07.000+00:00
         description: description
         annotations: annotations
-        display_name: display_name
-        llm_max_tokens: 5
-        labels: labels
+        sandbox_policy: sandbox_policy
         environment_variables: environment_variables
         updated_at: 2000-01-23T04:56:07.000+00:00
         project_id: project_id
-        bot_account_name: bot_account_name
-        name: name
+        entrypoint: entrypoint
         id: id
         href: href
+        repo_url: repo_url
+        llm_model: llm_model
+        resource_overrides: resource_overrides
+        owner_user_id: owner_user_id
+        kind: kind
+        llm_temperature: 5.962133916683182
+        display_name: display_name
+        llm_max_tokens: 5
+        sandbox_template:
+          image: image
+          runtime_class_name: runtime_class_name
+          log_level: log_level
+          resources:
+            memory: memory
+            cpu: cpu
+          annotations:
+            key: annotations
+          gpu:
+            count: 2
+          driver_config:
+            key: ""
+          labels:
+            key: labels
+        labels: labels
+        environment:
+          key: environment
+        bot_account_name: bot_account_name
+        name: name
         prompt: prompt
+        providers:
+        - providers
+        - providers
     AgentList:
       allOf:
       - $ref: "#/components/schemas/List"
@@ -4953,62 +6475,155 @@ components:
         kind: kind
         page: 0
         items:
-        - repo_url: repo_url
-          workflow_id: workflow_id
-          llm_model: llm_model
-          resource_overrides: resource_overrides
-          owner_user_id: owner_user_id
+        - workflow_id: workflow_id
+          payloads:
+          - repo_url: repo_url
+            ref: ref
+            sandbox_path: sandbox_path
+            content: content
+          - repo_url: repo_url
+            ref: ref
+            sandbox_path: sandbox_path
+            content: content
           current_session_id: current_session_id
-          kind: kind
-          llm_temperature: 5.962133916683182
           created_at: 2000-01-23T04:56:07.000+00:00
           description: description
           annotations: annotations
-          display_name: display_name
-          llm_max_tokens: 5
-          labels: labels
+          sandbox_policy: sandbox_policy
           environment_variables: environment_variables
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
-          bot_account_name: bot_account_name
-          name: name
+          entrypoint: entrypoint
           id: id
           href: href
-          prompt: prompt
-        - repo_url: repo_url
-          workflow_id: workflow_id
+          repo_url: repo_url
           llm_model: llm_model
           resource_overrides: resource_overrides
           owner_user_id: owner_user_id
-          current_session_id: current_session_id
           kind: kind
           llm_temperature: 5.962133916683182
+          display_name: display_name
+          llm_max_tokens: 5
+          sandbox_template:
+            image: image
+            runtime_class_name: runtime_class_name
+            log_level: log_level
+            resources:
+              memory: memory
+              cpu: cpu
+            annotations:
+              key: annotations
+            gpu:
+              count: 2
+            driver_config:
+              key: ""
+            labels:
+              key: labels
+          labels: labels
+          environment:
+            key: environment
+          bot_account_name: bot_account_name
+          name: name
+          prompt: prompt
+          providers:
+          - providers
+          - providers
+        - workflow_id: workflow_id
+          payloads:
+          - repo_url: repo_url
+            ref: ref
+            sandbox_path: sandbox_path
+            content: content
+          - repo_url: repo_url
+            ref: ref
+            sandbox_path: sandbox_path
+            content: content
+          current_session_id: current_session_id
           created_at: 2000-01-23T04:56:07.000+00:00
           description: description
           annotations: annotations
-          display_name: display_name
-          llm_max_tokens: 5
-          labels: labels
+          sandbox_policy: sandbox_policy
           environment_variables: environment_variables
           updated_at: 2000-01-23T04:56:07.000+00:00
           project_id: project_id
-          bot_account_name: bot_account_name
-          name: name
+          entrypoint: entrypoint
           id: id
           href: href
+          repo_url: repo_url
+          llm_model: llm_model
+          resource_overrides: resource_overrides
+          owner_user_id: owner_user_id
+          kind: kind
+          llm_temperature: 5.962133916683182
+          display_name: display_name
+          llm_max_tokens: 5
+          sandbox_template:
+            image: image
+            runtime_class_name: runtime_class_name
+            log_level: log_level
+            resources:
+              memory: memory
+              cpu: cpu
+            annotations:
+              key: annotations
+            gpu:
+              count: 2
+            driver_config:
+              key: ""
+            labels:
+              key: labels
+          labels: labels
+          environment:
+            key: environment
+          bot_account_name: bot_account_name
+          name: name
           prompt: prompt
+          providers:
+          - providers
+          - providers
     AgentPatchRequest:
       example:
         repo_url: repo_url
         llm_model: llm_model
+        payloads:
+        - repo_url: repo_url
+          ref: ref
+          sandbox_path: sandbox_path
+          content: content
+        - repo_url: repo_url
+          ref: ref
+          sandbox_path: sandbox_path
+          content: content
         llm_temperature: 0.8008281904610115
-        name: name
         description: description
         annotations: annotations
         display_name: display_name
-        prompt: prompt
+        sandbox_policy: sandbox_policy
         llm_max_tokens: 6
+        sandbox_template:
+          image: image
+          runtime_class_name: runtime_class_name
+          log_level: log_level
+          resources:
+            memory: memory
+            cpu: cpu
+          annotations:
+            key: annotations
+          gpu:
+            count: 2
+          driver_config:
+            key: ""
+          labels:
+            key: labels
         labels: labels
+        environment:
+          key: environment
+        entrypoint: entrypoint
+        name: name
+        prompt: prompt
+        providers:
+        - providers
+        - providers
       properties:
         name:
           type: string
@@ -5029,6 +6644,24 @@ components:
         llm_max_tokens:
           format: int32
           type: integer
+        entrypoint:
+          type: string
+        providers:
+          items:
+            type: string
+          type: array
+        payloads:
+          items:
+            $ref: "#/components/schemas/Payload"
+          type: array
+        environment:
+          additionalProperties:
+            type: string
+          type: object
+        sandbox_template:
+          $ref: "#/components/schemas/SandboxTemplate"
+        sandbox_policy:
+          type: string
         labels:
           type: string
         annotations:
@@ -5053,8 +6686,12 @@ components:
           completion_time: 2000-01-23T04:56:07.000+00:00
           agent_id: agent_id
           created_at: 2000-01-23T04:56:07.000+00:00
+          source_scheduled_session_id: source_scheduled_session_id
+          scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
+          sandbox_logs_snapshot: sandbox_logs_snapshot
           reconciled_workflow: reconciled_workflow
+          sandbox_policy_snapshot: sandbox_policy_snapshot
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
@@ -5089,8 +6726,12 @@ components:
           completion_time: 2000-01-23T04:56:07.000+00:00
           agent_id: agent_id
           created_at: 2000-01-23T04:56:07.000+00:00
+          source_scheduled_session_id: source_scheduled_session_id
+          scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
+          sandbox_logs_snapshot: sandbox_logs_snapshot
           reconciled_workflow: reconciled_workflow
+          sandbox_policy_snapshot: sandbox_policy_snapshot
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
@@ -5136,8 +6777,12 @@ components:
           completion_time: 2000-01-23T04:56:07.000+00:00
           agent_id: agent_id
           created_at: 2000-01-23T04:56:07.000+00:00
+          source_scheduled_session_id: source_scheduled_session_id
+          scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
+          sandbox_logs_snapshot: sandbox_logs_snapshot
           reconciled_workflow: reconciled_workflow
+          sandbox_policy_snapshot: sandbox_policy_snapshot
           timeout: 5
           environment_variables: environment_variables
           kube_cr_uid: kube_cr_uid
@@ -5472,6 +7117,17 @@ components:
           enabled:
             description: Whether the schedule is active
             type: boolean
+          overlap_policy:
+            description: Behavior when a previous session from this schedule is still
+              active. Defaults to skip.
+            enum:
+            - skip
+            - allow
+            type: string
+          created_by_user_id:
+            description: User who created this schedule. Set from JWT on create. Immutable.
+            readOnly: true
+            type: string
           session_prompt:
             description: Prompt passed to each triggered session
             type: string
@@ -5501,6 +7157,7 @@ components:
         - schedule
         type: object
       example:
+        overlap_policy: skip
         last_run_at: 2000-01-23T04:56:07.000+00:00
         agent_id: agent_id
         next_run_at: 2000-01-23T04:56:07.000+00:00
@@ -5510,6 +7167,7 @@ components:
         description: description
         runner_type: runner_type
         inactivity_timeout: 5
+        created_by_user_id: created_by_user_id
         enabled: true
         timeout: 5
         schedule: schedule
@@ -5535,7 +7193,8 @@ components:
         kind: kind
         page: 0
         items:
-        - last_run_at: 2000-01-23T04:56:07.000+00:00
+        - overlap_policy: skip
+          last_run_at: 2000-01-23T04:56:07.000+00:00
           agent_id: agent_id
           next_run_at: 2000-01-23T04:56:07.000+00:00
           kind: kind
@@ -5544,6 +7203,7 @@ components:
           description: description
           runner_type: runner_type
           inactivity_timeout: 5
+          created_by_user_id: created_by_user_id
           enabled: true
           timeout: 5
           schedule: schedule
@@ -5554,7 +7214,8 @@ components:
           id: id
           href: href
           session_prompt: session_prompt
-        - last_run_at: 2000-01-23T04:56:07.000+00:00
+        - overlap_policy: skip
+          last_run_at: 2000-01-23T04:56:07.000+00:00
           agent_id: agent_id
           next_run_at: 2000-01-23T04:56:07.000+00:00
           kind: kind
@@ -5563,6 +7224,7 @@ components:
           description: description
           runner_type: runner_type
           inactivity_timeout: 5
+          created_by_user_id: created_by_user_id
           enabled: true
           timeout: 5
           schedule: schedule
@@ -5577,6 +7239,7 @@ components:
       example:
         schedule: schedule
         stop_on_run_finished: true
+        overlap_policy: skip
         agent_id: agent_id
         timezone: timezone
         name: name
@@ -5599,6 +7262,11 @@ components:
           type: string
         enabled:
           type: boolean
+        overlap_policy:
+          enum:
+          - skip
+          - allow
+          type: string
         session_prompt:
           type: string
         timeout:
@@ -5612,12 +7280,753 @@ components:
         runner_type:
           type: string
       type: object
-    _api_ambient_v1_projects__id__scheduled_sessions__ss_id__trigger_post_200_response:
+    Provider:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          project_id:
+            description: The project this provider belongs to
+            type: string
+          name:
+            description: Human-readable identifier; unique within the project
+            type: string
+          type:
+            description: "Provider type (e.g., github, anthropic, jira)"
+            type: string
+          secret:
+            description: Name of the Kubernetes Secret containing credentials for
+              this provider
+            type: string
+          namespace:
+            description: Source namespace where this provider was declared
+            type: string
+          labels:
+            type: string
+          annotations:
+            type: string
+          created_at:
+            format: date-time
+            type: string
+          updated_at:
+            format: date-time
+            type: string
+        required:
+        - name
+        - project_id
+        type: object
       example:
-        status: status
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        project_id: project_id
+        kind: kind
+        name: name
+        namespace: namespace
+        created_at: 2000-01-23T04:56:07.000+00:00
+        annotations: annotations
+        id: id
+        href: href
+        secret: secret
+        type: type
+        labels: labels
+    ProviderList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/Provider"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          kind: kind
+          name: name
+          namespace: namespace
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          id: id
+          href: href
+          secret: secret
+          type: type
+          labels: labels
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          kind: kind
+          name: name
+          namespace: namespace
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          id: id
+          href: href
+          secret: secret
+          type: type
+          labels: labels
+    ProviderPatchRequest:
+      example:
+        name: name
+        namespace: namespace
+        annotations: annotations
+        secret: secret
+        type: type
+        labels: labels
       properties:
-        status:
+        name:
           type: string
+        type:
+          type: string
+        secret:
+          type: string
+        namespace:
+          type: string
+        labels:
+          type: string
+        annotations:
+          type: string
+      type: object
+    Policy:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          project_id:
+            description: The project this policy belongs to
+            type: string
+          name:
+            description: Human-readable identifier; unique within the project
+            type: string
+          namespace:
+            description: Source namespace where this policy was declared
+            type: string
+          spec:
+            additionalProperties: true
+            description: "Full policy specification (network_policies, filesystem,\
+              \ process, landlock)"
+            type: object
+          labels:
+            type: string
+          annotations:
+            type: string
+          created_at:
+            format: date-time
+            type: string
+          updated_at:
+            format: date-time
+            type: string
+        required:
+        - name
+        - project_id
+        type: object
+      example:
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        project_id: project_id
+        kind: kind
+        name: name
+        namespace: namespace
+        created_at: 2000-01-23T04:56:07.000+00:00
+        annotations: annotations
+        id: id
+        href: href
+        spec:
+          key: ""
+        labels: labels
+    PolicyList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/Policy"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          kind: kind
+          name: name
+          namespace: namespace
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          id: id
+          href: href
+          spec:
+            key: ""
+          labels: labels
+        - updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          kind: kind
+          name: name
+          namespace: namespace
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          id: id
+          href: href
+          spec:
+            key: ""
+          labels: labels
+    PolicyPatchRequest:
+      example:
+        name: name
+        namespace: namespace
+        annotations: annotations
+        spec:
+          key: ""
+        labels: labels
+      properties:
+        name:
+          type: string
+        namespace:
+          type: string
+        spec:
+          additionalProperties: true
+          type: object
+        labels:
+          type: string
+        annotations:
+          type: string
+      type: object
+    Application:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          name:
+            description: Unique human-readable name for this application
+            type: string
+          source_repo_url:
+            description: Git repository URL (HTTPS or SSH)
+            type: string
+          source_target_revision:
+            description: "Branch name, tag, or commit SHA (default main)"
+            type: string
+          source_path:
+            description: Path within repo to kustomize directory
+            type: string
+          destination_ambient_url:
+            description: Target Ambient API URL; null means local
+            type: string
+          destination_project:
+            description: Target project name
+            type: string
+          credential_id:
+            description: FK to Credential for remote Ambient auth
+            type: string
+          auto_sync:
+            description: Enable automated sync on git change
+            type: boolean
+          auto_prune:
+            description: Delete resources removed from git
+            type: boolean
+          self_heal:
+            description: Re-sync when live state drifts
+            type: boolean
+          sync_options:
+            description: "Comma-separated options: CreateProject=true"
+            type: string
+          retry_limit:
+            description: Max sync retries on failure (default 3)
+            format: int32
+            type: integer
+          sync_status:
+            description: Synced | OutOfSync | Unknown
+            readOnly: true
+            type: string
+          health_status:
+            description: Healthy | Degraded | Progressing | Unknown
+            readOnly: true
+            type: string
+          sync_revision:
+            description: Last successfully synced git commit SHA
+            readOnly: true
+            type: string
+          operation_phase:
+            description: Succeeded | Failed | Running
+            readOnly: true
+            type: string
+          operation_message:
+            description: Human-readable sync result summary
+            readOnly: true
+            type: string
+          resource_status:
+            description: JSON array of per-resource sync results
+            readOnly: true
+            type: string
+          conditions:
+            description: JSON array of error conditions
+            readOnly: true
+            type: string
+          labels:
+            type: string
+          annotations:
+            type: string
+          last_synced_at:
+            format: date-time
+            readOnly: true
+            type: string
+        required:
+        - destination_project
+        - name
+        - source_path
+        - source_repo_url
+        type: object
+      example:
+        last_synced_at: 2000-01-23T04:56:07.000+00:00
+        destination_project: destination_project
+        created_at: 2000-01-23T04:56:07.000+00:00
+        annotations: annotations
+        source_target_revision: source_target_revision
+        source_repo_url: source_repo_url
+        retry_limit: 5
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        self_heal: true
+        operation_message: operation_message
+        id: id
+        href: href
+        health_status: health_status
+        resource_status: resource_status
+        operation_phase: operation_phase
+        kind: kind
+        sync_revision: sync_revision
+        auto_prune: true
+        auto_sync: true
+        labels: labels
+        name: name
+        sync_status: sync_status
+        source_path: source_path
+        sync_options: sync_options
+        destination_ambient_url: destination_ambient_url
+        conditions: conditions
+        credential_id: credential_id
+    ApplicationList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/Application"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - last_synced_at: 2000-01-23T04:56:07.000+00:00
+          destination_project: destination_project
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          source_target_revision: source_target_revision
+          source_repo_url: source_repo_url
+          retry_limit: 5
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          self_heal: true
+          operation_message: operation_message
+          id: id
+          href: href
+          health_status: health_status
+          resource_status: resource_status
+          operation_phase: operation_phase
+          kind: kind
+          sync_revision: sync_revision
+          auto_prune: true
+          auto_sync: true
+          labels: labels
+          name: name
+          sync_status: sync_status
+          source_path: source_path
+          sync_options: sync_options
+          destination_ambient_url: destination_ambient_url
+          conditions: conditions
+          credential_id: credential_id
+        - last_synced_at: 2000-01-23T04:56:07.000+00:00
+          destination_project: destination_project
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          source_target_revision: source_target_revision
+          source_repo_url: source_repo_url
+          retry_limit: 5
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          self_heal: true
+          operation_message: operation_message
+          id: id
+          href: href
+          health_status: health_status
+          resource_status: resource_status
+          operation_phase: operation_phase
+          kind: kind
+          sync_revision: sync_revision
+          auto_prune: true
+          auto_sync: true
+          labels: labels
+          name: name
+          sync_status: sync_status
+          source_path: source_path
+          sync_options: sync_options
+          destination_ambient_url: destination_ambient_url
+          conditions: conditions
+          credential_id: credential_id
+    ApplicationPatchRequest:
+      example:
+        destination_project: destination_project
+        auto_prune: true
+        annotations: annotations
+        source_target_revision: source_target_revision
+        source_repo_url: source_repo_url
+        auto_sync: true
+        retry_limit: 0
+        labels: labels
+        self_heal: true
+        name: name
+        source_path: source_path
+        sync_options: sync_options
+        destination_ambient_url: destination_ambient_url
+        credential_id: credential_id
+      properties:
+        name:
+          type: string
+        source_repo_url:
+          type: string
+        source_target_revision:
+          type: string
+        source_path:
+          type: string
+        destination_ambient_url:
+          type: string
+        destination_project:
+          type: string
+        credential_id:
+          type: string
+        auto_sync:
+          type: boolean
+        auto_prune:
+          type: boolean
+        self_heal:
+          type: boolean
+        sync_options:
+          type: string
+        retry_limit:
+          format: int32
+          type: integer
+        labels:
+          type: string
+        annotations:
+          type: string
+      type: object
+    ApplicationSyncRequest:
+      example:
+        prune: true
+        prune_project: true
+        revision: revision
+      properties:
+        prune:
+          description: Override auto_prune for this sync only
+          type: boolean
+        revision:
+          description: Override source_target_revision for this sync only
+          type: string
+        prune_project:
+          description: Required alongside prune to allow project deletion
+          type: boolean
+      type: object
+    SessionEvent:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          session_id:
+            description: ID of the parent session
+            readOnly: true
+            type: string
+          seq:
+            description: Monotonic sequence within session; gaps allowed after compression
+            format: int64
+            readOnly: true
+            type: integer
+          event_type:
+            description: |-
+              AG-UI event type. One of 33 types: RUN_STARTED, RUN_FINISHED,
+              RUN_ERROR, TEXT_MESSAGE_START, TEXT_MESSAGE_CONTENT,
+              TEXT_MESSAGE_END, TOOL_CALL_START, TOOL_CALL_ARGS,
+              TOOL_CALL_END, TOOL_CALL_RESULT, THINKING_TEXT_MESSAGE_CONTENT,
+              REASONING_MESSAGE_CONTENT, etc.
+            type: string
+          payload:
+            description: JSON-encoded event payload; structure varies by event type
+            type: string
+          completed_at:
+            description: Last event timestamp for compressed events; null for uncompressed
+            format: date-time
+            nullable: true
+            readOnly: true
+            type: string
+          event_count:
+            default: 1
+            description: Number of raw events compressed into this row (1 = uncompressed)
+            format: int32
+            readOnly: true
+            type: integer
+        type: object
+      example:
+        completed_at: 2000-01-23T04:56:07.000+00:00
+        event_type: event_type
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        payload: payload
+        kind: kind
+        event_count: 5
+        created_at: 2000-01-23T04:56:07.000+00:00
+        session_id: session_id
+        id: id
+        href: href
+        seq: 5
+    SessionEventList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/SessionEvent"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - completed_at: 2000-01-23T04:56:07.000+00:00
+          event_type: event_type
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          payload: payload
+          kind: kind
+          event_count: 5
+          created_at: 2000-01-23T04:56:07.000+00:00
+          session_id: session_id
+          id: id
+          href: href
+          seq: 5
+        - completed_at: 2000-01-23T04:56:07.000+00:00
+          event_type: event_type
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          payload: payload
+          kind: kind
+          event_count: 5
+          created_at: 2000-01-23T04:56:07.000+00:00
+          session_id: session_id
+          id: id
+          href: href
+          seq: 5
+    Gateway:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          name:
+            description: Resource name (typically openshell-gateway)
+            type: string
+          project_id:
+            description: The project this gateway belongs to
+            type: string
+          image:
+            description: Gateway container image reference
+            type: string
+          server_dns_names:
+            description: DNS names for TLS certificate generation
+            items:
+              type: string
+            type: array
+          config:
+            description: OpenShell gateway TOML configuration
+            type: string
+          labels:
+            description: JSON-encoded labels
+            type: string
+          annotations:
+            description: JSON-encoded annotations
+            type: string
+        required:
+        - name
+        - project_id
+        - server_dns_names
+        type: object
+      example:
+        image: image
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        project_id: project_id
+        kind: kind
+        server_dns_names:
+        - server_dns_names
+        - server_dns_names
+        name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        annotations: annotations
+        id: id
+        href: href
+        config: config
+        labels: labels
+    GatewayList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/Gateway"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - image: image
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          kind: kind
+          server_dns_names:
+          - server_dns_names
+          - server_dns_names
+          name: name
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          id: id
+          href: href
+          config: config
+          labels: labels
+        - image: image
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          kind: kind
+          server_dns_names:
+          - server_dns_names
+          - server_dns_names
+          name: name
+          created_at: 2000-01-23T04:56:07.000+00:00
+          annotations: annotations
+          id: id
+          href: href
+          config: config
+          labels: labels
+    GatewayPatchRequest:
+      example:
+        image: image
+        server_dns_names:
+        - server_dns_names
+        - server_dns_names
+        name: name
+        annotations: annotations
+        config: config
+        labels: labels
+      properties:
+        name:
+          type: string
+        image:
+          type: string
+        server_dns_names:
+          items:
+            type: string
+          type: array
+        config:
+          type: string
+        labels:
+          type: string
+        annotations:
+          type: string
+      type: object
+    Payload:
+      example:
+        repo_url: repo_url
+        ref: ref
+        sandbox_path: sandbox_path
+        content: content
+      properties:
+        sandbox_path:
+          description: Absolute path inside the sandbox where the content is delivered.
+          type: string
+        content:
+          description: Inline string content to place at the sandbox path.
+          type: string
+        repo_url:
+          description: Git repository URL to clone into the sandbox path.
+          type: string
+        ref:
+          description: "Git ref to check out (branch, tag, or commit SHA). Only valid\
+            \ with repo_url."
+          type: string
+      required:
+      - sandbox_path
+      type: object
+    SandboxTemplate:
+      example:
+        image: image
+        runtime_class_name: runtime_class_name
+        log_level: log_level
+        resources:
+          memory: memory
+          cpu: cpu
+        annotations:
+          key: annotations
+        gpu:
+          count: 2
+        driver_config:
+          key: ""
+        labels:
+          key: labels
+      properties:
+        image:
+          description: OCI container image reference for the sandbox.
+          type: string
+        resources:
+          $ref: "#/components/schemas/ResourceRequirements"
+        gpu:
+          $ref: "#/components/schemas/GpuRequirements"
+        runtime_class_name:
+          description: Kubernetes RuntimeClassName for the sandbox pod.
+          type: string
+        driver_config:
+          additionalProperties: true
+          description: OpenShell driver-specific opaque configuration (JSON).
+          type: object
+        labels:
+          additionalProperties:
+            type: string
+          description: Labels applied to the sandbox compute resources.
+          type: object
+        annotations:
+          additionalProperties:
+            type: string
+          description: Annotations applied to the sandbox compute resources.
+          type: object
+        log_level:
+          description: "Sandbox supervisor log verbosity (debug, info, warn, error)."
+          type: string
+      type: object
+    ResourceRequirements:
+      example:
+        memory: memory
+        cpu: cpu
+      properties:
+        cpu:
+          description: "CPU request/limit in Kubernetes quantity format (e.g., \"\
+            2\", \"500m\")."
+          type: string
+        memory:
+          description: "Memory request/limit in Kubernetes quantity format (e.g.,\
+            \ \"4Gi\", \"256Mi\")."
+          type: string
+      type: object
+    GpuRequirements:
+      example:
+        count: 2
+      properties:
+        count:
+          description: Number of GPUs to allocate. Default 0.
+          type: integer
       type: object
   securitySchemes:
     Bearer:

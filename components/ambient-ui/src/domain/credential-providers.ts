@@ -16,6 +16,7 @@ export type ProviderMeta = {
   namePlaceholder?: string
   urlOptional?: boolean
   urlHint?: string
+  comingSoon?: boolean
 }
 
 export type CredentialCategory = {
@@ -32,6 +33,7 @@ export const CREDENTIAL_CATEGORIES: readonly CredentialCategory[] = [
       },
       { provider: 'gitlab', label: 'GitLab', icon: 'GitBranch', fields: ['token'],
         namePlaceholder: 'my-gitlab-pat',
+        comingSoon: true,
       },
     ],
   },

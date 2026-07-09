@@ -285,6 +285,10 @@ func (kc *KubeClient) DeleteRoleBindingsByLabel(ctx context.Context, namespace, 
 	return kc.deleteCollectionWithFallback(ctx, RoleBindingGVR, namespace, labelSelector)
 }
 
+func (kc *KubeClient) DeleteNetworkPoliciesByLabel(ctx context.Context, namespace, labelSelector string) error {
+	return kc.deleteCollectionWithFallback(ctx, NetworkPolicyGVR, namespace, labelSelector)
+}
+
 func (kc *KubeClient) deleteCollectionWithFallback(ctx context.Context, gvr schema.GroupVersionResource, namespace, labelSelector string) error {
 	err := kc.dynamic.Resource(gvr).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: labelSelector})
 	if err == nil {
@@ -337,12 +341,25 @@ func (kc *KubeClient) ListTenantNamespaces(ctx context.Context, namespace, label
 	return kc.dynamic.Resource(gvr).Namespace(namespace).List(ctx, opts)
 }
 
+func (kc *KubeClient) DynamicClient() dynamic.Interface {
+	return kc.dynamic
+}
+
 func (kc *KubeClient) GetConfigMap(ctx context.Context, namespace, name string) (*unstructured.Unstructured, error) {
 	return kc.dynamic.Resource(ConfigMapGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
 func (kc *KubeClient) CreateConfigMap(ctx context.Context, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	return kc.dynamic.Resource(ConfigMapGVR).Namespace(obj.GetNamespace()).Create(ctx, obj, metav1.CreateOptions{})
+}
+
+func (kc *KubeClient) UpdateConfigMap(ctx context.Context, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	return kc.dynamic.Resource(ConfigMapGVR).Namespace(obj.GetNamespace()).Update(ctx, obj, metav1.UpdateOptions{})
+}
+
+func (kc *KubeClient) ListConfigMapsByLabel(ctx context.Context, namespace, labelSelector string) (*unstructured.UnstructuredList, error) {
+	opts := metav1.ListOptions{LabelSelector: labelSelector}
+	return kc.dynamic.Resource(ConfigMapGVR).Namespace(namespace).List(ctx, opts)
 }
 
 func (kc *KubeClient) GetResource(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error) {

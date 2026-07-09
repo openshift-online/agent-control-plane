@@ -1,5 +1,6 @@
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import Link from 'next/link'
-import { XCircle, AlertTriangle, Info } from 'lucide-react'
+import { XCircle, AlertTriangle, Info, ExternalLink, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Tooltip,
@@ -48,34 +49,83 @@ type NeedsYouQueueProps = {
   agentNames?: Map<string, string>
 }
 
+const STORAGE_KEY = 'acp:dismissed-attention'
+
+function loadDismissed(): Set<string> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return new Set(JSON.parse(raw) as string[])
+  } catch { /* ignore corrupt data */ }
+  return new Set()
+}
+
+function saveDismissed(ids: Set<string>) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]))
+  } catch { /* storage full / unavailable */ }
+}
+
 export function NeedsYouQueue({ items, projectId, agentNames }: NeedsYouQueueProps) {
-  const hasCritical = items.some((item) => item.criticality === 'critical')
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
+  const [hydrated, setHydrated] = useState(false)
+
+  useEffect(() => {
+    setDismissedIds(loadDismissed())
+    setHydrated(true)
+  }, [])
+
+  useEffect(() => {
+    if (hydrated) saveDismissed(dismissedIds)
+  }, [dismissedIds, hydrated])
+
+  const visibleItems = useMemo(
+    () => items.filter((item) => !dismissedIds.has(item.session.id)),
+    [items, dismissedIds],
+  )
+
+  const hasCritical = visibleItems.some((item) => item.criticality === 'critical')
+
+  const dismissItem = useCallback((sessionId: string) => {
+    setDismissedIds((prev) => new Set(prev).add(sessionId))
+  }, [])
+
+  const clearAll = useCallback(() => {
+    setDismissedIds(new Set(items.map((item) => item.session.id)))
+  }, [items])
 
   return (
     <section
       className={`rounded-lg border bg-card ${hasCritical ? 'border-destructive/50 bg-destructive/5' : ''}`}
     >
-      <h2 className="px-4 py-3 text-sm font-semibold">
-        Needs attention{' '}
-        {items.length > 0 && (
-          <span className={hasCritical ? 'text-destructive font-bold' : 'text-muted-foreground'}>
-            ({items.length})
-          </span>
+      <div className="flex items-center justify-between px-4 py-3">
+        <h2 className="text-sm font-semibold">
+          Needs attention{' '}
+          {visibleItems.length > 0 && (
+            <span className={hasCritical ? 'text-destructive font-bold' : 'text-muted-foreground'}>
+              ({visibleItems.length})
+            </span>
+          )}
+        </h2>
+        {visibleItems.length > 1 && (
+          <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={clearAll}>
+            Dismiss all
+          </Button>
         )}
-      </h2>
+      </div>
 
-      {items.length === 0 ? (
+      {visibleItems.length === 0 ? (
         <p className="px-4 pb-4 text-sm text-muted-foreground">All clear</p>
       ) : (
         <div>
           <RowHeader metaLabel="Since" />
           <ul className="divide-y">
-            {items.map((item) => (
+            {visibleItems.map((item) => (
               <NeedsYouRow
                 key={item.session.id}
                 item={item}
                 projectId={projectId}
                 agentNames={agentNames}
+                onDismiss={dismissItem}
               />
             ))}
           </ul>
@@ -93,9 +143,10 @@ type NeedsYouRowProps = {
   item: NeedsYouItem
   projectId: string
   agentNames?: Map<string, string>
+  onDismiss: (sessionId: string) => void
 }
 
-function NeedsYouRow({ item, projectId, agentNames }: NeedsYouRowProps) {
+function NeedsYouRow({ item, projectId, agentNames, onDismiss }: NeedsYouRowProps) {
   const { session, statusText, criticality, waitingSince } = item
   const Icon = CRITICALITY_ICON[criticality]
   const ref = getWorkItemRef(session.annotations)
@@ -157,10 +208,30 @@ function NeedsYouRow({ item, projectId, agentNames }: NeedsYouRowProps) {
         </div>
 
         {/* Action */}
-        <div>
-          <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
-            <Link href={`/${projectId}/sessions/${session.id}`}>View session</Link>
-          </Button>
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="icon" className="size-7" asChild>
+                <Link href={`/${projectId}/sessions/${session.id}`}>
+                  <ExternalLink className="size-3.5" />
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>View session</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 text-muted-foreground"
+                onClick={() => onDismiss(session.id)}
+              >
+                <X className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Dismiss</TooltipContent>
+          </Tooltip>
         </div>
       </RowGrid>
     </li>

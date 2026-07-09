@@ -142,7 +142,7 @@ func (h *userGRPCHandler) ListUsers(ctx context.Context, req *pb.ListUsersReques
 		if authResult != nil && !authResult.IsGlobalAdmin {
 			username := auth.GetUsernameFromContext(ctx)
 			if username != "" {
-				scopeFilter, err := rbac.TSLEqual("username", username)
+				scopeFilter, err := rbac.TSLEqualUsername("username", username)
 				if err != nil {
 					return nil, status.Error(codes.PermissionDenied, "not authorized")
 				}
