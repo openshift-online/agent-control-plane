@@ -32,21 +32,6 @@ make kind-port-forward           # ports shown in output
 make kind-setup-openshell-cli    # optional: port-forward to OpenShell gateways
 ```
 
-**Optional — pre-load the runner image into the kind cluster** to speed up the first sandbox creation:
-
-```bash
-# Podman (used by default)
-podman pull quay.io/ambient_code/acp_claude_runner:latest && \
-podman save quay.io/ambient_code/acp_claude_runner:latest | \
-podman exec -i $(kind get clusters | grep '^ambient-' | head -1)-control-plane \
-ctr --namespace=k8s.io images import -
-
-# Docker
-docker pull quay.io/ambient_code/acp_claude_runner:latest && \
-kind load docker-image quay.io/ambient_code/acp_claude_runner:latest \
-  --name $(kind get clusters | grep '^ambient-' | head -1)
-```
-
 Once the cluster is running, see [examples/README.md](examples/README.md) to deploy starter agents and vTeam lab environments.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md#local-development-setup) for full local development setup.
