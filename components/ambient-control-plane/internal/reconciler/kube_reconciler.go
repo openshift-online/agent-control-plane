@@ -514,7 +514,9 @@ func (r *SimpleKubeReconciler) verifyAndFixDNSConfig(ctx context.Context, namesp
 	}
 
 	r.logger.Warn().Str("sandbox", sbxName).Msg("sandbox pod has ndots:5, deleting for recreation from patched CR")
-	if err := r.nsKube().DeletePod(ctx, namespace, sbxName, &metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
+	gracePeriod := int64(0)
+	immediateDelete := &metav1.DeleteOptions{GracePeriodSeconds: &gracePeriod}
+	if err := r.nsKube().DeletePod(ctx, namespace, sbxName, immediateDelete); err != nil && !k8serrors.IsNotFound(err) {
 		return false, fmt.Errorf("deleting pod %s for ndots fix: %w", sbxName, err)
 	}
 	return false, nil
@@ -645,7 +647,7 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 	pollStart := time.Now()
 	lastProgressLog := pollStart
 	ndotsRetries := 0
-	const maxNdotsRetries = 3
+	const maxNdotsRetries = 5
 	awaitingPodRestart := false
 
 	for {
@@ -696,8 +698,9 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				continue
 			}
 			if awaitingPodRestart {
-				r.logger.Debug().Str("sandbox", sbxName).Msg("sandbox still READY after pod deletion, waiting for phase transition")
-				continue
+				// Sandbox may return to READY before we poll; re-verify rather than waiting for a phase transition we missed.
+				r.logger.Info().Str("sandbox", sbxName).Msg("sandbox READY after pod deletion, re-verifying DNS")
+				awaitingPodRestart = false
 			}
 
 			sandboxID := sbxName
