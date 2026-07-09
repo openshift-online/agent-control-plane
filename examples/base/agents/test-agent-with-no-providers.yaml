@@ -1,0 +1,5 @@
+kind: Agent
+name: test-agent-with-no-providers
+prompt: "Say hello"
+labels:
+  purpose: e2e-lifecycle-test

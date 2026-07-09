@@ -578,13 +578,28 @@ section "11. Runner lifecycle verification"
 
 # Verify the runner process started inside the sandbox and is processing.
 # The runner emits RUN_STARTED via AG-UI before contacting any LLM, so this
-# works without a real inference service.
-if [ -n "$CREATED_SESSION_ID" ]; then
+# works without a real inference service.  Uses a dedicated agent with no
+# bound providers to avoid credential-related provisioning failures.
+LIFECYCLE_AGENT_NAME="test-agent-with-no-providers"
+$ACPCTL apply -f "$REPO_ROOT/examples/base/agents/test-agent-with-no-providers.yaml" \
+  --project "$TENANT" >/dev/null 2>&1 || true
+LIFECYCLE_AGENTS_RESP=$(api GET "/api/ambient/v1/projects/${PROJECT_ID}/agents?size=50" || echo "")
+LIFECYCLE_AGENT_ID=$(echo "$LIFECYCLE_AGENTS_RESP" \
+  | jq -r ".items[] | select(.name == \"${LIFECYCLE_AGENT_NAME}\") | .id" 2>/dev/null | head -1 || echo "")
+
+if [ -n "$LIFECYCLE_AGENT_ID" ]; then
+  LIFECYCLE_START_RESP=$(api POST "/api/ambient/v1/projects/${PROJECT_ID}/agents/${LIFECYCLE_AGENT_ID}/start" \
+    -d '{"prompt": "gateway-e2e-test: runner lifecycle check"}' || echo "")
+  LIFECYCLE_SESSION_ID=$(echo "$LIFECYCLE_START_RESP" \
+    | jq -r '.session.id // empty' 2>/dev/null || echo "")
+fi
+
+if [ -n "$LIFECYCLE_SESSION_ID" ]; then
 
   # 11a. Session reaches Running phase (explicit assertion, not just a gate)
   LIFECYCLE_PHASE=""
   for i in $(seq 1 60); do
-    LIFECYCLE_PHASE=$(api GET "/api/ambient/v1/sessions/${CREATED_SESSION_ID}" 2>/dev/null \
+    LIFECYCLE_PHASE=$(api GET "/api/ambient/v1/sessions/${LIFECYCLE_SESSION_ID}" 2>/dev/null \
       | jq -r '.phase // empty' 2>/dev/null || echo "")
     if [ "$LIFECYCLE_PHASE" = "Running" ] || [ "$LIFECYCLE_PHASE" = "Succeeded" ] || [ "$LIFECYCLE_PHASE" = "Failed" ]; then
       break
@@ -608,7 +623,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
   # started successfully.
   RUN_STARTED_FOUND=false
   for i in $(seq 1 30); do
-    MESSAGES_RESP=$(api GET "/api/ambient/v1/sessions/${CREATED_SESSION_ID}/messages" || echo "")
+    MESSAGES_RESP=$(api GET "/api/ambient/v1/sessions/${LIFECYCLE_SESSION_ID}/messages" || echo "")
     if echo "$MESSAGES_RESP" | jq -e '.[] | select(.event_type == "RUN_STARTED")' >/dev/null 2>&1; then
       RUN_STARTED_FOUND=true
       break
@@ -666,7 +681,7 @@ section "Cleanup"
 
 if [ "$SKIP_CLEANUP" = "true" ]; then
   echo -e "  ${YELLOW}Skipping cleanup (--skip-cleanup)${NC}"
-  for _sid in "$CREATED_SESSION_ID" "$REPO_SESSION_ID"; do
+  for _sid in "$CREATED_SESSION_ID" "$REPO_SESSION_ID" "$LIFECYCLE_SESSION_ID"; do
     [ -z "$_sid" ] && continue
     _pod="session-$(echo "${_sid:0:40}" | tr '[:upper:]' '[:lower:]')"
     _phase=$(kubectl get pod "$_pod" -n "$TENANT" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
@@ -686,6 +701,11 @@ else
     api DELETE "/api/ambient/v1/sessions/${REPO_SESSION_ID}" >/dev/null 2>&1 && \
       echo "  Deleted repo session ${REPO_SESSION_ID}" || \
       echo "  Could not delete repo session (non-fatal)"
+  fi
+  if [ -n "$LIFECYCLE_SESSION_ID" ]; then
+    api DELETE "/api/ambient/v1/sessions/${LIFECYCLE_SESSION_ID}" >/dev/null 2>&1 && \
+      echo "  Deleted lifecycle session ${LIFECYCLE_SESSION_ID}" || \
+      echo "  Could not delete lifecycle session (non-fatal)"
   fi
 fi
 
