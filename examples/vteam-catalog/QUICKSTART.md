@@ -18,8 +18,20 @@ acp-mvp-lab
 
 ## 1. Create The Local Kind Cluster
 
+This lab runs on Docker. If Podman is also installed, `make` selects Podman by
+default, so later commands such as `make kind-status` and
+`make test-vteam-catalog-lab` look for the cluster under the wrong engine and
+report `No ambient Kind cluster found` even though it is running. Export the
+engine once so every command in this lab targets Docker:
+
 ```bash
-make kind-up CONTAINER_ENGINE=docker OPENSHELL_USE_GATEWAY=true
+export CONTAINER_ENGINE=docker
+```
+
+Then create the cluster:
+
+```bash
+make kind-up OPENSHELL_USE_GATEWAY=true
 ```
 
 After it finishes, check the assigned ports:
@@ -119,8 +131,29 @@ If you want Vertex credentials from the repo workflow, run:
 make kind-setup-vertex
 ```
 
-Then create or copy any missing provider secrets into the vTeam namespace after
-the project exists.
+For the other providers, add your own credentials as `kind: Credential`
+resources and apply them with `acpctl`. For example, to give the GitHub-backed
+agents (Amber, Parker, …) a token, create a file like
+[`examples/overlays/tenant-a/credential-github.yaml`](../overlays/tenant-a/credential-github.yaml):
+
+```yaml
+kind: Credential
+name: github-cred
+provider: github
+token: $GITHUB_PAT   # a GitHub Personal Access Token
+```
+
+```bash
+export AMBIENT_PROJECT=vteam-product-swarm
+"$ACPCTL" apply -f credential-github.yaml --project vteam-product-swarm
+```
+
+The control plane materializes the `github-creds` secret in the project
+namespace from this record. See the
+[Credentials concept guide](https://openshift-online.github.io/agent-control-plane/concepts/credentials/)
+for how credentials, role bindings, and runtime wiring fit together. Without a
+credential for a provider an agent declares, its sessions fail to start with
+`reading secret <provider>-creds ... not found`.
 
 ## 5. Apply The Current vTeam Catalog Manifests
 
@@ -190,4 +223,13 @@ Then inspect sessions:
 ```bash
 export AMBIENT_PROJECT=vteam-product-swarm
 "$ACPCTL" agent sessions stella --project-id vteam-product-swarm
+```
+
+## 8. Optional: Automated Lab Check
+
+With the cluster running and `CONTAINER_ENGINE` exported (step 1), you can
+validate the whole copy/paste flow end to end:
+
+```bash
+make test-vteam-catalog-lab
 ```
