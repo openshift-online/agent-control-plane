@@ -150,6 +150,17 @@ RUN uv pip install --python /sandbox/.venv/bin/python '/runner/ambient-runner[al
 RUN mkdir -p /sandbox/workspace/artifacts /sandbox/workspace/file-uploads && \
     chown -R sandbox:sandbox /sandbox/workspace
 
+# OpenShift compatibility: the sandbox runs under the restricted-v2 SCC with an
+# arbitrarily-assigned UID that is always a member of GID 0 (the root group).
+# Every directory and file the agent writes to under $HOME (/sandbox) must
+# therefore be owned by group 0 and be group-writable. Without this, repo
+# payload extraction into /sandbox/* (e.g. session-config) fails with
+# "tar: ...: Cannot mkdir: Permission denied" because the arbitrary UID owns
+# none of the pre-created sandbox-user dirs. This mirrors the "chmod -R g=u"
+# treatment in the file-mode Dockerfile. See:
+# https://docs.redhat.com/en/documentation/openshift_container_platform/latest/html/images/creating-images#use-uid
+RUN chgrp -R 0 /sandbox && chmod -R g=u /sandbox
+
 ENV RUNNER_TYPE=claude-agent-sdk \
     HOME=/sandbox \
     SHELL=/bin/bash \
