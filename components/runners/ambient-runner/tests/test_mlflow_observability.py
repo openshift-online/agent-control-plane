@@ -15,8 +15,6 @@ _mock_entities = types.ModuleType("mlflow.entities")
 _mock_entities.SpanStatusCode = MagicMock()
 _mock_entities.SpanType = MagicMock()
 _mock_mlflow.entities = _mock_entities
-sys.modules.setdefault("mlflow", _mock_mlflow)
-sys.modules.setdefault("mlflow.entities", _mock_entities)
 
 from ambient_runner.mlflow_observability import MLflowSessionTracer  # noqa: E402
 
@@ -33,10 +31,19 @@ INIT_KWARGS = dict(
 
 
 @pytest.fixture(autouse=True)
-def _reset_mlflow_mocks():
+def _mock_mlflow_modules():
     _mock_mlflow.set_tracking_uri.reset_mock()
     _mock_mlflow.set_experiment.reset_mock()
-    yield
+    _mock_mlflow.set_tracking_uri.side_effect = None
+    _mock_mlflow.set_experiment.side_effect = None
+    with patch.dict(
+        sys.modules,
+        {
+            "mlflow": _mock_mlflow,
+            "mlflow.entities": _mock_entities,
+        },
+    ):
+        yield
 
 
 class TestIsOpenshellToken:

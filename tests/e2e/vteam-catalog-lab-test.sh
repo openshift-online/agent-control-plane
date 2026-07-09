@@ -160,6 +160,28 @@ wait_for_backend() {
   return 1
 }
 
+backend_port() {
+  make -s kind-status | awk '/Forward:/ { for (i = 1; i <= NF; i++) if ($i == "(backend)") print $(i - 1) }'
+}
+
+ensure_backend_port_forward() {
+  local label="$1"
+  BACKEND_PORT="$(backend_port)"
+  if [ -n "$BACKEND_PORT" ] && wait_for_backend "$BACKEND_PORT"; then
+    pass "$label"
+    return
+  fi
+
+  echo "  Backend port-forward unavailable; restarting kind port-forward..."
+  make kind-port-forward >/tmp/acp-kind-port-forward.log 2>&1 &
+  BACKEND_PORT="$(backend_port)"
+  if [ -n "$BACKEND_PORT" ] && wait_for_backend "$BACKEND_PORT"; then
+    pass "$label"
+  else
+    die "$label; run make kind-port-forward"
+  fi
+}
+
 section "1. Lab markdown quality gate"
 
 [ -f "$LAB_DOC_ABS" ] || die "Lab doc exists: $LAB_DOC"
@@ -210,12 +232,7 @@ section "3. Execute port-forward from markdown"
 
 run_doc_block "kind-port-forward-background" '/tmp/acp-kind-port-forward.log'
 
-BACKEND_PORT="$(make -s kind-status | awk '/Forward:/ { for (i = 1; i <= NF; i++) if ($i == "(backend)") print $(i - 1) }')"
-if [ -n "$BACKEND_PORT" ] && wait_for_backend "$BACKEND_PORT"; then
-  pass "Kind backend port-forward is healthy"
-else
-  die "Kind backend port-forward is healthy; run make kind-port-forward"
-fi
+ensure_backend_port_forward "Kind backend port-forward is healthy"
 
 section "4. Execute login from markdown"
 
@@ -226,6 +243,8 @@ section "5. Execute catalog apply from markdown"
 run_doc_block_with_retry 3 "catalog-apply" "examples/vteam-catalog/product-swarm"
 
 section "6. Verify ACP records from markdown commands"
+
+ensure_backend_port_forward "Kind backend port-forward is healthy before inspection"
 
 run_doc_block "catalog-inspection" 'agent list --project-id vteam-product-swarm'
 
