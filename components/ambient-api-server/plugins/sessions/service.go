@@ -27,6 +27,7 @@ type SessionService interface {
 	ActiveByAgentID(ctx context.Context, agentID string) (*Session, *errors.ServiceError)
 	ByScheduledSessionID(ctx context.Context, scheduledSessionID string) (SessionList, *errors.ServiceError)
 	ActiveByScheduledSessionID(ctx context.Context, scheduledSessionID string) (*Session, *errors.ServiceError)
+	PhaseCounts(ctx context.Context, projectId string) (map[string]int64, *errors.ServiceError)
 
 	FindByIDs(ctx context.Context, ids []string) (SessionList, *errors.ServiceError)
 
@@ -305,6 +306,14 @@ func (s *sqlSessionService) ActiveByScheduledSessionID(ctx context.Context, sche
 		return nil, errors.GeneralError("unable to look up active session for schedule %s: %s", scheduledSessionID, err)
 	}
 	return session, nil
+}
+
+func (s *sqlSessionService) PhaseCounts(ctx context.Context, projectId string) (map[string]int64, *errors.ServiceError) {
+	counts, err := s.sessionDao.PhaseCounts(ctx, projectId)
+	if err != nil {
+		return nil, errors.GeneralError("unable to get phase counts: %s", err)
+	}
+	return counts, nil
 }
 
 func (s *sqlSessionService) Stop(ctx context.Context, id string) (*Session, *errors.ServiceError) {

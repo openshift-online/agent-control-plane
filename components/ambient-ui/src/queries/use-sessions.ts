@@ -91,6 +91,7 @@ export function useSessionPhaseCounts(
     queryKey: queryKeys.sessions.phaseCounts(projectId),
     queryFn: () => adapter.phaseCounts(projectId),
     enabled: !!projectId,
+    staleTime: 4000,
     refetchInterval: 5000,
   })
 }
