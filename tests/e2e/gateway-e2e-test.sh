@@ -637,18 +637,25 @@ if [ -n "$LOCKED_AGENT_ID" ]; then
       # check the proxy log for DENIED entries — the Claude binary attempts
       # api.anthropic.com on startup which should be blocked by locked-down policy.
       if [ "$LOCKED_SESSION_RUNNING" = "true" ]; then
-        sleep 5  # allow proxy log entries to flush
+        LOCKED_DENIED_FOUND=false
+        for i in $(seq 1 10); do
+          LOCKED_LOG=$(kubectl exec -n "$TENANT" "$LOCKED_SBX_NAME" -- \
+            sh -c 'cat /var/log/openshell.*.log 2>/dev/null' 2>/dev/null || echo "")
 
-        LOCKED_LOG=$(kubectl exec -n "$TENANT" "$LOCKED_SBX_NAME" -- \
-          sh -c 'cat /var/log/openshell.*.log 2>/dev/null' 2>/dev/null || echo "")
+          if echo "$LOCKED_LOG" | grep -q "DENIED.*api.anthropic.com"; then
+            LOCKED_DENIED_FOUND=true
+            break
+          fi
+          sleep 3
+        done
 
-        if echo "$LOCKED_LOG" | grep -q "DENIED"; then
-          DENIED_COUNT=$(echo "$LOCKED_LOG" | grep -c "DENIED" || echo "0")
-          pass "Locked-down policy denied network access (${DENIED_COUNT} DENIED entries in proxy log)"
+        if [ "$LOCKED_DENIED_FOUND" = "true" ]; then
+          DENIED_COUNT=$(echo "$LOCKED_LOG" | grep -c "DENIED.*api.anthropic.com" || echo "0")
+          pass "Locked-down policy denied api.anthropic.com (${DENIED_COUNT} DENIED entries in proxy log)"
         elif [ -z "$LOCKED_LOG" ]; then
           fail "Locked-down network test — no proxy log found in sandbox pod"
         else
-          fail "Locked-down policy did NOT deny any connections (no DENIED entries in proxy log)"
+          fail "Locked-down policy did NOT deny api.anthropic.com (no matching DENIED entries in proxy log)"
         fi
       else
         fail "Locked-down network test — session not Running (phase: ${LOCKED_PHASE:-unknown})"
@@ -673,16 +680,25 @@ if [ -n "${SBX_NAME:-}" ]; then
     -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
 
   if [ "$PERM_POD_PHASE" = "Running" ]; then
-    PERM_LOG=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
-      sh -c 'cat /var/log/openshell.*.log 2>/dev/null' 2>/dev/null || echo "")
+    PERM_ALLOWED_FOUND=false
+    for i in $(seq 1 10); do
+      PERM_LOG=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+        sh -c 'cat /var/log/openshell.*.log 2>/dev/null' 2>/dev/null || echo "")
 
-    if echo "$PERM_LOG" | grep -q "ALLOWED"; then
-      ALLOWED_COUNT=$(echo "$PERM_LOG" | grep -c "ALLOWED" || echo "0")
-      pass "Permissive policy allowed network access (${ALLOWED_COUNT} ALLOWED entries in proxy log)"
+      if echo "$PERM_LOG" | grep -q "ALLOWED.*api.anthropic.com"; then
+        PERM_ALLOWED_FOUND=true
+        break
+      fi
+      sleep 3
+    done
+
+    if [ "$PERM_ALLOWED_FOUND" = "true" ]; then
+      ALLOWED_COUNT=$(echo "$PERM_LOG" | grep -c "ALLOWED.*api.anthropic.com" || echo "0")
+      pass "Permissive policy allowed api.anthropic.com (${ALLOWED_COUNT} ALLOWED entries in proxy log)"
     elif [ -z "$PERM_LOG" ]; then
       fail "Permissive network test — no proxy log found in sandbox pod"
     else
-      fail "Permissive policy has no ALLOWED entries in proxy log"
+      fail "Permissive policy has no ALLOWED entries for api.anthropic.com in proxy log"
     fi
   else
     fail "Permissive network test — hello-world sandbox pod not running (phase: ${PERM_POD_PHASE:-unknown})"
