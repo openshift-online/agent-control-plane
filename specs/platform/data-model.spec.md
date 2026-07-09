@@ -994,18 +994,18 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 
 | REST API | `acpctl` Command | Status |
 |---|---|---|
-| `GET /projects/{id}/agents` | `acpctl agent list --project-id <p>` | ✅ implemented |
-| `GET /projects/{id}/agents/{agent_id}` | `acpctl agent get --project-id <p> --agent-id <id>` | ✅ implemented |
-| `POST /projects/{id}/agents` | `acpctl agent create --project-id <p> --name <n> [--prompt <p>]` | ✅ implemented |
-| `PATCH /projects/{id}/agents/{agent_id}` | `acpctl agent update --project-id <p> --agent-id <id> [--name <n>] [--prompt <p>]` | ✅ implemented |
-| `DELETE /projects/{id}/agents/{agent_id}` | `acpctl agent delete --project-id <p> --agent-id <id> --confirm` | ✅ implemented |
-| `POST /projects/{id}/agents/{agent_id}/start` | `acpctl start <agent-id> --project-id <p> [--prompt <t>]` | ✅ implemented |
-| `GET /projects/{id}/agents/{agent_id}/start` | `acpctl agent start-preview --project-id <p> --agent-id <id>` | ✅ implemented |
-| `GET /projects/{id}/agents/{agent_id}/sessions` | `acpctl agent sessions --project-id <p> --agent-id <id>` | ✅ implemented |
-| `GET /projects/{id}/agents/{agent_id}/inbox` | `acpctl inbox list --project-id <p> --pa-id <id>` | ✅ implemented |
-| `POST /projects/{id}/agents/{agent_id}/inbox` | `acpctl inbox send --project-id <p> --pa-id <id> --body <text>` | ✅ implemented |
-| `PATCH /projects/{id}/agents/{agent_id}/inbox/{msg_id}` | `acpctl inbox mark-read --project-id <p> --pa-id <id> --msg-id <id>` | ✅ implemented |
-| `DELETE /projects/{id}/agents/{agent_id}/inbox/{msg_id}` | `acpctl inbox delete --project-id <p> --pa-id <id> --msg-id <id>` | ✅ implemented |
+| `GET /projects/{id}/agents` | `acpctl agent list --project <p>` | ✅ implemented |
+| `GET /projects/{id}/agents/{agent_id}` | `acpctl agent get --project <p> --agent-id <id>` | ✅ implemented |
+| `POST /projects/{id}/agents` | `acpctl agent create --project <p> --name <n> [--prompt <p>]` | ✅ implemented |
+| `PATCH /projects/{id}/agents/{agent_id}` | `acpctl agent update --project <p> --agent-id <id> [--name <n>] [--prompt <p>]` | ✅ implemented |
+| `DELETE /projects/{id}/agents/{agent_id}` | `acpctl agent delete --project <p> --agent-id <id> --yes` | ✅ implemented |
+| `POST /projects/{id}/agents/{agent_id}/start` | `acpctl start <agent-id> --project <p> [--prompt <t>]` | ✅ implemented |
+| `GET /projects/{id}/agents/{agent_id}/start` | `acpctl agent start-preview --project <p> --agent-id <id>` | ✅ implemented |
+| `GET /projects/{id}/agents/{agent_id}/sessions` | `acpctl agent sessions --project <p> --agent-id <id>` | ✅ implemented |
+| `GET /projects/{id}/agents/{agent_id}/inbox` | `acpctl inbox list --project <p> --pa-id <id>` | ✅ implemented |
+| `POST /projects/{id}/agents/{agent_id}/inbox` | `acpctl inbox send --project <p> --pa-id <id> --body <text>` | ✅ implemented |
+| `PATCH /projects/{id}/agents/{agent_id}/inbox/{msg_id}` | `acpctl inbox mark-read --project <p> --pa-id <id> --msg-id <id>` | ✅ implemented |
+| `DELETE /projects/{id}/agents/{agent_id}/inbox/{msg_id}` | `acpctl inbox delete --project <p> --pa-id <id> --msg-id <id>` | ✅ implemented |
 
 #### Sessions
 
@@ -1030,7 +1030,7 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `GET /projects/{id}/scheduled-sessions/{sched_id}` | `acpctl scheduled-session get <name>` | ✅ implemented |
 | `POST /projects/{id}/scheduled-sessions` | `acpctl scheduled-session create --name <n> --agent-id <a> --schedule <cron> [--prompt <p>] [--timezone <tz>]` | ✅ implemented |
 | `PATCH /projects/{id}/scheduled-sessions/{sched_id}` | `acpctl scheduled-session update <name> [--schedule <cron>] [--prompt <p>] [--enabled=false]` | ✅ implemented |
-| `DELETE /projects/{id}/scheduled-sessions/{sched_id}` | `acpctl scheduled-session delete <name> --confirm` | ✅ implemented |
+| `DELETE /projects/{id}/scheduled-sessions/{sched_id}` | `acpctl scheduled-session delete <name> --yes` | ✅ implemented |
 | `POST .../suspend` | `acpctl scheduled-session suspend <name>` | ✅ implemented |
 | `POST .../resume` | `acpctl scheduled-session resume <name>` | ✅ implemented |
 | `POST .../trigger` | `acpctl scheduled-session trigger <name>` | ✅ implemented |
@@ -1069,7 +1069,7 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `GET /applications/{id}` | `acpctl get application <name>` | 🔲 planned |
 | `POST /applications` | `acpctl create application --name <n> --repo <url> --path <p> [--revision <r>] [--project <p>] [--ambient-url <u>]` | 🔲 planned |
 | `PATCH /applications/{id}` | `acpctl update application <name> [--repo <url>] [--path <p>] [--auto-sync] [--auto-prune] [--self-heal]` | 🔲 planned |
-| `DELETE /applications/{id}` | `acpctl delete application <name> --confirm` | 🔲 planned |
+| `DELETE /applications/{id}` | `acpctl delete application <name> --yes` | 🔲 planned |
 | `POST /applications/{id}/sync` | `acpctl sync application <name> [--prune] [--revision <r>]` | 🔲 planned |
 | `POST /applications/{id}/refresh` | `acpctl refresh application <name>` | 🔲 planned |
 | `GET /applications/{id}/status` | `acpctl get application <name> -o wide` | 🔲 planned |
@@ -1082,7 +1082,7 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `POST /credentials` | `acpctl credential create --name <n> --provider <p> --token <t\|@->  [--url <u>] [--email <e>] [--description <d>]` | ✅ implemented |
 | `GET /credentials/{cred_id}` | `acpctl credential get <id>` | ✅ implemented |
 | `PATCH /credentials/{cred_id}` | `acpctl credential update <id> [--token <t>] [--description <d>]` | ✅ implemented |
-| `DELETE /credentials/{cred_id}` | `acpctl credential delete <id> --confirm` | ✅ implemented |
+| `DELETE /credentials/{cred_id}` | `acpctl credential delete <id> --yes` | ✅ implemented |
 | `GET /credentials/{cred_id}/token` | `acpctl credential token <id>` | ✅ implemented |
 | `POST /role_bindings` | `acpctl credential bind <cred-name> --project <project>` | ✅ implemented |
 
@@ -1096,7 +1096,7 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `DELETE /roles/{id}` | `acpctl delete role <id>` | ✅ implemented |
 | `GET /role_bindings` | `acpctl get role-bindings` | ✅ implemented |
 | `GET /role_bindings/{id}` | `acpctl get role-bindings <id>` | ✅ implemented |
-| `POST /role_bindings` | `acpctl create role-binding --role-id <r> --scope <s> [--user-id <u>] [--project-id <p>] [--agent-id <a>] [--session-id <s>] [--credential-id <c>]` | ✅ implemented |
+| `POST /role_bindings` | `acpctl create role-binding --role-id <r> --scope <s> [--user-id <u>] [--project-fk <p>] [--agent-id-fk <a>] [--session-id-fk <s>] [--credential-id-fk <c>]` | ✅ implemented |
 | `DELETE /role_bindings/{id}` | `acpctl delete role-binding <id>` | ✅ implemented |
 
 #### Auth & Context
@@ -2027,10 +2027,10 @@ All Kinds with `labels`/`annotations` store them as JSON strings in the DB (`*st
   acpctl project test-cred-1
 
   # 2. Agent
-  acpctl agent create --project-id test-cred-1 --name github-agent \
+  acpctl agent create --project test-cred-1 --name github-agent \
     --prompt "You are a GitHub automation agent."
 
-  AGENT_ID=$(acpctl agent list --project-id test-cred-1 -o json | python3 -c "import sys,json; print(json.load(sys.stdin)['items'][0]['id'])")
+  AGENT_ID=$(acpctl agent list --project test-cred-1 -o json | python3 -c "import sys,json; print(json.load(sys.stdin)['items'][0]['id'])")
   echo "AGENT_ID=$AGENT_ID"
 
   # 3. Credential (global resource)
@@ -2045,7 +2045,7 @@ All Kinds with `labels`/`annotations` store them as JSON strings in the DB (`*st
   echo "CRED_ID=$CRED_ID"
 
   # 5. Start session
-  SESSION_ID=$(acpctl start github-agent --project-id test-cred-1 \
+  SESSION_ID=$(acpctl start github-agent --project test-cred-1 \
     --prompt "Fetch credential $CRED_ID token and confirm you received it." \
     -o json | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
   echo "SESSION_ID=$SESSION_ID"

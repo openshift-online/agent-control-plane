@@ -44,7 +44,7 @@ acpctl project current
 acpctl project update my-project --prompt "Follow our repository standards and keep changes narrow."
 ```
 
-The CLI uses the configured project for project-scoped commands unless you pass `--project-id`.
+The CLI uses the configured project for project-scoped commands unless you pass `--project`.
 
 ## Credentials
 
@@ -97,7 +97,7 @@ You can create one-off sessions directly, then start or stop them through the se
 ```bash
 acpctl create session \
   --name investigate-auth \
-  --project-id my-project \
+  --project my-project \
   --prompt "Find why expired tokens return 500 instead of 401." \
   --repo-url https://github.com/acme/service.git
 
@@ -110,7 +110,7 @@ acpctl stop <session-id>
 For a project-agent ID, the root command also starts an agent session:
 
 ```bash
-acpctl start <project-agent-id> --project-id my-project --prompt "Run triage."
+acpctl start <project-agent-id> --project my-project --prompt "Run triage."
 ```
 
 ## Messages and events
@@ -151,16 +151,16 @@ Current server behavior stores and updates these records. Automatic cron executi
 Agents have project-scoped inbox messages. Starting an agent drains unread inbox messages into the start context and marks them read.
 
 ```bash
-acpctl inbox send --project-id my-project --pa-id api-maintainer --body "Please review the auth changes."
-acpctl inbox list --project-id my-project --pa-id api-maintainer
-acpctl inbox mark-read --project-id my-project --pa-id api-maintainer --msg-id <message-id>
+acpctl inbox send --project my-project --pa-id api-maintainer --body "Please review the auth changes."
+acpctl inbox list --project my-project --pa-id api-maintainer
+acpctl inbox mark-read --project my-project --pa-id api-maintainer --msg-id <message-id>
 ```
 
 ## Generic resources
 
 ```bash
 acpctl get projects
-acpctl get agents --project-id my-project
+acpctl get agents --project my-project
 acpctl get credentials -o json
 acpctl describe session <session-id>
 acpctl delete session <session-id>

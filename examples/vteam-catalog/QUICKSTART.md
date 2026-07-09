@@ -136,8 +136,8 @@ Verify ACP records:
 ```bash
 export AMBIENT_PROJECT=vteam-product-swarm
 "$ACPCTL" get project vteam-product-swarm
-"$ACPCTL" agent list --project-id vteam-product-swarm
-"$ACPCTL" provider list --project-id vteam-product-swarm
+"$ACPCTL" agent list --project vteam-product-swarm
+"$ACPCTL" provider list --project vteam-product-swarm
 ```
 
 Verify Kubernetes-side objects:
@@ -181,7 +181,7 @@ packet:
 ```bash
 export AMBIENT_PROJECT=vteam-product-swarm
 "$ACPCTL" agent start stella \
-  --project-id vteam-product-swarm \
+  --project vteam-product-swarm \
   --prompt "Add dark mode to the calculator"
 ```
 
@@ -189,5 +189,5 @@ Then inspect sessions:
 
 ```bash
 export AMBIENT_PROJECT=vteam-product-swarm
-"$ACPCTL" agent sessions stella --project-id vteam-product-swarm
+"$ACPCTL" agent sessions stella --project vteam-product-swarm
 ```

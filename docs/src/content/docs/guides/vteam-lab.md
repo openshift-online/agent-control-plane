@@ -81,13 +81,13 @@ After applying a catalog team, check the ACP records:
 ```bash
 # Product swarm
 acpctl get project vteam-product-swarm
-acpctl agent list --project-id vteam-product-swarm
-acpctl provider list --project-id vteam-product-swarm
+acpctl agent list --project vteam-product-swarm
+acpctl provider list --project vteam-product-swarm
 
 # Codebase maintainers
 acpctl get project codebase-maintainers
-acpctl agent list --project-id codebase-maintainers
-acpctl provider list --project-id codebase-maintainers
+acpctl agent list --project codebase-maintainers
+acpctl provider list --project codebase-maintainers
 ```
 
 On a local Kind cluster, also check the project namespaces:

@@ -103,8 +103,8 @@ jobs:
           echo ""
           echo "=== vTeam project records ==="
           acpctl get project vteam-product-swarm 2>&1 || true
-          acpctl agent list --project-id vteam-product-swarm 2>&1 || true
-          acpctl provider list --project-id vteam-product-swarm 2>&1 || true
+          acpctl agent list --project vteam-product-swarm 2>&1 || true
+          acpctl provider list --project vteam-product-swarm 2>&1 || true
 
           echo ""
           echo "=== Recent ambient-code events ==="
