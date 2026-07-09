@@ -9,7 +9,7 @@ from unittest.mock import patch
 # Import model-discovery.py as a module (it has a hyphen in the name)
 _spec = importlib.util.spec_from_file_location(
     "model_discovery",
-    Path(__file__).resolve().parent.parent / ".github" / "scripts" / "model-discovery.py",
+    Path(__file__).resolve().parent.parent.parent / ".github" / "scripts" / "model-discovery.py",
 )
 _mod = importlib.util.module_from_spec(_spec)
 sys.modules["model_discovery"] = _mod
