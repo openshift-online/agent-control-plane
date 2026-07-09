@@ -4,27 +4,54 @@
 [![Unit Tests](https://github.com/openshift-online/agent-control-plane/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/openshift-online/agent-control-plane/actions/workflows/unit-tests.yml)
 [![Docs](https://github.com/openshift-online/agent-control-plane/actions/workflows/docs.yml/badge.svg)](https://openshift-online.github.io/agent-control-plane/)
 
-> Kubernetes-native AI automation platform for orchestrating agentic sessions through containerized microservices
+> A secure, multi-tenant platform for running AI agents at scale on Kubernetes
+
+## Why ACP?
+
+Running AI agents on your laptop is easy. Running them securely for your team is not. You need multi-tenancy, managed credentials, integration with internal systems, and a deployment story that doesn't require every engineer to be a platform expert.
+
+Agent Control Plane (ACP) solves this by giving teams a platform where they can:
+
+- **Define agent workflows using GitOps** — agents, credentials, and schedules are declared in YAML and synced from git repositories
+- **Operate securely in a multi-tenant model** — each team gets an isolated project with its own agents, credentials, and sandboxed execution
+- **Run agents in OpenShell sandboxes** — credentials are masked and resolved by the sandbox supervisor, never exposed to agent code
+- **Go from laptop to deployed quickly** — bring your agent config, point it at ACP, and it handles the rest (namespaces, gateways, credential wiring, sandbox lifecycle)
 
 ## Overview
 
-The Agent Control Plane (ACP) lets teams create and manage AI agentic sessions — automated tasks that clone repos, run AI agents, and push results. Sessions are stored in PostgreSQL and reconciled into Kubernetes Jobs via gRPC watch streams.
+ACP organizes work around a few core concepts:
+
+- **Projects** are scoped to teams. Each team gets its own project with isolated agents and credentials — tenant A and tenant B never see each other's resources.
+- **Agents** are configured per project. A team might have a PR reviewer, a Jira automation agent, or a research assistant — each defined as a YAML configuration with a prompt, model, and provider bindings.
+- **Providers** are sets of credentials that allow agents to reach external services like GitHub, Jira, GitLab, or Vertex AI. Credentials are stored as Kubernetes secrets and managed through OpenShell providers so agents never see raw tokens.
+- **Sessions** are individual agent runs. Start them on demand from the UI or CLI, or configure **scheduled sessions** (cron-based) for recurring tasks like reviewing PRs every 30 minutes. Active sessions can be observed and interacted with in real time — multiple team members can watch a session's progress, and in development environments, users can steer the agent mid-run by sending messages to the session.
+- **Sandboxes** are OpenShell-isolated environments where agents execute. Each sandbox gets the credentials it needs through masked provider bindings, with full network and filesystem isolation.
+
+### How It Works
+
+1. Teams define their agents and providers in YAML and store them in a git repo
+2. ACP syncs those definitions and sets up the agents in the team's project
+3. When a session starts, ACP spins up an OpenShell sandbox, wires in the team's credentials, and uploads any skills or payloads
+4. The AI agent runs inside the sandbox with access to configured tools (MCP servers for Jira, GitHub, etc.)
+5. Results stream back through the API server — viewable in the UI with full logs, tool call history, and MLflow traces
 
 ### Key Capabilities
 
-- **Agentic Sessions**: AI-powered automation for code review, bug fixes, research, and development tasks
-- **Multi-Agent Workflows**: Agents organized in projects with inter-agent messaging via persistent inbox queues
-- **Scheduled Sessions**: Cron-based recurring agent triggers with overlap policies and timezone support
+- **Multi-Tenant Isolation**: Projects scoped to teams with separate credentials, agents, and sandboxes
 - **GitOps Fleet Management**: Argo CD-style Applications that continuously sync agent fleet definitions from git repositories
+- **Managed Credentials**: Per-tenant OpenShell providers with credential masking — agents never touch raw tokens
+- **Scheduled Sessions**: Cron-based recurring agent triggers with overlap policies and timezone support
+- **Sandbox Security**: OpenShell-based defense-in-depth (network namespace, TLS proxy, Landlock, seccomp-BPF, OPA policy)
+- **Observability**: Session logs, tool call history, sandbox audit logs, and MLflow tracing out of the box
 - **AG-UI Event Streaming**: Real-time event streaming via the [AG-UI protocol](https://github.com/anthropics/ag-ui) with dual APIs (human-readable Messages API + comprehensive Events API with compression)
-- **Credential Provider Support**: GitHub, GitLab, Jira, Google, Vertex AI, and Kubeconfig via isolated credential sidecars
 - **SSO Authentication**: OpenID Connect with Red Hat SSO / Keycloak, BFF token relay, and Kubernetes user impersonation
 - **RBAC**: Scope-aware authorization (global, project, agent, session, credential) with role bindings and permission matrix
-- **Sandbox Isolation**: OpenShell-based defense-in-depth (network namespace, TLS proxy, Landlock, seccomp-BPF, OPA policy) for runner pods
 - **CLI and SDK**: `acpctl` CLI and generated SDKs (Go, Python, TypeScript) for automation
 - **MCP Integration**: Model Context Protocol server exposing platform resources as tools, deployed as sidecar or public endpoint
 
-## Quick Start
+## Getting Started
+
+**Try it locally** — spin up ACP in a Kind cluster and run agents on your machine:
 
 ```bash
 make kind-up
@@ -57,10 +84,26 @@ The [examples/](examples/) directory contains starter agents and multi-agent vir
 
 ## Architecture
 
+ACP has three high-level pieces:
+
+1. **Agent repos** — git repositories containing YAML definitions for agents, providers, and schedules
+2. **ACP application** — the API server, control plane, UI, and runner components running on Kubernetes
+3. **External management** — the OpenShell agent sandbox controller, tenant namespaces, secrets, and platform configuration
+
 ```
-User Creates Session → API Server Persists to DB → Control Plane Creates Pod →
-Runner Executes AI Agent → Results Stream to API Server → UI Displays Progress
+Agent Repo (YAML) → ACP syncs config → User/Schedule triggers session →
+API Server persists to DB → Control Plane spins up sandbox →
+Runner executes AI agent → Results stream to API Server → UI displays progress
 ```
+
+### Tenant Onboarding
+
+1. Configure a namespace with role bindings and credential secrets
+2. Add the namespace to ACP's platform config — a project is created automatically
+3. ACP installs an OpenShell gateway into the namespace (one per tenant)
+4. ACP reads secrets from the namespace and sets up OpenShell providers on the gateway
+5. Add your agent config repo to the platform config — ACP imports it and sets up your agents
+6. Agents are ready to run — on demand or on a schedule
 
 ### Components
 
