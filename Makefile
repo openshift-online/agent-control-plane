@@ -201,7 +201,7 @@ ifeq ($(OPENSHELL_USE_GATEWAY),true)
 MCP_BUILD_TARGETS :=
 endif
 
-build-all: build-runner build-runner-openshell build-api-server build-control-plane build-ambient-ui $(MCP_BUILD_TARGETS) ## Build all container images
+build-all: build-runner-openshell build-api-server build-control-plane build-ambient-ui $(MCP_BUILD_TARGETS) ## Build all container images
 
 build-ambient-ui: ## Build ambient-ui image
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building ambient-ui with $(CONTAINER_ENGINE)..."
@@ -927,7 +927,7 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 			$(MAKE) --no-print-directory kind-load-runner; \
 			echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching control plane to use locally-built runner image..."; \
 			kubectl set env deployment/ambient-control-plane -n $(NAMESPACE) \
-				OPENSHELL_RUNNER_IMAGE=localhost/acp_claude_runner:latest $(QUIET_REDIRECT); \
+				OPENSHELL_RUNNER_IMAGE=localhost/acp_runner_openshell:latest $(QUIET_REDIRECT); \
 		else \
 			$(MAKE) --no-print-directory _kind-preload-runner; \
 			echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching control plane to use pre-loaded runner image..."; \
@@ -1319,10 +1319,10 @@ kind-reload-runner-openshell: check-kind check-kubectl check-local-context ## Re
 	@kubectl rollout status deployment/ambient-control-plane -n $(NAMESPACE) --timeout=60s
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell runner reloaded — new sessions will use the updated image"
 
-kind-load-runner: build-runner check-kind check-kubectl check-local-context ## Build runner image and load into kind (skips if already present)
-	@_IMG=$$(echo "$(RUNNER_IMAGE)" | cut -d: -f1) && \
+kind-load-runner: build-runner-openshell check-kind check-kubectl check-local-context ## Build OpenShell runner image and load into kind (skips if already present)
+	@_IMG=$$(echo "$(RUNNER_OPENSHELL_IMAGE)" | cut -d: -f1) && \
 	_REF=localhost/$$_IMG:latest && \
-	$(CONTAINER_ENGINE) tag $(RUNNER_IMAGE) $$_REF 2>/dev/null || true; \
+	$(CONTAINER_ENGINE) tag $(RUNNER_OPENSHELL_IMAGE) $$_REF 2>/dev/null || true; \
 	if $(CONTAINER_ENGINE) exec $(KIND_CLUSTER_NAME)-control-plane \
 		ctr --namespace=k8s.io images check "name==$$_REF" 2>/dev/null | grep -q "$$_REF"; then \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner image already loaded in kind: $$_REF (skipping)"; \
@@ -1554,7 +1554,7 @@ _kind-require-cluster: ## Internal: Fail fast if kind cluster is not running
 	@$(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null | grep -q '^$(KIND_CLUSTER_NAME)$$' || \
 		(echo "$(COLOR_RED)✗$(COLOR_RESET) No ambient Kind cluster found. Run 'make kind-up' first, or set KIND_CLUSTER_NAME to an existing cluster." && exit 1)
 
-KIND_CORE_IMAGES := $(RUNNER_IMAGE) $(RUNNER_OPENSHELL_IMAGE) $(API_SERVER_IMAGE) $(CONTROL_PLANE_IMAGE) $(AMBIENT_UI_IMAGE)
+KIND_CORE_IMAGES := $(RUNNER_OPENSHELL_IMAGE) $(API_SERVER_IMAGE) $(CONTROL_PLANE_IMAGE) $(AMBIENT_UI_IMAGE)
 KIND_MCP_IMAGES := $(MCP_IMAGE) $(GITHUB_MCP_IMAGE) $(JIRA_MCP_IMAGE) $(K8S_MCP_IMAGE) $(GOOGLE_MCP_IMAGE)
 ifeq ($(OPENSHELL_USE_GATEWAY),true)
 KIND_MCP_IMAGES :=
