@@ -11,6 +11,50 @@ If you are using a hosted ACP environment, your administrators provide Vertex
 AI access; you only need to supply your own integration credentials, such as
 GitHub and Jira, for examples that use those providers.
 
+### Local Kind cluster
+
+The following covers credential setup for the local Kind cluster. Each
+agent example declares which providers it needs; you only need to set up
+credentials for the providers used by the agents you want to run.
+
+#### Vertex AI (Claude)
+
+If you have local Vertex authentication configured (e.g.
+`gcloud auth application-default login`), `make kind-up` automatically detects
+it and installs the credential into each tenant namespace. Agents that use
+Claude — such as `hello-world` — will work out of the box.
+
+To use a different Vertex service account key:
+
+```bash
+kubectl create secret generic vertex-sa-key \
+  --namespace=tenant-a \
+  --from-literal=token="$(cat vertex.json)"
+```
+
+#### Jira
+
+Agents that integrate with Jira (e.g. `jira-simple-whoami`,
+`jira-issue-categorizer`) require a Jira API token in the tenant namespace:
+
+```bash
+kubectl create secret generic jira \
+  --from-literal=JIRA_USERNAME="you@example.com" \
+  --from-literal=JIRA_API_TOKEN="$(cat ~/jira-token.txt)" \
+  -n tenant-a
+```
+
+#### GitHub
+
+Agents that integrate with GitHub (e.g. `pr-reviewer`) require a GitHub
+personal access token in the tenant namespace:
+
+```bash
+kubectl create secret generic github-creds \
+  --from-literal=token="$(cat ~/github-pat.txt)" \
+  -n tenant-a
+```
+
 ---
 
 ## Starter Examples
