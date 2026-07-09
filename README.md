@@ -84,17 +84,13 @@ The [examples/](examples/) directory contains starter agents and multi-agent vir
 
 ## Architecture
 
+![Architecture](docs/architecture.png)
+
 ACP has three high-level pieces:
 
 1. **Agent repos** — git repositories containing YAML definitions for agents, providers, and schedules
 2. **ACP application** — the API server, control plane, UI, and runner components running on Kubernetes
 3. **External management** — the OpenShell agent sandbox controller, tenant namespaces, secrets, and platform configuration
-
-```
-Agent Repo (YAML) → ACP syncs config → User/Schedule triggers session →
-API Server persists to DB → Control Plane spins up sandbox →
-Runner executes AI agent → Results stream to API Server → UI displays progress
-```
 
 ### Tenant Onboarding
 
