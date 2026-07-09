@@ -75,6 +75,7 @@ MCP_IMAGE ?= acp_mcp:$(IMAGE_TAG)
 # Quay runner image reference and tag for kind pre-loading
 RUNNER_QUAY_IMAGE ?= quay.io/ambient_code/acp_runner_openshell
 RUNNER_PRELOAD_TAG ?= kind-preloaded
+RUNNER_PRELOAD_REF := localhost/acp_runner_openshell:$(RUNNER_PRELOAD_TAG)
 
 # kind-local overlay always references localhost/acp_* images.
 # Podman produces this prefix natively; for Docker we tag before loading.
@@ -922,7 +923,7 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 		$(MAKE) --no-print-directory _kind-preload-runner; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching control plane to use pre-loaded runner image..."; \
 		kubectl set env deployment/ambient-control-plane -n $(NAMESPACE) \
-			OPENSHELL_RUNNER_IMAGE=$(RUNNER_QUAY_IMAGE):$(RUNNER_PRELOAD_TAG) $(QUIET_REDIRECT); \
+			OPENSHELL_RUNNER_IMAGE=$(RUNNER_PRELOAD_REF) $(QUIET_REDIRECT); \
 	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods..."
 	@./tests/infra/wait-for-ready.sh
@@ -1547,17 +1548,16 @@ _kind-preload-runner: ## Internal: Pull runner image from Quay, retag, and load 
 		exit 1; \
 	fi; \
 	rm -f "$$_LOG"
-	@$(CONTAINER_ENGINE) tag $(RUNNER_QUAY_IMAGE):latest $(RUNNER_QUAY_IMAGE):$(RUNNER_PRELOAD_TAG)
+	@$(CONTAINER_ENGINE) tag $(RUNNER_QUAY_IMAGE):latest $(RUNNER_PRELOAD_REF)
 	@printf '  Loading image into cluster '
 	@_LOG=/tmp/runner-load-$$$$.log; \
 	if [ "$(CONTAINER_ENGINE)" = "podman" ] || [ -n "$(KIND_HOST)" ]; then \
-		( $(CONTAINER_ENGINE) save $(RUNNER_QUAY_IMAGE):$(RUNNER_PRELOAD_TAG) | \
+		( $(CONTAINER_ENGINE) save $(RUNNER_PRELOAD_REF) | \
 		$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
 		ctr --namespace=k8s.io images import - ) >"$$_LOG" 2>&1 & \
 	else \
-		( $(CONTAINER_ENGINE) save -o /tmp/runner-preload.tar $(RUNNER_QUAY_IMAGE):$(RUNNER_PRELOAD_TAG) && \
-		kind load image-archive /tmp/runner-preload.tar --name $(KIND_CLUSTER_NAME) && \
-		rm -f /tmp/runner-preload.tar ) >"$$_LOG" 2>&1 & \
+		( $(CONTAINER_ENGINE) save $(RUNNER_PRELOAD_REF) | \
+		kind load image-archive /dev/stdin --name $(KIND_CLUSTER_NAME) ) >"$$_LOG" 2>&1 & \
 	fi; \
 	_PID=$$!; \
 	_CHARS='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'; \
@@ -1575,7 +1575,7 @@ _kind-preload-runner: ## Internal: Pull runner image from Quay, retag, and load 
 		exit 1; \
 	fi; \
 	rm -f "$$_LOG"
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner image pre-loaded: $(RUNNER_QUAY_IMAGE):$(RUNNER_PRELOAD_TAG)"
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner image pre-loaded: $(RUNNER_PRELOAD_REF)"
 
 _kind-load-images: ## Internal: Load images into kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind ($(KIND_CLUSTER_NAME))..."
