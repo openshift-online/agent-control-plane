@@ -37,6 +37,10 @@ def _fake_anthropic_key(length: int = 36) -> str:
     return "sk-" + "ant-" + "a" * length
 
 
+def _fake_mlflow_token() -> str:
+    return ".".join(["eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiJhY3AifQ", "signature"])
+
+
 # -- Unit tests for _collect_secret_values --
 
 
@@ -73,6 +77,12 @@ class TestCollectSecretValues:
             gh_idx = next(i for i, (v, _) in enumerate(pairs) if v == "GITHUB_TOKEN")
             gl_idx = next(i for i, (v, _) in enumerate(pairs) if v == "GITLAB_TOKEN")
             assert gl_idx < gh_idx  # longer value comes first
+
+    def test_collects_mlflow_tracking_token(self):
+        token = _fake_mlflow_token()
+        with patch.dict(os.environ, {"MLFLOW_TRACKING_TOKEN": token}, clear=False):
+            pairs = _collect_secret_values()
+            assert ("MLFLOW_TRACKING_TOKEN", token) in pairs
 
 
 # -- Unit tests for _redact_text --
@@ -112,6 +122,24 @@ class TestRedactText:
         result = _redact_text(text, secrets)
         assert secret not in result
         assert pat not in result
+
+    def test_pattern_based_mlflow_tracking_token_assignment(self):
+        token = _fake_mlflow_token()
+        result = _redact_text(f"MLFLOW_TRACKING_TOKEN={token}", [])
+        assert token not in result
+        assert result == "MLFLOW_TRACKING_TOKEN=***REDACTED***"
+
+    def test_pattern_based_bearer_jwt_redaction(self):
+        token = _fake_mlflow_token()
+        result = _redact_text(f"Authorization: Bearer {token}", [])
+        assert token not in result
+        assert result == "Authorization: Bearer ***REDACTED***"
+
+    def test_pattern_based_bare_jwt_redaction(self):
+        token = _fake_mlflow_token()
+        result = _redact_text(f"request failed with token {token}", [])
+        assert token not in result
+        assert result == "request failed with token ***REDACTED_JWT***"
 
 
 # -- Unit tests for _redact_event --
@@ -178,6 +206,41 @@ class TestRedactEvent:
         )
         result = _redact_event(event, self.SECRETS)
         assert "supersecretvalue123" not in result.message
+
+    def test_mlflow_token_text_chunk_event(self):
+        token = _fake_mlflow_token()
+        event = TextMessageChunkEvent(
+            type=EventType.TEXT_MESSAGE_CHUNK,
+            message_id="msg-1",
+            delta=f"Token: {token}",
+            role="assistant",
+        )
+        result = _redact_event(event, [("MLFLOW_TRACKING_TOKEN", token)])
+        assert token not in result.delta
+        assert "[REDACTED_MLFLOW_TRACKING_TOKEN]" in result.delta
+
+    def test_mlflow_token_tool_result_event(self):
+        token = _fake_mlflow_token()
+        event = ToolCallResultEvent(
+            type=EventType.TOOL_CALL_RESULT,
+            message_id="msg-1",
+            tool_call_id="tc-1",
+            role="tool",
+            content=f"MLFLOW_TRACKING_TOKEN={token}",
+        )
+        result = _redact_event(event, [("MLFLOW_TRACKING_TOKEN", token)])
+        assert token not in result.content
+        assert result.content == "MLFLOW_TRACKING_TOKEN=***REDACTED***"
+
+    def test_mlflow_token_run_error_event(self):
+        token = _fake_mlflow_token()
+        event = RunErrorEvent(
+            type=EventType.RUN_ERROR,
+            message=f"MLflow auth failed with {token}",
+        )
+        result = _redact_event(event, [("MLFLOW_TRACKING_TOKEN", token)])
+        assert token not in result.message
+        assert "[REDACTED_MLFLOW_TRACKING_TOKEN]" in result.message
 
     def test_custom_event_string_value(self):
         event = CustomEvent(

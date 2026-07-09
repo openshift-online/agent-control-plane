@@ -276,7 +276,7 @@ async def setup_bridge_observability(
 ) -> Any:
     """Initialise observability for a bridge (best-effort).
 
-    Activates MLflow autologging (if credential env vars are present) before
+    Activates MLflow autologging (if a tracking URI is present) before
     creating the ObservabilityManager, so the SDK is patched before any
     ClaudeSDKClient instantiation.
 
@@ -285,9 +285,14 @@ async def setup_bridge_observability(
     """
     from ambient_runner.mlflow_autolog import activate_mlflow_autologging
 
-    # MLflowRequiredError (raised when MLFLOW_REQUIRED=true and env vars are
-    # missing) must propagate uncaught — it means the sandbox cannot start.
-    activate_mlflow_autologging()
+    activate_mlflow_autologging(
+        extra_tags={
+            "acp.session_id": context.session_id,
+            "acp.project_id": context.get_env("PROJECT_NAME", ""),
+            "acp.agent_id": context.get_env("AGENT_ID", ""),
+            "acp.model": configured_model,
+        }
+    )
 
     try:
         from ambient_runner.observability import ObservabilityManager

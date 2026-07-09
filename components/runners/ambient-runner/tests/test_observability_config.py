@@ -26,7 +26,16 @@ def test_observability_backends_parsing():
         assert observability_backend_names() == frozenset({"langfuse", "mlflow"})
 
 
-def test_use_mlflow_requires_flags_and_uri():
+def test_use_mlflow_defaults_on_when_tracking_uri_is_present():
+    with patch.dict(
+        os.environ,
+        {"MLFLOW_TRACKING_URI": "http://mlflow:5000"},
+        clear=True,
+    ):
+        assert use_mlflow_backend() is True
+
+
+def test_use_mlflow_allows_legacy_backend_opt_in_when_enabled():
     with patch.dict(
         os.environ,
         {
@@ -38,6 +47,8 @@ def test_use_mlflow_requires_flags_and_uri():
     ):
         assert use_mlflow_backend() is True
 
+
+def test_use_mlflow_requires_tracking_uri_for_legacy_backend_opt_in():
     with patch.dict(
         os.environ,
         {
@@ -50,14 +61,25 @@ def test_use_mlflow_requires_flags_and_uri():
         assert use_mlflow_backend() is False
 
 
-def test_mlflow_backend_ignored_without_backend_list():
+def test_explicit_false_tracing_flag_disables_mlflow():
     with patch.dict(
         os.environ,
         {
-            "OBSERVABILITY_BACKENDS": "langfuse",
-            "MLFLOW_TRACING_ENABLED": "true",
             "MLFLOW_TRACKING_URI": "http://mlflow:5000",
+            "MLFLOW_TRACING_ENABLED": "false",
         },
         clear=True,
     ):
         assert use_mlflow_backend() is False
+
+
+def test_mlflow_backend_ignores_backend_list_without_explicit_false():
+    with patch.dict(
+        os.environ,
+        {
+            "OBSERVABILITY_BACKENDS": "langfuse",
+            "MLFLOW_TRACKING_URI": "http://mlflow:5000",
+        },
+        clear=True,
+    ):
+        assert use_mlflow_backend() is True

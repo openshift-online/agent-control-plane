@@ -145,9 +145,19 @@ _REDACT_PATTERNS = [
     (re.compile(r"AIza[a-zA-Z0-9\-_]{30,}"), "AIza***REDACTED***"),
     (
         re.compile(
-            r"(ANTHROPIC_API_KEY|LANGFUSE_SECRET_KEY|LANGFUSE_PUBLIC_KEY|BOT_TOKEN|GIT_TOKEN|GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*[^\s\'\"]+",
+            r"(ANTHROPIC_API_KEY|LANGFUSE_SECRET_KEY|LANGFUSE_PUBLIC_KEY|BOT_TOKEN|GIT_TOKEN|GEMINI_API_KEY|GOOGLE_API_KEY|MLFLOW_TRACKING_TOKEN)\s*=\s*[^\s\'\"]+",
         ),
         r"\1=***REDACTED***",
+    ),
+    (
+        re.compile(
+            r"Bearer\s+[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}",
+        ),
+        "Bearer ***REDACTED***",
+    ),
+    (
+        re.compile(r"\b[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
+        "***REDACTED_JWT***",
     ),
 ]
 
