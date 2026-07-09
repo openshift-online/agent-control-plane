@@ -1528,17 +1528,53 @@ endif
 
 _kind-preload-runner: ## Internal: Pull runner image from Quay, retag, and load into kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Pre-loading runner image into kind ($(KIND_CLUSTER_NAME))..."
-	@$(CONTAINER_ENGINE) pull $(RUNNER_QUAY_IMAGE):latest
+	@_LOG=/tmp/runner-preload-$$$$.log; \
+	printf '  Pulling $(RUNNER_QUAY_IMAGE):latest '; \
+	$(CONTAINER_ENGINE) pull $(RUNNER_QUAY_IMAGE):latest >"$$_LOG" 2>&1 & \
+	_PID=$$!; \
+	_CHARS='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'; \
+	while kill -0 $$_PID 2>/dev/null; do \
+		for _c in $$(echo "$$_CHARS" | grep -o .); do \
+			printf '\b%s' "$$_c"; \
+			sleep 0.1; \
+		done; \
+	done; \
+	wait $$_PID; _RC=$$?; \
+	printf '\b \b\n'; \
+	if [ $$_RC -ne 0 ]; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Pull failed (log: $$_LOG)"; \
+		tail -5 "$$_LOG"; \
+		exit 1; \
+	fi; \
+	rm -f "$$_LOG"
 	@$(CONTAINER_ENGINE) tag $(RUNNER_QUAY_IMAGE):latest $(RUNNER_QUAY_IMAGE):$(RUNNER_PRELOAD_TAG)
-	@if [ "$(CONTAINER_ENGINE)" = "podman" ] || [ -n "$(KIND_HOST)" ]; then \
-		$(CONTAINER_ENGINE) save $(RUNNER_QUAY_IMAGE):$(RUNNER_PRELOAD_TAG) | \
+	@printf '  Loading image into cluster '
+	@_LOG=/tmp/runner-load-$$$$.log; \
+	if [ "$(CONTAINER_ENGINE)" = "podman" ] || [ -n "$(KIND_HOST)" ]; then \
+		( $(CONTAINER_ENGINE) save $(RUNNER_QUAY_IMAGE):$(RUNNER_PRELOAD_TAG) | \
 		$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
-		ctr --namespace=k8s.io images import -; \
+		ctr --namespace=k8s.io images import - ) >"$$_LOG" 2>&1 & \
 	else \
-		$(CONTAINER_ENGINE) save -o /tmp/runner-preload.tar $(RUNNER_QUAY_IMAGE):$(RUNNER_PRELOAD_TAG); \
-		kind load image-archive /tmp/runner-preload.tar --name $(KIND_CLUSTER_NAME); \
-		rm -f /tmp/runner-preload.tar; \
-	fi
+		( $(CONTAINER_ENGINE) save -o /tmp/runner-preload.tar $(RUNNER_QUAY_IMAGE):$(RUNNER_PRELOAD_TAG) && \
+		kind load image-archive /tmp/runner-preload.tar --name $(KIND_CLUSTER_NAME) && \
+		rm -f /tmp/runner-preload.tar ) >"$$_LOG" 2>&1 & \
+	fi; \
+	_PID=$$!; \
+	_CHARS='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'; \
+	while kill -0 $$_PID 2>/dev/null; do \
+		for _c in $$(echo "$$_CHARS" | grep -o .); do \
+			printf '\b%s' "$$_c"; \
+			sleep 0.1; \
+		done; \
+	done; \
+	wait $$_PID; _RC=$$?; \
+	printf '\b \b\n'; \
+	if [ $$_RC -ne 0 ]; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Load failed (log: $$_LOG)"; \
+		tail -5 "$$_LOG"; \
+		exit 1; \
+	fi; \
+	rm -f "$$_LOG"
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner image pre-loaded: $(RUNNER_QUAY_IMAGE):$(RUNNER_PRELOAD_TAG)"
 
 _kind-load-images: ## Internal: Load images into kind cluster
