@@ -8,26 +8,6 @@ import (
 const acpInternalPolicyKey = "_acp_internal"
 const mlflowPolicyKey = "_mlflow_rh"
 
-// bakedInRuleNames lists the network policy rule keys present in the runner
-// image's /etc/openshell/policy.yaml. When an agent specifies a custom
-// sandbox policy we must explicitly remove these via RemoveNetworkRule
-// because proto3 cannot distinguish "empty network_policies map" from
-// "absent" — setting UpdateConfigRequest.Policy alone won't clear them.
-var bakedInRuleNames = []string{
-	"claude_code_vertex",
-	"gcloud",
-	"github_ssh_over_https",
-	"nvidia_inference",
-	"github_rest_api",
-	"pypi",
-	"vscode",
-	"cursor",
-	"opencode",
-	"atlassian",
-	acpInternalPolicyKey,
-	mlflowPolicyKey,
-}
-
 func acpInternalRule(namespace string) *sandboxpb.NetworkPolicyRule {
 	return &sandboxpb.NetworkPolicyRule{
 		Name: "acp-internal",
@@ -87,37 +67,15 @@ func platformMergeOperations(namespace string) []*openshellpb.PolicyMergeOperati
 	}
 }
 
-// policyReplacementOperations builds merge operations that replace the
-// baked-in image network rules with the agent's policy. The sequence is:
-//  1. RemoveNetworkRule for every baked-in rule (clean slate)
-//  2. AddRule for each rule in the agent's policy (if any)
-//  3. AddRule for platform-required rules (_acp_internal, _mlflow_rh)
-func policyReplacementOperations(namespace string, agentPolicy *sandboxpb.SandboxPolicy) []*openshellpb.PolicyMergeOperation {
-	var ops []*openshellpb.PolicyMergeOperation
-
-	for _, name := range bakedInRuleNames {
-		ops = append(ops, &openshellpb.PolicyMergeOperation{
-			Operation: &openshellpb.PolicyMergeOperation_RemoveRule{
-				RemoveRule: &openshellpb.RemoveNetworkRule{
-					RuleName: name,
-				},
-			},
-		})
+// mergePlatformRules injects platform-required network rules (_acp_internal,
+// _mlflow_rh) directly into the SandboxPolicy's NetworkPolicies map. This
+// is called before CreateSandbox so the gateway receives the complete policy
+// upfront — no post-hoc UpdateConfig replacement needed.
+func mergePlatformRules(policy *sandboxpb.SandboxPolicy, namespace string) *sandboxpb.SandboxPolicy {
+	if policy.NetworkPolicies == nil {
+		policy.NetworkPolicies = make(map[string]*sandboxpb.NetworkPolicyRule)
 	}
-
-	if agentPolicy != nil {
-		for key, rule := range agentPolicy.NetworkPolicies {
-			ops = append(ops, &openshellpb.PolicyMergeOperation{
-				Operation: &openshellpb.PolicyMergeOperation_AddRule{
-					AddRule: &openshellpb.AddNetworkRule{
-						RuleName: key,
-						Rule:     rule,
-					},
-				},
-			})
-		}
-	}
-
-	ops = append(ops, platformMergeOperations(namespace)...)
-	return ops
+	policy.NetworkPolicies[acpInternalPolicyKey] = acpInternalRule(namespace)
+	policy.NetworkPolicies[mlflowPolicyKey] = mlflowRule()
+	return policy
 }

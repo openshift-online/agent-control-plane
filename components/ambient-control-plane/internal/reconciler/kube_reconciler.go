@@ -376,7 +376,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 			payloads = agent.Payloads
 		}
 		payloads = r.appendInitialPromptPayload(ctx, session, sdk, payloads)
-		go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads, nil)
+		go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads)
 		r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 		return nil
 	}
@@ -396,6 +396,16 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	sandboxPolicy, policyErr := r.resolveAgentSandboxPolicy(ctx, sdk, session.ProjectID, agent)
 	if policyErr != nil {
 		return fmt.Errorf("resolving sandbox policy: %w", policyErr)
+	}
+
+	// Merge platform-required network rules into the policy before
+	// CreateSandbox so the gateway receives the complete policy upfront.
+	if sandboxPolicy != nil {
+		sandboxPolicy = mergePlatformRules(sandboxPolicy, r.cfg.CPRuntimeNamespace)
+		r.logger.Info().
+			Str("sandbox", sbxName).
+			Int("network_policies", len(sandboxPolicy.NetworkPolicies)).
+			Msg("merged platform rules into sandbox policy")
 	}
 
 	req := &openshellpb.CreateSandboxRequest{
@@ -437,49 +447,25 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		payloads = agent.Payloads
 	}
 	payloads = r.appendInitialPromptPayload(ctx, session, sdk, payloads)
-	go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads, sandboxPolicy)
+	go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads)
 
 	r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 	return nil
 }
 
-func (r *SimpleKubeReconciler) injectACPInternalPolicy(ctx context.Context, namespace, sandboxName string, sandboxPolicy *sandboxpb.SandboxPolicy) error {
-	// The gateway enforces that policy, setting_key, and merge_operations
-	// are mutually exclusive in a single UpdateConfig request. When the
-	// agent has a custom policy we need two calls: first replace the
-	// non-network fields (filesystem, process, landlock) via the Policy
-	// field, then use merge operations to swap out network rules.
-	if sandboxPolicy != nil {
-		policyReq := &openshellpb.UpdateConfigRequest{
-			Name:   sandboxName,
-			Policy: sandboxPolicy,
-		}
-		if _, err := r.gateway.UpdateConfig(ctx, namespace, policyReq); err != nil {
-			return fmt.Errorf("UpdateConfig policy replacement: %w", err)
-		}
-	}
-
-	var mergeOps []*openshellpb.PolicyMergeOperation
-	if sandboxPolicy != nil {
-		mergeOps = policyReplacementOperations(r.cfg.CPRuntimeNamespace, sandboxPolicy)
-	} else {
-		mergeOps = platformMergeOperations(r.cfg.CPRuntimeNamespace)
-	}
-
-	mergeReq := &openshellpb.UpdateConfigRequest{
+func (r *SimpleKubeReconciler) injectACPInternalPolicy(ctx context.Context, namespace, sandboxName string) error {
+	mergeOps := platformMergeOperations(r.cfg.CPRuntimeNamespace)
+	_, err := r.gateway.UpdateConfig(ctx, namespace, &openshellpb.UpdateConfigRequest{
 		Name:            sandboxName,
 		MergeOperations: mergeOps,
+	})
+	if err != nil {
+		return fmt.Errorf("UpdateConfig merge for platform policy: %w", err)
 	}
-	if _, err := r.gateway.UpdateConfig(ctx, namespace, mergeReq); err != nil {
-		return fmt.Errorf("UpdateConfig merge operations: %w", err)
-	}
-
 	r.logger.Info().
 		Str("sandbox", sandboxName).
 		Str("namespace", namespace).
 		Str("cp_namespace", r.cfg.CPRuntimeNamespace).
-		Bool("policy_replacement", sandboxPolicy != nil).
-		Int("merge_ops", len(mergeOps)).
 		Msg("injected platform policy via merge operation")
 	return nil
 }
@@ -654,7 +640,7 @@ func (r *SimpleKubeReconciler) sandboxReadinessTimeout() time.Duration {
 	return 600 * time.Second
 }
 
-func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string, sdk *sdkclient.Client, execEnv map[string]string, payloads []types.Payload, sandboxPolicy *sandboxpb.SandboxPolicy) {
+func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string, sdk *sdkclient.Client, execEnv map[string]string, payloads []types.Payload) {
 	timeout := r.sandboxReadinessTimeout()
 	pollCtx, pollCancel := context.WithTimeout(context.Background(), timeout)
 	defer pollCancel()
@@ -810,7 +796,7 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			// the default rules. When an agent-specific policy is set, we
 			// replace the image default; platform rules (_acp_internal,
 			// _mlflow_rh) are always merged on top.
-			if err := r.injectACPInternalPolicy(pollCtx, namespace, sbxName, sandboxPolicy); err != nil {
+			if err := r.injectACPInternalPolicy(pollCtx, namespace, sbxName); err != nil {
 				r.logger.Error().Err(err).Str("sandbox", sbxName).Str("session_id", sessionID).Msg("failed to inject ACP internal policy")
 				failSession(fmt.Sprintf("failed to inject ACP internal policy: %v", err))
 				return

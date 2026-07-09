@@ -109,42 +109,28 @@ func TestPlatformMergeOperations_Binaries(t *testing.T) {
 	}
 }
 
-func TestPolicyReplacementOperations_LockedDown(t *testing.T) {
-	// A locked-down policy with no network_policies should produce:
-	// len(bakedInRuleNames) RemoveRule ops + 2 platform AddRule ops
-	ops := policyReplacementOperations("ns", &sandboxpb.SandboxPolicy{})
+func TestMergePlatformRules_EmptyPolicy(t *testing.T) {
+	policy := &sandboxpb.SandboxPolicy{}
+	result := mergePlatformRules(policy, "ns")
 
-	removeCount := 0
-	addCount := 0
-	for _, op := range ops {
-		if op.GetRemoveRule() != nil {
-			removeCount++
-		}
-		if op.GetAddRule() != nil {
-			addCount++
-		}
+	if len(result.NetworkPolicies) != 2 {
+		t.Fatalf("network policies count = %d, want 2", len(result.NetworkPolicies))
+	}
+	if _, ok := result.NetworkPolicies[acpInternalPolicyKey]; !ok {
+		t.Error("missing _acp_internal rule")
+	}
+	if _, ok := result.NetworkPolicies[mlflowPolicyKey]; !ok {
+		t.Error("missing _mlflow_rh rule")
 	}
 
-	if removeCount != len(bakedInRuleNames) {
-		t.Errorf("remove ops = %d, want %d", removeCount, len(bakedInRuleNames))
-	}
-	if addCount != 2 {
-		t.Errorf("add ops (platform) = %d, want 2", addCount)
-	}
-
-	// Platform rules should be the last two operations
-	acpOp := ops[len(ops)-2].GetAddRule()
-	if acpOp == nil || acpOp.RuleName != acpInternalPolicyKey {
-		t.Error("second-to-last op should be _acp_internal AddRule")
-	}
-	mlOp := ops[len(ops)-1].GetAddRule()
-	if mlOp == nil || mlOp.RuleName != mlflowPolicyKey {
-		t.Error("last op should be _mlflow_rh AddRule")
+	acpRule := result.NetworkPolicies[acpInternalPolicyKey]
+	if len(acpRule.Endpoints) != 6 {
+		t.Errorf("_acp_internal endpoints = %d, want 6", len(acpRule.Endpoints))
 	}
 }
 
-func TestPolicyReplacementOperations_WithAgentRules(t *testing.T) {
-	agentPolicy := &sandboxpb.SandboxPolicy{
+func TestMergePlatformRules_PreservesExistingRules(t *testing.T) {
+	policy := &sandboxpb.SandboxPolicy{
 		NetworkPolicies: map[string]*sandboxpb.NetworkPolicyRule{
 			"custom_api": {
 				Name: "custom-api",
@@ -154,35 +140,30 @@ func TestPolicyReplacementOperations_WithAgentRules(t *testing.T) {
 			},
 		},
 	}
-	ops := policyReplacementOperations("ns", agentPolicy)
+	result := mergePlatformRules(policy, "test-ns")
 
-	removeCount := 0
-	addCount := 0
-	addNames := make(map[string]bool)
-	for _, op := range ops {
-		if r := op.GetRemoveRule(); r != nil {
-			removeCount++
-		}
-		if a := op.GetAddRule(); a != nil {
-			addCount++
-			addNames[a.RuleName] = true
-		}
+	if len(result.NetworkPolicies) != 3 {
+		t.Fatalf("network policies count = %d, want 3", len(result.NetworkPolicies))
 	}
+	if _, ok := result.NetworkPolicies["custom_api"]; !ok {
+		t.Error("agent rule 'custom_api' was removed")
+	}
+	if _, ok := result.NetworkPolicies[acpInternalPolicyKey]; !ok {
+		t.Error("missing _acp_internal rule")
+	}
+	if _, ok := result.NetworkPolicies[mlflowPolicyKey]; !ok {
+		t.Error("missing _mlflow_rh rule")
+	}
+}
 
-	if removeCount != len(bakedInRuleNames) {
-		t.Errorf("remove ops = %d, want %d", removeCount, len(bakedInRuleNames))
-	}
-	// 1 agent rule + 2 platform rules
-	if addCount != 3 {
-		t.Errorf("add ops = %d, want 3", addCount)
-	}
-	if !addNames["custom_api"] {
-		t.Error("agent rule 'custom_api' not found in add operations")
-	}
-	if !addNames[acpInternalPolicyKey] {
-		t.Errorf("platform rule %q not found", acpInternalPolicyKey)
-	}
-	if !addNames[mlflowPolicyKey] {
-		t.Errorf("platform rule %q not found", mlflowPolicyKey)
+func TestMergePlatformRules_NamespaceScoped(t *testing.T) {
+	policy := &sandboxpb.SandboxPolicy{}
+	result := mergePlatformRules(policy, "pr-99")
+
+	acpRule := result.NetworkPolicies[acpInternalPolicyKey]
+	for _, ep := range acpRule.Endpoints {
+		if !strings.Contains(ep.Host, "pr-99") {
+			t.Errorf("endpoint host %q does not contain namespace pr-99", ep.Host)
+		}
 	}
 }
