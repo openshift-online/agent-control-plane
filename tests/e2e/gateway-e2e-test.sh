@@ -632,15 +632,23 @@ if [ -n "$LOCKED_AGENT_ID" ]; then
       done
 
       # 11c. Verify locked-down policy blocks external network access
+      # NOTE: kubectl exec bypasses the OpenShell proxy (eBPF process-tree
+      # filtering only intercepts processes spawned by the supervisor). Instead,
+      # check the proxy log for DENIED entries — the Claude binary attempts
+      # api.anthropic.com on startup which should be blocked by locked-down policy.
       if [ "$LOCKED_SESSION_RUNNING" = "true" ]; then
-        LOCKED_CURL_EXIT=0
-        kubectl exec -n "$TENANT" "$LOCKED_SBX_NAME" -- \
-          curl --connect-timeout 5 -s -o /dev/null https://github.com 2>/dev/null || LOCKED_CURL_EXIT=$?
+        sleep 5  # allow proxy log entries to flush
 
-        if [ "$LOCKED_CURL_EXIT" -ne 0 ]; then
-          pass "Locked-down policy blocks external network (curl exit=${LOCKED_CURL_EXIT})"
+        LOCKED_LOG=$(kubectl exec -n "$TENANT" "$LOCKED_SBX_NAME" -- \
+          sh -c 'cat /var/log/openshell.*.log 2>/dev/null' 2>/dev/null || echo "")
+
+        if echo "$LOCKED_LOG" | grep -q "DENIED"; then
+          DENIED_COUNT=$(echo "$LOCKED_LOG" | grep -c "DENIED" || echo "0")
+          pass "Locked-down policy denied network access (${DENIED_COUNT} DENIED entries in proxy log)"
+        elif [ -z "$LOCKED_LOG" ]; then
+          fail "Locked-down network test — no proxy log found in sandbox pod"
         else
-          fail "Locked-down policy did NOT block curl to github.com (expected failure)"
+          fail "Locked-down policy did NOT deny any connections (no DENIED entries in proxy log)"
         fi
       else
         fail "Locked-down network test — session not Running (phase: ${LOCKED_PHASE:-unknown})"
@@ -657,20 +665,24 @@ else
 fi
 
 # 11d. Verify permissive policy allows external network access
-# Use the hello-world session sandbox from section 8 (permissive policy)
+# Use the hello-world session sandbox from section 8 (permissive policy).
+# Check proxy log for ALLOWED entries — the session's Claude binary connects
+# to api.anthropic.com on startup which should be allowed by the permissive policy.
 if [ -n "${SBX_NAME:-}" ]; then
   PERM_POD_PHASE=$(kubectl get pod "$SBX_NAME" -n "$TENANT" \
     -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
 
   if [ "$PERM_POD_PHASE" = "Running" ]; then
-    PERM_CURL_EXIT=0
-    kubectl exec -n "$TENANT" "$SBX_NAME" -- \
-      curl --connect-timeout 5 -s -o /dev/null https://github.com 2>/dev/null || PERM_CURL_EXIT=$?
+    PERM_LOG=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+      sh -c 'cat /var/log/openshell.*.log 2>/dev/null' 2>/dev/null || echo "")
 
-    if [ "$PERM_CURL_EXIT" -eq 0 ]; then
-      pass "Permissive policy allows external network (curl to github.com succeeded)"
+    if echo "$PERM_LOG" | grep -q "ALLOWED"; then
+      ALLOWED_COUNT=$(echo "$PERM_LOG" | grep -c "ALLOWED" || echo "0")
+      pass "Permissive policy allowed network access (${ALLOWED_COUNT} ALLOWED entries in proxy log)"
+    elif [ -z "$PERM_LOG" ]; then
+      fail "Permissive network test — no proxy log found in sandbox pod"
     else
-      fail "Permissive policy blocked curl to github.com (exit=${PERM_CURL_EXIT})"
+      fail "Permissive policy has no ALLOWED entries in proxy log"
     fi
   else
     fail "Permissive network test — hello-world sandbox pod not running (phase: ${PERM_POD_PHASE:-unknown})"
