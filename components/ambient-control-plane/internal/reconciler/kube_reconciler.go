@@ -357,9 +357,6 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 	existing, err := r.gateway.GetSandbox(ctx, namespace, sbxName)
 	if err == nil && existing != nil && existing.Sandbox != nil {
 		r.logger.Debug().Str("sandbox", sbxName).Msg("sandbox already exists")
-		if err := r.injectACPInternalPolicy(ctx, namespace, sbxName); err != nil {
-			return fmt.Errorf("injecting ACP internal policy into existing sandbox %s: %w", sbxName, err)
-		}
 		if err := r.patchSandboxDNSConfig(ctx, namespace, sbxName); err != nil {
 			r.logger.Warn().Err(err).Str("sandbox", sbxName).Msg("failed to patch sandbox dnsConfig; DNS resolution for external FQDNs may fail")
 		}
@@ -442,7 +439,7 @@ func (r *SimpleKubeReconciler) injectACPInternalPolicy(ctx context.Context, name
 		MergeOperations: []*openshellpb.PolicyMergeOperation{acpInternalMergeOperation(r.cfg.CPRuntimeNamespace)},
 	})
 	if err != nil {
-		return fmt.Errorf("UpdateConfig merge for %s: %w", acpInternalPolicyKey, err)
+		return fmt.Errorf("UpdateConfig merge for ACP internal policy: %w", err)
 	}
 	r.logger.Info().
 		Str("sandbox", sandboxName).
