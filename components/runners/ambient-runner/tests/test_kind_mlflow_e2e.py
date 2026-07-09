@@ -110,7 +110,9 @@ def _api_list(
     return items
 
 
-def _ensure_project_mlflow_binding(api: str, token: str, project_id: str, name: str) -> None:
+def _ensure_project_mlflow_binding(
+    api: str, token: str, project_id: str, name: str
+) -> None:
     roles = _api_list(api, token, "/api/ambient/v1/roles", "name = 'credential:viewer'")
     assert roles, "credential:viewer role was not found"
     role_id = str(roles[0]["id"])

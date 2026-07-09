@@ -160,9 +160,7 @@ def _activate_generic_autolog(
         )
         return True
     except Exception:
-        logger.warning(
-            "MLflow autologging: generic mlflow.autolog activation failed"
-        )
+        logger.warning("MLflow autologging: generic mlflow.autolog activation failed")
         return False
 
 
