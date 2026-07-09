@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import type { DomainSession, SessionPhase } from '@/domain/types'
+import type { DomainSession } from '@/domain/types'
 import { sessionMatchesPath } from '@/domain/folder-tree'
 import { useTableKeyboardNav } from '@/hooks/use-table-keyboard-nav'
 import { cn } from '@/lib/utils'
@@ -35,7 +35,6 @@ export function FleetTable({
   sessions,
   searchFilter,
   agentNames,
-  phaseFilter,
   showTestRuns = false,
   pathFilter,
   onFilteredCountChange,
@@ -48,7 +47,6 @@ export function FleetTable({
   sessions: DomainSession[]
   searchFilter: string
   agentNames?: Map<string, string>
-  phaseFilter?: SessionPhase | null
   showTestRuns?: boolean
   pathFilter?: string | null
   onFilteredCountChange?: (count: number) => void
@@ -88,17 +86,6 @@ export function FleetTable({
     setUseAbsoluteTime(prev => !prev)
   }, [])
 
-  // Sync phaseFilter prop to column filters
-  useEffect(() => {
-    setColumnFilters(prev => {
-      const without = prev.filter(f => f.id !== 'phase')
-      if (phaseFilter) {
-        return [...without, { id: 'phase', value: phaseFilter }]
-      }
-      return without
-    })
-  }, [phaseFilter])
-
   const tableMeta: FleetTableMeta = {
     agentNames,
     useAbsoluteTime,
@@ -123,11 +110,7 @@ export function FleetTable({
     onColumnFiltersChange: setColumnFilters,
     onRowSelectionChange: setRowSelection,
     meta: tableMeta,
-    filterFns: {
-      phaseEquals: (row, columnId, filterValue) => {
-        return row.getValue(columnId) === filterValue
-      },
-    },
+    filterFns: {},
   })
 
   // Report filtered count back to parent

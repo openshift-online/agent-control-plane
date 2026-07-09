@@ -191,4 +191,28 @@ describe('sdk-sessions adapter', () => {
     expect(capturedOpts?.page).toBe(2)
     expect(capturedOpts?.size).toBe(10)
   })
+
+  it('phaseCounts() returns counts per phase from the server', async () => {
+    const capturedSearches: string[] = []
+    const fakeAPI = {
+      ...createFakeSessionAPI({}),
+      list: async (listOpts?: ListOptions): Promise<SessionList> => {
+        const search = listOpts?.search ?? ''
+        capturedSearches.push(search)
+        let total = 0
+        if (search.includes("phase = 'Running'")) total = 5
+        else if (search.includes("phase = 'Failed'")) total = 2
+        else if (search.includes("phase = 'Completed'")) total = 10
+        return { kind: 'SessionList', page: 1, size: 1, total, items: [] }
+      },
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const adapter: SessionsPort = createSessionsAdapter(fakeAPI as any)
+
+    const counts = await adapter.phaseCounts('proj-123')
+
+    expect(counts).toEqual({ Running: 5, Failed: 2, Completed: 10 })
+    expect(capturedSearches).toHaveLength(7)
+    expect(capturedSearches.every(s => s.includes("project_id = 'proj-123'"))).toBe(true)
+  })
 })

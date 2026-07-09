@@ -86,6 +86,7 @@ export type ListParams = {
   size?: number
   search?: string
   orderBy?: string
+  phase?: SessionPhase
 }
 
 export type SessionEventType =

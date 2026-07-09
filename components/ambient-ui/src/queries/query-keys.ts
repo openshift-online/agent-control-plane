@@ -11,6 +11,8 @@ export const queryKeys = {
     details: () => [...queryKeys.sessions.all, 'detail'] as const,
     detail: (sessionId: string) =>
       [...queryKeys.sessions.details(), sessionId] as const,
+    phaseCounts: (projectId: string) =>
+      [...queryKeys.sessions.all, 'phase-counts', projectId] as const,
   },
   projects: {
     all: ['projects'] as const,

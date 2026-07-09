@@ -1,4 +1,6 @@
-import type { DomainSession, DomainSessionCreateRequest, ListParams, PaginatedResult } from '@/domain/types'
+import type { DomainSession, DomainSessionCreateRequest, ListParams, PaginatedResult, SessionPhase } from '@/domain/types'
+
+export type SessionPhaseCounts = Partial<Record<SessionPhase, number>>
 
 export type SessionsPort = {
   list: (projectId: string, params?: ListParams) => Promise<PaginatedResult<DomainSession>>
@@ -8,4 +10,5 @@ export type SessionsPort = {
   stop: (sessionId: string) => Promise<void>
   start: (sessionId: string) => Promise<DomainSession>
   delete: (sessionId: string) => Promise<void>
+  phaseCounts: (projectId: string) => Promise<SessionPhaseCounts>
 }

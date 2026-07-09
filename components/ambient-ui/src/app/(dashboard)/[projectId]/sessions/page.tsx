@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/empty-state'
-import { useSessions } from '@/queries/use-sessions'
+import { useSessions, useSessionPhaseCounts } from '@/queries/use-sessions'
 import { useAgentNames } from '@/queries/use-agents'
 import type { SessionPhase } from '@/domain/types'
 import { buildFolderTree } from '@/domain/folder-tree'
@@ -28,8 +28,19 @@ export default function FleetPage() {
   const [showFolderTree, setShowFolderTree] = useState(false)
   const [pathFilter, setPathFilter] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
-  const { data, isLoading, error } = useSessions(projectId, { page: currentPage, size: PAGE_SIZE, orderBy: 'created_at desc' })
+  const { data, isLoading, error } = useSessions(projectId, {
+    page: currentPage,
+    size: PAGE_SIZE,
+    orderBy: 'created_at desc',
+    phase: phaseFilter ?? undefined,
+  })
+  const { data: phaseCounts } = useSessionPhaseCounts(projectId)
   const { data: agentNames } = useAgentNames(projectId)
+
+  const handlePhaseFilter = useCallback((phase: SessionPhase | null) => {
+    setPhaseFilter(phase)
+    setCurrentPage(1)
+  }, [])
 
   const handleFilteredCountChange = useCallback((count: number) => {
     setFilteredCount(count)
@@ -67,7 +78,7 @@ export default function FleetPage() {
     )
   }
 
-  if (sessions.length === 0 && currentPage === 1) {
+  if (sessions.length === 0 && currentPage === 1 && !phaseFilter) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold tracking-tight">Sessions</h1>
@@ -134,11 +145,12 @@ export default function FleetPage() {
         </div>
       </div>
       <FleetSummary
-        sessions={sessions}
         serverTotal={serverTotal}
+        phaseCounts={phaseCounts ?? {}}
+        pageItemCount={sessions.length}
         filteredCount={filteredCount}
         activePhase={phaseFilter}
-        onPhaseFilter={setPhaseFilter}
+        onPhaseFilter={handlePhaseFilter}
       />
       <div className="flex gap-4">
         {showFolderTree && (
@@ -153,7 +165,6 @@ export default function FleetPage() {
             sessions={sessions}
             searchFilter={search}
             agentNames={agentNames}
-            phaseFilter={phaseFilter}
             showTestRuns={showTestRuns}
             pathFilter={pathFilter}
             onFilteredCountChange={handleFilteredCountChange}

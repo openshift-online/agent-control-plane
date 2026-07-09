@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils'
-import type { DomainSession, SessionPhase } from '@/domain/types'
+import type { SessionPhase } from '@/domain/types'
+import type { SessionPhaseCounts } from '@/ports/sessions'
 import { getPhaseStyle } from '@/lib/status-colors'
 import { PhaseBadge } from './phase-badge'
 
@@ -12,26 +13,21 @@ const VARIANT_RING_CLASS: Record<string, string> = {
 }
 
 export function FleetSummary({
-  sessions,
   serverTotal,
+  phaseCounts,
+  pageItemCount,
   filteredCount,
   activePhase,
   onPhaseFilter,
 }: {
-  sessions: DomainSession[]
-  serverTotal?: number
+  serverTotal: number
+  phaseCounts: SessionPhaseCounts
+  pageItemCount: number
   filteredCount?: number
   activePhase?: SessionPhase | null
   onPhaseFilter?: (phase: SessionPhase | null) => void
 }) {
-  const counts = sessions.reduce<Partial<Record<SessionPhase, number>>>((acc, s) => {
-    acc[s.phase] = (acc[s.phase] ?? 0) + 1
-    return acc
-  }, {})
-
-  const displayTotal = serverTotal ?? sessions.length
-  const total = sessions.length
-  const showFiltered = filteredCount !== undefined && filteredCount !== total
+  const showFiltered = filteredCount !== undefined && filteredCount !== pageItemCount
 
   const phases: SessionPhase[] = ['Running', 'Pending', 'Creating', 'Stopping', 'Failed', 'Completed', 'Stopped']
 
@@ -39,12 +35,12 @@ export function FleetSummary({
     <div className="flex items-center gap-4 text-sm rounded-lg border bg-muted/30 px-4 py-2.5">
       <span className="font-medium">
         {showFiltered
-          ? `Showing ${filteredCount} of ${displayTotal} sessions`
-          : `${displayTotal} sessions`}
+          ? `Showing ${filteredCount} of ${serverTotal} sessions`
+          : `${serverTotal} sessions`}
       </span>
       <span className="text-muted-foreground">—</span>
       {phases.map(phase => {
-        const count = counts[phase]
+        const count = phaseCounts[phase]
         if (!count) return null
         const isActive = activePhase === phase
 

@@ -1,17 +1,23 @@
 import type { SessionAPI, SessionCreateRequest } from 'ambient-sdk'
-import type { SessionsPort } from '@/ports/sessions'
-import type { DomainSession, DomainSessionCreateRequest, ListParams, PaginatedResult } from '@/domain/types'
+import type { SessionsPort, SessionPhaseCounts } from '@/ports/sessions'
+import type { DomainSession, DomainSessionCreateRequest, ListParams, PaginatedResult, SessionPhase } from '@/domain/types'
 import { mapSdkSessionToDomain } from './mappers'
 import { getSessionAPI } from './sdk-client'
+
+const ALL_PHASES: SessionPhase[] = ['Running', 'Pending', 'Creating', 'Stopping', 'Failed', 'Completed', 'Stopped']
 
 function sanitizeSearch(value: string): string {
   return value.replace(/['"%;\\]/g, '')
 }
 
 function buildSdkListOptions(projectId: string, params?: ListParams) {
-  const search = params?.search
-    ? `project_id = '${sanitizeSearch(projectId)}' and name like '%${sanitizeSearch(params.search)}%'`
-    : `project_id = '${sanitizeSearch(projectId)}'`
+  let search = `project_id = '${sanitizeSearch(projectId)}'`
+  if (params?.search) {
+    search += ` and name like '%${sanitizeSearch(params.search)}%'`
+  }
+  if (params?.phase) {
+    search += ` and phase = '${sanitizeSearch(params.phase)}'`
+  }
 
   return {
     page: params?.page ?? 1,
@@ -92,6 +98,24 @@ function createSdkSessionsAdapter(api: SessionAPI): SessionsPort {
 
     async delete(sessionId: string): Promise<void> {
       await api.delete(sessionId)
+    },
+
+    async phaseCounts(projectId: string): Promise<SessionPhaseCounts> {
+      const results = await Promise.all(
+        ALL_PHASES.map(async (phase) => {
+          const result = await api.list({
+            page: 1,
+            size: 1,
+            search: `project_id = '${sanitizeSearch(projectId)}' and phase = '${phase}'`,
+          })
+          return [phase, result.total] as const
+        })
+      )
+      const counts: SessionPhaseCounts = {}
+      for (const [phase, total] of results) {
+        if (total > 0) counts[phase] = total
+      }
+      return counts
     },
   }
 }
