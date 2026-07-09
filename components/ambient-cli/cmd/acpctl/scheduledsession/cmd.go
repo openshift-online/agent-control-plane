@@ -365,22 +365,22 @@ var updateCmd = &cobra.Command{
 
 var deleteArgs struct {
 	projectID string
-	confirm   bool
+	yes       bool
 }
 
 var deleteCmd = &cobra.Command{
 	Use:   "delete <name-or-id>",
 	Short: "Delete a scheduled session",
 	Args:  cobra.ExactArgs(1),
-	Example: `  acpctl scheduled-session delete my-schedule --confirm
-  acpctl scheduled-session delete <id> --project <id> --confirm`,
+	Example: `  acpctl scheduled-session delete my-schedule -y
+  acpctl scheduled-session delete <id> --project <id> --yes`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(deleteArgs.projectID)
 		if err != nil {
 			return err
 		}
-		if !deleteArgs.confirm {
-			return fmt.Errorf("add --confirm to delete scheduled-session/%s", args[0])
+		if !deleteArgs.yes {
+			return fmt.Errorf("interactive confirmation required; use --yes/-y to skip")
 		}
 
 		client, err := connection.NewClientFromConfig()
@@ -657,7 +657,7 @@ func init() {
 	updateCmd.Flags().StringVar(&updateArgs.runnerType, "runner-type", "", "New runner type")
 
 	deleteCmd.Flags().StringVar(&deleteArgs.projectID, "project", "", "Project ID (defaults to configured project)")
-	deleteCmd.Flags().BoolVar(&deleteArgs.confirm, "confirm", false, "Confirm deletion")
+	deleteCmd.Flags().BoolVarP(&deleteArgs.yes, "yes", "y", false, "Skip confirmation prompt")
 
 	suspendCmd.Flags().StringVar(&suspendArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	resumeCmd.Flags().StringVar(&resumeArgs.projectID, "project", "", "Project ID (defaults to configured project)")

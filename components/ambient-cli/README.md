@@ -191,7 +191,7 @@ acpctl describe project <project-id>
 acpctl delete session <session-id> -y
 acpctl delete project <project-id> -y
 acpctl delete project-settings <id>
-acpctl credential delete <credential-id> --confirm
+acpctl credential delete <credential-id> -y
 ```
 
 ### 11. Log out
@@ -214,7 +214,7 @@ acpctl get credentials
 GITHUB_TOKEN="ghp_..." acpctl apply -f credential.yaml
 
 # Delete
-acpctl credential delete <credential-id> --confirm
+acpctl credential delete <credential-id> -y
 ```
 
 ### Role bindings

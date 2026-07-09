@@ -284,17 +284,17 @@ var updateCmd = &cobra.Command{
 }
 
 var deleteArgs struct {
-	confirm bool
+	yes bool
 }
 
 var deleteCmd = &cobra.Command{
 	Use:     "delete <name-or-id>",
 	Short:   "Delete a credential",
 	Args:    cobra.ExactArgs(1),
-	Example: `  acpctl credential delete my-credential --confirm`,
+	Example: `  acpctl credential delete my-credential -y`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if !deleteArgs.confirm {
-			return fmt.Errorf("add --confirm to delete credential/%s", args[0])
+		if !deleteArgs.yes {
+			return fmt.Errorf("interactive confirmation required; use --yes/-y to skip")
 		}
 
 		client, err := connection.NewClientFromConfig()
@@ -464,7 +464,7 @@ func init() {
 	updateCmd.Flags().StringVar(&updateArgs.labels, "labels", "", "New labels (JSON string)")
 	updateCmd.Flags().StringVar(&updateArgs.annotations, "annotations", "", "New annotations (JSON string)")
 
-	deleteCmd.Flags().BoolVar(&deleteArgs.confirm, "confirm", false, "Confirm deletion")
+	deleteCmd.Flags().BoolVarP(&deleteArgs.yes, "yes", "y", false, "Skip confirmation prompt")
 
 	tokenCmd.Flags().StringVarP(&tokenArgs.outputFormat, "output", "o", "", "Output format: json")
 

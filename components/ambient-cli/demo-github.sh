@@ -160,7 +160,7 @@ cleanup() {
     fi
     if [[ -n "${CREATED_CREDENTIAL_ID}" ]]; then
         dim "   deleting credential ${CREATED_CREDENTIAL_ID}..."
-        "$ACPCTL" credential delete "${CREATED_CREDENTIAL_ID}" --confirm 2>/dev/null || true
+        "$ACPCTL" credential delete "${CREATED_CREDENTIAL_ID}" -y 2>/dev/null || true
     fi
     if [[ -n "${CREATED_PROJECT}" ]]; then
         dim "   deleting project ${CREATED_PROJECT}..."
