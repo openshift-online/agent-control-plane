@@ -25,11 +25,11 @@ If not, a new session is created. Unread inbox messages are drained and
 injected into the start context.`,
 	Args:    cobra.ExactArgs(1),
 	RunE:    run,
-	Example: "  acpctl start <pa-id> --project-id <project-id>\n  acpctl start <pa-id> --project-id <project-id> --prompt \"fix the RBAC middleware\"",
+	Example: "  acpctl start <pa-id> --project <project>\n  acpctl start <pa-id> --project <project> --prompt \"fix the RBAC middleware\"",
 }
 
 func init() {
-	Cmd.Flags().StringVar(&startArgs.projectID, "project-id", "", "Project ID (required)")
+	Cmd.Flags().StringVar(&startArgs.projectID, "project", "", "Project ID (required)")
 	Cmd.Flags().StringVar(&startArgs.prompt, "prompt", "", "Task prompt for this session run")
 }
 
@@ -37,7 +37,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	paID := cmdArgs[0]
 
 	if startArgs.projectID == "" {
-		return fmt.Errorf("--project-id is required")
+		return fmt.Errorf("--project is required")
 	}
 
 	client, err := connection.NewClientFromConfig()

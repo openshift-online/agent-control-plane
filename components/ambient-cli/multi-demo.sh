@@ -2,7 +2,7 @@
 # multi-demo.sh — create a 4-panel tmux session for a lead/fe/api/cp agent group discussion
 #
 # Usage:
-#   ./multi-demo.sh [--project-id <id>] [--session <tmux-session-name>]
+#   ./multi-demo.sh [--project <id>] [--session <tmux-session-name>]
 #
 # Requires: acpctl, jq, tmux
 
@@ -13,7 +13,7 @@ PROJECT_ID="${PROJECT_ID:-}"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --project-id) PROJECT_ID="$2"; shift 2 ;;
+    --project) PROJECT_ID="$2"; shift 2 ;;
     --session)    TMUX_SESSION="$2"; shift 2 ;;
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
@@ -25,7 +25,7 @@ if [[ -z "$PROJECT_ID" ]]; then
   PROJECT_ID=$(acpctl project current 2>/dev/null | awk '{print $NF}')
 fi
 if [[ -z "$PROJECT_ID" ]]; then
-  echo "error: no project set — use --project-id or: acpctl project set <name>" >&2
+  echo "error: no project set — use --project or: acpctl project set <name>" >&2
   exit 1
 fi
 echo "Project: $PROJECT_ID"
@@ -58,7 +58,7 @@ resolve_or_start_session() {
   fi
   echo "No session found for '$prefix' — starting agent..." >&2
   local out
-  out=$(acpctl agent start "$prefix" --project-id "$PROJECT_ID" 2>&1) || {
+  out=$(acpctl agent start "$prefix" --project "$PROJECT_ID" 2>&1) || {
     echo "error: failed to start agent '$prefix': $out" >&2
     exit 1
   }
@@ -105,7 +105,7 @@ Your task for this session:
    b) Reply to you (lead) with a summary.
    c) If they find a communication protocol in the annotations, use it going forward.
 
-   Use: acpctl inbox send --project-id ${PROJECT_ID} --pa-id <agent-id> --body "<message>" --from-name lead
+   Use: acpctl inbox send --project ${PROJECT_ID} --pa-id <agent-id> --body "<message>" --from-name lead
 
 3. After each agent replies, synthesize what you learn and send a follow-up directing
    each agent on next steps based on their annotations and any discovered protocol.
@@ -187,7 +187,7 @@ echo "  Ctrl+B arrow — switch pane"
 echo ""
 echo "Lead pane shortcuts (once interactive):"
 echo "  acpctl session send '${LEAD_SID}' \"your message\""
-echo "  acpctl inbox send --project-id '${PROJECT_ID}' --pa-id <agent-id> --body \"...\""
+echo "  acpctl inbox send --project '${PROJECT_ID}' --pa-id <agent-id> --body \"...\""
 echo ""
 
 tmux attach-session -t "$TMUX_SESSION"

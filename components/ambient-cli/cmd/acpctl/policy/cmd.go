@@ -42,7 +42,7 @@ func resolveProject(projectID string) (string, error) {
 	}
 	p := cfg.GetProject()
 	if p == "" {
-		return "", fmt.Errorf("no project set; use --project-id or run 'acpctl config set project <name>'")
+		return "", fmt.Errorf("no project set; use --project or run 'acpctl config set project <name>'")
 	}
 	return p, nil
 }
@@ -75,7 +75,7 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List policies in a project",
 	Example: `  acpctl policy list
-  acpctl policy list --project-id <id> -o json
+  acpctl policy list --project <id> -o json
   acpctl policy list -o yaml`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(listArgs.projectID)
@@ -134,7 +134,7 @@ var getCmd = &cobra.Command{
 	Short: "Get a specific policy",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl policy get my-policy
-  acpctl policy get my-policy --project-id <id>
+  acpctl policy get my-policy --project <id>
   acpctl policy get my-policy -o json
   acpctl policy get my-policy -o yaml`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -194,7 +194,7 @@ var exportCmd = &cobra.Command{
 	Long:  "Export a policy definition as a Kubernetes ConfigMap YAML suitable for kubectl apply.",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl policy export my-policy
-  acpctl policy export my-policy --project-id <id>
+  acpctl policy export my-policy --project <id>
   acpctl policy export my-policy --namespace my-ns
   acpctl policy export my-policy > policy.yaml
   acpctl policy export my-policy | kubectl apply -f -`,
@@ -241,14 +241,14 @@ func init() {
 	Cmd.AddCommand(getCmd)
 	Cmd.AddCommand(exportCmd)
 
-	listCmd.Flags().StringVar(&listArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	listCmd.Flags().StringVar(&listArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	listCmd.Flags().StringVarP(&listArgs.outputFormat, "output", "o", "", "Output format: json|yaml")
 	listCmd.Flags().IntVar(&listArgs.limit, "limit", 100, "Maximum number of items to return")
 
-	getCmd.Flags().StringVar(&getArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	getCmd.Flags().StringVar(&getArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	getCmd.Flags().StringVarP(&getArgs.outputFormat, "output", "o", "", "Output format: json|yaml")
 
-	exportCmd.Flags().StringVar(&exportArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	exportCmd.Flags().StringVar(&exportArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	exportCmd.Flags().StringVar(&exportArgs.namespace, "namespace", "", "Kubernetes namespace for the ConfigMap")
 }
 

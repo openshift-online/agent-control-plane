@@ -25,7 +25,7 @@ func TestStart_Success(t *testing.T) {
 	})
 
 	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "pa-1", "--project-id", "proj-1")
+	result := testhelper.Run(t, Cmd, "pa-1", "--project", "proj-1")
 	if result.Err != nil {
 		t.Fatalf("unexpected error: %v\nstdout: %s\nstderr: %s", result.Err, result.Stdout, result.Stderr)
 	}
@@ -47,7 +47,7 @@ func TestStart_NotFound(t *testing.T) {
 	})
 
 	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "missing", "--project-id", "proj-1")
+	result := testhelper.Run(t, Cmd, "missing", "--project", "proj-1")
 	if result.Err == nil {
 		t.Fatal("expected error for missing project-agent")
 	}
@@ -70,10 +70,10 @@ func TestStart_RequiresProjectID(t *testing.T) {
 	testhelper.Configure(t, srv.URL)
 	result := testhelper.Run(t, Cmd, "pa-1")
 	if result.Err == nil {
-		t.Fatal("expected error for missing --project-id")
+		t.Fatal("expected error for missing --project")
 	}
-	if !strings.Contains(result.Err.Error(), "--project-id is required") {
-		t.Errorf("expected '--project-id is required', got: %v", result.Err)
+	if !strings.Contains(result.Err.Error(), "--project is required") {
+		t.Errorf("expected '--project is required', got: %v", result.Err)
 	}
 }
 
@@ -89,7 +89,7 @@ func TestStart_OutputContainsID(t *testing.T) {
 	})
 
 	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "pa-abc", "--project-id", "proj-1")
+	result := testhelper.Run(t, Cmd, "pa-abc", "--project", "proj-1")
 	if result.Err != nil {
 		t.Fatalf("unexpected error: %v", result.Err)
 	}

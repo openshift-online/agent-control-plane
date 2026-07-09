@@ -38,7 +38,7 @@ func resolveProject(projectID string) (string, error) {
 	}
 	p := cfg.GetProject()
 	if p == "" {
-		return "", fmt.Errorf("no project set; use --project-id or run 'acpctl config set project <name>'")
+		return "", fmt.Errorf("no project set; use --project or run 'acpctl config set project <name>'")
 	}
 	return p, nil
 }
@@ -71,7 +71,7 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List providers in a project",
 	Example: `  acpctl provider list
-  acpctl provider list --project-id <id> -o json
+  acpctl provider list --project <id> -o json
   acpctl provider list -o yaml`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(listArgs.projectID)
@@ -130,7 +130,7 @@ var getCmd = &cobra.Command{
 	Short: "Get a specific provider",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl provider get my-provider
-  acpctl provider get my-provider --project-id <id>
+  acpctl provider get my-provider --project <id>
   acpctl provider get my-provider -o json
   acpctl provider get my-provider -o yaml`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -190,7 +190,7 @@ var exportCmd = &cobra.Command{
 	Long:  "Export a provider definition as a Kubernetes ConfigMap YAML suitable for kubectl apply.",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl provider export my-provider
-  acpctl provider export my-provider --project-id <id>
+  acpctl provider export my-provider --project <id>
   acpctl provider export my-provider --namespace my-ns
   acpctl provider export my-provider > provider.yaml
   acpctl provider export my-provider | kubectl apply -f -`,
@@ -237,14 +237,14 @@ func init() {
 	Cmd.AddCommand(getCmd)
 	Cmd.AddCommand(exportCmd)
 
-	listCmd.Flags().StringVar(&listArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	listCmd.Flags().StringVar(&listArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	listCmd.Flags().StringVarP(&listArgs.outputFormat, "output", "o", "", "Output format: json|yaml")
 	listCmd.Flags().IntVar(&listArgs.limit, "limit", 100, "Maximum number of items to return")
 
-	getCmd.Flags().StringVar(&getArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	getCmd.Flags().StringVar(&getArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	getCmd.Flags().StringVarP(&getArgs.outputFormat, "output", "o", "", "Output format: json|yaml")
 
-	exportCmd.Flags().StringVar(&exportArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	exportCmd.Flags().StringVar(&exportArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	exportCmd.Flags().StringVar(&exportArgs.namespace, "namespace", "", "Kubernetes namespace for the ConfigMap")
 }
 
