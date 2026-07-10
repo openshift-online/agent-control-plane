@@ -11,7 +11,7 @@
 
 The gateway e2e test (`tests/e2e/gateway-e2e-test.sh`) validates platform plumbing — session creation, sandbox provisioning, payload delivery, environment injection — but cannot test the full LLM inference round-trip. The existing `smoke-test-llm.sh` requires real Vertex AI credentials, making it impossible to run in CI without secrets.
 
-This spec defines a mock LLM inference service and its integration into the kind development cluster. The mock enables fully self-contained e2e testing of the LLM response path without external API credentials. Inspired by [StacklokLabs/mockllm](https://github.com/StacklokLabs/mockllm), the implementation is intentionally minimal — a deterministic OpenAI-compatible endpoint with no streaming, token counting, or YAML-based response configuration.
+This spec defines a mock LLM inference service and its integration into the kind development cluster. The mock enables fully self-contained e2e testing of the LLM response path without external API credentials. The implementation is a custom, minimal server that speaks the Anthropic Messages API (`POST /v1/messages`) with streaming SSE support — the wire protocol Claude Code actually uses when `ANTHROPIC_BASE_URL` redirects its calls.
 
 ### Scope
 
@@ -23,7 +23,7 @@ This spec defines a mock LLM inference service and its integration into the kind
 
 ### Dependencies
 
-The sandbox network policy (Requirement 6) depends on PR #318 for `kind: Policy` and the `sandbox_policy` field on agents. All other requirements can land independently.
+The sandbox network policy (Requirement 7) depends on PR #318 for `kind: Policy` and the `sandbox_policy` field on agents. All other requirements can land independently.
 
 ---
 
@@ -31,47 +31,38 @@ The sandbox network policy (Requirement 6) depends on PR #318 for `kind: Policy`
 
 ### Requirement: Mock LLM Server
 
-The platform SHALL include a mock LLM server at `tests/mock-llm/` that implements the OpenAI chat completions API with deterministic responses. The server exists solely for e2e testing and is not deployed outside of kind development clusters.
+The platform SHALL include a mock LLM server at `tests/mock-llm/` that implements the Anthropic Messages API with deterministic responses. The server exists solely for e2e testing and is not deployed outside of kind development clusters.
 
-The server SHALL be a minimal FastAPI application with two endpoints:
+The server SHALL be a minimal FastAPI application with the following endpoints:
 
-- `POST /v1/chat/completions` — accepts an OpenAI-format request body, extracts the last user message, and returns a deterministic response in OpenAI chat completion format
+- `POST /v1/messages` — accepts an Anthropic Messages API request body, extracts the last user message, and returns a deterministic response. Supports both non-streaming and streaming modes (see [Streaming Support](#requirement-streaming-support))
 - `GET /health` — liveness/readiness probe returning HTTP 200
 
-The response format SHALL match the OpenAI chat completion schema:
+When `stream` is absent or `false`, the non-streaming response format SHALL match the Anthropic Messages API schema:
 
 ```json
 {
-  "id": "mock-<uuid>",
-  "object": "chat.completion",
+  "id": "msg_mock-<uuid>",
+  "type": "message",
+  "role": "assistant",
+  "content": [{"type": "text", "text": "Mock LLM response: <last_user_message>"}],
   "model": "<requested-model>",
-  "choices": [{
-    "index": 0,
-    "message": {
-      "role": "assistant",
-      "content": "Mock LLM response: <last_user_message>"
-    },
-    "finish_reason": "stop"
-  }],
-  "usage": {
-    "prompt_tokens": 0,
-    "completion_tokens": 0,
-    "total_tokens": 0
-  }
+  "stop_reason": "end_turn",
+  "usage": {"input_tokens": 0, "output_tokens": 0}
 }
 ```
 
 The response content SHALL echo the last user message with a `"Mock LLM response: "` prefix. This makes test assertions deterministic and verifiable.
 
-The server SHALL NOT implement streaming (`stream: true`), token counting, YAML-based response configuration, or the Anthropic Messages API. These are unnecessary for e2e plumbing validation.
+The server SHALL NOT implement token counting, YAML-based response configuration, or tool use. These are unnecessary for e2e plumbing validation.
 
-#### Scenario: Valid chat completion request
+#### Scenario: Valid non-streaming messages request
 
 - GIVEN the mock LLM server is running
-- WHEN a client sends `POST /v1/chat/completions` with body `{"model": "test", "messages": [{"role": "user", "content": "What is 2+2?"}]}`
+- WHEN a client sends `POST /v1/messages` with body `{"model": "claude-3-5-sonnet-20241022", "max_tokens": 1024, "messages": [{"role": "user", "content": "What is 2+2?"}]}`
 - THEN the server SHALL return HTTP 200
-- AND the response body SHALL contain `choices[0].message.content` equal to `"Mock LLM response: What is 2+2?"`
-- AND the response SHALL be valid OpenAI chat completion JSON
+- AND the response body SHALL contain `content[0].text` equal to `"Mock LLM response: What is 2+2?"`
+- AND the response SHALL be valid Anthropic Messages API JSON
 
 #### Scenario: Health check
 
@@ -82,13 +73,58 @@ The server SHALL NOT implement streaming (`stream: true`), token counting, YAML-
 #### Scenario: Empty messages array
 
 - GIVEN the mock LLM server is running
-- WHEN a client sends `POST /v1/chat/completions` with an empty `messages` array
+- WHEN a client sends `POST /v1/messages` with an empty `messages` array
 - THEN the server SHALL return HTTP 200
-- AND `choices[0].message.content` SHALL contain a default response (e.g., `"Mock LLM response: "`)
+- AND `content[0].text` SHALL contain a default response (e.g., `"Mock LLM response: "`)
+
+### Requirement: Streaming Support
+
+Claude Code sends `stream: true` by default when calling the Anthropic Messages API. The mock server SHALL support streaming responses via Server-Sent Events (SSE) to exercise the full response path.
+
+When a request includes `"stream": true`, the server SHALL:
+- Return `Content-Type: text/event-stream`
+- Emit the following SSE event sequence:
+
+```
+event: message_start
+data: {"type":"message_start","message":{"id":"msg_mock-<uuid>","type":"message","role":"assistant","content":[],"model":"<requested-model>","stop_reason":null,"usage":{"input_tokens":0,"output_tokens":0}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Mock LLM response: <last_user_message>"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":0}}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+```
+
+The mock MAY emit the full response text in a single `content_block_delta` event rather than splitting it across multiple deltas. This is sufficient for e2e plumbing validation — the goal is to exercise the SSE framing and event type handling, not to simulate realistic token-by-token streaming.
+
+#### Scenario: Streaming messages request
+
+- GIVEN the mock LLM server is running
+- WHEN a client sends `POST /v1/messages` with `"stream": true` and `"messages": [{"role": "user", "content": "hello"}]`
+- THEN the server SHALL return HTTP 200 with `Content-Type: text/event-stream`
+- AND the response SHALL contain a `message_start` event followed by `content_block_start`, `content_block_delta` (containing `"Mock LLM response: hello"`), `content_block_stop`, `message_delta` (with `stop_reason: end_turn`), and `message_stop` events
+- AND each event SHALL be framed as `event: <type>\ndata: <json>\n\n`
+
+#### Scenario: Non-streaming fallback
+
+- GIVEN the mock LLM server is running
+- WHEN a client sends `POST /v1/messages` without `"stream"` or with `"stream": false`
+- THEN the server SHALL return a standard JSON response (not SSE)
 
 ### Requirement: Mock LLM Container Image
 
-The mock LLM server SHALL be containerized via a Dockerfile at `tests/mock-llm/Dockerfile`. The image SHALL use `python:3.12-slim` as the base, install only `fastapi` and `uvicorn` as dependencies, and run as a non-root user.
+The mock LLM server SHALL be containerized via a Dockerfile at `tests/mock-llm/Dockerfile`. The image SHALL use `python:3.12-slim` as the base, install only `fastapi` and `uvicorn[standard]` as dependencies, and run as a non-root user. The `uvicorn[standard]` extra is required for SSE streaming support.
 
 #### Scenario: Image builds successfully
 
@@ -109,7 +145,8 @@ The mock LLM server SHALL be deployed as a Kubernetes Deployment with a ClusterI
 
 The Deployment SHALL:
 - Run 1 replica with `imagePullPolicy: IfNotPresent` (image loaded locally via `ctr import`)
-- Apply a restricted SecurityContext: `runAsNonRoot: true`, drop `ALL` capabilities, `readOnlyRootFilesystem: true`
+- Apply a restricted SecurityContext: `runAsNonRoot: true`, drop `ALL` capabilities, `readOnlyRootFilesystem: true`, `seccompProfile: { type: RuntimeDefault }`
+- Mount an `emptyDir` volume at `/tmp` — Python and uvicorn write bytecode cache and temporary files to `/tmp`, which is required when `readOnlyRootFilesystem` is `true`
 - Configure liveness and readiness probes on `/health`
 - Set resource requests and limits
 
@@ -127,7 +164,7 @@ The Service SHALL:
 
 - GIVEN the mock-llm Deployment is applied
 - WHEN the pod starts
-- THEN the container SHALL run as non-root with all capabilities dropped and a read-only root filesystem
+- THEN the container SHALL run as non-root with all capabilities dropped, a read-only root filesystem, and `seccompProfile: RuntimeDefault`
 
 ### Requirement: Makefile Integration
 
@@ -190,7 +227,7 @@ labels:
   purpose: e2e-testing
 ```
 
-The `ANTHROPIC_BASE_URL` and `CLAUDE_CODE_ATTRIBUTION_HEADER` are set on the agent's `environment` block — they are configuration, not secrets. The auth token is stored in a K8s secret (see [Credential Secret Provisioning](#requirement-credential-secret-provisioning)).
+`ANTHROPIC_BASE_URL` redirects Claude Code's Anthropic SDK calls to the mock server. `CLAUDE_CODE_ATTRIBUTION_HEADER` set to `"0"` disables attribution reporting headers that are unnecessary in test runs and would otherwise add noise to mock request validation. Both are set on the agent's `environment` block — they are configuration, not secrets. The auth token is stored in a K8s secret (see [Credential Secret Provisioning](#requirement-credential-secret-provisioning)).
 
 The `sandbox_policy: mock-llm-permissive` field references the OpenShell sandbox policy (see [OpenShell Sandbox Network Policy](#requirement-openshell-sandbox-network-policy)). This field requires PR #318.
 
@@ -300,9 +337,9 @@ The `test-agent-mock-llm` agent references this policy via `sandbox_policy: mock
 
 - GIVEN a session running `test-agent-mock-llm` in `tenant-a`
 - AND the `mock-llm-permissive` policy is applied to the sandbox
-- WHEN the Claude Code process inside the sandbox sends a request to `http://mock-llm.ambient-code.svc.cluster.local:8000/v1/chat/completions`
+- WHEN the Claude Code process inside the sandbox sends a request to `http://mock-llm.ambient-code.svc.cluster.local:8000/v1/messages`
 - THEN the request SHALL succeed
-- AND the sandbox SHALL receive a valid mock LLM response
+- AND the sandbox SHALL receive a valid streamed mock LLM response
 
 #### Scenario: Policy blocks other egress
 
