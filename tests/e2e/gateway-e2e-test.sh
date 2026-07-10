@@ -562,7 +562,7 @@ if [ -n "$REPO_AGENT_ID" ]; then
         fail "Repo payload: .git directory should not exist at /sandbox/workspace/.git"
       fi
     else
-      skip "Repo payload verification" "sandbox pod not ready (phase: ${REPO_POD_PHASE:-unknown})"
+      fail "Repo payload verification" "sandbox pod not ready (phase: ${REPO_POD_PHASE:-unknown})"
     fi
   else
     fail "Failed to start session for agent 'repo-clone-workspace'"
