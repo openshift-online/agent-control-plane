@@ -45,10 +45,10 @@ def check_mlflow_tracking_reachable(
     host = parsed.hostname
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
 
+    executor = ThreadPoolExecutor(max_workers=1)
     try:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(socket.getaddrinfo, host, port)
-            future.result(timeout=timeout)
+        future = executor.submit(socket.getaddrinfo, host, port)
+        future.result(timeout=timeout)
         _mlflow_dns_cache[tracking_uri] = True
         return True
     except FuturesTimeoutError:
@@ -69,6 +69,8 @@ def check_mlflow_tracking_reachable(
             host,
             e,
         )
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
     _mlflow_dns_cache[tracking_uri] = False
     return False

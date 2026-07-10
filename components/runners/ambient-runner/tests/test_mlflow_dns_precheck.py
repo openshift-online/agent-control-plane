@@ -1,7 +1,7 @@
 """Tests for MLflow tracking URI DNS pre-check."""
 
 import socket
-from concurrent.futures import TimeoutError as FuturesTimeoutError
+import time
 from unittest.mock import patch
 
 import pytest
@@ -33,14 +33,11 @@ class TestDnsPrecheck:
             assert check_mlflow_tracking_reachable("https://mlflow.example.com") is True
 
     def test_timeout_returns_false(self):
-        def slow_resolve(*args, **kwargs):
-            raise FuturesTimeoutError()
-
         with patch(
             "ambient_runner.observability_config.socket.getaddrinfo",
-            side_effect=slow_resolve,
+            side_effect=lambda *a, **kw: time.sleep(10),
         ):
-            assert check_mlflow_tracking_reachable("https://slow.example.com", timeout=0.1) is False
+            assert check_mlflow_tracking_reachable("https://slow.example.com", timeout=0.01) is False
 
     def test_cached_result_returned_without_repeat_lookup(self):
         with patch(
