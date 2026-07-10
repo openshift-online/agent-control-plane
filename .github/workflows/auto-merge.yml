@@ -57,4 +57,3 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_PR: ${{ github.event.pull_request.number }}
         run: bash .github/scripts/detect-components.sh --label "$GH_PR"
-
