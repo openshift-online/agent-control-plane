@@ -74,21 +74,7 @@ class TestIsOpenshellToken:
         assert MLflowSessionTracer._is_openshell_token("openshell:resolve:") is False
 
 
-class TestInitializeOpenshellTokens:
-    def test_openshell_token_skips_set_tracking_uri_and_set_experiment(self):
-        env = {
-            "MLFLOW_TRACKING_URI": "openshell:resolve:env:MLFLOW_TRACKING_URI",
-            "MLFLOW_EXPERIMENT_NAME": "openshell:resolve:env:MLFLOW_EXPERIMENT_NAME",
-        }
-        with patch.dict(os.environ, env, clear=True):
-            tracer = MLflowSessionTracer("s1", "u1", "user1")
-            result = tracer.initialize(**INIT_KWARGS)
-
-        assert result is True
-        assert tracer.enabled is True
-        _mock_mlflow.set_tracking_uri.assert_not_called()
-        _mock_mlflow.set_experiment.assert_not_called()
-
+class TestInitializeTracking:
     def test_standard_uri_calls_set_tracking_uri_and_set_experiment(self):
         env = {
             "MLFLOW_TRACKING_URI": "https://mlflow.example.com",

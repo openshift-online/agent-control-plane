@@ -62,13 +62,6 @@ class TestDnsPrecheck:
             assert check_mlflow_tracking_reachable(uri) is False
             mock_resolve.assert_called_once()
 
-    def test_openshell_resolve_token_bypasses_check(self):
-        with patch(
-            "ambient_runner.observability_config.socket.getaddrinfo",
-        ) as mock_resolve:
-            assert check_mlflow_tracking_reachable("openshell:resolve:env:MLFLOW_TRACKING_URI") is True
-            mock_resolve.assert_not_called()
-
     def test_file_uri_bypasses_check(self):
         with patch(
             "ambient_runner.observability_config.socket.getaddrinfo",

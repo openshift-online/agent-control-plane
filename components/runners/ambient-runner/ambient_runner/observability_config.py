@@ -11,7 +11,6 @@ from urllib.parse import urlparse
 logger = logging.getLogger(__name__)
 
 _DNS_CHECK_TIMEOUT = 5.0
-_OPENSHELL_RESOLVE_PREFIX = "openshell:resolve:env:"
 _NON_NETWORK_SCHEMES = frozenset({"file", "sqlite"})
 
 _mlflow_dns_cache: dict[str, bool] = {}
@@ -31,13 +30,10 @@ def check_mlflow_tracking_reachable(
 ) -> bool:
     """Fast DNS pre-check for the MLflow tracking URI hostname.
 
-    Returns True if the hostname resolves or if the URI is not subject to
-    DNS checks (openshell resolve tokens, non-network schemes like file://).
-    Returns cached result on subsequent calls for the same URI.
+    Returns True if the hostname resolves or if the URI uses a non-network
+    scheme (file://, sqlite://). Returns cached result on subsequent calls
+    for the same URI.
     """
-    if tracking_uri.startswith(_OPENSHELL_RESOLVE_PREFIX):
-        return True
-
     parsed = urlparse(tracking_uri)
 
     if parsed.scheme in _NON_NETWORK_SCHEMES or not parsed.hostname:

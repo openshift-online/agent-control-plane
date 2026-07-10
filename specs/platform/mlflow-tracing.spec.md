@@ -75,7 +75,7 @@ The platform SHALL support an `mlflow` credential provider. The credential secre
 
 The credential provider follows the existing credential binding hierarchy defined in `credential-binding.spec.md` — it can be bound at agent or project scope. The MLflow bearer token source may be materialized by Vault into the ACP deployment namespace, but it MUST NOT be injected into tenant sandboxes unless an `mlflow` credential binding authorizes that project or agent to use it.
 
-The control-plane reads MLflow runtime env from its own process environment (set on the deployment). When `MLFLOW_TRACKING_URI` is set, the control-plane injects the MLflow runtime env into every standard runner pod and OpenShell sandbox. Agent-level environment configuration (`agent.environment`) MAY override non-platform MLflow defaults such as `MLFLOW_EXPERIMENT_NAME`, `MLFLOW_TRACING_ENABLED`, `MLFLOW_AUTOLOG_EXCLUDE_FLAVORS`, and `MLFLOW_GENAI_AUTOLOG_INTEGRATIONS`. Agent configuration MUST NOT override platform MLflow routing or authentication keys: `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_AUTH`, `MLFLOW_WORKSPACE`, or `MLFLOW_TRACKING_TOKEN`.
+The control-plane reads MLflow runtime env from its own process environment (set on the deployment). When `MLFLOW_TRACKING_URI` is set, the control-plane injects the MLflow runtime env into every standard runner pod and OpenShell sandbox. `MLFLOW_TRACKING_URI` MUST NOT be injected as a provider credential (i.e., it MUST NOT arrive in the sandbox as an `openshell:resolve:env:` token); it is a platform environment variable resolved at deployment time, not a lazy-resolve credential. Agent-level environment configuration (`agent.environment`) MAY override non-platform MLflow defaults such as `MLFLOW_EXPERIMENT_NAME`, `MLFLOW_TRACING_ENABLED`, `MLFLOW_AUTOLOG_EXCLUDE_FLAVORS`, and `MLFLOW_GENAI_AUTOLOG_INTEGRATIONS`. Agent configuration MUST NOT override platform MLflow routing or authentication keys: `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_AUTH`, `MLFLOW_WORKSPACE`, or `MLFLOW_TRACKING_TOKEN`.
 
 #### Scenario: MLflow credential bound to project
 
@@ -145,22 +145,13 @@ The runner MUST attempt provider-native GenAI autologging for `MLFLOW_GENAI_AUTO
 
 #### Scenario: Tracking URI present — tracing enabled
 
-- GIVEN `MLFLOW_TRACKING_URI` is set to `https://mlflow.example.com` (a real URL, not an openshell resolve token)
+- GIVEN `MLFLOW_TRACKING_URI` is set to `https://mlflow.example.com`
 - WHEN the runner initializes the Claude SDK bridge
 - THEN the runner MUST call `mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)`
 - AND it MUST call `mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME or "ambient-code-sessions")`
 - AND it MUST call generic `mlflow.autolog(log_models=False, log_datasets=True, log_traces=True, silent=False, ...)`
 - AND it MUST attempt `mlflow.anthropic.autolog()` and `mlflow.openai.autolog()` before creating the `ClaudeSDKClient`
 - AND ACP session, turn, and tool spans MUST remain the universal trace envelope for Claude, Codex, OpenCode, and CLI-based agents
-
-#### Scenario: OpenShell resolve tokens — deferred configuration
-
-- GIVEN `MLFLOW_TRACKING_URI` is set to a value prefixed with `openshell:resolve:env:` (an openshell lazy-resolve token)
-- WHEN the runner initializes the Claude SDK bridge
-- THEN the runner MUST NOT call `mlflow.set_tracking_uri()` or `mlflow.set_experiment()` explicitly
-- AND the runner MUST defer tracking URI and experiment configuration to runtime environment resolution by the openshell supervisor (which intercepts `getenv()` at the C library level and returns real values)
-- AND the runner MUST still call generic and configured provider autologging before creating the `ClaudeSDKClient`
-- AND tracing MUST be enabled, relying on MLflow's native environment variable reading through supervisor-intercepted `getenv()`
 
 #### Scenario: Missing MLFLOW_TRACKING_URI — tracing disabled
 
@@ -179,7 +170,7 @@ The runner MUST attempt provider-native GenAI autologging for `MLFLOW_GENAI_AUTO
 
 #### Scenario: Tracing activation is best-effort (standard env)
 
-- GIVEN `MLFLOW_TRACKING_URI` is set to a real value (not an openshell resolve token)
+- GIVEN `MLFLOW_TRACKING_URI` is set to a valid tracking server URL
 - WHEN `mlflow.set_tracking_uri()`, `mlflow.set_experiment()`, generic `mlflow.autolog()`, or provider-specific autologging raises an exception
 - THEN the runner MUST log a warning
 - AND the session MUST NOT fail due to a tracing initialization error
@@ -191,7 +182,7 @@ Before calling any MLflow SDK initialization function (`set_tracking_uri`, `set_
 
 The pre-check result MUST be cached for the lifetime of the process so that subsequent initialization paths (e.g., `MLflowSessionTracer.initialize` after `activate_mlflow_autologging`) return instantly without repeating the DNS lookup.
 
-This requirement does not apply to `openshell:resolve:env:` prefixed URIs, which defer hostname resolution to the OpenShell supervisor, nor to non-network URIs (file paths, SQLite).
+`MLFLOW_TRACKING_URI` SHALL always contain a valid URI; the runner MUST NOT inspect or handle `openshell:resolve:env:` prefixed values for this variable. This requirement does not apply to non-network URIs (file paths, SQLite).
 
 #### Scenario: Unresolvable hostname — fast skip
 
@@ -216,13 +207,6 @@ This requirement does not apply to `openshell:resolve:env:` prefixed URIs, which
 - GIVEN the DNS pre-check has already been performed for a given tracking URI
 - WHEN a second initialization path invokes the pre-check for the same URI
 - THEN the cached result MUST be returned immediately without repeating the DNS lookup
-
-#### Scenario: OpenShell resolve tokens bypass pre-check
-
-- GIVEN `MLFLOW_TRACKING_URI` is set to a value prefixed with `openshell:resolve:env:`
-- WHEN the runner initializes
-- THEN the DNS pre-check MUST NOT be performed
-- AND initialization MUST defer to the supervisor's runtime env resolution
 
 #### Scenario: Non-network URIs bypass pre-check
 

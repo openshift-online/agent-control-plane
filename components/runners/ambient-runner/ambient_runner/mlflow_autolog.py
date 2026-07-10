@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 _DEFAULT_EXPERIMENT_NAME = "ambient-code-sessions"
 _DEFAULT_GENAI_INTEGRATIONS = ("anthropic", "openai")
 _EXPLICIT_FALSE_VALUES = ("0", "false", "no", "off")
-_OPENSHELL_RESOLVE_PREFIX = "openshell:resolve:env:"
 _BASE_AUTOLOG_TAGS = {
     "acp.runner": "ambient-runner",
 }
@@ -85,18 +84,7 @@ def _autolog_tags(extra_tags: Mapping[str, str] | None) -> dict[str, str]:
     return tags
 
 
-def _is_openshell_token(value: str) -> bool:
-    return value.startswith(_OPENSHELL_RESOLVE_PREFIX)
-
-
 def _configure_tracking(mlflow_module: MLflowModule, tracking_uri: str) -> bool:
-    if _is_openshell_token(tracking_uri):
-        logger.info(
-            "MLflow autologging: openshell resolve tokens detected; "
-            "deferring tracking config to runtime env resolution"
-        )
-        return True
-
     from ambient_runner.observability_config import check_mlflow_tracking_reachable
 
     if not check_mlflow_tracking_reachable(tracking_uri):

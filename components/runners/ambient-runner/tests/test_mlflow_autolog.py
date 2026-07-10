@@ -261,21 +261,6 @@ def test_genai_integration_is_imported_before_autologging():
     imported_anthropic.autolog.assert_called_once()
 
 
-def test_openshell_resolve_token_skips_explicit_tracking_setup():
-    mock_mlflow = MagicMock()
-    env = {"MLFLOW_TRACKING_URI": "openshell:resolve:env:MLFLOW_TRACKING_URI"}
-
-    with (
-        patch.dict(os.environ, env, clear=True),
-        patch.dict("sys.modules", {"mlflow": mock_mlflow}),
-    ):
-        assert activate_mlflow_autologging() is True
-
-    mock_mlflow.set_tracking_uri.assert_not_called()
-    mock_mlflow.set_experiment.assert_not_called()
-    mock_mlflow.autolog.assert_called_once()
-
-
 def test_idempotent_second_call_does_not_repatch():
     mock_mlflow = MagicMock()
     env = {"MLFLOW_TRACKING_URI": "https://mlflow.example.com"}
