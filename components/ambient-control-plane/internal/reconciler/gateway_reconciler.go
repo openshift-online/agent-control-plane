@@ -42,7 +42,7 @@ func NewGatewayReconciler(
 ) *GatewayReconciler {
 	defaultImage := os.Getenv("OPENSHELL_GATEWAY_IMAGE")
 	if defaultImage == "" {
-		defaultImage = "ghcr.io/nvidia/openshell/gateway:0.0.74"
+		defaultImage = "ghcr.io/nvidia/openshell/gateway:0.0.80"
 	}
 	return &GatewayReconciler{
 		factory:             factory,
