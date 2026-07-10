@@ -79,18 +79,15 @@ for NS in "${NAMESPACES[@]}"; do
 
   GW_PORTS+=("$PORT")
 
-  # Register the gateway. Remove first if it already exists.
+  # Remove existing registration first (may also delete the cert dir).
   if openshell gateway list 2>/dev/null | grep -q "$GW_NAME"; then
     echo "  Removing existing gateway registration..."
     openshell gateway remove "$GW_NAME" 2>/dev/null || true
   fi
 
-  echo "  Registering gateway $GW_NAME -> https://localhost:$PORT..."
-  openshell gateway add --name "$GW_NAME" --local "https://localhost:$PORT"
-
-  # `gateway add --local` generates self-signed certs into the mtls
-  # directory. Overwrite them with the real certs from the cluster secret
-  # so the CLI trusts the gateway's server certificate.
+  # Extract mTLS certs from the cluster secret BEFORE registering the
+  # gateway — the openshell CLI expects client TLS material to exist at
+  # registration time.
   mkdir -p "$CERT_DIR"
   echo "  Extracting mTLS certs from openshell-server-tls..."
   kubectl get secret openshell-server-tls -n "$NS" \
@@ -99,6 +96,9 @@ for NS in "${NAMESPACES[@]}"; do
     -o jsonpath='{.data.tls\.crt}' | base64 -d > "$CERT_DIR/tls.crt"
   kubectl get secret openshell-server-tls -n "$NS" \
     -o jsonpath='{.data.tls\.key}' | base64 -d > "$CERT_DIR/tls.key"
+
+  echo "  Registering gateway $GW_NAME -> https://localhost:$PORT..."
+  openshell gateway add --name "$GW_NAME" --local "https://localhost:$PORT"
 
   # Verify mTLS connectivity
   if openshell provider list --gateway "$GW_NAME" &>/dev/null; then
