@@ -4,11 +4,17 @@
 # gateways. Extracts mTLS certs from each namespace, registers the gateway,
 # and starts a port-forward on a random local port.
 #
+# Port-forwards run in the background with PIDs saved to $PF_DIR so they
+# can be stopped later via `make kind-setup-openshell-cli-stop`.
+#
 # USAGE:
 #   ./scripts/setup-gateway-cli.sh [NAMESPACE...]
 #
 #   Each namespace gets a gateway registered as "<namespace>" on a random port.
 #   With no arguments, defaults to tenant-a.
+#
+# ENVIRONMENT:
+#   PF_DIR  — directory for PID/log files (default: /tmp/ambient-code)
 #
 # EXAMPLES:
 #   ./scripts/setup-gateway-cli.sh                    # tenant-a
@@ -23,15 +29,10 @@ set -e
 
 NAMESPACES=("${@:-tenant-a}")
 CERT_BASE="$HOME/.config/openshell/gateways"
-PF_PIDS=()
+PF_DIR="${PF_DIR:-/tmp/ambient-code}"
 GW_PORTS=()
 
-cleanup() {
-  for pid in "${PF_PIDS[@]}"; do
-    kill "$pid" 2>/dev/null || true
-  done
-}
-trap cleanup EXIT
+mkdir -p "$PF_DIR"
 
 for NS in "${NAMESPACES[@]}"; do
   GW_NAME="$NS"
@@ -51,18 +52,30 @@ for NS in "${NAMESPACES[@]}"; do
   fi
 
   CERT_DIR="$CERT_BASE/$GW_NAME/mtls"
+  PID_FILE="$PF_DIR/kind-pf-openshell-${NS}.pid"
+  LOG_FILE="$PF_DIR/kind-pf-openshell-${NS}.log"
+
+  # Kill any existing port-forward for this namespace
+  if [ -f "$PID_FILE" ]; then
+    OLD_PID=$(cat "$PID_FILE")
+    if ps -p "$OLD_PID" >/dev/null 2>&1; then
+      kill "$OLD_PID" 2>/dev/null || true
+      echo "  Stopped previous port-forward (PID $OLD_PID)"
+    fi
+    rm -f "$PID_FILE" "$LOG_FILE"
+  fi
 
   # Start port-forward on :0 (kernel picks a free port), capture the assigned port
   kubectl port-forward -n "$NS" statefulset/openshell-gateway ":8080" \
-    >/tmp/pf-${NS}.log 2>&1 &
+    >"$LOG_FILE" 2>&1 &
   PF_PID=$!
-  PF_PIDS+=($PF_PID)
+  echo "$PF_PID" > "$PID_FILE"
 
   # Wait for kubectl to print the assigned port
   PORT=""
   for attempt in $(seq 1 30); do
-    if [ -s "/tmp/pf-${NS}.log" ]; then
-      PORT=$(grep -oE 'Forwarding from 127\.0\.0\.1:[0-9]+' "/tmp/pf-${NS}.log" | grep -oE '[0-9]+$' | head -1)
+    if [ -s "$LOG_FILE" ]; then
+      PORT=$(grep -oE 'Forwarding from 127\.0\.0\.1:[0-9]+' "$LOG_FILE" | grep -oE '[0-9]+$' | head -1)
       if [ -n "$PORT" ]; then
         break
       fi
@@ -73,6 +86,7 @@ for NS in "${NAMESPACES[@]}"; do
   if [ -z "$PORT" ]; then
     echo "  Error: Failed to determine port-forward port for '$NS'; skipping"
     kill "$PF_PID" 2>/dev/null || true
+    rm -f "$PID_FILE" "$LOG_FILE"
     echo ""
     continue
   fi
@@ -142,10 +156,5 @@ for NS in "${NAMESPACES[@]}"; do
   echo "  openshell sandbox list --gateway ${NS}"
 done
 echo ""
-echo "Port-forwards are running in the background (PIDs: ${PF_PIDS[*]})."
-echo "Press Ctrl-C to stop them, or run: kill ${PF_PIDS[*]}"
-echo ""
-
-# Keep port-forwards alive until interrupted
-trap - EXIT
-wait
+echo "Port-forwards are running in the background."
+echo "Stop with: make kind-setup-openshell-cli-stop"

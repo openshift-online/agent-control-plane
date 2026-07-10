@@ -3,7 +3,7 @@
 .PHONY: local-dev-token
 .PHONY: local-logs local-logs-api-server local-logs-ui local-logs-control-plane local-shell-api-server local-shell-ui
 .PHONY: local-test local-test-dev local-test-quick test-all local-troubleshoot local-port-forward local-stop-port-forward
-.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-reload-ambient-control-plane kind-reload-ambient-api-server kind-reload-runner-openshell kind-load-runner kind-status kind-login kind-sso-toggle kind-setup-vertex kind-setup-openshell-cli
+.PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-reload-ambient-control-plane kind-reload-ambient-api-server kind-reload-runner-openshell kind-load-runner kind-status kind-login kind-sso-toggle kind-setup-vertex kind-setup-openshell-cli kind-setup-openshell-cli-stop
 .PHONY: preflight-cluster preflight dev-env dev
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift test-gateway-e2e test-vteam-catalog-lab
 .PHONY: unleash-port-forward unleash-status
@@ -1415,14 +1415,34 @@ kind-setup-vertex: check-kubectl _kind-require-cluster ## Configure Vertex AI fo
 			./scripts/setup-vertex-kind.sh; \
 	fi
 
-kind-setup-openshell-cli: check-kubectl _kind-require-cluster ## Auto-discover tenant gateways and register openshell CLI access
+kind-setup-openshell-cli: check-kubectl _kind-require-cluster ## Auto-discover tenant gateways and register openshell CLI access (stop with: make kind-setup-openshell-cli-stop)
 	@NAMESPACES=$$(kubectl get pods --all-namespaces -l app.kubernetes.io/instance=openshell-gateway -o jsonpath='{range .items[*]}{.metadata.namespace}{"\n"}{end}' 2>/dev/null | sort -u); \
 	if [ -z "$$NAMESPACES" ]; then \
 		echo "$(COLOR_RED)✗$(COLOR_RESET) No openshell-gateway pods found in any namespace"; \
 		exit 1; \
 	fi; \
 	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Found openshell-gateway in: $$NAMESPACES"; \
-	./scripts/setup-gateway-cli.sh $$NAMESPACES
+	PF_DIR=$(KIND_PF_DIR) ./scripts/setup-gateway-cli.sh $$NAMESPACES
+
+kind-setup-openshell-cli-stop: ## Stop background openshell gateway port-forwards
+	@STOPPED=0; \
+	for PID_FILE in $(KIND_PF_DIR)/kind-pf-openshell-*.pid; do \
+		[ -f "$$PID_FILE" ] || continue; \
+		SVC=$$(basename "$$PID_FILE" .pid | sed 's/^kind-pf-openshell-//'); \
+		PID=$$(cat "$$PID_FILE"); \
+		if ps -p "$$PID" >/dev/null 2>&1; then \
+			kill "$$PID" 2>/dev/null || true; \
+			echo "  Stopped openshell-gateway port-forward for $$SVC (PID $$PID)"; \
+			STOPPED=1; \
+		fi; \
+		rm -f "$$PID_FILE"; \
+		rm -f "$(KIND_PF_DIR)/kind-pf-openshell-$$SVC.log"; \
+	done; \
+	if [ "$$STOPPED" -eq 1 ]; then \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Openshell gateway port-forwarding stopped"; \
+	else \
+		echo "$(COLOR_YELLOW)No active openshell gateway port-forwards found$(COLOR_RESET)"; \
+	fi
 
 kind-clean: kind-down ## Alias for kind-down
 

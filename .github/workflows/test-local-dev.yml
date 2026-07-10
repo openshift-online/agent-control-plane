@@ -190,11 +190,16 @@ jobs:
           exit 1
         }
 
+    - name: Install openshell CLI
+      run: pipx install openshell
+
     - name: Run Gateway E2E tests
       run: |
         kubectl port-forward -n ambient-code svc/ambient-api-server 13592:8000 &
         kubectl port-forward -n ambient-code svc/keycloak-service 18592:8080 &
         sleep 3
+
+        PF_DIR=/tmp/ambient-code ./scripts/setup-gateway-cli.sh tenant-a
 
         TEST_TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d) \
         API_URL=http://localhost:13592 \

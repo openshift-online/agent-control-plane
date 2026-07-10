@@ -638,30 +638,22 @@ if [ -n "$LOCKED_AGENT_ID" ]; then
       done
 
       # 11c. Verify locked-down policy blocks external network access
-      # NOTE: kubectl exec bypasses the OpenShell proxy (eBPF process-tree
-      # filtering only intercepts processes spawned by the supervisor). Instead,
-      # check the proxy log for DENIED entries — the Claude binary attempts
-      # api.anthropic.com on startup which should be blocked by locked-down policy.
+      # SSH into the sandbox and curl a known endpoint over plain HTTP so
+      # the proxy can intercept the GET and return policy_denied JSON.
+      # (HTTPS would fail at the CONNECT tunnel level with no response body.)
+      # FIXME: switch to `openshell sandbox exec` when it is fixed upstream.
       if [ "$LOCKED_SESSION_RUNNING" = "true" ]; then
-        LOCKED_DENIED_FOUND=false
-        for i in $(seq 1 10); do
-          LOCKED_LOG=$(kubectl exec -n "$TENANT" "$LOCKED_SBX_NAME" -- \
-            sh -c 'cat /var/log/openshell.*.log 2>/dev/null' 2>/dev/null || echo "")
+        LOCKED_CURL_OUTPUT=$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          -o LogLevel=ERROR \
+          -o "ProxyCommand=openshell ssh-proxy --gateway-name $TENANT --name $LOCKED_SBX_NAME" \
+          "user@$LOCKED_SBX_NAME" \
+          'curl http://update.code.visualstudio.com 2>/dev/null' 2>/dev/null) || true
 
-          if echo "$LOCKED_LOG" | grep -q "DENIED.*api.anthropic.com"; then
-            LOCKED_DENIED_FOUND=true
-            break
-          fi
-          sleep 3
-        done
-
-        if [ "$LOCKED_DENIED_FOUND" = "true" ]; then
-          DENIED_COUNT=$(echo "$LOCKED_LOG" | grep -c "DENIED.*api.anthropic.com" || echo "0")
-          pass "Locked-down policy denied api.anthropic.com (${DENIED_COUNT} DENIED entries in proxy log)"
-        elif [ -z "$LOCKED_LOG" ]; then
-          fail "Locked-down network test — no proxy log found in sandbox pod"
+        if echo "$LOCKED_CURL_OUTPUT" | grep -q "policy_denied"; then
+          pass "Locked-down policy denied outbound network access (policy_denied)"
         else
-          fail "Locked-down policy did NOT deny api.anthropic.com (no matching DENIED entries in proxy log)"
+          fail "Locked-down policy did NOT deny outbound network access"
+          echo "  Output: $(echo "$LOCKED_CURL_OUTPUT" | head -c 200)"
         fi
       else
         fail "Locked-down network test — session not Running (phase: ${LOCKED_PHASE:-unknown})"
@@ -678,9 +670,8 @@ else
 fi
 
 # 11d. Verify permissive policy allows external network access
-# Start a dedicated permissive session so the pod is guaranteed to be running.
-# Check proxy log for ALLOWED entries — the Claude binary connects to
-# api.anthropic.com on startup which should be allowed by the permissive policy.
+# Start a dedicated permissive session and curl api.anthropic.com via the
+# sandbox proxy. The request should succeed (not return policy_denied).
 PERM_AGENT_ID=$(echo "$AGENTS_RESP" \
   | jq -r '.items[] | select(.name == "network-test-permissive") | .id' 2>/dev/null | head -1 || echo "")
 
@@ -721,26 +712,25 @@ if [ -n "$PERM_AGENT_ID" ]; then
         sleep 2
       done
 
+      # Verify permissive policy allows external network access via curl.
+      # The permissive policy allows /usr/bin/curl to reach
+      # update.code.visualstudio.com:443 (vscode policy). If policy_denied
+      # appears, the proxy blocked it; any other response means it got through.
+      # FIXME: switch to `openshell sandbox exec` when it is fixed upstream.
       if [ "$PERM_SESSION_RUNNING" = "true" ]; then
-        PERM_ALLOWED_FOUND=false
-        for i in $(seq 1 10); do
-          PERM_LOG=$(kubectl exec -n "$TENANT" "$PERM_SBX_NAME" -- \
-            sh -c 'cat /var/log/openshell.*.log 2>/dev/null' 2>/dev/null || echo "")
+        PERM_CURL_OUTPUT=$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          -o LogLevel=ERROR \
+          -o "ProxyCommand=openshell ssh-proxy --gateway-name $TENANT --name $PERM_SBX_NAME" \
+          "user@$PERM_SBX_NAME" \
+          'curl https://update.code.visualstudio.com 2>/dev/null' 2>/dev/null) || true
 
-          if echo "$PERM_LOG" | grep -q "ALLOWED.*api.anthropic.com"; then
-            PERM_ALLOWED_FOUND=true
-            break
-          fi
-          sleep 3
-        done
-
-        if [ "$PERM_ALLOWED_FOUND" = "true" ]; then
-          ALLOWED_COUNT=$(echo "$PERM_LOG" | grep -c "ALLOWED.*api.anthropic.com" || echo "0")
-          pass "Permissive policy allowed api.anthropic.com (${ALLOWED_COUNT} ALLOWED entries in proxy log)"
-        elif [ -z "$PERM_LOG" ]; then
-          fail "Permissive network test — no proxy log found in sandbox pod"
+        if echo "$PERM_CURL_OUTPUT" | grep -q "policy_denied"; then
+          fail "Permissive policy denied update.code.visualstudio.com (policy_denied)"
+          echo "  Output: $(echo "$PERM_CURL_OUTPUT" | head -c 200)"
+        elif [ -n "$PERM_CURL_OUTPUT" ]; then
+          pass "Permissive policy allowed update.code.visualstudio.com"
         else
-          fail "Permissive policy has no ALLOWED entries for api.anthropic.com in proxy log"
+          fail "Permissive network test — no response from curl"
         fi
       else
         fail "Permissive network test — session not Running (phase: ${PERM_PHASE:-unknown})"
