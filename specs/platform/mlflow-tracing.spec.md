@@ -170,7 +170,7 @@ The runner MUST attempt provider-native GenAI autologging for `MLFLOW_GENAI_AUTO
 
 #### Scenario: Tracing activation is best-effort (standard env)
 
-- GIVEN `MLFLOW_TRACKING_URI` is set to a valid tracking server URL
+- GIVEN `MLFLOW_TRACKING_URI` is set
 - WHEN `mlflow.set_tracking_uri()`, `mlflow.set_experiment()`, generic `mlflow.autolog()`, or provider-specific autologging raises an exception
 - THEN the runner MUST log a warning
 - AND the session MUST NOT fail due to a tracing initialization error
@@ -196,7 +196,7 @@ The pre-check result MUST be cached for the lifetime of the process so that subs
 
 #### Scenario: Resolvable hostname — normal initialization
 
-- GIVEN `MLFLOW_TRACKING_URI` is set to a valid tracking server URL
+- GIVEN `MLFLOW_TRACKING_URI` is set
 - AND the hostname resolves in DNS
 - WHEN the runner initializes the Claude SDK bridge
 - THEN the DNS pre-check MUST succeed
