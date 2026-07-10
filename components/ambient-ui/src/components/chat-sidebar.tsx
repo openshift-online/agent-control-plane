@@ -381,7 +381,7 @@ export function ChatSidebar() {
   if (!isOpen || !activeSessionId) return null
 
   const sessionName = session?.name ?? 'Loading...'
-  const sessionPhase = session?.phase ?? 'Pending'
+  const sessionPhase: SessionPhase = session?.phase ?? 'Pending'
   const isThinking = sessionPhase === 'Running' && isRunActive(messagesData?.items ?? [])
 
   if (collapsed) {

@@ -7,6 +7,7 @@ import {
   filterEmptyMessages,
   groupChatItems,
   buildChatItems,
+  isRunActive,
 } from '../chat-messages'
 
 // ---- Factory ----
@@ -407,5 +408,105 @@ describe('buildChatItems', () => {
 
   it('returns empty array when given no messages', () => {
     expect(buildChatItems([])).toEqual([])
+  })
+})
+
+// ---- isRunActive ----
+
+describe('isRunActive', () => {
+  it('returns false on empty message list', () => {
+    expect(isRunActive([])).toBe(false)
+  })
+
+  it('returns false when last relevant event is assistant message', () => {
+    const messages = [
+      makeMsg({ eventType: 'user', payload: 'hello' }),
+      makeMsg({ eventType: 'assistant', payload: 'hi there' }),
+    ]
+    expect(isRunActive(messages)).toBe(false)
+  })
+
+  it('returns true when run_started lifecycle follows user message', () => {
+    const messages = [
+      makeMsg({ eventType: 'user', payload: 'fix the bug' }),
+      makeMsg({
+        eventType: 'lifecycle',
+        payload: JSON.stringify({ event: 'run_started' }),
+      }),
+    ]
+    expect(isRunActive(messages)).toBe(true)
+  })
+
+  it('returns false when run_finished lifecycle received', () => {
+    const messages = [
+      makeMsg({ eventType: 'user', payload: 'fix the bug' }),
+      makeMsg({
+        eventType: 'lifecycle',
+        payload: JSON.stringify({ event: 'run_started' }),
+      }),
+      makeMsg({
+        eventType: 'lifecycle',
+        payload: JSON.stringify({ event: 'run_finished' }),
+      }),
+    ]
+    expect(isRunActive(messages)).toBe(false)
+  })
+
+  it('does not trigger on bare user message without run_started', () => {
+    const messages = [
+      makeMsg({ eventType: 'user', payload: 'hello' }),
+    ]
+    expect(isRunActive(messages)).toBe(false)
+  })
+
+  it('indicator persists through tool_use and tool_result messages', () => {
+    const messages = [
+      makeMsg({ eventType: 'user', payload: 'fix the bug' }),
+      makeMsg({
+        eventType: 'lifecycle',
+        payload: JSON.stringify({ event: 'run_started' }),
+      }),
+      makeMsg({
+        eventType: 'tool_use',
+        payload: JSON.stringify({ tool: 'Read', tool_call_id: 'tc-1' }),
+      }),
+      makeMsg({
+        eventType: 'tool_result',
+        payload: JSON.stringify({ tool_call_id: 'tc-1', result: 'data' }),
+      }),
+    ]
+    expect(isRunActive(messages)).toBe(true)
+  })
+
+  it('handles malformed lifecycle payload gracefully', () => {
+    const messages = [
+      makeMsg({ eventType: 'lifecycle', payload: 'not valid json' }),
+    ]
+    expect(isRunActive(messages)).toBe(false)
+  })
+
+  it('returns false when assistant message follows run_started', () => {
+    const messages = [
+      makeMsg({
+        eventType: 'lifecycle',
+        payload: JSON.stringify({ event: 'run_started' }),
+      }),
+      makeMsg({ eventType: 'assistant', payload: 'Here is the fix' }),
+    ]
+    expect(isRunActive(messages)).toBe(false)
+  })
+
+  it('ignores unrelated lifecycle events', () => {
+    const messages = [
+      makeMsg({
+        eventType: 'lifecycle',
+        payload: JSON.stringify({ event: 'run_started' }),
+      }),
+      makeMsg({
+        eventType: 'lifecycle',
+        payload: JSON.stringify({ event: 'session_created' }),
+      }),
+    ]
+    expect(isRunActive(messages)).toBe(true)
   })
 })

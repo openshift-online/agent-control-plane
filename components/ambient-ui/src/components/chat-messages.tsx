@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
-import type { DomainSessionMessage, SessionEventType } from '@/domain/types'
+import type { DomainSessionMessage, SessionEventType, SessionPhase } from '@/domain/types'
 import { useSendMessage } from '@/queries/use-send-message'
 import { formatRelativeTime } from '@/lib/format-timestamp'
 import { cn } from '@/lib/utils'
@@ -353,7 +353,7 @@ function SimpleChatMessage({ message }: { message: DomainSessionMessage }) {
 
 // ---- Phase Status Indicator ----
 
-const PHASE_STYLES: Record<string, string> = {
+const PHASE_STYLES: Record<SessionPhase, string> = {
   Running: 'bg-status-success text-status-success-foreground border-status-success-border',
   Pending: 'bg-status-warning text-status-warning-foreground border-status-warning-border',
   Creating: 'bg-status-info text-status-info-foreground border-status-info-border',
@@ -363,8 +363,8 @@ const PHASE_STYLES: Record<string, string> = {
   Stopped: 'bg-event-system text-event-system-foreground border-event-system-border',
 }
 
-export function PhaseIndicator({ phase }: { phase: string }) {
-  const style = PHASE_STYLES[phase] ?? PHASE_STYLES.Stopped
+export function PhaseIndicator({ phase }: { phase: SessionPhase }) {
+  const style = PHASE_STYLES[phase]
   return (
     <Badge
       variant="outline"
@@ -379,7 +379,7 @@ export function PhaseIndicator({ phase }: { phase: string }) {
 
 type ChatInputProps = {
   sessionId: string
-  phase: string
+  phase: SessionPhase
   disabled: boolean
 }
 
@@ -505,8 +505,8 @@ export function ChatInput({ sessionId, phase, disabled }: ChatInputProps) {
 
 // ---- Chat Items List (shared between tab and sidebar) ----
 
-const STARTING_PHASES = new Set(['Pending', 'Creating'])
-const TERMINAL_PHASES = new Set(['Completed', 'Failed', 'Stopped'])
+const STARTING_PHASES: ReadonlySet<SessionPhase> = new Set(['Pending', 'Creating'])
+const TERMINAL_PHASES: ReadonlySet<SessionPhase> = new Set(['Completed', 'Failed', 'Stopped'])
 
 export function ChatItemsList({
   items,
@@ -516,7 +516,7 @@ export function ChatItemsList({
 }: {
   items: ChatItem[]
   isLoading: boolean
-  phase?: string
+  phase?: SessionPhase
   isThinking?: boolean
 }) {
   if (isLoading) {
@@ -616,7 +616,6 @@ export function isRunActive(messages: DomainSessionMessage[]): boolean {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]
     if (msg.eventType === 'assistant') return false
-    if (msg.eventType === 'user') return true
     if (msg.eventType !== 'lifecycle') continue
     const event = parseLifecycleEvent(msg.payload)
     if (event === 'run_started') return true
