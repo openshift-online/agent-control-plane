@@ -463,7 +463,7 @@ func (r *SimpleKubeReconciler) injectACPInternalPolicy(ctx context.Context, name
 func (r *SimpleKubeReconciler) patchSandboxDNSConfig(ctx context.Context, namespace, sandboxName string) error {
 	sandboxGVR := schema.GroupVersionResource{
 		Group:    "agents.x-k8s.io",
-		Version:  "v1alpha1",
+		Version:  "v1beta1",
 		Resource: "sandboxes",
 	}
 

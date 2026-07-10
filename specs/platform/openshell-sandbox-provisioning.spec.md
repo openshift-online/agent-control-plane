@@ -39,16 +39,13 @@ The ACP control plane reads the `openshell-client-tls` Secret from the project n
 
 The [Agent Sandbox CRD](https://github.com/kubernetes-sigs/agent-sandbox) (`sandboxes.agents.x-k8s.io`) and its controller must be installed cluster-wide before deploying the gateway. The CRD version must match the API version that the OpenShell gateway expects.
 
-**Version compatibility:** The OpenShell gateway 0.0.70 uses the `agents.x-k8s.io/v1alpha1` API. The agent-sandbox project graduated its API to `v1beta1` in release v0.5.0. Installing the `latest` release (v0.5.0+) will cause sandbox-to-gateway authentication failures because the gateway's K8s ServiceAccount authenticator checks for `v1alpha1` in pod ownerReferences, but the v0.5.0 controller stamps `v1beta1`.
+**Version compatibility:** The agent-sandbox project graduated its API from `v1alpha1` to `v1beta1` in release v0.5.0. The v0.5.0+ CRD includes a conversion webhook that serves both `v1alpha1` and `v1beta1`, so existing `v1alpha1` API calls continue to work. The controller stamps `v1beta1` in ownerReferences. OpenShell gateway 0.0.74+ is compatible with `v1beta1` ownerReferences.
 
-Install the CRD at the version compatible with your gateway:
+Install the CRD:
 
 ```bash
-# For OpenShell gateway ≤ 0.0.70 — use agent-sandbox v0.4.6 (v1alpha1)
-kubectl apply -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v0.4.6/manifest.yaml
-
-# For OpenShell gateway with v1beta1 support (future) — use agent-sandbox v0.5.0+
-kubectl apply -f https://github.com/kubernetes-sigs/agent-sandbox/releases/latest/download/manifest.yaml
+# Current recommended version (v1beta1 API with v1alpha1 conversion webhook)
+kubectl apply -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v0.5.1/manifest.yaml
 ```
 
 This installs the `agent-sandbox-system` namespace, the CRD, and the sandbox controller. The controller watches for Sandbox CRs and creates pods with ownerReferences — the API version in those ownerReferences must match what the gateway authenticator expects.
@@ -566,7 +563,7 @@ The control plane SHALL configure DNS resolution for sandboxes by patching the S
 
 - GIVEN a sandbox has been created via `CreateSandbox`
 - WHEN the control plane prepares the sandbox for runner execution
-- THEN it SHALL patch the `agents.x-k8s.io/v1alpha1` Sandbox CR using a Kubernetes merge-patch on `spec.podTemplate.spec.dnsConfig` with `options: [{name: ndots, value: "1"}]`
+- THEN it SHALL patch the `agents.x-k8s.io/v1beta1` Sandbox CR using a Kubernetes merge-patch on `spec.podTemplate.spec.dnsConfig` with `options: [{name: ndots, value: "1"}]`
 - AND it SHALL delete the sandbox pod to trigger recreation by the sandbox controller with the updated DNS config
 - AND if the pod deletion fails with NotFound, the error SHALL be ignored (pod may not exist yet)
 - AND DNS patching failures SHALL be logged as warnings but SHALL NOT block sandbox provisioning
@@ -847,7 +844,7 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | [kube_reconciler.go] `configureInference()` | New method — called after `ensureGatewayProviders`; sets gateway inference routing via `SetClusterInference` when an inference-capable credential is present |
 | `GatewayClient.UploadPayloads()` | New method — opens an SSH session via `CreateSshSession` / `ForwardTcp` gRPC RPCs and writes payload files into the sandbox via `mkdir -p && cat >` SSH commands. Called in the exec-after-Ready goroutine before `ExecSandbox` when the agent has inline content payloads |
 | `GatewayClient.ExecSandboxStreaming()` | New method — fire-and-forget variant of `ExecSandbox` that discards output and uses a caller-provided context, replacing the blocking `ExecSandbox` for long-running processes |
-| [kube_reconciler.go] `patchSandboxDNSConfig()` | New method — patches `agents.x-k8s.io/v1alpha1` Sandbox CR's `podTemplate.spec.dnsConfig` with `ndots:1` and deletes the sandbox pod to force recreation. Workaround for [OpenShell#2053](https://github.com/NVIDIA/OpenShell/issues/2053) |
+| [kube_reconciler.go] `patchSandboxDNSConfig()` | New method — patches `agents.x-k8s.io/v1beta1` Sandbox CR's `podTemplate.spec.dnsConfig` with `ndots:1` and deletes the sandbox pod to force recreation. Workaround for [OpenShell#2053](https://github.com/NVIDIA/OpenShell/issues/2053) |
 | [kube_reconciler.go] `resolveEntrypoint()` | Default entrypoint changed from `/sandbox/runner/entrypoint.sh` to `/runner/entrypoint.sh` to match the gateway runner image's directory layout |
 | `provider_mapping.go` | Updated `vertex` mapping from `vertex-prod` to `google-vertex-ai` to match the OpenShell CLI's provider type |
 | Vendored proto (`openshell.proto`, `sandbox.proto`) | Extended with `UpdateConfig` RPC, `UpdateConfigRequest`/`UpdateConfigResponse` messages, `SettingValue` message, `CreateSshSession` RPC, `ForwardTcp` RPC (bidirectional streaming), `TcpForwardFrame`, `TcpForwardInit`, `SshRelayTarget`, `CreateSshSessionRequest`, and `CreateSshSessionResponse` messages |

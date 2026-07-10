@@ -65,14 +65,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md#local-development-setup) for full local de
 
 ### OpenShell Gateway (Kind)
 
-The control plane delegates sandbox creation to an OpenShell gateway by default. `make kind-up` automatically installs all prerequisites: the tenant namespace, and the [agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) CRD (v0.4.6). ACP will automatically install configuration similar to the [OpenShell gateway Helm chart](https://github.com/NVIDIA/OpenShell/tree/main/deploy/helm/openshell) when it is configured to manage a namespace.
+The control plane delegates sandbox creation to an OpenShell gateway by default. `make kind-up` automatically installs all prerequisites: the tenant namespace, and the [agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) CRD (v0.5.1). ACP will automatically install configuration similar to the [OpenShell gateway Helm chart](https://github.com/NVIDIA/OpenShell/tree/main/deploy/helm/openshell) when it is configured to manage a namespace.
 
 Override defaults with:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OPENSHELL_TENANT_NAMESPACE` | `tenant` | Namespace for the gateway and sandboxes |
-| `AGENT_SANDBOX_VERSION` | `v0.4.6` | Agent Sandbox CRD release (must match gateway API version) |
+| `AGENT_SANDBOX_VERSION` | `v0.5.1` | Agent Sandbox CRD release (must match gateway API version) |
 
 After the sandbox reaches Ready, the control plane executes commands inside it via the `ExecSandbox` gRPC RPC — the runner starts through exec, not the container entrypoint.
 

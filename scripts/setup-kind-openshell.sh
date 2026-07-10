@@ -17,7 +17,7 @@
 set -euo pipefail
 
 NAMESPACE="${NAMESPACE:-ambient-code}"
-AGENT_SANDBOX_VERSION="${AGENT_SANDBOX_VERSION:-v0.4.6}"
+AGENT_SANDBOX_VERSION="${AGENT_SANDBOX_VERSION:-v0.5.1}"
 # Space-separated list of tenant namespaces to provision
 IFS=' ' read -ra TENANTS <<< "${OPENSHELL_TENANTS:-tenant-a tenant-b vteam-product-swarm codebase-maintainers}"
 
