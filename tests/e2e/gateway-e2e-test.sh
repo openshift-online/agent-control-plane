@@ -575,17 +575,23 @@ fi
 section "12. Network policy enforcement"
 
 LOCKED_SESSION_ID=""
+PERM_SESSION_ID=""
 
-# 11a. Apply locked-down policy and test agent
+# 11a. Apply policies and test agents
 $ACPCTL apply -f "$REPO_ROOT/examples/base/policies/locked-down.yaml" \
   --project "$TENANT" >/dev/null 2>&1 && \
   pass "Locked-down policy applied to ${TENANT}" || \
   fail "Could not apply locked-down policy"
 
+$ACPCTL apply -f "$REPO_ROOT/examples/base/policies/permissive.yaml" \
+  --project "$TENANT" >/dev/null 2>&1 && \
+  pass "Permissive policy applied to ${TENANT}" || \
+  fail "Could not apply permissive policy"
+
 $ACPCTL apply -k "$SCRIPT_DIR/fixtures/network-policy-test" \
   --project "$TENANT" >/dev/null 2>&1 && \
-  pass "Network test agent applied to ${TENANT}" || \
-  fail "Could not apply network test agent"
+  pass "Network test agents applied to ${TENANT}" || \
+  fail "Could not apply network test agents"
 
 # Look up the locked-down agent
 AGENTS_RESP=$(api GET "/api/ambient/v1/projects/${PROJECT_ID}/agents?size=50" || echo "")
@@ -672,46 +678,89 @@ else
 fi
 
 # 11d. Verify permissive policy allows external network access
-# Use the hello-world session sandbox from section 8 (permissive policy).
-# Check proxy log for ALLOWED entries — the session's Claude binary connects
-# to api.anthropic.com on startup which should be allowed by the permissive policy.
-if [ -n "${SBX_NAME:-}" ]; then
-  PERM_POD_PHASE=$(kubectl get pod "$SBX_NAME" -n "$TENANT" \
-    -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+# Start a dedicated permissive session so the pod is guaranteed to be running.
+# Check proxy log for ALLOWED entries — the Claude binary connects to
+# api.anthropic.com on startup which should be allowed by the permissive policy.
+PERM_AGENT_ID=$(echo "$AGENTS_RESP" \
+  | jq -r '.items[] | select(.name == "network-test-permissive") | .id' 2>/dev/null | head -1 || echo "")
 
-  if [ "$PERM_POD_PHASE" = "Running" ]; then
-    PERM_ALLOWED_FOUND=false
-    for i in $(seq 1 10); do
-      PERM_LOG=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
-        sh -c 'cat /var/log/openshell.*.log 2>/dev/null' 2>/dev/null || echo "")
+if [ -n "$PERM_AGENT_ID" ]; then
+  PERM_START_RESP=$(api POST "/api/ambient/v1/projects/${PROJECT_ID}/agents/${PERM_AGENT_ID}/start" \
+    -d '{"prompt": "gateway-e2e-test: network policy enforcement"}' || echo "")
 
-      if echo "$PERM_LOG" | grep -q "ALLOWED.*api.anthropic.com"; then
-        PERM_ALLOWED_FOUND=true
+  PERM_SESSION_ID=$(echo "$PERM_START_RESP" \
+    | jq -r '.session.id // empty' 2>/dev/null || echo "")
+
+  if [ -n "$PERM_SESSION_ID" ]; then
+    pass "Permissive session started (id: ${PERM_SESSION_ID})"
+
+    PERM_SBX_NAME="session-$(echo "${PERM_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
+
+    PERM_POD_READY=false
+    for i in $(seq 1 30); do
+      PERM_POD_PHASE=$(kubectl get pod "$PERM_SBX_NAME" -n "$TENANT" \
+        -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+      if [ "$PERM_POD_PHASE" = "Running" ]; then
+        PERM_POD_READY=true
         break
       fi
-      sleep 3
+      sleep 2
     done
 
-    if [ "$PERM_ALLOWED_FOUND" = "true" ]; then
-      ALLOWED_COUNT=$(echo "$PERM_LOG" | grep -c "ALLOWED.*api.anthropic.com" || echo "0")
-      pass "Permissive policy allowed api.anthropic.com (${ALLOWED_COUNT} ALLOWED entries in proxy log)"
-    elif [ -z "$PERM_LOG" ]; then
-      fail "Permissive network test — no proxy log found in sandbox pod"
+    if [ "$PERM_POD_READY" = "true" ]; then
+      pass "Permissive sandbox pod '${PERM_SBX_NAME}' is running"
+
+      PERM_SESSION_RUNNING=false
+      for i in $(seq 1 30); do
+        PERM_PHASE=$(api GET "/api/ambient/v1/sessions/${PERM_SESSION_ID}" 2>/dev/null \
+          | jq -r '.phase // empty' 2>/dev/null || echo "")
+        if [ "$PERM_PHASE" = "Running" ] || [ "$PERM_PHASE" = "Succeeded" ] || [ "$PERM_PHASE" = "Failed" ]; then
+          PERM_SESSION_RUNNING=true
+          break
+        fi
+        sleep 2
+      done
+
+      if [ "$PERM_SESSION_RUNNING" = "true" ]; then
+        PERM_ALLOWED_FOUND=false
+        for i in $(seq 1 10); do
+          PERM_LOG=$(kubectl exec -n "$TENANT" "$PERM_SBX_NAME" -- \
+            sh -c 'cat /var/log/openshell.*.log 2>/dev/null' 2>/dev/null || echo "")
+
+          if echo "$PERM_LOG" | grep -q "ALLOWED.*api.anthropic.com"; then
+            PERM_ALLOWED_FOUND=true
+            break
+          fi
+          sleep 3
+        done
+
+        if [ "$PERM_ALLOWED_FOUND" = "true" ]; then
+          ALLOWED_COUNT=$(echo "$PERM_LOG" | grep -c "ALLOWED.*api.anthropic.com" || echo "0")
+          pass "Permissive policy allowed api.anthropic.com (${ALLOWED_COUNT} ALLOWED entries in proxy log)"
+        elif [ -z "$PERM_LOG" ]; then
+          fail "Permissive network test — no proxy log found in sandbox pod"
+        else
+          fail "Permissive policy has no ALLOWED entries for api.anthropic.com in proxy log"
+        fi
+      else
+        fail "Permissive network test — session not Running (phase: ${PERM_PHASE:-unknown})"
+      fi
     else
-      fail "Permissive policy has no ALLOWED entries for api.anthropic.com in proxy log"
+      fail "Permissive network test — sandbox pod not ready (phase: ${PERM_POD_PHASE:-unknown})"
     fi
   else
-    fail "Permissive network test — hello-world sandbox pod not running (phase: ${PERM_POD_PHASE:-unknown})"
+    fail "Failed to start permissive session"
+    echo "  Response: $(echo "$PERM_START_RESP" | head -c 200)"
   fi
 else
-  fail "Permissive network test — hello-world session was not created"
+  fail "Agent 'network-test-permissive' not found after apply"
 fi
 
 section "Cleanup"
 
 if [ "$SKIP_CLEANUP" = "true" ]; then
   echo -e "  ${YELLOW}Skipping cleanup (--skip-cleanup)${NC}"
-  for _sid in "$CREATED_SESSION_ID" "$REPO_SESSION_ID" "$LOCKED_SESSION_ID"; do
+  for _sid in "$CREATED_SESSION_ID" "$REPO_SESSION_ID" "$LOCKED_SESSION_ID" "${PERM_SESSION_ID:-}"; do
     [ -z "$_sid" ] && continue
     _pod="session-$(echo "${_sid:0:40}" | tr '[:upper:]' '[:lower:]')"
     _phase=$(kubectl get pod "$_pod" -n "$TENANT" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
@@ -736,6 +785,11 @@ else
     api DELETE "/api/ambient/v1/sessions/${LOCKED_SESSION_ID}" >/dev/null 2>&1 && \
       echo "  Deleted locked-down session ${LOCKED_SESSION_ID}" || \
       echo "  Could not delete locked-down session (non-fatal)"
+  fi
+  if [ -n "${PERM_SESSION_ID:-}" ]; then
+    api DELETE "/api/ambient/v1/sessions/${PERM_SESSION_ID}" >/dev/null 2>&1 && \
+      echo "  Deleted permissive session ${PERM_SESSION_ID}" || \
+      echo "  Could not delete permissive session (non-fatal)"
   fi
 fi
 
