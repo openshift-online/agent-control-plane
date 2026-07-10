@@ -834,7 +834,31 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 						uploadCtx, cancel = context.WithTimeout(execCtx, 5*time.Minute)
 						defer cancel()
 					}
-					if uploadErr := r.gateway.UploadPayloads(uploadCtx, namespace, sandboxID, sshPayloads); uploadErr != nil {
+					const maxUploadRetries = 4
+					var uploadErr error
+					for attempt := range maxUploadRetries + 1 {
+						uploadErr = r.gateway.UploadPayloads(uploadCtx, namespace, sandboxID, sshPayloads)
+						if uploadErr == nil {
+							break
+						}
+						retryable := isUploadRetryable(uploadErr)
+						if !retryable || attempt == maxUploadRetries {
+							break
+						}
+						backoff := time.Duration(1<<uint(attempt)) * time.Second
+						r.logger.Warn().Err(uploadErr).Str("sandbox", sbxName).Int("attempt", attempt+1).Dur("backoff", backoff).Msg("payload upload failed with Unavailable, retrying")
+						timer := time.NewTimer(backoff)
+						select {
+						case <-uploadCtx.Done():
+							timer.Stop()
+							uploadErr = fmt.Errorf("upload context cancelled during retry: %w", uploadCtx.Err())
+						case <-timer.C:
+						}
+						if uploadCtx.Err() != nil {
+							break
+						}
+					}
+					if uploadErr != nil {
 						r.logger.Error().Err(uploadErr).Str("sandbox", sbxName).Msg("failed to upload payloads via SSH")
 						failSession(fmt.Sprintf("payload upload failed: %v", uploadErr))
 						return
@@ -895,6 +919,17 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			return
 		}
 	}
+}
+
+// isUploadRetryable returns true for transient supervisor relay failures.
+// The SSH library wraps gRPC errors with %v (not %w), so status.FromError
+// cannot extract the code — fall back to string matching.
+func isUploadRetryable(err error) bool {
+	if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "code = Unavailable") && strings.Contains(msg, "supervisor")
 }
 
 func convertPayloads(payloads []types.Payload, logger zerolog.Logger, sandbox string) ([]openshell.Payload, bool) {

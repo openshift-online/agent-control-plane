@@ -13,6 +13,8 @@ import (
 	pb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/rs/zerolog"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -1020,5 +1022,47 @@ func TestReconcileGateway_NamespacePlaceholderSubstitution(t *testing.T) {
 		if err := gateway.ValidateDNSName(dns); err != nil {
 			t.Errorf("resolved DNS name %q failed validation: %v", dns, err)
 		}
+	}
+}
+
+func TestIsUploadRetryable(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "direct gRPC Unavailable",
+			err:  status.Error(codes.Unavailable, "connection refused"),
+			want: true,
+		},
+		{
+			name: "SSH-wrapped supervisor relay failure",
+			err:  fmt.Errorf("SSH handshake: ssh: handshake failed: rpc error: code = Unavailable desc = supervisor relay failed: supervisor session disconnected"),
+			want: true,
+		},
+		{
+			name: "gRPC PermissionDenied is not retryable",
+			err:  status.Error(codes.PermissionDenied, "access denied"),
+			want: false,
+		},
+		{
+			name: "generic error is not retryable",
+			err:  fmt.Errorf("connection refused"),
+			want: false,
+		},
+		{
+			name: "Unavailable without supervisor is retryable via gRPC status",
+			err:  status.Error(codes.Unavailable, "transport closing"),
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isUploadRetryable(tt.err)
+			if got != tt.want {
+				t.Errorf("isUploadRetryable(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
 	}
 }
