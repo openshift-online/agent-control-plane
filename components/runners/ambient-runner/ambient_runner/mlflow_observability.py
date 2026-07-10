@@ -88,6 +88,13 @@ class MLflowSessionTracer:
                 "tracking URI and experiment config to runtime env resolution"
             )
         else:
+            from ambient_runner.observability_config import (
+                check_mlflow_tracking_reachable,
+            )
+
+            if not check_mlflow_tracking_reachable(tracking_uri):
+                return False
+
             try:
                 mlflow.set_tracking_uri(tracking_uri)
                 mlflow.set_experiment(exp_name)

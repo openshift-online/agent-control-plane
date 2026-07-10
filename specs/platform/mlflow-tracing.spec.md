@@ -1,7 +1,7 @@
 # MLflow Tracing
 
 **Date:** 2026-07-01
-**Last Updated:** 2026-07-08
+**Last Updated:** 2026-07-10
 **Status:** Implemented
 **Related:** `runner.spec.md` — runner lifecycle and observability; `credential-binding.spec.md` — credential resolution hierarchy; `openshell-sandbox-provisioning.spec.md` — gateway credential providers and provider type mapping; `agent-sandbox-config.spec.md` — agent sandbox provider declarations
 
@@ -184,6 +184,52 @@ The runner MUST attempt provider-native GenAI autologging for `MLFLOW_GENAI_AUTO
 - THEN the runner MUST log a warning
 - AND the session MUST NOT fail due to a tracing initialization error
 - AND no MLflow liveness probe or server health check may block pod or session startup
+
+### Requirement: Fast-Fail DNS Pre-Check for Tracking Server
+
+Before calling any MLflow SDK initialization function (`set_tracking_uri`, `set_experiment`), the runner MUST perform a DNS resolution pre-check on the hostname extracted from `MLFLOW_TRACKING_URI`. The pre-check MUST complete within 5 seconds. If DNS resolution fails or times out, the runner MUST skip all MLflow initialization immediately rather than waiting for MLflow's internal HTTP timeout (default: 120 seconds with 7 retries and exponential backoff).
+
+The pre-check result MUST be cached for the lifetime of the process so that subsequent initialization paths (e.g., `MLflowSessionTracer.initialize` after `activate_mlflow_autologging`) return instantly without repeating the DNS lookup.
+
+This requirement does not apply to `openshell:resolve:env:` prefixed URIs, which defer hostname resolution to the OpenShell supervisor, nor to non-network URIs (file paths, SQLite).
+
+#### Scenario: Unresolvable hostname — fast skip
+
+- GIVEN `MLFLOW_TRACKING_URI` is set to `https://nonexistent.example.invalid:443`
+- AND the hostname does not resolve in DNS
+- WHEN the runner initializes the Claude SDK bridge
+- THEN the DNS pre-check MUST fail within 5 seconds
+- AND the runner MUST log a warning indicating DNS resolution failed for the tracking URI hostname
+- AND the runner MUST NOT call `mlflow.set_tracking_uri()` or `mlflow.set_experiment()`
+- AND the session MUST proceed without MLflow tracing
+
+#### Scenario: Resolvable hostname — normal initialization
+
+- GIVEN `MLFLOW_TRACKING_URI` is set to a valid tracking server URL
+- AND the hostname resolves in DNS
+- WHEN the runner initializes the Claude SDK bridge
+- THEN the DNS pre-check MUST succeed
+- AND normal MLflow initialization MUST proceed
+
+#### Scenario: Cached pre-check result
+
+- GIVEN the DNS pre-check has already been performed for a given tracking URI
+- WHEN a second initialization path invokes the pre-check for the same URI
+- THEN the cached result MUST be returned immediately without repeating the DNS lookup
+
+#### Scenario: OpenShell resolve tokens bypass pre-check
+
+- GIVEN `MLFLOW_TRACKING_URI` is set to a value prefixed with `openshell:resolve:env:`
+- WHEN the runner initializes
+- THEN the DNS pre-check MUST NOT be performed
+- AND initialization MUST defer to the supervisor's runtime env resolution
+
+#### Scenario: Non-network URIs bypass pre-check
+
+- GIVEN `MLFLOW_TRACKING_URI` is set to a local path (e.g., `file:///tmp/mlruns` or `sqlite:///mlflow.db`)
+- WHEN the runner initializes
+- THEN the DNS pre-check MUST NOT be performed
+- AND normal MLflow initialization MUST proceed
 
 #### Scenario: Autolog called before agent client creation
 

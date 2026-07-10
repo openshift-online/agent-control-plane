@@ -2,7 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import socket
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
+
+_DNS_CHECK_TIMEOUT = 5.0
+_OPENSHELL_RESOLVE_PREFIX = "openshell:resolve:env:"
+_NON_NETWORK_SCHEMES = frozenset({"file", "sqlite"})
+
+_mlflow_dns_cache: dict[str, bool] = {}
 
 
 def _truthy_env(name: str) -> bool:
@@ -12,6 +24,58 @@ def _truthy_env(name: str) -> bool:
 
 def _explicitly_false_env(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in ("0", "false", "no", "off")
+
+
+def check_mlflow_tracking_reachable(
+    tracking_uri: str, timeout: float = _DNS_CHECK_TIMEOUT
+) -> bool:
+    """Fast DNS pre-check for the MLflow tracking URI hostname.
+
+    Returns True if the hostname resolves or if the URI is not subject to
+    DNS checks (openshell resolve tokens, non-network schemes like file://).
+    Returns cached result on subsequent calls for the same URI.
+    """
+    if tracking_uri.startswith(_OPENSHELL_RESOLVE_PREFIX):
+        return True
+
+    parsed = urlparse(tracking_uri)
+
+    if parsed.scheme in _NON_NETWORK_SCHEMES or not parsed.hostname:
+        return True
+
+    if tracking_uri in _mlflow_dns_cache:
+        return _mlflow_dns_cache[tracking_uri]
+
+    host = parsed.hostname
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(socket.getaddrinfo, host, port)
+            future.result(timeout=timeout)
+        _mlflow_dns_cache[tracking_uri] = True
+        return True
+    except FuturesTimeoutError:
+        logger.warning(
+            "MLflow: DNS resolution for %s timed out after %.0fs — skipping MLflow initialization",
+            host,
+            timeout,
+        )
+    except socket.gaierror as e:
+        logger.warning(
+            "MLflow: DNS resolution failed for %s (%s) — skipping MLflow initialization",
+            host,
+            e,
+        )
+    except Exception as e:
+        logger.warning(
+            "MLflow: DNS pre-check failed for %s (%s) — skipping MLflow initialization",
+            host,
+            e,
+        )
+
+    _mlflow_dns_cache[tracking_uri] = False
+    return False
 
 
 def observability_backend_names() -> frozenset[str]:

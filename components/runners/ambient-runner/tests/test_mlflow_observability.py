@@ -36,12 +36,18 @@ def _mock_mlflow_modules():
     _mock_mlflow.set_experiment.reset_mock()
     _mock_mlflow.set_tracking_uri.side_effect = None
     _mock_mlflow.set_experiment.side_effect = None
-    with patch.dict(
-        sys.modules,
-        {
-            "mlflow": _mock_mlflow,
-            "mlflow.entities": _mock_entities,
-        },
+    with (
+        patch.dict(
+            sys.modules,
+            {
+                "mlflow": _mock_mlflow,
+                "mlflow.entities": _mock_entities,
+            },
+        ),
+        patch(
+            "ambient_runner.observability_config.check_mlflow_tracking_reachable",
+            return_value=True,
+        ),
     ):
         yield
 

@@ -14,6 +14,15 @@ def _reset_activated():
     autolog_mod._activated = False
 
 
+@pytest.fixture(autouse=True)
+def _bypass_dns_check():
+    with patch(
+        "ambient_runner.observability_config.check_mlflow_tracking_reachable",
+        return_value=True,
+    ):
+        yield
+
+
 def test_tracking_uri_default_activates_generic_and_genai_autologging():
     mock_mlflow = MagicMock()
     mock_mlflow.anthropic = MagicMock()

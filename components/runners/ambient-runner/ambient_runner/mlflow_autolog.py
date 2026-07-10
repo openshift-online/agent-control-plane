@@ -89,13 +89,18 @@ def _is_openshell_token(value: str) -> bool:
     return value.startswith(_OPENSHELL_RESOLVE_PREFIX)
 
 
-def _configure_tracking(mlflow_module: MLflowModule, tracking_uri: str) -> None:
+def _configure_tracking(mlflow_module: MLflowModule, tracking_uri: str) -> bool:
     if _is_openshell_token(tracking_uri):
         logger.info(
             "MLflow autologging: openshell resolve tokens detected; "
             "deferring tracking config to runtime env resolution"
         )
-        return
+        return True
+
+    from ambient_runner.observability_config import check_mlflow_tracking_reachable
+
+    if not check_mlflow_tracking_reachable(tracking_uri):
+        return False
 
     experiment_name = (
         os.getenv("MLFLOW_EXPERIMENT_NAME", _DEFAULT_EXPERIMENT_NAME).strip()
@@ -104,11 +109,13 @@ def _configure_tracking(mlflow_module: MLflowModule, tracking_uri: str) -> None:
     try:
         mlflow_module.set_tracking_uri(tracking_uri)
         mlflow_module.set_experiment(experiment_name)
+        return True
     except Exception:
         logger.warning(
             "MLflow autologging: tracking URI or experiment setup failed; "
             "continuing with autologging enabled"
         )
+        return True
 
 
 def _configure_async_logging(mlflow_module: MLflowModule) -> None:
@@ -214,7 +221,8 @@ def activate_mlflow_autologging(extra_tags: Mapping[str, str] | None = None) -> 
         logger.warning("MLflow autologging requested but mlflow is not installed")
         return False
 
-    _configure_tracking(mlflow, tracking_uri)
+    if not _configure_tracking(mlflow, tracking_uri):
+        return False
     _configure_async_logging(mlflow)
     if not _configure_trace_masking(mlflow):
         return False
