@@ -228,7 +228,7 @@ The `scripts/setup-kind-openshell.sh` script SHALL create a `mock-llm-creds` Kub
 ```bash
 kubectl create secret generic mock-llm-creds \
   --namespace="$TENANT" \
-  --from-literal=ANTHROPIC_AUTH_TOKEN="mock-llm-token" \
+  --from-literal=ANTHROPIC_AUTH_TOKEN=mock-llm-token \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
