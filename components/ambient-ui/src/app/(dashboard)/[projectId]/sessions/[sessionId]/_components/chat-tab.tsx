@@ -11,6 +11,7 @@ import {
   ChatItemsList,
   ChatInput,
   buildChatItems,
+  isRunActive,
 } from '@/components/chat-messages'
 import { useChatSidebar } from '@/components/chat-sidebar-context'
 import { useLiveTail, LiveIndicator } from './live-tail-indicator'
@@ -25,6 +26,10 @@ export function ChatTab({ session }: { session: DomainSession }) {
   const chatItems = useMemo(() => {
     return buildChatItems(data?.items ?? [])
   }, [data])
+
+  const isThinking = useMemo(() => {
+    return session.phase === 'Running' && isRunActive(data?.items ?? [])
+  }, [data, session.phase])
 
   const chatItemCount = chatItems.length
 
@@ -126,7 +131,7 @@ export function ChatTab({ session }: { session: DomainSession }) {
             aria-label="Chat messages"
             onScroll={handleScroll}
           >
-            <ChatItemsList items={chatItems} isLoading={isLoading} />
+            <ChatItemsList items={chatItems} isLoading={isLoading} phase={session.phase} isThinking={isThinking} />
             <div ref={sentinelRef} className="h-1" aria-hidden="true" />
           </div>
 
