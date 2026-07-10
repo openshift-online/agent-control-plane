@@ -75,7 +75,7 @@ The platform SHALL support an `mlflow` credential provider. The credential secre
 
 The credential provider follows the existing credential binding hierarchy defined in `credential-binding.spec.md` — it can be bound at agent or project scope. The MLflow bearer token source may be materialized by Vault into the ACP deployment namespace, but it MUST NOT be injected into tenant sandboxes unless an `mlflow` credential binding authorizes that project or agent to use it.
 
-The control-plane reads MLflow runtime env from its own process environment (set on the deployment). When `MLFLOW_TRACKING_URI` is set, the control-plane injects the MLflow runtime env into every standard runner pod and OpenShell sandbox. `MLFLOW_TRACKING_URI` MUST NOT be injected as a provider credential (i.e., it MUST NOT arrive in the sandbox as an `openshell:resolve:env:` token); it is a platform environment variable resolved at deployment time, not a lazy-resolve credential. Agent-level environment configuration (`agent.environment`) MAY override non-platform MLflow defaults such as `MLFLOW_EXPERIMENT_NAME`, `MLFLOW_TRACING_ENABLED`, `MLFLOW_AUTOLOG_EXCLUDE_FLAVORS`, and `MLFLOW_GENAI_AUTOLOG_INTEGRATIONS`. Agent configuration MUST NOT override platform MLflow routing or authentication keys: `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_AUTH`, `MLFLOW_WORKSPACE`, or `MLFLOW_TRACKING_TOKEN`.
+The control-plane reads MLflow runtime env from its own process environment (set on the deployment). When `MLFLOW_TRACKING_URI` is set, the control-plane injects the MLflow runtime env into every standard runner pod and OpenShell sandbox. `MLFLOW_TRACKING_URI` is a platform environment variable set at deployment time. Agent-level environment configuration (`agent.environment`) MAY override non-platform MLflow defaults such as `MLFLOW_EXPERIMENT_NAME`, `MLFLOW_TRACING_ENABLED`, `MLFLOW_AUTOLOG_EXCLUDE_FLAVORS`, and `MLFLOW_GENAI_AUTOLOG_INTEGRATIONS`. Agent configuration MUST NOT override platform MLflow routing or authentication keys: `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_AUTH`, `MLFLOW_WORKSPACE`, or `MLFLOW_TRACKING_TOKEN`.
 
 #### Scenario: MLflow credential bound to project
 
@@ -182,7 +182,7 @@ Before calling any MLflow SDK initialization function (`set_tracking_uri`, `set_
 
 The pre-check result MUST be cached for the lifetime of the process so that subsequent initialization paths (e.g., `MLflowSessionTracer.initialize` after `activate_mlflow_autologging`) return instantly without repeating the DNS lookup.
 
-`MLFLOW_TRACKING_URI` SHALL always contain a valid URI; the runner MUST NOT inspect or handle `openshell:resolve:env:` prefixed values for this variable. This requirement does not apply to non-network URIs (file paths, SQLite).
+`MLFLOW_TRACKING_URI` is a platform environment variable that SHALL always contain a valid URI. This requirement does not apply to non-network URIs (file paths, SQLite).
 
 #### Scenario: Unresolvable hostname — fast skip
 
@@ -275,7 +275,7 @@ When operating in gateway mode with MLflow tracing enabled, the sandbox OPA netw
 | `agent-sandbox-config.spec.md` § Provider type mapping | Maps credential types to OpenShell provider types | Add `mlflow` → `generic` to the mapping table |
 | Control plane `provider_mapping.go` | Maps ambient credential providers to OpenShell provider types; contained `MLflowNetworkPolicy()` for dynamic OPA policy generation | Add `mlflow` → `generic` entry (follows existing pattern for `jira`, `google`, `kubeconfig`); remove `MLflowNetworkPolicy()` function (superseded by static `policy.yaml` entry); remove `MLflowSandboxEnvVars()` and `MLflowProviderCredentials()` — URI and experiment name now come from CP config, not the secret |
 | OPA policy (`policy.yaml`) | Network policy sections for known endpoints | Add `_mlflow_rh` static entry with the MLflow tracking server endpoint; uses `_` prefix convention for platform-managed policies (matching `_acp_internal`) |
-| `mlflow_observability.py` | Manual span tracking using `mlflow.start_span()` | Add openshell resolve token detection — when `MLFLOW_TRACKING_URI` starts with `openshell:resolve:env:`, skip explicit `mlflow.set_tracking_uri()` / `mlflow.set_experiment()` and defer to runtime env resolution by the openshell supervisor |
+| `mlflow_observability.py` | Manual span tracking using `mlflow.start_span()` | Add DNS pre-check before `mlflow.set_tracking_uri()` / `mlflow.set_experiment()` to avoid blocking on unresolvable hosts |
 | Control plane `config.go` | No MLflow config fields | Add `MLflowTrackingURI` and `MLflowExperimentName` config fields read from `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` env vars; these are the global defaults forwarded to sandboxes that have an MLflow provider |
 
 ### Specs requiring amendment
