@@ -33,7 +33,7 @@ mlflow-observability = [
   "opentelemetry-exporter-otlp==1.42.1",
 ]
 mcp-atlassian = [
-  "mcp-atlassian==0.21.1",
+  "mcp-atlassian==0.22.0",
 ]
 all = [
   "ambient-runner[claude,observability,mlflow-observability,mcp-atlassian]",

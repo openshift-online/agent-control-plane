@@ -217,7 +217,7 @@ requires-dist = [
     { name = "fastapi", specifier = "==0.136.3" },
     { name = "grpcio", specifier = "==1.81.1" },
     { name = "langfuse", marker = "extra == 'observability'", specifier = "==4.7.1" },
-    { name = "mcp-atlassian", marker = "extra == 'mcp-atlassian'", specifier = "==0.21.1" },
+    { name = "mcp-atlassian", marker = "extra == 'mcp-atlassian'", specifier = "==0.22.0" },
     { name = "mlflow", extras = ["kubernetes"], marker = "extra == 'mlflow-observability'", specifier = "==3.13.0" },
     { name = "opentelemetry-exporter-otlp", marker = "extra == 'mlflow-observability'", specifier = "==1.42.1" },
     { name = "protobuf", specifier = "==6.33.6" },
@@ -2213,7 +2213,7 @@ wheels = [
 
 [[package]]
 name = "mcp-atlassian"
-version = "0.21.1"
+version = "0.22.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "atlassian-python-api" },
@@ -2243,9 +2243,9 @@ dependencies = [
     { name = "urllib3" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c3/44/d879210be4178c408fbd8971f8dd36e9abc7ba3d729f7ccd4b790e73c1f6/mcp_atlassian-0.21.1.tar.gz", hash = "sha256:dff6c81541506cb0cc80d7ac9900ffdcb246fec7808e41e8df73c09dd4a28074", size = 755390, upload-time = "2026-04-10T07:32:01.379Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/90/bfddfaaa14308e633fa25b8f2f2adb26ba5903d51ce08ce7ac93511517a1/mcp_atlassian-0.22.0.tar.gz", hash = "sha256:645522501661c04728cf9075aa3c3391f2073aec9335ea6844afd8dc078f0e3c", size = 865944, upload-time = "2026-07-10T13:40:15.072Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/75/48/7e856835ded4a343bdb7af58ea5d346a6838378b58e4142b5aeb0d3545c8/mcp_atlassian-0.21.1-py3-none-any.whl", hash = "sha256:8ef9f5a68a58ac264aa6c98c891e7df14a02edde724f06ac5ea869b0be60b666", size = 283728, upload-time = "2026-04-10T07:31:59.834Z" },
+    { url = "https://files.pythonhosted.org/packages/0d/17/c87fc83ddccd1fa103d88c85b930a6ac55badc7372708cd4087035645e3a/mcp_atlassian-0.22.0-py3-none-any.whl", hash = "sha256:1c19db7e2eb3ba67d17a4a2fcfbe42abd97f13dd1c7d6d001d803980e0594d89", size = 332292, upload-time = "2026-07-10T13:40:13.653Z" },
 ]
 
 [[package]]
