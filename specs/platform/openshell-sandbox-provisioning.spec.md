@@ -550,6 +550,16 @@ The `_acp_internal` rule SHALL NOT be included in the `CreateSandboxRequest.Spec
 - THEN the existing default policy rules SHALL remain intact and unmodified
 - AND the `_acp_internal` rule SHALL be added alongside them
 
+#### Scenario: Policy merge confirmation via UpdateConfig response
+
+- GIVEN the control plane has called `UpdateConfig` with the `_acp_internal` merge operation
+- WHEN the gateway processes the merge
+- THEN the `UpdateConfigResponse` SHALL include the new `version` (uint32) and `policy_hash` (string)
+- AND a successful response SHALL serve as the definitive confirmation that the merge has been applied
+- AND the control plane SHALL NOT poll sandbox logs to verify the merge — the synchronous `UpdateConfig` RPC is authoritative
+- AND the control plane SHALL log the returned `policy_version` and `policy_hash` for observability
+- AND the entrypoint execution SHALL proceed immediately after a successful `UpdateConfig` response
+
 #### Scenario: Missing ACP internal policy causes runner failure
 
 - GIVEN the `_acp_internal` network policy rule has not been injected (e.g., `UpdateConfig` merge failed)

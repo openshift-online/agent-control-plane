@@ -444,7 +444,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 }
 
 func (r *SimpleKubeReconciler) injectACPInternalPolicy(ctx context.Context, namespace, sandboxName string) error {
-	_, err := r.gateway.UpdateConfig(ctx, namespace, &openshellpb.UpdateConfigRequest{
+	resp, err := r.gateway.UpdateConfig(ctx, namespace, &openshellpb.UpdateConfigRequest{
 		Name:            sandboxName,
 		MergeOperations: []*openshellpb.PolicyMergeOperation{acpInternalMergeOperation(r.cfg.CPRuntimeNamespace)},
 	})
@@ -455,7 +455,9 @@ func (r *SimpleKubeReconciler) injectACPInternalPolicy(ctx context.Context, name
 		Str("sandbox", sandboxName).
 		Str("namespace", namespace).
 		Str("cp_namespace", r.cfg.CPRuntimeNamespace).
-		Msg("injected _acp_internal policy via merge operation")
+		Uint32("policy_version", resp.GetVersion()).
+		Str("policy_hash", resp.GetPolicyHash()).
+		Msg("_acp_internal policy merge confirmed by gateway")
 	return nil
 }
 
