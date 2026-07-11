@@ -674,7 +674,7 @@ The control plane SHALL start the runner process inside the sandbox by calling t
 - WHEN the control plane polls `GetSandbox` for readiness
 - THEN it SHALL poll every 2 seconds with a configurable timeout (default 600 seconds, set via `SANDBOX_READINESS_TIMEOUT_SECONDS` env var)
 - AND the control plane SHALL log a progress message every 30 seconds during polling, including sandbox name, session ID, and elapsed time
-- AND if the sandbox enters `SANDBOX_PHASE_ERROR`, the control plane SHALL log an error, stop polling, and transition the session to `Failed`
+- AND if the sandbox enters `SANDBOX_PHASE_ERROR`, the control plane SHALL start a 15-second grace period — logging a warning on first observation and continuing to poll. If the sandbox remains in `SANDBOX_PHASE_ERROR` for at least 15 consecutive seconds, the control plane SHALL log an error, stop polling, and transition the session to `Failed`. If the sandbox recovers before the grace period expires, the timer resets
 - AND if the timeout expires before `SANDBOX_PHASE_READY`, the control plane SHALL log an error and transition the session to `Failed`
 
 #### Scenario: OPENSHELL_SANDBOX_COMMAND is not used

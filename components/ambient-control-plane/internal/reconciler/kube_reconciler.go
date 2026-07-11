@@ -664,6 +664,7 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 	const maxNdotsRetries = 5
 	awaitingPodRestart := false
 	sawNonReady := false
+	var firstErrorSeen time.Time
 
 	for {
 		select {
@@ -694,12 +695,36 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			}
 			phase := resp.Sandbox.Status.Phase
 			if phase == openshellpb.SandboxPhase_SANDBOX_PHASE_ERROR {
+				if firstErrorSeen.IsZero() {
+					firstErrorSeen = time.Now()
+					r.logger.Warn().
+						Str("sandbox", sbxName).
+						Str("session_id", sessionID).
+						Msg("sandbox entered error phase, starting grace period")
+					continue
+				}
+				if time.Since(firstErrorSeen) < sandboxErrorGracePeriod {
+					r.logger.Debug().
+						Str("sandbox", sbxName).
+						Str("session_id", sessionID).
+						Dur("error_duration", time.Since(firstErrorSeen)).
+						Msg("sandbox still in error phase, within grace period")
+					continue
+				}
 				r.logger.Error().
 					Str("sandbox", sbxName).
 					Str("session_id", sessionID).
-					Msg("sandbox entered error phase")
-				failSession("sandbox entered error phase")
+					Dur("error_duration", time.Since(firstErrorSeen)).
+					Msg("sandbox error exceeded grace period")
+				failSession("sandbox remained in error phase beyond grace period")
 				return
+			}
+			if !firstErrorSeen.IsZero() {
+				r.logger.Info().
+					Str("sandbox", sbxName).
+					Str("session_id", sessionID).
+					Msg("sandbox recovered from error phase")
+				firstErrorSeen = time.Time{}
 			}
 			if phase != openshellpb.SandboxPhase_SANDBOX_PHASE_READY {
 				if awaitingPodRestart {

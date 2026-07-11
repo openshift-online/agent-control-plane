@@ -353,7 +353,7 @@ The `ExecSandbox` RPC is a server-streaming call that returns stdout, stderr, an
 - WHEN the control plane polls `GetSandbox` for readiness
 - THEN it SHALL poll every 2 seconds with a configurable timeout (default 600 seconds, set via `SANDBOX_READINESS_TIMEOUT_SECONDS` env var)
 - AND the control plane SHALL log a progress message every 30 seconds during polling, including sandbox name, session ID, and elapsed time
-- AND if the sandbox enters `SANDBOX_PHASE_ERROR`, the control plane SHALL log an error and stop polling
+- AND if the sandbox enters `SANDBOX_PHASE_ERROR`, the control plane SHALL start a 15-second grace period — logging a warning on first observation and continuing to poll. If the sandbox remains in `SANDBOX_PHASE_ERROR` for at least 15 consecutive seconds, the control plane SHALL log an error, stop polling, and transition the session to `Failed`. If the sandbox recovers (transitions out of `SANDBOX_PHASE_ERROR`) before the grace period expires, the timer resets
 - AND if the timeout expires before `SANDBOX_PHASE_READY`, the control plane SHALL log an error
 
 #### Scenario: Idempotent exec on re-reconcile
@@ -437,12 +437,24 @@ The status syncer SHALL poll the OpenShell gateway for sandbox phase as a second
 |---|---|---|
 | Sandbox exists, phase `PROVISIONING` | (no change) | Sandbox is starting up |
 | Sandbox exists, phase `READY` | (no change) | Runner is executing normally |
-| Sandbox exists, phase `ERROR` | `Failed` | Gateway detected an error |
+| Sandbox exists, phase `ERROR` (session `Creating`, within 15s grace period) | (no change) | Transient errors during sandbox provisioning — grace period allows recovery |
+| Sandbox exists, phase `ERROR` (session `Creating`, grace period exceeded) | `Failed` | Sustained error during provisioning — sandbox cannot recover |
+| Sandbox exists, phase `ERROR` (session `Running`) | `Failed` | Gateway detected an error after sandbox was operational |
 | Sandbox exists, phase `DELETING` | (no change) | Gateway is cleaning up |
 | Sandbox exists, phase `UNKNOWN` | (no change, log warning) | Transient or unexpected state |
 | Sandbox not found | `Failed` | Abnormal termination (sandbox disappeared while session still Running) |
 
 Sessions in terminal phases are not listed because the syncer skips them before reaching the gateway call.
+
+#### Scenario: Sandbox error grace period during creation
+
+- GIVEN a session in `Creating` phase with a sandbox in `SANDBOX_PHASE_ERROR`
+- WHEN the status syncer first observes the error
+- THEN it SHALL record the timestamp, log a warning, and NOT change the session phase
+- AND on subsequent sync cycles within 15 seconds of the first observation, it SHALL continue to skip the phase update
+- AND if the sandbox remains in `SANDBOX_PHASE_ERROR` for at least 15 seconds, the syncer SHALL transition the session to `Failed`
+- AND if the sandbox transitions out of `SANDBOX_PHASE_ERROR` before the grace period expires, the tracked timestamp SHALL be cleared
+- AND the provisioning poller (`execAfterReady`) SHALL independently enforce the same 15-second grace period — both code paths must agree to prevent one from short-circuiting the other
 
 #### Scenario: Gateway unreachable during sync
 

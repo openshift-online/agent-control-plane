@@ -25,8 +25,9 @@ const (
 )
 
 const (
-	sdkClientTimeout = 30 * time.Second
-	maxUpdateRetries = 3
+	sdkClientTimeout         = 30 * time.Second
+	maxUpdateRetries         = 3
+	sandboxErrorGracePeriod  = 15 * time.Second
 )
 
 const (
