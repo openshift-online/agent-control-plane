@@ -526,9 +526,7 @@ func (r *SimpleKubeReconciler) verifyAndFixDNSConfig(ctx context.Context, namesp
 	}
 
 	r.logger.Warn().Str("sandbox", sbxName).Msg("sandbox pod has ndots:5, deleting for recreation from patched CR")
-	gracePeriod := int64(0)
-	immediateDelete := &metav1.DeleteOptions{GracePeriodSeconds: &gracePeriod}
-	if err := r.nsKube().DeletePod(ctx, namespace, sbxName, immediateDelete); err != nil && !k8serrors.IsNotFound(err) {
+	if err := r.nsKube().DeletePod(ctx, namespace, sbxName, &metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
 		return false, fmt.Errorf("deleting pod %s for ndots fix: %w", sbxName, err)
 	}
 	return false, nil
@@ -665,6 +663,7 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 	ndotsRetries := 0
 	const maxNdotsRetries = 5
 	awaitingPodRestart := false
+	sawNonReady := false
 
 	for {
 		select {
@@ -704,7 +703,7 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			}
 			if phase != openshellpb.SandboxPhase_SANDBOX_PHASE_READY {
 				if awaitingPodRestart {
-					awaitingPodRestart = false
+					sawNonReady = true
 					r.logger.Info().Str("sandbox", sbxName).Str("phase", phase.String()).Msg("sandbox left READY after pod deletion, waiting for new pod")
 				}
 				r.logger.Debug().
@@ -714,9 +713,13 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				continue
 			}
 			if awaitingPodRestart {
-				// Sandbox may return to READY before we poll; re-verify rather than waiting for a phase transition we missed.
-				r.logger.Info().Str("sandbox", sbxName).Msg("sandbox READY after pod deletion, re-verifying DNS")
+				if !sawNonReady {
+					r.logger.Debug().Str("sandbox", sbxName).Msg("sandbox still READY during graceful pod termination, waiting")
+					continue
+				}
+				r.logger.Info().Str("sandbox", sbxName).Msg("sandbox READY after pod recreation, re-verifying DNS")
 				awaitingPodRestart = false
+				sawNonReady = false
 			}
 
 			sandboxID := sbxName
@@ -810,16 +813,42 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				}
 			}
 
-			err = r.gateway.ExecSandboxStreaming(execCtx, namespace, &openshellpb.ExecSandboxRequest{
-				SandboxId:   sandboxID,
-				Command:     entrypoint,
-				Environment: execEnv,
-			})
-			if err != nil {
+			const maxExecRetries = 3
+			const execRetryDelay = 3 * time.Second
+
+			for attempt := 0; attempt <= maxExecRetries; attempt++ {
+				if attempt > 0 {
+					r.logger.Info().
+						Str("sandbox", sbxName).
+						Str("session_id", sessionID).
+						Int("attempt", attempt+1).
+						Msg("retrying entrypoint exec after relay error")
+					time.Sleep(execRetryDelay)
+				}
+
+				err = r.gateway.ExecSandboxStreaming(execCtx, namespace, &openshellpb.ExecSandboxRequest{
+					SandboxId:   sandboxID,
+					Command:     entrypoint,
+					Environment: execEnv,
+				})
+				if err == nil {
+					break
+				}
+
+				if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable && attempt < maxExecRetries {
+					r.logger.Warn().Err(err).
+						Str("sandbox", sbxName).
+						Str("session_id", sessionID).
+						Int("attempt", attempt+1).
+						Msg("exec relay died (likely supervisor reconnect), will retry")
+					continue
+				}
+
 				r.logger.Error().Err(err).Str("sandbox", sbxName).Str("session_id", sessionID).Msg("failed to start runner exec")
 				failSession(fmt.Sprintf("failed to start runner exec: %v", err))
 				return
 			}
+
 			// FIXME(#223): Mark session PhaseCompleted and set completion_time here once
 			// session lifecycle is ironed out. Currently left Running so the sandbox
 			// isn't orphaned (Completed triggers deprovision).
