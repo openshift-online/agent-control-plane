@@ -55,3 +55,4 @@ Machine-readable index for autonomous reconciliation (`/reconcile` skill).
 | `standards/control-plane/conventions.spec.md` | standards | - | CP | - |
 | `standards/platform/cross-cutting.spec.md` | standards | - | ALL | - |
 | `standards/security/security.spec.md` | standards | - | ALL | - |
+| `standards/specs/specs.spec.md` | standards | Spec, Requirement, Scenario | ALL | - |

@@ -23,15 +23,18 @@ set -e
 
 NAMESPACES=("${@:-tenant-a}")
 CERT_BASE="$HOME/.config/openshell/gateways"
+PF_DIR="/tmp/ambient-code"
 PF_PIDS=()
 GW_PORTS=()
 
-cleanup() {
-  for pid in "${PF_PIDS[@]}"; do
-    kill "$pid" 2>/dev/null || true
-  done
-}
-trap cleanup EXIT
+mkdir -p "$PF_DIR"
+
+for pidfile in "$PF_DIR"/openshell-pf-*.pid; do
+  [ -f "$pidfile" ] || continue
+  OLD_PID=$(cat "$pidfile")
+  kill "$OLD_PID" 2>/dev/null || true
+  rm -f "$pidfile"
+done
 
 for NS in "${NAMESPACES[@]}"; do
   GW_NAME="$NS"
@@ -54,15 +57,15 @@ for NS in "${NAMESPACES[@]}"; do
 
   # Start port-forward on :0 (kernel picks a free port), capture the assigned port
   kubectl port-forward -n "$NS" statefulset/openshell-gateway ":8080" \
-    >/tmp/pf-${NS}.log 2>&1 &
+    >"$PF_DIR/openshell-pf-${NS}.log" 2>&1 &
   PF_PID=$!
   PF_PIDS+=($PF_PID)
 
   # Wait for kubectl to print the assigned port
   PORT=""
   for attempt in $(seq 1 30); do
-    if [ -s "/tmp/pf-${NS}.log" ]; then
-      PORT=$(grep -oE 'Forwarding from 127\.0\.0\.1:[0-9]+' "/tmp/pf-${NS}.log" | grep -oE '[0-9]+$' | head -1)
+    if [ -s "$PF_DIR/openshell-pf-${NS}.log" ]; then
+      PORT=$(grep -oE 'Forwarding from 127\.0\.0\.1:[0-9]+' "$PF_DIR/openshell-pf-${NS}.log" | grep -oE '[0-9]+$' | head -1)
       if [ -n "$PORT" ]; then
         break
       fi
@@ -77,6 +80,7 @@ for NS in "${NAMESPACES[@]}"; do
     continue
   fi
 
+  echo "$PF_PID" > "$PF_DIR/openshell-pf-${NS}.pid"
   GW_PORTS+=("$PORT")
 
   # Remove existing registration first (may also delete the cert dir).
@@ -143,9 +147,4 @@ for NS in "${NAMESPACES[@]}"; do
 done
 echo ""
 echo "Port-forwards are running in the background (PIDs: ${PF_PIDS[*]})."
-echo "Press Ctrl-C to stop them, or run: kill ${PF_PIDS[*]}"
-echo ""
-
-# Keep port-forwards alive until interrupted
-trap - EXIT
-wait
+echo "Stop with: make kind-stop-openshell-cli"

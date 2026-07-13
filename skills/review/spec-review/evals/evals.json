@@ -1,0 +1,47 @@
+[
+  {
+    "input": "/spec-review specs/platform/session-timeout.spec.md",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "spec-review",
+      "args": "specs/platform/session-timeout.spec.md"
+    },
+    "description": "Direct invocation with slash command and spec path"
+  },
+  {
+    "input": "review the new credential rotation spec for standards compliance",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "spec-review",
+      "args": "review the new credential rotation spec for standards compliance"
+    },
+    "description": "Natural language trigger for spec review"
+  },
+  {
+    "input": "check if this spec is valid: specs/security/new-rbac-policy.spec.md",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "spec-review",
+      "args": "specs/security/new-rbac-policy.spec.md"
+    },
+    "description": "Validation request with spec path"
+  },
+  {
+    "input": "does the runner spec follow our spec standards?",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "spec-review",
+      "args": "does the runner spec follow our spec standards?"
+    },
+    "description": "Quality question about existing spec"
+  },
+  {
+    "input": "spec quality check on specs/ui/work-tracking-dashboard.spec.md",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "spec-review",
+      "args": "specs/ui/work-tracking-dashboard.spec.md"
+    },
+    "description": "Alternative trigger phrase with spec path"
+  }
+]

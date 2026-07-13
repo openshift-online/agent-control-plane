@@ -1424,6 +1424,26 @@ kind-setup-openshell-cli: check-kubectl _kind-require-cluster ## Auto-discover t
 	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Found openshell-gateway in: $$NAMESPACES"; \
 	./scripts/setup-gateway-cli.sh $$NAMESPACES
 
+kind-stop-openshell-cli: ## Stop openshell gateway port-forwards
+	@STOPPED=0; \
+	for pidfile in $(KIND_PF_DIR)/openshell-pf-*.pid; do \
+		[ -f "$$pidfile" ] || continue; \
+		NS=$$(basename "$$pidfile" .pid | sed 's/^openshell-pf-//'); \
+		PID=$$(cat "$$pidfile"); \
+		if ps -p "$$PID" >/dev/null 2>&1; then \
+			kill "$$PID" 2>/dev/null || true; \
+			echo "  Stopped openshell port-forward for $$NS (PID $$PID)"; \
+			STOPPED=1; \
+		fi; \
+		rm -f "$$pidfile"; \
+		rm -f "$(KIND_PF_DIR)/openshell-pf-$$NS.log"; \
+	done; \
+	if [ "$$STOPPED" -eq 1 ]; then \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Openshell port-forwards stopped"; \
+	else \
+		echo "$(COLOR_YELLOW)No active openshell port-forwards found$(COLOR_RESET)"; \
+	fi
+
 kind-clean: kind-down ## Alias for kind-down
 
 e2e-clean: kind-down ## Alias for kind-down (backward compatibility)
