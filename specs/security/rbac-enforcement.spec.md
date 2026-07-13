@@ -561,6 +561,164 @@ the caller has no matching resources.
 - THEN the response is 200 with an empty items array
 - AND no 403 is returned
 
+## Audit-Driven Requirements
+
+> Requirements in this section address findings from the 2026-07 ProdSec security audit.
+> Each requirement references the originating finding ID (fNNN) for traceability.
+
+### Requirement: Credential Scope Extraction on Nested Routes (f001)
+
+`ExtractRequestScope` SHALL extract `CredentialID` from nested credential routes
+(`/projects/{id}/credentials/{cred_id}/*`). The current implementation extracts only
+`ProjectID` from these paths, allowing any caller with a project binding to access
+arbitrary credentials via the nested route.
+
+Additionally, the `GetToken` handler SHALL NOT treat `authResult.CredentialIDs == nil`
+as globally authorized. A nil credential ID list means the caller has zero credential-scoped
+bindings and SHALL be denied, not granted. The handler SHALL require an explicit `isGlobal`
+flag from `AuthorizedCredentialIDs` to distinguish "global admin" from "no grants."
+
+#### Scenario: Nested credential route extracts credential ID
+
+- GIVEN a request to `GET /projects/proj-1/credentials/cred-99/token`
+- WHEN `ExtractRequestScope` processes the URL
+- THEN `scope.CredentialID` is set to `cred-99`
+- AND the RBAC evaluator checks the caller's credential-scoped bindings for `cred-99`
+
+#### Scenario: Caller with zero credential bindings denied
+
+- GIVEN user A has `project:owner` on proj-1 but zero credential-scoped bindings
+- WHEN user A calls `GET /projects/proj-1/credentials/cred-99/token`
+- THEN the request returns 403 Forbidden
+- AND `authResult.CredentialIDs == nil` is NOT treated as authorized
+
+### Requirement: Session/Agent-Scoped Binding Target Validation (f003)
+
+Creating `scope=session` or `scope=agent` RoleBindings SHALL validate that the
+target session or agent belongs to a project the caller has access to. The caller
+SHALL hold a covering binding on the target's owning project.
+
+The system SHALL also reject bindings whose FK resources (session_id, agent_id) do not
+exist in the database.
+
+#### Scenario: Session-scoped binding requires project access
+
+- GIVEN user A has `project:owner` on proj-1
+- AND session S1 belongs to proj-2
+- WHEN user A calls `POST /role_bindings` with `scope=session`, `session_id=S1`
+- THEN the middleware resolves S1's owning project as proj-2
+- AND the request returns 403 Forbidden (user A has no binding on proj-2)
+
+#### Scenario: Nonexistent session target rejected
+
+- GIVEN user A calls `POST /role_bindings` with `scope=session`, `session_id=nonexistent`
+- THEN the request returns 400 Bad Request
+- AND the error indicates the target session does not exist
+
+### Requirement: IsGlobalAdmin Derived from Role Permissions (f004)
+
+The `IsGlobalAdmin` flag in `AuthResult` SHALL be computed from global bindings whose
+role carries administrative permissions (e.g., `*:*` or specific admin-level permissions),
+not from any binding with `scope='global'` regardless of role.
+
+A user bound globally with `platform:viewer` (a read-only role) SHALL NOT receive
+`IsGlobalAdmin=true`. The flag SHALL only be true when the caller holds a global
+binding with a role that grants mutating or administrative permissions.
+
+Downstream code (credential token access, gRPC handlers, user listing) SHALL check
+the permission set in `AuthResult`, not rely solely on `IsGlobalAdmin`.
+
+#### Scenario: Global viewer is not admin
+
+- GIVEN user A has `platform:viewer` with `scope=global`
+- WHEN `PopulateAuthResult` evaluates user A's bindings
+- THEN `IsGlobalAdmin` is `false`
+- AND user A cannot fetch credential tokens or mutate sessions
+
+#### Scenario: Global admin correctly identified
+
+- GIVEN user A has `platform:admin` with `scope=global`
+- WHEN `PopulateAuthResult` evaluates user A's bindings
+- THEN `IsGlobalAdmin` is `true`
+
+### Requirement: gRPC Per-Method Permission Evaluation (f005)
+
+gRPC handlers SHALL enforce `resource:action` permission checks equivalent to
+the HTTP `Evaluate()` path, not just project membership checks. Each gRPC method
+SHALL map to a specific `(resource, action)` pair and evaluate the caller's
+role permissions accordingly.
+
+A `project:viewer` (read-only) SHALL NOT be able to create, update, or delete
+sessions, or push messages/events via gRPC.
+
+#### Scenario: gRPC viewer cannot create session
+
+- GIVEN user A has `project:viewer` on proj-1
+- WHEN user A calls gRPC `CreateSession` for proj-1
+- THEN the interceptor evaluates `session:create` permission
+- AND returns `PermissionDenied` (viewer lacks `session:create`)
+
+#### Scenario: gRPC editor can create session
+
+- GIVEN user A has `project:editor` on proj-1
+- WHEN user A calls gRPC `CreateSession` for proj-1
+- THEN the interceptor evaluates `session:create` permission
+- AND the request is authorized
+
+#### Scenario: gRPC viewer cannot push messages
+
+- GIVEN user A has `project:viewer` on proj-1
+- WHEN user A calls gRPC `PushSessionMessage` for a session in proj-1
+- THEN the interceptor evaluates `session:push_message` permission
+- AND returns `PermissionDenied`
+
+### Requirement: orderBy Parameter Sanitization (f006)
+
+All list endpoints SHALL validate the `orderBy` query parameter against a strict
+per-model allowlist of column names before passing it to the database query layer.
+The `orderBy` value SHALL match `^[a-zA-Z0-9_.]+(\s+(asc|desc))?$` and be present
+in the model's allowed columns list. Values not matching SHALL be rejected with
+HTTP 400.
+
+The `SearchDisallowedFields` configuration SHALL be populated as defense-in-depth
+to prevent sensitive columns (e.g., `token`) from appearing in ordering or
+search clauses.
+
+#### Scenario: Valid orderBy accepted
+
+- GIVEN a request to `GET /sessions?orderBy=created_at desc`
+- WHEN the list handler validates the parameter
+- THEN `created_at` is in the sessions allowlist
+- AND the query proceeds normally
+
+#### Scenario: SQL injection via orderBy rejected
+
+- GIVEN a request to `GET /sessions?orderBy=(SELECT//pg_sleep(5))`
+- WHEN the list handler validates the parameter
+- THEN the value fails regex and allowlist validation
+- AND the request returns 400 Bad Request
+
+#### Scenario: Sensitive column in orderBy rejected
+
+- GIVEN a request to `GET /credentials?orderBy=token`
+- WHEN the list handler validates the parameter
+- THEN `token` is in the disallowed fields list
+- AND the request returns 400 Bad Request
+
+### Requirement: gRPC Session Re-Parenting Prevention (f033)
+
+gRPC `UpdateSession` SHALL NOT allow changing a session's `ProjectId`. If
+`req.ProjectId` differs from the session's current project, the request SHALL
+be rejected. This matches the HTTP PATCH handler behavior which deliberately
+omits `ProjectId` from the update mask.
+
+#### Scenario: gRPC session move rejected
+
+- GIVEN session S1 belongs to proj-1
+- WHEN user A calls gRPC `UpdateSession` with `ProjectId=proj-2`
+- THEN the request returns `InvalidArgument`
+- AND S1 remains in proj-1
+
 ## Design Decisions
 
 | Decision | Rationale |

@@ -1204,6 +1204,48 @@ func main() {
 
 ---
 
+## Audit-Driven Requirements
+
+> Requirements in this section address findings from the 2026-07 ProdSec security audit.
+> Each requirement references the originating finding ID (fNNN) for traceability.
+
+### Requirement: Prompt Injection Resistance for Delegation Mechanisms (f037)
+
+The `@mention` auto-delegation, credential-inheriting child sessions, and
+auto-executed `startupPrompt` from workflow repos SHALL be hardened against
+prompt injection:
+
+1. **@mention parsing**: Session/message creation from in-band text parsing SHALL
+   be replaced with structured parameters. `push_message` SHALL NOT automatically
+   create and start new sessions from `@mention` patterns found in message text —
+   this converts attacker-controlled issue bodies or repo files into privileged
+   session creation.
+
+2. **Child session credential inheritance**: `create_session` with `parentSessionId`
+   SHALL require explicit confirmation or authorization before inheriting the parent's
+   `userContext` and credentials. Delegation depth and rate SHALL be capped to prevent
+   fan-out attacks.
+
+3. **Workflow startupPrompt**: Workflow repos' `ambient.json` `startupPrompt` SHALL
+   be pinned to reviewed SHAs or run with reduced tool permissions. Arbitrary
+   prompts from unpinned repos SHALL NOT be auto-executed with the session's full
+   credential set.
+
+#### Scenario: @mention in untrusted content does not auto-delegate
+
+- GIVEN an agent summarizing a GitHub issue containing `@data-analyst fix the dashboard`
+- WHEN the agent's `push_message` call includes the issue text
+- THEN no new session is automatically created for `data-analyst`
+- AND the @mention is treated as literal text
+
+#### Scenario: Child session delegation depth capped
+
+- GIVEN a session creates a child session via `create_session`
+- AND the child session attempts to create another child
+- WHEN the delegation depth exceeds the configured maximum (e.g., 3)
+- THEN the nested `create_session` call returns an error
+- AND no further delegation is permitted
+
 ## Spec Completeness Checklist
 
 Per `ambient-spec-development.md`, this spec is complete when:

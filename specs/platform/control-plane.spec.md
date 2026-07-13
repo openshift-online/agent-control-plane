@@ -617,6 +617,117 @@ The `ambient-control-plane` ServiceAccount does not have `delete` on `namespaces
 
 ---
 
+## Audit-Driven Requirements
+
+> Requirements in this section address findings from the 2026-07 ProdSec security audit.
+> Each requirement references the originating finding ID (fNNN) for traceability.
+
+### Requirement: kube_namespace Must Be DNS-1123 Validated (f007)
+
+The `kube_namespace` field in session status patches SHALL be validated against
+RFC 1123 DNS label syntax (`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`) on both HTTP
+and gRPC update paths. The current implementation allows arbitrary strings
+including `@` userinfo delimiters, enabling SSRF via `runnerBaseURL` interpolation.
+
+The status-patch endpoint (`PATCH /sessions/{id}/status`) SHALL additionally
+restrict callers to the control-plane service identity — not any authenticated user.
+
+URLs constructed from session fields SHALL use `url.URL` field assignment, not
+`fmt.Sprintf` string interpolation, to prevent authority injection.
+
+#### Scenario: SSRF via namespace injection blocked
+
+- GIVEN a session with `kube_namespace` set to `x@10.96.0.1:443/`
+- WHEN the API server constructs `runnerBaseURL`
+- THEN the namespace is rejected during status update (fails DNS-1123 validation)
+- AND the SSRF path is not reachable
+
+### Requirement: Application Reconciler URL and Path Validation (f008)
+
+The `ApplicationReconciler` SHALL validate `SourceRepoUrl` against an HTTPS-only
+scheme allowlist with private-IP blocking (matching the `ssh_upload.validateRepoURL`
+policy). The `SourcePath` SHALL be cleaned with `filepath.Clean` and prefix-checked
+against the clone root to prevent directory traversal.
+
+Git commands SHALL use `--` separators before positional arguments and set
+`GIT_ALLOW_PROTOCOL=https` to prevent `ext::` transport RCE and option injection.
+
+#### Scenario: ext:: transport URL rejected
+
+- GIVEN an Application with `SourceRepoUrl = "ext::sh -c evil"`
+- WHEN the ApplicationReconciler validates the URL
+- THEN the URL is rejected (not HTTPS scheme)
+- AND no git command is executed
+
+#### Scenario: SourcePath traversal rejected
+
+- GIVEN an Application with `SourcePath = "../../../etc/passwd"`
+- WHEN the ApplicationReconciler resolves the path
+- THEN `filepath.Clean` normalizes the path
+- AND the prefix check rejects it (escapes the clone root)
+
+### Requirement: Least-Privilege Control Plane ClusterRole (f019)
+
+The `ambient-control-plane` ClusterRole SHALL NOT include `escalate` or `bind` verbs
+on `clusterroles`/`clusterrolebindings` — these are documented direct paths to
+cluster-admin equivalence.
+
+The ClusterRole SHALL be scoped to the minimum permissions required:
+1. RBAC management SHALL use `resourceNames` to scope to specific gateway objects
+2. Cluster-wide secret/pod rules SHALL be replaced with per-tenant-namespace Roles
+   created at provisioning time
+3. The long-lived `kubernetes.io/service-account-token` Secret SHALL be replaced
+   with bound projected tokens
+
+#### Scenario: CP cannot escalate to cluster-admin
+
+- GIVEN the ambient-control-plane ServiceAccount
+- WHEN an attacker compromises the CP (via f002 or f008)
+- THEN the SA cannot create arbitrary ClusterRoleBindings
+- AND cluster takeover is prevented
+
+### Requirement: Project Namespace Naming Validation (f035)
+
+Project IDs/names flowing into namespace names SHALL be:
+1. Prefixed with a fixed string (e.g., `ambient-`) to prevent collision with
+   system namespaces
+2. Validated against RFC 1123 plus a reserved-name denylist
+   (`kube-system`, `kube-public`, `kube-node-lease`, `openshift-*`, `default`)
+3. Refused for deprovisioning if the namespace does not carry the
+   `ambient-code.io/managed-by` label created by this controller
+
+#### Scenario: System namespace collision prevented
+
+- GIVEN a project with name `kube-system`
+- WHEN the ProjectReconciler resolves the namespace name
+- THEN the name is rejected (reserved-name denylist)
+- AND the project creation fails with a descriptive error
+
+#### Scenario: Namespace deprovisioning requires managed-by label
+
+- GIVEN a namespace `my-project` without the `ambient-code.io/managed-by` label
+- WHEN `DeprovisionNamespace` is called for `my-project`
+- THEN the namespace is NOT deleted
+- AND an error is logged: "refusing to delete unmanaged namespace"
+
+### Requirement: Session Delete Must Not Deprovision Project Namespace (f063)
+
+Deleting a single session SHALL NOT deprovision the project namespace. The
+`cleanupSessionPod` function SHALL delete only session-scoped resources (pod,
+secret, service account, service), not the shared project namespace.
+
+Namespace deprovisioning SHALL occur only on project deletion (as the
+`ProjectReconciler` already handles) or when explicitly verified that no other
+non-terminal sessions reference the namespace.
+
+#### Scenario: Sibling session survives session deletion
+
+- GIVEN sessions S1 and S2 running in project P namespace
+- WHEN S1 is deleted
+- THEN only S1's pod, secret, SA, and service are deleted
+- AND S2 continues running undisturbed
+- AND the namespace is NOT deleted
+
 ## Design Decisions
 
 | Decision | Rationale |

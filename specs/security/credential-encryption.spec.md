@@ -226,6 +226,43 @@ No API, SDK, CLI, sidecar, or runner changes SHALL be required when the storage 
 | `CREDENTIAL_ENCRYPTION_KEY_VERSION` | When keyring is set | Integer version of the active key used for new encryptions (e.g., `2`). Must exist in the keyring. |
 | `CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT` | No | Set to `true` to allow startup without encryption. Without this, the server fails closed if no keyring is configured. |
 
+## Audit-Driven Requirements
+
+> Requirements in this section address findings from the 2026-07 ProdSec security audit.
+> Each requirement references the originating finding ID (fNNN) for traceability.
+
+### Requirement: Production Overlays Must Enable Encryption (f024)
+
+The `CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT` setting SHALL be `false` in all production
+and production-equivalent overlays. The production and mpp-openshift overlays currently
+set `ALLOW_PLAINTEXT=true`, storing tenant provider tokens unencrypted in PostgreSQL.
+
+Combined with the hardcoded database password (f023), cluster-wide network reachability
+(f027), and SQL injection via `orderBy` (f006), plaintext credential storage enables
+database-level cross-tenant credential exfiltration.
+
+The encryption implementation (AES-256-GCM, AAD, versioned keyring) is sound — it is
+simply disabled where it matters most. All production overlays SHALL:
+1. Provision a `credential-encryption-keyring` Secret (following the hcmais pattern)
+2. Set `CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT=false`
+3. Run the `encrypt_credentials` migration before enabling enforcement
+4. Remove the plaintext escape hatch at the code level for `AMBIENT_ENV=production`
+
+#### Scenario: Production overlay enforces encryption
+
+- GIVEN the production overlay at `components/manifests/overlays/production/`
+- WHEN the API server starts in production
+- THEN `CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT` is `false`
+- AND `CREDENTIAL_ENCRYPTION_KEYRING` is set from a provisioned Secret
+- AND the server refuses to start if the keyring is missing
+
+#### Scenario: Plaintext opt-in blocked in production
+
+- GIVEN `AMBIENT_ENV=production`
+- WHEN `CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT=true` is set
+- THEN the API server SHALL refuse to start
+- AND log a fatal error: "plaintext credential storage is not permitted in production"
+
 ## Design Decisions
 
 | Decision | Rationale |

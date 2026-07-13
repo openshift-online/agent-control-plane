@@ -98,6 +98,63 @@ The feedback history panel SHALL be positioned as a right-side panel alongside t
 - AND sent feedback appears below with muted styling
 - AND the panel is collapsible via a toggle handle
 
+## Audit-Driven Requirements
+
+> Requirements in this section address findings from the 2026-07 ProdSec security audit.
+> Each requirement references the originating finding ID (fNNN) for traceability.
+
+### Requirement: Preview Content Must Be Served from a Sandbox Origin (f021)
+
+Proxied preview content SHALL be served from a dedicated sandbox origin (e.g.,
+`preview.ambient.example.com`), NOT from the dashboard application origin. The
+current design fetches agent-supplied HTML server-side and re-serves it — scripts
+intact, anti-framing headers stripped — from the dashboard origin inside an
+`allow-same-origin + allow-scripts` iframe. JavaScript in the previewed app
+therefore runs with full access to the operator's dashboard session.
+
+Alternatively, the `allow-same-origin` directive SHALL be removed from the iframe
+sandbox attribute so the document runs in an opaque origin with no access to
+the parent frame's cookies, storage, or DOM.
+
+#### Scenario: Preview iframe isolation
+
+- GIVEN a session with a preview URL pointing to agent-generated content
+- WHEN the preview overlay renders the content
+- THEN the iframe either uses a separate origin OR omits `allow-same-origin`
+- AND the previewed content cannot access `parent` DOM or dashboard cookies
+- AND the previewed content cannot make authenticated API calls as the operator
+
+### Requirement: Operator Token Must Not Be Forwarded to Preview Targets (f022)
+
+The preview proxy SHALL NOT forward the operator's OIDC access token to preview
+target hosts. The current implementation attaches the logged-in operator's
+control-plane access token as `Authorization: Bearer` to every request to the
+preview target — which is an untrusted agent-generated application.
+
+If previews require authentication, a short-lived, audience-scoped preview token
+valid only for the specific host/session SHALL be minted instead.
+
+#### Scenario: Preview request without operator token
+
+- GIVEN the preview proxy fetches content from an agent preview URL
+- WHEN the proxy makes the HTTP request
+- THEN no `Authorization` header with the operator's token is included
+- AND the operator's session cannot be hijacked by the preview target
+
+### Requirement: Preview PostMessage Bridge Origin Validation (f060)
+
+The preview postMessage bridge SHALL validate `e.origin` and `e.source` before
+accepting responses, and SHALL use a specific `targetOrigin` (not `'*'`) when
+posting requests. The current implementation accepts `capturedHtml` from any
+origin and broadcasts with `targetOrigin '*'`.
+
+#### Scenario: postMessage from untrusted origin rejected
+
+- GIVEN the preview bridge is listening for capture responses
+- WHEN a message arrives from an unexpected origin
+- THEN the message is ignored
+- AND no content is injected into the feedback payload
+
 ---
 
 ## Real-Time Updates
