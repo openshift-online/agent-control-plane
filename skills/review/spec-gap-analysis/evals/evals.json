@@ -1,0 +1,47 @@
+[
+  {
+    "input": "run a gap analysis on specs/platform/control-plane.spec.md",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "spec-gap-analysis",
+      "args": "specs/platform/control-plane.spec.md"
+    },
+    "description": "Triggers gap analysis on a specific platform spec"
+  },
+  {
+    "input": "what gaps exist in the runner spec?",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "spec-gap-analysis",
+      "args": "specs/platform/runner.spec.md"
+    },
+    "description": "Triggers gap analysis when user asks about spec coverage"
+  },
+  {
+    "input": "validate spec coverage for RBAC enforcement",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "spec-gap-analysis",
+      "args": "specs/security/rbac-enforcement.spec.md"
+    },
+    "description": "Triggers gap analysis for a security spec"
+  },
+  {
+    "input": "find untested requirements in the SSO spec",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "spec-gap-analysis",
+      "args": "specs/security/sso-authentication.spec.md"
+    },
+    "description": "Triggers gap analysis focused on test coverage"
+  },
+  {
+    "input": "spec gaps for the UI architecture",
+    "expected_tool_call": "Skill",
+    "expected_args": {
+      "skill": "spec-gap-analysis",
+      "args": "specs/ui/architecture.spec.md"
+    },
+    "description": "Triggers gap analysis for a UI spec"
+  }
+]
