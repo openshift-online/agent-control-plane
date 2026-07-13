@@ -284,6 +284,8 @@ objects:
                     optional: true
               - name: CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT
                 value: "false"
+              - name: JWK_CERT_URL
+                value: ${KEYCLOAK_REALM_URL}/protocol/openid-connect/certs
             command:
               - /usr/local/bin/ambient-api-server
               - serve
@@ -295,7 +297,6 @@ objects:
               - --enable-jwt=true
               - --enable-authz=true
               - --jwk-cert-file=/configs/authentication/jwks.json
-              - --jwk-cert-url=${KEYCLOAK_REALM_URL}/protocol/openid-connect/certs
               - --enable-https=false
               - --enable-grpc=true
               - --api-server-bindaddress=:8000
