@@ -190,5 +190,20 @@ func (s *InMemorySessionService) FindByIDs(_ context.Context, ids []string) (Ses
 	return list, nil
 }
 
+func (s *InMemorySessionService) PhaseCounts(_ context.Context, projectId string) (map[string]int64, *errors.ServiceError) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	counts := make(map[string]int64)
+	for _, ss := range s.data {
+		if projectId != "" && (ss.ProjectId == nil || *ss.ProjectId != projectId) {
+			continue
+		}
+		if ss.Phase != nil {
+			counts[*ss.Phase]++
+		}
+	}
+	return counts, nil
+}
+
 func (s *InMemorySessionService) OnUpsert(_ context.Context, _ string) error { return nil }
 func (s *InMemorySessionService) OnDelete(_ context.Context, _ string) error { return nil }

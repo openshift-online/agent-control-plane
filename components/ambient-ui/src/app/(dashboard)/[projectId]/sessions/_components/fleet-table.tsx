@@ -10,7 +10,7 @@ import {
   flexRender,
 } from '@tanstack/react-table'
 import type { SortingState, ColumnFiltersState, RowSelectionState } from '@tanstack/react-table'
-import { ChevronUp, ChevronDown } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -19,8 +19,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import type { DomainSession, SessionPhase } from '@/domain/types'
+import type { DomainSession } from '@/domain/types'
 import { sessionMatchesPath } from '@/domain/folder-tree'
 import { useTableKeyboardNav } from '@/hooks/use-table-keyboard-nav'
 import { cn } from '@/lib/utils'
@@ -34,18 +35,26 @@ export function FleetTable({
   sessions,
   searchFilter,
   agentNames,
-  phaseFilter,
   showTestRuns = false,
   pathFilter,
   onFilteredCountChange,
+  currentPage,
+  totalPages,
+  pageSize,
+  serverTotal,
+  onPageChange,
 }: {
   sessions: DomainSession[]
   searchFilter: string
   agentNames?: Map<string, string>
-  phaseFilter?: SessionPhase | null
   showTestRuns?: boolean
   pathFilter?: string | null
   onFilteredCountChange?: (count: number) => void
+  currentPage?: number
+  totalPages?: number
+  pageSize?: number
+  serverTotal?: number
+  onPageChange?: (page: number) => void
 }) {
   const router = useRouter()
   const { projectId } = useParams<{ projectId: string }>()
@@ -77,17 +86,6 @@ export function FleetTable({
     setUseAbsoluteTime(prev => !prev)
   }, [])
 
-  // Sync phaseFilter prop to column filters
-  useEffect(() => {
-    setColumnFilters(prev => {
-      const without = prev.filter(f => f.id !== 'phase')
-      if (phaseFilter) {
-        return [...without, { id: 'phase', value: phaseFilter }]
-      }
-      return without
-    })
-  }, [phaseFilter])
-
   const tableMeta: FleetTableMeta = {
     agentNames,
     useAbsoluteTime,
@@ -112,11 +110,7 @@ export function FleetTable({
     onColumnFiltersChange: setColumnFilters,
     onRowSelectionChange: setRowSelection,
     meta: tableMeta,
-    filterFns: {
-      phaseEquals: (row, columnId, filterValue) => {
-        return row.getValue(columnId) === filterValue
-      },
-    },
+    filterFns: {},
   })
 
   // Report filtered count back to parent
@@ -248,6 +242,36 @@ export function FleetTable({
         </TableBody>
       </Table>
     </div>
+    {currentPage != null && totalPages != null && totalPages > 1 && onPageChange && (
+      <div className="flex items-center justify-between px-2 py-3">
+        <p className="text-sm text-muted-foreground">
+          Showing {((currentPage - 1) * (pageSize ?? 20)) + 1}–{Math.min(currentPage * (pageSize ?? 20), serverTotal ?? 0)} of {serverTotal} sessions
+        </p>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={currentPage <= 1}
+            onClick={() => onPageChange(currentPage - 1)}
+          >
+            <ChevronLeft className="mr-1 size-4" />
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {currentPage} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={currentPage >= totalPages}
+            onClick={() => onPageChange(currentPage + 1)}
+          >
+            Next
+            <ChevronRight className="ml-1 size-4" />
+          </Button>
+        </div>
+      </div>
+    )}
     </TooltipProvider>
   )
 }

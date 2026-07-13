@@ -30,6 +30,7 @@ type PodStatusSyncer struct {
 	platformMode       string
 	mppConfigNamespace string
 	logger             zerolog.Logger
+	errorFirstSeen     map[string]time.Time
 }
 
 func NewPodStatusSyncer(factory *SDKClientFactory, kube *kubeclient.KubeClient, gateway *openshell.GatewayClient, useGateway bool, platformMode, mppConfigNamespace string, logger zerolog.Logger) *PodStatusSyncer {
@@ -41,6 +42,7 @@ func NewPodStatusSyncer(factory *SDKClientFactory, kube *kubeclient.KubeClient, 
 		platformMode:       platformMode,
 		mppConfigNamespace: mppConfigNamespace,
 		logger:             logger.With().Str("component", "pod-status-syncer").Logger(),
+		errorFirstSeen:     make(map[string]time.Time),
 	}
 }
 
@@ -180,7 +182,35 @@ func (s *PodStatusSyncer) syncSandboxStatus(ctx context.Context, sdk *sdkclient.
 
 	desiredPhase := mapSandboxPhaseToSessionPhase(resp.Sandbox.Status.Phase)
 	if desiredPhase == "" {
+		delete(s.errorFirstSeen, session.ID)
 		return
+	}
+
+	if desiredPhase != PhaseFailed {
+		delete(s.errorFirstSeen, session.ID)
+	}
+
+	if desiredPhase == PhaseFailed && session.Phase == PhaseCreating {
+		first, tracked := s.errorFirstSeen[session.ID]
+		if !tracked {
+			s.errorFirstSeen[session.ID] = time.Now()
+			s.logger.Warn().
+				Str("session_id", session.ID).
+				Msg("sandbox error during creation, starting grace period")
+			return
+		}
+		if time.Since(first) < sandboxErrorGracePeriod {
+			s.logger.Debug().
+				Str("session_id", session.ID).
+				Dur("error_duration", time.Since(first)).
+				Msg("sandbox error within grace period, skipping failure")
+			return
+		}
+		s.logger.Error().
+			Str("session_id", session.ID).
+			Dur("error_duration", time.Since(first)).
+			Msg("sandbox error exceeded grace period")
+		delete(s.errorFirstSeen, session.ID)
 	}
 
 	if session.Phase == desiredPhase {

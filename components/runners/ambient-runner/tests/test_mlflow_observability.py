@@ -15,10 +15,8 @@ _mock_entities = types.ModuleType("mlflow.entities")
 _mock_entities.SpanStatusCode = MagicMock()
 _mock_entities.SpanType = MagicMock()
 _mock_mlflow.entities = _mock_entities
-sys.modules.setdefault("mlflow", _mock_mlflow)
-sys.modules.setdefault("mlflow.entities", _mock_entities)
 
-from ambient_runner.mlflow_observability import MLflowSessionTracer
+from ambient_runner.mlflow_observability import MLflowSessionTracer  # noqa: E402
 
 
 INIT_KWARGS = dict(
@@ -33,18 +31,41 @@ INIT_KWARGS = dict(
 
 
 @pytest.fixture(autouse=True)
-def _reset_mlflow_mocks():
+def _mock_mlflow_modules():
     _mock_mlflow.set_tracking_uri.reset_mock()
     _mock_mlflow.set_experiment.reset_mock()
-    yield
+    _mock_mlflow.set_tracking_uri.side_effect = None
+    _mock_mlflow.set_experiment.side_effect = None
+    with (
+        patch.dict(
+            sys.modules,
+            {
+                "mlflow": _mock_mlflow,
+                "mlflow.entities": _mock_entities,
+            },
+        ),
+        patch(
+            "ambient_runner.observability_config.check_mlflow_tracking_reachable",
+            return_value=True,
+        ),
+    ):
+        yield
 
 
 class TestIsOpenshellToken:
     def test_recognizes_resolve_prefix(self):
-        assert MLflowSessionTracer._is_openshell_token("openshell:resolve:env:MLFLOW_TRACKING_URI") is True
+        assert (
+            MLflowSessionTracer._is_openshell_token(
+                "openshell:resolve:env:MLFLOW_TRACKING_URI"
+            )
+            is True
+        )
 
     def test_rejects_normal_url(self):
-        assert MLflowSessionTracer._is_openshell_token("https://mlflow.example.com") is False
+        assert (
+            MLflowSessionTracer._is_openshell_token("https://mlflow.example.com")
+            is False
+        )
 
     def test_rejects_empty_string(self):
         assert MLflowSessionTracer._is_openshell_token("") is False
@@ -53,21 +74,7 @@ class TestIsOpenshellToken:
         assert MLflowSessionTracer._is_openshell_token("openshell:resolve:") is False
 
 
-class TestInitializeOpenshellTokens:
-    def test_openshell_token_skips_set_tracking_uri_and_set_experiment(self):
-        env = {
-            "MLFLOW_TRACKING_URI": "openshell:resolve:env:MLFLOW_TRACKING_URI",
-            "MLFLOW_EXPERIMENT_NAME": "openshell:resolve:env:MLFLOW_EXPERIMENT_NAME",
-        }
-        with patch.dict(os.environ, env, clear=True):
-            tracer = MLflowSessionTracer("s1", "u1", "user1")
-            result = tracer.initialize(**INIT_KWARGS)
-
-        assert result is True
-        assert tracer.enabled is True
-        _mock_mlflow.set_tracking_uri.assert_not_called()
-        _mock_mlflow.set_experiment.assert_not_called()
-
+class TestInitializeTracking:
     def test_standard_uri_calls_set_tracking_uri_and_set_experiment(self):
         env = {
             "MLFLOW_TRACKING_URI": "https://mlflow.example.com",
@@ -79,7 +86,9 @@ class TestInitializeOpenshellTokens:
 
         assert result is True
         assert tracer.enabled is True
-        _mock_mlflow.set_tracking_uri.assert_called_once_with("https://mlflow.example.com")
+        _mock_mlflow.set_tracking_uri.assert_called_once_with(
+            "https://mlflow.example.com"
+        )
         _mock_mlflow.set_experiment.assert_called_once_with("my-experiment")
 
     def test_empty_tracking_uri_disables(self):
@@ -122,13 +131,16 @@ class TestInitializeOpenshellTokens:
             "MLFLOW_TRACKING_URI": "openshell:resolve:env:MLFLOW_TRACKING_URI",
             "MLFLOW_TRACKING_AUTH": "openshell:resolve:env:MLFLOW_TRACKING_AUTH",
         }
-        with patch.dict(os.environ, env, clear=True), \
-             patch("ambient_runner.mlflow_observability.logger") as mock_logger:
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch("ambient_runner.mlflow_observability.logger") as mock_logger,
+        ):
             tracer = MLflowSessionTracer("s1", "u1", "user1")
             tracer.initialize(**INIT_KWARGS)
 
         auth_info_calls = [
-            c for c in mock_logger.info.call_args_list
+            c
+            for c in mock_logger.info.call_args_list
             if "MLFLOW_TRACKING_AUTH=" in str(c)
         ]
         assert len(auth_info_calls) == 0

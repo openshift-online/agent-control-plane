@@ -160,7 +160,7 @@ cleanup() {
     fi
     if [[ -n "${CREATED_CREDENTIAL_ID}" ]]; then
         dim "   deleting credential ${CREATED_CREDENTIAL_ID}..."
-        "$ACPCTL" credential delete "${CREATED_CREDENTIAL_ID}" --confirm 2>/dev/null || true
+        "$ACPCTL" credential delete "${CREATED_CREDENTIAL_ID}" -y 2>/dev/null || true
     fi
     if [[ -n "${CREATED_PROJECT}" ]]; then
         dim "   deleting project ${CREATED_PROJECT}..."
@@ -263,7 +263,7 @@ announce "3 · Create agent"
 sep; bold "▶  Create agent: ${AGENT_NAME}"; sleep "$PAUSE"
 AGENT_JSON=$(
     "$ACPCTL" agent create \
-        --project-id "${PROJECT_NAME}" \
+        --project "${PROJECT_NAME}" \
         --name "${AGENT_NAME}" \
         --prompt "You are a GitHub automation agent. You use the GitHub CLI (gh) and GitHub API to manage issues and pull requests. When given a credential, you authenticate with it and perform the requested GitHub operations." \
         -o json 2>/dev/null
@@ -374,7 +374,7 @@ After opening the issue, report the issue URL back as confirmation."
 sep; bold "▶  Start session for agent ${AGENT_NAME}"; sleep "$PAUSE"
 SESSION_JSON=$(
     "$ACPCTL" agent start "${AGENT_NAME}" \
-        --project-id "${PROJECT_NAME}" \
+        --project "${PROJECT_NAME}" \
         --prompt "${SESSION_PROMPT}" \
         -o json 2>&1
 )

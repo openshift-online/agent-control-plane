@@ -79,6 +79,7 @@ ehthumbs.db
 Thumbs.db
 
 # IDE / AI assistant configuration
+.codex/
 .cursor/
 .tessl/
 

@@ -3,6 +3,7 @@ package reconciler
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/rs/zerolog"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -10,7 +11,8 @@ import (
 
 func newTestPodSyncer() *PodStatusSyncer {
 	return &PodStatusSyncer{
-		logger: zerolog.Nop(),
+		logger:         zerolog.Nop(),
+		errorFirstSeen: make(map[string]time.Time),
 	}
 }
 

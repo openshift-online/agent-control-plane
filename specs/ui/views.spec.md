@@ -167,7 +167,88 @@ Condition colors SHALL reflect semantic health, not literal True/False values. "
 
 Note: the runner currently persists one `assistant` message per turn (final text only). Intermediate assistant text and individual tool call arguments are not yet persisted as separate messages — they arrive via the operational event writer with tool name and result only. Full streaming with intermediate text requires the SSE-Driven Updates requirement.
 
-## Requirement: Draft Message Persistence
+## Requirement: Phase-Aware Chat Empty State
+
+When the Chat tab or chat sidebar has no messages to display, the empty state SHALL reflect the session's current phase rather than showing a generic placeholder. This gives the user immediate feedback that the system is working to start their session.
+
+### Scenario: Pending or Creating session shows waiting spinner
+
+- GIVEN a session in Pending or Creating phase
+- AND the chat message list is empty
+- WHEN the Chat tab or chat sidebar renders
+- THEN it displays an animated spinner with the text "Runner is starting..."
+- AND the spinner is vertically centered in the message area
+
+### Scenario: Running session with no messages yet
+
+- GIVEN a session in Running phase
+- AND the chat message list is empty
+- WHEN the Chat tab or chat sidebar renders
+- THEN it displays an animated spinner with the text "Runner started. Waiting for messages..."
+- AND the spinner is vertically centered in the message area
+
+### Scenario: Terminal session with no messages
+
+- GIVEN a session in Completed, Failed, or Stopped phase
+- AND the chat message list is empty
+- WHEN the Chat tab or chat sidebar renders
+- THEN it displays: "No conversation messages were recorded."
+
+### Scenario: Spinner transitions to messages
+
+- GIVEN a session is showing a spinner ("Runner is starting..." or "Runner started. Waiting for messages...")
+- WHEN the first message arrives
+- THEN the spinner is replaced by the message content
+- AND the transition is seamless (no layout shift)
+
+## Requirement: Agent Thinking Indicator
+
+When the agent is actively processing a user message, the chat SHALL display a pulsing three-dot ellipsis below the message list to indicate the agent is working. The indicator uses the `run_started` and `run_finished` lifecycle events persisted by the runner to determine activity state.
+
+The indicator SHALL appear only when the session is in Running phase AND the most recent lifecycle event in the message stream is `run_started` (i.e., `run_finished` has not yet been received). It SHALL render as three animated dots with a staggered bounce animation, aligned with the assistant message layout (bot avatar + dots).
+
+### Scenario: Thinking indicator appears after user sends a message
+
+- GIVEN a session in Running phase
+- AND the user sends a message via the chat input
+- WHEN the runner emits a `run_started` lifecycle event
+- THEN a pulsing three-dot indicator appears below the last message
+- AND the indicator is left-aligned with assistant messages (bot icon + dots)
+
+### Scenario: Thinking indicator disappears when assistant message arrives
+
+- GIVEN the thinking indicator is displayed
+- WHEN an `assistant` message appears in the message stream
+- THEN the indicator is removed immediately
+- AND the agent's response renders in its place
+- AND the indicator does NOT briefly reappear while waiting for `run_finished`
+
+### Scenario: Thinking indicator persists through tool calls
+
+- GIVEN the thinking indicator is displayed
+- WHEN `tool_use` or `tool_result` messages appear (but no `assistant` message yet)
+- THEN the indicator remains visible
+
+### Scenario: Thinking indicator disappears on run_finished
+
+- GIVEN the thinking indicator is displayed
+- WHEN the runner emits a `run_finished` lifecycle event (even without an assistant message)
+- THEN the indicator is removed
+
+### Scenario: Thinking indicator not shown for terminal sessions
+
+- GIVEN a session in Completed, Failed, or Stopped phase
+- WHEN the chat renders
+- THEN no thinking indicator is displayed regardless of lifecycle event history
+
+### Scenario: Thinking indicator in sidebar
+
+- GIVEN the chat sidebar is open for a Running session
+- AND a run is active
+- WHEN the sidebar renders
+- THEN the same thinking indicator appears below the message list
+
+
 
 The chat input SHALL persist unsent text to `localStorage` as the user types, scoped per session ID. If the user navigates away, refreshes, or is redirected by an auth flow, the draft SHALL be restored when they return to the same session.
 

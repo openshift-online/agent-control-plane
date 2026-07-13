@@ -172,10 +172,10 @@ bridge._setup_platform():
   4. resolve_workspace_paths(context)        ← CWD: workflow / multi-repo / artifacts
   5. setup_workspace(context)                ← log workspace state
   6. ObservabilityManager init               ← Langfuse (best-effort, no-op on failure)
-  6a. MLflow autologging activation           ← if MLFLOW_TRACKING_URI + MLFLOW_TRACKING_TOKEN + MLFLOW_EXPERIMENT_NAME all set:
-                                                 mlflow.set_tracking_uri(), mlflow.set_experiment(), mlflow.anthropic.autolog()
-                                                 Best-effort: log warning on failure, continue without tracing
-                                                 If MLFLOW_REQUIRED=true and any env var missing: fail startup
+  6a. MLflow autologging activation           ← if MLFLOW_TRACKING_URI is set and MLFLOW_TRACING_ENABLED is not false:
+                                                 mlflow.set_tracking_uri(), mlflow.set_experiment(), mlflow.autolog(...),
+                                                 and configured GenAI autolog integrations
+                                                 Best-effort: log warning on failure, continue the session
   7. build_mcp_servers(context, cwd_path)    ← external + platform MCP servers
   8. build_sdk_system_prompt(...)            ← preset + workspace context string
 ```
@@ -480,13 +480,18 @@ All env vars are injected by the CP at pod creation time.
 | `AMBIENT_MCP_URL` | Ambient MCP sidecar URL (SSE transport) |
 | `REPOS_JSON` | JSON array of `{url, branch, autoPush}` repo configs |
 | `ACTIVE_WORKFLOW_GIT_URL` | Active workflow repo URL (overrides REPOS_JSON workspace setup) |
+| `SESSION_CONFIG_PATH` | Existing absolute path to a mounted session-config harness repo; appended to Claude SDK `add_dirs` and enables SDK skills |
 | `AGUI_TOKEN` | Session-scoped bearer token; when set, all non-health endpoints require `X-Ambient-Session-Token` header (constant-time comparison) |
 | `PAYLOAD_MCP_CONFIG_FILE` | Path to payload `.mcp.json` (default `/sandbox/.mcp.json`); merged on top of baked-in MCP config |
 | `SDK_OPTIONS` | JSON string of additional Claude SDK options |
-| `MLFLOW_TRACKING_URI` | MLflow tracking server URL (HTTPS); global default from control-plane env, overridable per-agent |
+| `MLFLOW_TRACKING_URI` | MLflow tracking server URL (HTTPS); platform-owned global default from control-plane env |
 | `MLFLOW_TRACKING_TOKEN` | MLflow tracking server auth token (secret — must not appear in logs); injected via `mlflow` credential provider |
 | `MLFLOW_EXPERIMENT_NAME` | MLflow experiment name for trace logging; global default from control-plane env, overridable per-agent |
-| `MLFLOW_REQUIRED` | When `true`, sandbox fails to start if any MLflow env var is missing |
+| `MLFLOW_CREDENTIAL_SECRET_NAME` | Control-plane-only source secret name for the global MLflow credential; defaults to `mlflow` |
+| `MLFLOW_CREDENTIAL_SECRET_NAMESPACE` | Control-plane-only source namespace for the global MLflow credential; defaults to the control-plane runtime namespace |
+| `MLFLOW_TRACING_ENABLED` | Optional kill switch; only `false` / `0` / `no` / `off` disables MLflow when a tracking URI is present |
+| `MLFLOW_AUTOLOG_EXCLUDE_FLAVORS` | Optional comma-separated generic MLflow autolog flavor exclusions |
+| `MLFLOW_GENAI_AUTOLOG_INTEGRATIONS` | Optional comma-separated provider autolog integrations; default `anthropic,openai` |
 
 ---
 
@@ -515,6 +520,23 @@ Priority order:
 ```
 
 The resolved `(cwd_path, add_dirs)` tuple is passed to the Claude SDK via `ClaudeAgentAdapter`. Claude Code sees `cwd_path` as its working directory and `add_dirs` as additional indexed directories.
+
+If `SESSION_CONFIG_PATH` is set to an existing absolute directory, the runner
+SHALL append it to `add_dirs` without replacing `cwd_path`. This supports
+Git-backed session-config harness repositories mounted by sandbox payloads:
+
+```yaml
+payloads:
+  - sandbox_path: /sandbox/session-config
+    repo_url: https://github.com/example/team-session-config
+    ref: main
+environment:
+  SESSION_CONFIG_PATH: /sandbox/session-config
+```
+
+For Claude sessions, the bridge SHALL also enable SDK skills when
+`SESSION_CONFIG_PATH` resolves successfully so skills in the mounted harness can
+be discovered and activated by semantic prompt intent.
 
 ---
 
@@ -821,17 +843,19 @@ The runner does not need to set proxy or TLS CA vars for general cluster traffic
 
 #### OPA Network Policy for ACP Internal Traffic
 
-The runner's OPA policy (`policy.yaml`) MUST include an `acp_internal` network policy section that whitelists the control plane and API server endpoints for the runner's Python binaries. Without this, the supervisor proxy denies all cluster-internal traffic from the runner with `DENIED FORWARD`.
+The sandbox's OPA network policy MUST include an `_acp_internal` network policy rule that whitelists the control plane and API server endpoints for the runner's Python binaries. Without this, the supervisor proxy denies all cluster-internal traffic from the runner with `DENIED FORWARD`.
 
-Required endpoints:
+The runner image bundles a default `policy.yaml` (via `Dockerfile.openshell`) that includes a static `_acp_internal` entry with hardcoded `ambient-code` namespace endpoints. In gateway mode, this baked-in policy becomes the sandbox's default policy. The control plane **overwrites** the `_acp_internal` entry after sandbox creation using OpenShell's `UpdateConfig` RPC with `merge_operations` (equivalent to `openshell policy update --add-allow`) to set the correct namespace-specific endpoints. All other rules in the baked-in default policy (e.g., `claude_code_vertex`, `github_ssh_over_https`, `pypi`) are preserved. See `agent-sandbox-config.spec.md` (ACP Internal Policy Injection) and `openshell-sandbox-provisioning.spec.md` (ACP Internal Network Policy Injection) for the injection mechanism.
+
+Required endpoints (namespace varies by deployment):
 
 | Host | Port | Purpose |
 |------|------|---------|
-| `ambient-control-plane.ambient-code.svc[.cluster.local]` | 8080 | CP token endpoint |
-| `ambient-api-server.ambient-code.svc[.cluster.local]` | 8000 | API server HTTP |
-| `ambient-api-server.ambient-code.svc[.cluster.local]` | 9000 | API server gRPC |
+| `ambient-control-plane.{namespace}.svc[.cluster.local]` | 8080 | CP token endpoint |
+| `ambient-api-server.{namespace}.svc[.cluster.local]` | 8000 | API server HTTP |
+| `ambient-api-server.{namespace}.svc[.cluster.local]` | 9000 | API server gRPC |
 
-Allowed binaries: `/sandbox/.venv/bin/python`, `/sandbox/.venv/bin/python3`, `/sandbox/.venv/bin/uvicorn`
+Allowed binaries: `/sandbox/.venv/bin/python`, `/sandbox/.venv/bin/python3`, `/sandbox/.venv/bin/uvicorn`, `/sandbox/.uv/python/cpython-*/bin/python*`
 
 Both short (`svc`) and fully-qualified (`svc.cluster.local`) hostnames must be listed because the proxy matches on the exact hostname in the CONNECT request.
 

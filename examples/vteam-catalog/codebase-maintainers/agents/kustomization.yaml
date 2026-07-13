@@ -1,0 +1,6 @@
+kind: Kustomization
+resources:
+  - lead-maintainer.yaml
+  - code-maintainer.yaml
+  - runtime-maintainer.yaml
+  - quality-maintainer.yaml

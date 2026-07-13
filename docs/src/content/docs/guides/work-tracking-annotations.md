@@ -73,7 +73,7 @@ An agent that tracks Jira issues, opens PRs, and reports lifecycle phases:
 ```bash
 acpctl create agent \
   --name "jira-reporter" \
-  --project-id my-project \
+  --project my-project \
   --prompt 'You are a Jira work reporter agent. Report your status using annotations via the patch_session_annotations MCP tool.
 
 ## Getting Accurate Timestamps
@@ -112,7 +112,7 @@ An agent that reviews PRs and reports review status:
 ```bash
 acpctl create agent \
   --name "pr-reviewer" \
-  --project-id my-project \
+  --project my-project \
   --prompt 'You are a PR review agent. Report your status using annotations via the patch_session_annotations MCP tool.
 
 ## Getting Accurate Timestamps

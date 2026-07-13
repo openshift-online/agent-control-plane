@@ -20,6 +20,7 @@ type SessionDao interface {
 	ActiveByAgentID(ctx context.Context, agentID string) (*Session, error)
 	ByScheduledSessionID(ctx context.Context, scheduledSessionID string) (SessionList, error)
 	ActiveByScheduledSessionID(ctx context.Context, scheduledSessionID string) (*Session, error)
+	PhaseCounts(ctx context.Context, projectId string) (map[string]int64, error)
 }
 
 var _ SessionDao = &sqlSessionDao{}
@@ -126,4 +127,30 @@ func (d *sqlSessionDao) ActiveByScheduledSessionID(ctx context.Context, schedule
 		return nil, err
 	}
 	return &session, nil
+}
+
+func (d *sqlSessionDao) PhaseCounts(ctx context.Context, projectId string) (map[string]int64, error) {
+	g2 := (*d.sessionFactory).New(ctx)
+
+	type phaseRow struct {
+		Phase string
+		Count int64
+	}
+	var rows []phaseRow
+
+	query := g2.Model(&Session{}).Select("phase, count(*) as count")
+	if projectId != "" {
+		query = query.Where("project_id = ?", projectId)
+	}
+	if err := query.Group("phase").Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	counts := make(map[string]int64, len(rows))
+	for _, r := range rows {
+		if r.Phase != "" {
+			counts[r.Phase] = r.Count
+		}
+	}
+	return counts, nil
 }

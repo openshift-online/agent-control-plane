@@ -1,17 +1,17 @@
 # MLflow Tracing
 
 **Date:** 2026-07-01
-**Last Updated:** 2026-07-07
-**Status:** Partially Implemented
+**Last Updated:** 2026-07-10
+**Status:** Implemented
 **Related:** `runner.spec.md` — runner lifecycle and observability; `credential-binding.spec.md` — credential resolution hierarchy; `openshell-sandbox-provisioning.spec.md` — gateway credential providers and provider type mapping; `agent-sandbox-config.spec.md` — agent sandbox provider declarations
 
 ---
 
 ## Purpose
 
-The platform MUST support MLflow tracing of Claude SDK interactions. When an `mlflow` credential is available (bound at project scope, or inherited from the global credential in the ACP deployment namespace), the runner MUST activate MLflow's Claude Agent SDK autologging, sending traces (prompts, responses, tool calls, token usage, latency) to the MLflow tracking server. This replaces the manual span-tracking approach in `mlflow_observability.py` with the SDK-native autologging integration (`mlflow.anthropic.autolog()`), which captures the full call graph automatically.
+The platform MUST support MLflow tracing for every runner session when deployment tracking configuration is present. `MLFLOW_TRACKING_URI` is the default-on signal. The runner MUST attempt generic MLflow autologging before any agent SDK client or subprocess-backed agent starts, and it MUST also attempt provider-native GenAI autologging for configured integrations.
 
-Tracing is enabled by default when all three MLflow environment variables are present in the runner's environment. `MLFLOW_TRACKING_TOKEN` is injected via the `mlflow` credential provider (gateway provider credentials). `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` are global platform defaults set as environment variables on the control-plane deployment and forwarded to sandboxes. Agent-level environment configuration may override the platform defaults. Platform maintainers are responsible for ensuring the `mlflow` credential is present either globally or at project scope, and that the control-plane deployment has the URI and experiment name configured. When the `MLFLOW_REQUIRED` environment variable is set to `true`, sandboxes MUST fail to start if any of the three MLflow environment variables are missing, indicating a configuration error.
+Tracing is enabled by default when `MLFLOW_TRACKING_URI` is present in the runner environment. `MLFLOW_TRACING_ENABLED=false` is the explicit kill switch. `MLFLOW_EXPERIMENT_NAME` is optional and defaults to `ambient-code-sessions`. `MLFLOW_TRACKING_TOKEN`, `MLFLOW_TRACKING_AUTH`, and `MLFLOW_WORKSPACE` remain supported for authenticated tracking servers, but missing auth MUST NOT block session startup. MLflow setup and export failures fail open: the runner logs a warning and continues the session, relying on MLflow asynchronous export retry/drop behavior rather than probing tracking-server health during startup.
 
 ---
 
@@ -50,52 +50,50 @@ The Dockerfile MUST accept an `INTERNAL_BUILD` build argument that defaults to `
 
 ### Requirement: MLflow Package Dependency
 
-The runner MUST depend on `mlflow>=3.10`. This is the minimum version shipped by Red Hat and the minimum required for the `mlflow.anthropic.autolog()` integration with the Claude Agent SDK.
+The runner MUST depend on `mlflow>=3.10`. This is the minimum version shipped by Red Hat and the minimum required for GenAI tracing integrations such as Anthropic and OpenAI autologging.
 
 #### Scenario: MLflow autolog available
 
 - GIVEN a runner environment with the `mlflow` package installed
-- WHEN Python executes `import mlflow; mlflow.anthropic.autolog()`
+- WHEN Python executes `import mlflow; mlflow.autolog(log_traces=True); mlflow.anthropic.autolog()`
 - THEN the call MUST succeed without `ImportError` or `AttributeError`
 
 ### Requirement: MLflow Credential Provider
 
-The platform SHALL support an `mlflow` credential provider. The credential secret provides authentication credentials (e.g., `MLFLOW_TRACKING_TOKEN`) which are injected as provider credentials on the OpenShell gateway. The `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` are NOT stored in the credential secret — they are global platform defaults configured as environment variables on the control-plane deployment and forwarded to sandboxes that have an MLflow provider.
+The platform SHALL support an `mlflow` credential provider. The credential secret provides authentication credentials (e.g., `MLFLOW_TRACKING_TOKEN`) which are injected as provider credentials on the OpenShell gateway only when an `mlflow` credential is explicitly bound to the project or agent. `MLFLOW_TRACKING_URI`, `MLFLOW_EXPERIMENT_NAME`, async trace logging settings, and autolog settings are global platform defaults configured as environment variables on the control-plane deployment and forwarded to standard runner pods and OpenShell sandboxes whenever `MLFLOW_TRACKING_URI` is configured.
 
 | Source | Environment Variable | Purpose |
 |---|---|---|
 | Control-plane env | `MLFLOW_TRACKING_URI` | URL of the MLflow tracking server (must be HTTPS, e.g., `https://mlflow.example.com`) |
 | Credential secret | `MLFLOW_TRACKING_TOKEN` | Authentication token for the MLflow tracking server |
-| Control-plane env | `MLFLOW_EXPERIMENT_NAME` | Name of the MLflow experiment to log traces to |
+| Control-plane env | `MLFLOW_EXPERIMENT_NAME` | Optional experiment name; runner default is `ambient-code-sessions` |
+| Control-plane env | `MLFLOW_CREDENTIAL_SECRET_NAME` | Optional source secret name for explicitly bound MLflow credentials; defaults to `mlflow` |
+| Control-plane env | `MLFLOW_CREDENTIAL_SECRET_NAMESPACE` | Optional source namespace for explicitly bound MLflow credentials; defaults to the control-plane runtime namespace |
+| Control-plane env | `MLFLOW_ENABLE_ASYNC_TRACE_LOGGING` | Optional async trace logging toggle; default forwarded value is `true` |
+| Control-plane env | `MLFLOW_AUTOLOG_EXCLUDE_FLAVORS` | Optional comma-separated generic autolog flavor exclusions |
+| Control-plane env | `MLFLOW_GENAI_AUTOLOG_INTEGRATIONS` | Optional comma-separated GenAI integrations; default forwarded value is `anthropic,openai` |
 
-The credential provider follows the existing credential binding hierarchy defined in `credential-binding.spec.md` — it can be bound at agent, project, or global scope. The platform MUST also support a global `mlflow` credential in the ACP deployment namespace. If no `mlflow` credential is bound in the tenant namespace, the platform MUST fall back to the global credential.
+The credential provider follows the existing credential binding hierarchy defined in `credential-binding.spec.md` — it can be bound at agent or project scope. The MLflow bearer token source may be materialized by Vault into the ACP deployment namespace, but it MUST NOT be injected into tenant sandboxes unless an `mlflow` credential binding authorizes that project or agent to use it.
 
-The control-plane reads `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` from its own process environment (set on the deployment). When a sandbox has an MLflow provider, the control-plane injects these values into the sandbox environment. Agent-level environment configuration (`agent.environment`) MAY override these defaults — agent environment takes precedence over platform defaults.
+The control-plane reads MLflow runtime env from its own process environment (set on the deployment). When `MLFLOW_TRACKING_URI` is set, the control-plane injects the MLflow runtime env into every standard runner pod and OpenShell sandbox. `MLFLOW_TRACKING_URI` is a platform environment variable set at deployment time. Agent-level environment configuration (`agent.environment`) MAY override non-platform MLflow defaults such as `MLFLOW_EXPERIMENT_NAME`, `MLFLOW_TRACING_ENABLED`, `MLFLOW_AUTOLOG_EXCLUDE_FLAVORS`, and `MLFLOW_GENAI_AUTOLOG_INTEGRATIONS`. Agent configuration MUST NOT override platform MLflow routing or authentication keys: `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_AUTH`, `MLFLOW_WORKSPACE`, or `MLFLOW_TRACKING_TOKEN`.
 
 #### Scenario: MLflow credential bound to project
 
 - GIVEN a user creates a credential with provider type `mlflow` containing `MLFLOW_TRACKING_TOKEN`
-- AND the control-plane deployment has `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` set
+- AND the control-plane deployment has `MLFLOW_TRACKING_URI` set
 - AND the user binds the credential to project P
 - WHEN a session starts in project P
 - THEN the runner pod MUST have `MLFLOW_TRACKING_TOKEN` set via the gateway provider credential
-- AND `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` MUST be set from the control-plane's environment
+- AND `MLFLOW_TRACKING_URI`, `MLFLOW_TRACING_ENABLED=true`, async trace logging settings, and autolog settings MUST be set from the control-plane's environment
 
-#### Scenario: Global credential fallback
-
-- GIVEN no `mlflow` credential is bound to project P
-- AND a global `mlflow` credential exists in the ACP deployment namespace
-- WHEN a session starts in project P
-- THEN the runner pod MUST inherit `MLFLOW_TRACKING_TOKEN` from the global credential
-- AND `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` MUST be set from the control-plane's environment
-
-#### Scenario: No MLflow credential at any scope
+#### Scenario: No MLflow credential binding
 
 - GIVEN no `mlflow` credential is bound to project P
-- AND no global `mlflow` credential exists in the ACP deployment namespace
+- AND a global MLflow credential source secret exists in the ACP deployment namespace
 - WHEN a session starts in project P
-- THEN the runner pod SHALL NOT have `MLFLOW_TRACKING_TOKEN`, `MLFLOW_TRACKING_URI`, or `MLFLOW_EXPERIMENT_NAME` in its environment
-- AND tracing SHALL remain disabled
+- THEN the runner pod SHALL NOT have `MLFLOW_TRACKING_TOKEN` in its environment
+- AND `MLFLOW_TRACKING_URI`, `MLFLOW_TRACING_ENABLED=true`, async trace logging settings, and autolog settings SHALL still be set from the control-plane environment
+- AND MLflow export errors SHALL NOT fail the session
 
 #### Scenario: Agent-level experiment name override
 
@@ -110,113 +108,118 @@ The control-plane reads `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` from 
 - GIVEN an `mlflow` credential is bound to a project
 - WHEN the control plane creates an OpenShell provider for this credential
 - THEN the provider type MUST be `generic`
-- AND the provider credentials MUST contain only the authentication keys from the secret (e.g., `MLFLOW_TRACKING_TOKEN`)
+- AND the provider credentials MUST contain only `MLFLOW_TRACKING_TOKEN` from the secret
 
-#### Scenario: Malformed MLFLOW_TRACKING_URI rejected at bind time
+#### Scenario: Malformed MLFLOW_TRACKING_URI rejected at startup
 
-- GIVEN a user creates a credential with provider type `mlflow`
-- AND the `MLFLOW_TRACKING_URI` value is empty, uses a non-HTTPS scheme (e.g., `http://`), or is otherwise malformed
-- WHEN the user attempts to bind the credential
-- THEN the API MUST return HTTP 400 with a descriptive error indicating the URI must be a valid HTTPS URL
+- GIVEN the control-plane deployment sets `MLFLOW_TRACKING_URI`
+- AND the value is relative, contains URL credentials, uses non-HTTPS for a non-loopback host, or is otherwise malformed
+- WHEN the control plane starts
+- THEN startup MUST fail with a descriptive error indicating the URI must be a valid HTTPS absolute URL without embedded credentials
 
 #### Scenario: MLFLOW_TRACKING_URI validated against domain allowlist
 
 - GIVEN the platform maintains a domain allowlist for MLflow tracking server endpoints
-- AND a user creates a credential with an `MLFLOW_TRACKING_URI` whose host does not appear in the allowlist
+- AND the control-plane deployment sets `MLFLOW_TRACKING_URI` whose host does not appear in the allowlist
 - WHEN the user attempts to bind the credential
 - THEN the API MUST return HTTP 400 with a descriptive error indicating the tracking server domain is not permitted
 
 ### Requirement: Conditional Tracing Activation
 
-The runner MUST activate MLflow Claude SDK autologging if and only if all three of the following environment variables are set to non-empty values:
+The runner MUST attempt MLflow tracing when `MLFLOW_TRACKING_URI` is set to a non-empty value, unless `MLFLOW_TRACING_ENABLED=false`. `OBSERVABILITY_BACKENDS` MAY include `mlflow`, but it MUST NOT be the only opt-in path.
 
-1. `MLFLOW_TRACKING_URI`
-2. `MLFLOW_TRACKING_TOKEN`
-3. `MLFLOW_EXPERIMENT_NAME`
+The runner MUST call generic MLflow autologging before any agent SDK client or subprocess-backed agent starts:
 
-When any of the three is missing or empty, tracing MUST be disabled.
+```python
+mlflow.autolog(
+    log_models=False,
+    log_datasets=True,
+    log_traces=True,
+    silent=False,
+    extra_tags={...},
+    exclude_flavors=...,
+)
+```
 
-The `MLFLOW_REQUIRED` environment variable serves as the enforcement toggle. When `MLFLOW_REQUIRED` is set to `true` (e.g., in staging/production environments), sandboxes MUST fail to start if any of the three MLflow environment variables are missing or empty, indicating an environment configuration error. When `MLFLOW_REQUIRED` is not set or is `false` (e.g., in development environments), missing variables simply disable tracing without blocking the session.
+The runner MUST attempt provider-native GenAI autologging for `MLFLOW_GENAI_AUTOLOG_INTEGRATIONS`, defaulting to `anthropic,openai`. Provider-specific activation failures MUST be logged and MUST NOT fail runner startup.
 
-#### Scenario: All three env vars present (standard) — tracing enabled
+#### Scenario: Tracking URI present — tracing enabled
 
-- GIVEN `MLFLOW_TRACKING_URI` is set to `https://mlflow.example.com` (a real URL, not an openshell resolve token)
-- AND `MLFLOW_TRACKING_TOKEN` is set to a non-empty value
-- AND `MLFLOW_EXPERIMENT_NAME` is set to `my-experiment`
+- GIVEN `MLFLOW_TRACKING_URI` is set to `https://mlflow.example.com`
 - WHEN the runner initializes the Claude SDK bridge
 - THEN the runner MUST call `mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)`
-- AND it MUST call `mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)`
-- AND it MUST call `mlflow.anthropic.autolog()` before creating the `ClaudeSDKClient`
-- AND all subsequent Claude SDK interactions MUST be automatically traced to the MLflow tracking server
-
-#### Scenario: OpenShell resolve tokens — deferred configuration
-
-- GIVEN `MLFLOW_TRACKING_URI` is set to a value prefixed with `openshell:resolve:env:` (an openshell lazy-resolve token)
-- AND `MLFLOW_TRACKING_TOKEN` is set to a non-empty value
-- AND `MLFLOW_EXPERIMENT_NAME` is set to a non-empty value
-- WHEN the runner initializes the Claude SDK bridge
-- THEN the runner MUST NOT call `mlflow.set_tracking_uri()` or `mlflow.set_experiment()` explicitly
-- AND the runner MUST defer tracking URI and experiment configuration to runtime environment resolution by the openshell supervisor (which intercepts `getenv()` at the C library level and returns real values)
-- AND the runner MUST still call `mlflow.anthropic.autolog()` before creating the `ClaudeSDKClient`
-- AND tracing MUST be enabled, relying on MLflow's native environment variable reading through supervisor-intercepted `getenv()`
+- AND it MUST call `mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME or "ambient-code-sessions")`
+- AND it MUST call generic `mlflow.autolog(log_models=False, log_datasets=True, log_traces=True, silent=False, ...)`
+- AND it MUST attempt `mlflow.anthropic.autolog()` and `mlflow.openai.autolog()` before creating the `ClaudeSDKClient`
+- AND ACP session, turn, and tool spans MUST remain the universal trace envelope for Claude, Codex, OpenCode, and CLI-based agents
 
 #### Scenario: Missing MLFLOW_TRACKING_URI — tracing disabled
 
 - GIVEN `MLFLOW_TRACKING_URI` is not set
-- AND `MLFLOW_TRACKING_TOKEN` is set
-- AND `MLFLOW_EXPERIMENT_NAME` is set
-- AND `MLFLOW_REQUIRED` is not set or is `false`
 - WHEN the runner initializes the Claude SDK bridge
-- THEN the runner MUST NOT call `mlflow.anthropic.autolog()`
+- THEN the runner MUST NOT call generic or provider-specific MLflow autologging
 - AND no traces MUST be sent to any MLflow server
 
-#### Scenario: Missing MLFLOW_TRACKING_TOKEN — tracing disabled
+#### Scenario: Explicit opt-out disables tracing
 
 - GIVEN `MLFLOW_TRACKING_URI` is set
-- AND `MLFLOW_TRACKING_TOKEN` is not set
-- AND `MLFLOW_EXPERIMENT_NAME` is set
-- AND `MLFLOW_REQUIRED` is not set or is `false`
+- AND `MLFLOW_TRACING_ENABLED=false`
 - WHEN the runner initializes the Claude SDK bridge
-- THEN the runner MUST NOT call `mlflow.anthropic.autolog()`
-
-#### Scenario: Missing MLFLOW_EXPERIMENT_NAME — tracing disabled
-
-- GIVEN `MLFLOW_TRACKING_URI` is set
-- AND `MLFLOW_TRACKING_TOKEN` is set
-- AND `MLFLOW_EXPERIMENT_NAME` is not set
-- AND `MLFLOW_REQUIRED` is not set or is `false`
-- WHEN the runner initializes the Claude SDK bridge
-- THEN the runner MUST NOT call `mlflow.anthropic.autolog()`
-
-#### Scenario: MLFLOW_REQUIRED enforces env var presence
-
-- GIVEN `MLFLOW_REQUIRED` is set to `true`
-- AND one or more of `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_TOKEN`, or `MLFLOW_EXPERIMENT_NAME` is missing or empty
-- WHEN the sandbox attempts to start
-- THEN the sandbox MUST fail to start
-- AND the error MUST indicate which MLflow environment variables are missing
-
-#### Scenario: MLFLOW_REQUIRED with all env vars present
-
-- GIVEN `MLFLOW_REQUIRED` is set to `true`
-- AND all three MLflow environment variables are set to non-empty values
-- WHEN the sandbox starts
-- THEN tracing MUST activate normally
+- THEN the runner MUST NOT call generic or provider-specific MLflow autologging
+- AND the session MUST continue normally
 
 #### Scenario: Tracing activation is best-effort (standard env)
 
-- GIVEN all three MLflow environment variables are set to real values (not openshell resolve tokens)
-- WHEN `mlflow.set_tracking_uri()`, `mlflow.set_experiment()`, or `mlflow.anthropic.autolog()` raises an exception (e.g., network unreachable, invalid URI)
+- GIVEN `MLFLOW_TRACKING_URI` is set
+- WHEN `mlflow.set_tracking_uri()`, `mlflow.set_experiment()`, generic `mlflow.autolog()`, or provider-specific autologging raises an exception
 - THEN the runner MUST log a warning
-- AND the runner MUST continue operating normally without tracing
 - AND the session MUST NOT fail due to a tracing initialization error
-- AND autologging MUST NOT be retried after initialization failure — tracing remains disabled for the lifetime of the session
+- AND no MLflow liveness probe or server health check may block pod or session startup
 
-#### Scenario: Autolog called before ClaudeSDKClient creation
+### Requirement: Fast-Fail DNS Pre-Check for Tracking Server
+
+Before calling any MLflow SDK initialization function (`set_tracking_uri`, `set_experiment`), the runner MUST perform a DNS resolution pre-check on the hostname extracted from `MLFLOW_TRACKING_URI`. The pre-check MUST complete within 5 seconds. If DNS resolution fails or times out, the runner MUST skip all MLflow initialization immediately rather than waiting for MLflow's internal HTTP timeout (default: 120 seconds with 7 retries and exponential backoff).
+
+The pre-check result MUST be cached for the lifetime of the process so that subsequent initialization paths (e.g., `MLflowSessionTracer.initialize` after `activate_mlflow_autologging`) return instantly without repeating the DNS lookup.
+
+`MLFLOW_TRACKING_URI` is a platform environment variable that SHALL always contain a valid URI. This requirement does not apply to non-network URIs (file paths, SQLite).
+
+#### Scenario: Unresolvable hostname — fast skip
+
+- GIVEN `MLFLOW_TRACKING_URI` is set to `https://nonexistent.example.invalid:443`
+- AND the hostname does not resolve in DNS
+- WHEN the runner initializes the Claude SDK bridge
+- THEN the DNS pre-check MUST fail within 5 seconds
+- AND the runner MUST log a warning indicating DNS resolution failed for the tracking URI hostname
+- AND the runner MUST NOT call `mlflow.set_tracking_uri()` or `mlflow.set_experiment()`
+- AND the session MUST proceed without MLflow tracing
+
+#### Scenario: Resolvable hostname — normal initialization
+
+- GIVEN `MLFLOW_TRACKING_URI` is set
+- AND the hostname resolves in DNS
+- WHEN the runner initializes the Claude SDK bridge
+- THEN the DNS pre-check MUST succeed
+- AND normal MLflow initialization MUST proceed
+
+#### Scenario: Cached pre-check result
+
+- GIVEN the DNS pre-check has already been performed for a given tracking URI
+- WHEN a second initialization path invokes the pre-check for the same URI
+- THEN the cached result MUST be returned immediately without repeating the DNS lookup
+
+#### Scenario: Non-network URIs bypass pre-check
+
+- GIVEN `MLFLOW_TRACKING_URI` is set to a local path (e.g., `file:///tmp/mlruns` or `sqlite:///mlflow.db`)
+- WHEN the runner initializes
+- THEN the DNS pre-check MUST NOT be performed
+- AND normal MLflow initialization MUST proceed
+
+#### Scenario: Autolog called before agent client creation
 
 - GIVEN tracing activation conditions are met
 - WHEN the runner sets up the Claude SDK bridge
-- THEN `mlflow.anthropic.autolog()` MUST be called before the `ClaudeSDKClient` is instantiated
+- THEN generic and provider-specific MLflow autologging MUST be attempted before the `ClaudeSDKClient` is instantiated
 - AND this ordering is required because MLflow patches the SDK at autolog time — calling it after client creation results in untraced interactions
 
 ### Requirement: Tracing Token Security
@@ -264,15 +267,15 @@ When operating in gateway mode with MLflow tracing enabled, the sandbox OPA netw
 
 | Consumer | Current behavior | Required change |
 |----------|-----------------|-----------------|
-| `mlflow_observability.py` | Manual span tracking using `mlflow.start_span()` for turn/tool boundaries; activated by `OBSERVABILITY_BACKENDS=mlflow` + `MLFLOW_TRACING_ENABLED=true` | The autologging activation (`mlflow.anthropic.autolog()`) replaces the manual span-tracking approach. Autologging traces Claude SDK calls at the SDK level, capturing the full call graph automatically |
-| `observability_config.py` | Controls MLflow backend via `OBSERVABILITY_BACKENDS` env var and `MLFLOW_TRACING_ENABLED` flag | No change — the new autologging activation is independent of the `OBSERVABILITY_BACKENDS` config. It is gated solely on the three MLflow credential env vars |
+| `mlflow_observability.py` | Manual span tracking using `mlflow.start_span()` for turn/tool boundaries | Keep ACP session/turn/tool spans as the universal trace envelope; activate by default when `MLFLOW_TRACKING_URI` is present unless `MLFLOW_TRACING_ENABLED=false` |
+| `observability_config.py` | Controls MLflow backend via `OBSERVABILITY_BACKENDS` env var and `MLFLOW_TRACING_ENABLED` flag | Update so `MLFLOW_TRACKING_URI` is the default-on path; `OBSERVABILITY_BACKENDS` remains supported but is not required |
 | `Dockerfile.openshell` | No Red Hat IT Root CA | Add `INTERNAL_BUILD` build arg (default `true`); when `true`, fetch CA certificate and update trust store; fail build if fetch fails |
 | `pyproject.toml` | `mlflow[kubernetes]==3.13.0` in `mlflow-observability` extra | Verify `mlflow>=3.10` constraint is satisfied (current 3.13.0 already satisfies) |
 | `openshell-sandbox-provisioning.spec.md` § Provider type mapping | Maps `jira`, `google`, `kubeconfig`, and unknown types to `generic` | Add `mlflow` → `generic` to the mapping table |
 | `agent-sandbox-config.spec.md` § Provider type mapping | Maps credential types to OpenShell provider types | Add `mlflow` → `generic` to the mapping table |
 | Control plane `provider_mapping.go` | Maps ambient credential providers to OpenShell provider types; contained `MLflowNetworkPolicy()` for dynamic OPA policy generation | Add `mlflow` → `generic` entry (follows existing pattern for `jira`, `google`, `kubeconfig`); remove `MLflowNetworkPolicy()` function (superseded by static `policy.yaml` entry); remove `MLflowSandboxEnvVars()` and `MLflowProviderCredentials()` — URI and experiment name now come from CP config, not the secret |
 | OPA policy (`policy.yaml`) | Network policy sections for known endpoints | Add `_mlflow_rh` static entry with the MLflow tracking server endpoint; uses `_` prefix convention for platform-managed policies (matching `_acp_internal`) |
-| `mlflow_observability.py` | Manual span tracking using `mlflow.start_span()` | Add openshell resolve token detection — when `MLFLOW_TRACKING_URI` starts with `openshell:resolve:env:`, skip explicit `mlflow.set_tracking_uri()` / `mlflow.set_experiment()` and defer to runtime env resolution by the openshell supervisor |
+| `mlflow_observability.py` | Manual span tracking using `mlflow.start_span()` | Add DNS pre-check before `mlflow.set_tracking_uri()` / `mlflow.set_experiment()` to avoid blocking on unresolvable hosts |
 | Control plane `config.go` | No MLflow config fields | Add `MLflowTrackingURI` and `MLflowExperimentName` config fields read from `MLFLOW_TRACKING_URI` and `MLFLOW_EXPERIMENT_NAME` env vars; these are the global defaults forwarded to sandboxes that have an MLflow provider |
 
 ### Specs requiring amendment

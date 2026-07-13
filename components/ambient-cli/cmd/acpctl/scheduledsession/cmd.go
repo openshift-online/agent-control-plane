@@ -43,7 +43,7 @@ func resolveProject(projectID string) (string, error) {
 	}
 	p := cfg.GetProject()
 	if p == "" {
-		return "", fmt.Errorf("no project set; use --project-id or run 'acpctl config set project <name>'")
+		return "", fmt.Errorf("no project set; use --project or run 'acpctl config set project <name>'")
 	}
 	return p, nil
 }
@@ -77,7 +77,7 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List scheduled sessions in a project",
 	Example: `  acpctl scheduled-session list
-  acpctl scheduled-session list --project-id <id> -o json`,
+  acpctl scheduled-session list --project <id> -o json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(listArgs.projectID)
 		if err != nil {
@@ -130,7 +130,7 @@ var getCmd = &cobra.Command{
 	Short: "Get a specific scheduled session",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl scheduled-session get my-schedule
-  acpctl scheduled-session get <id> --project-id <id> -o json`,
+  acpctl scheduled-session get <id> --project <id> -o json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(getArgs.projectID)
 		if err != nil {
@@ -365,22 +365,22 @@ var updateCmd = &cobra.Command{
 
 var deleteArgs struct {
 	projectID string
-	confirm   bool
+	yes       bool
 }
 
 var deleteCmd = &cobra.Command{
 	Use:   "delete <name-or-id>",
 	Short: "Delete a scheduled session",
 	Args:  cobra.ExactArgs(1),
-	Example: `  acpctl scheduled-session delete my-schedule --confirm
-  acpctl scheduled-session delete <id> --project-id <id> --confirm`,
+	Example: `  acpctl scheduled-session delete my-schedule -y
+  acpctl scheduled-session delete <id> --project <id> --yes`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(deleteArgs.projectID)
 		if err != nil {
 			return err
 		}
-		if !deleteArgs.confirm {
-			return fmt.Errorf("add --confirm to delete scheduled-session/%s", args[0])
+		if !deleteArgs.yes {
+			return fmt.Errorf("interactive confirmation required; use --yes/-y to skip")
 		}
 
 		client, err := connection.NewClientFromConfig()
@@ -423,7 +423,7 @@ var suspendCmd = &cobra.Command{
 	Short: "Suspend a scheduled session (disable firing)",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl scheduled-session suspend my-schedule
-  acpctl scheduled-session suspend <id> --project-id <id>`,
+  acpctl scheduled-session suspend <id> --project <id>`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(suspendArgs.projectID)
 		if err != nil {
@@ -471,7 +471,7 @@ var resumeCmd = &cobra.Command{
 	Short: "Resume a suspended scheduled session",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl scheduled-session resume my-schedule
-  acpctl scheduled-session resume <id> --project-id <id>`,
+  acpctl scheduled-session resume <id> --project <id>`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(resumeArgs.projectID)
 		if err != nil {
@@ -519,7 +519,7 @@ var triggerCmd = &cobra.Command{
 	Short: "Manually trigger a scheduled session now",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl scheduled-session trigger my-schedule
-  acpctl scheduled-session trigger <id> --project-id <id>`,
+  acpctl scheduled-session trigger <id> --project <id>`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(triggerArgs.projectID)
 		if err != nil {
@@ -568,7 +568,7 @@ var runsCmd = &cobra.Command{
 	Short: "List session runs for a scheduled session",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl scheduled-session runs my-schedule
-  acpctl scheduled-session runs <id> --project-id <id> -o json`,
+  acpctl scheduled-session runs <id> --project <id> -o json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(runsArgs.projectID)
 		if err != nil {
@@ -624,14 +624,14 @@ func init() {
 	Cmd.AddCommand(triggerCmd)
 	Cmd.AddCommand(runsCmd)
 
-	listCmd.Flags().StringVar(&listArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	listCmd.Flags().StringVar(&listArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	listCmd.Flags().StringVarP(&listArgs.outputFormat, "output", "o", "", "Output format: json")
 	listCmd.Flags().IntVar(&listArgs.limit, "limit", 100, "Maximum number of items to return")
 
-	getCmd.Flags().StringVar(&getArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	getCmd.Flags().StringVar(&getArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	getCmd.Flags().StringVarP(&getArgs.outputFormat, "output", "o", "", "Output format: json")
 
-	createCmd.Flags().StringVar(&createArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	createCmd.Flags().StringVar(&createArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	createCmd.Flags().StringVar(&createArgs.name, "name", "", "Scheduled session name (required)")
 	createCmd.Flags().StringVar(&createArgs.agentID, "agent-id", "", "Agent ID to run")
 	createCmd.Flags().StringVar(&createArgs.schedule, "schedule", "", "Cron expression, e.g. \"0 9 * * 1-5\" (required)")
@@ -644,7 +644,7 @@ func init() {
 	createCmd.Flags().BoolVar(&createArgs.stopOnRunFinished, "stop-on-run-finished", false, "Stop session when run finishes")
 	createCmd.Flags().StringVar(&createArgs.runnerType, "runner-type", "", "Runner type (e.g. claude-code)")
 
-	updateCmd.Flags().StringVar(&updateArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	updateCmd.Flags().StringVar(&updateArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	updateCmd.Flags().StringVar(&updateArgs.name, "name", "", "New name")
 	updateCmd.Flags().StringVar(&updateArgs.agentID, "agent-id", "", "New agent ID")
 	updateCmd.Flags().StringVar(&updateArgs.schedule, "schedule", "", "New cron expression")
@@ -656,14 +656,14 @@ func init() {
 	updateCmd.Flags().BoolVar(&updateArgs.stopOnRunFinished, "stop-on-run-finished", false, "Stop session when run finishes")
 	updateCmd.Flags().StringVar(&updateArgs.runnerType, "runner-type", "", "New runner type")
 
-	deleteCmd.Flags().StringVar(&deleteArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
-	deleteCmd.Flags().BoolVar(&deleteArgs.confirm, "confirm", false, "Confirm deletion")
+	deleteCmd.Flags().StringVar(&deleteArgs.projectID, "project", "", "Project ID (defaults to configured project)")
+	deleteCmd.Flags().BoolVarP(&deleteArgs.yes, "yes", "y", false, "Skip confirmation prompt")
 
-	suspendCmd.Flags().StringVar(&suspendArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
-	resumeCmd.Flags().StringVar(&resumeArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
-	triggerCmd.Flags().StringVar(&triggerArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	suspendCmd.Flags().StringVar(&suspendArgs.projectID, "project", "", "Project ID (defaults to configured project)")
+	resumeCmd.Flags().StringVar(&resumeArgs.projectID, "project", "", "Project ID (defaults to configured project)")
+	triggerCmd.Flags().StringVar(&triggerArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 
-	runsCmd.Flags().StringVar(&runsArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	runsCmd.Flags().StringVar(&runsArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	runsCmd.Flags().StringVarP(&runsArgs.outputFormat, "output", "o", "", "Output format: json")
 	runsCmd.Flags().IntVar(&runsArgs.limit, "limit", 100, "Maximum number of items to return")
 }

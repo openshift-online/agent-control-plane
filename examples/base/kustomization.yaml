@@ -1,8 +1,10 @@
 kind: Kustomization
 resources:
   - agents/hello-world.yaml
+  - agents/repo-clone-workspace.yaml
   - agents/security-reviewer.yaml
   - agents/jira-simple-whoami.yaml
+  - agents/jira-simple-whoami-with-skill-payload.yaml
   - agents/pr-reviewer.yaml
   - agents/jira-issue-categorizer.yaml
   - providers/vertex.yaml

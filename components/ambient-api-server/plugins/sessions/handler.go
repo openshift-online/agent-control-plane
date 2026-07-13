@@ -251,6 +251,34 @@ func (h sessionHandler) Stop(w http.ResponseWriter, r *http.Request) {
 	handlers.HandleGet(w, r, cfg)
 }
 
+func (h sessionHandler) PhaseCounts(w http.ResponseWriter, r *http.Request) {
+	cfg := &handlers.HandlerConfig{
+		Action: func() (interface{}, *errors.ServiceError) {
+			ctx := r.Context()
+
+			listArgs := services.NewListArguments(r.URL.Query())
+			if err := common.ApplyProjectScope(r, listArgs); err != nil {
+				return nil, err
+			}
+			if !pkgrbac.ApplyListFilter(ctx, listArgs, "project_id", false) {
+				return map[string]int64{}, nil
+			}
+
+			projectId := r.URL.Query().Get("project_id")
+			if projectId == "" {
+				projectId = r.Header.Get("X-Ambient-Project")
+			}
+
+			counts, svcErr := h.session.PhaseCounts(ctx, projectId)
+			if svcErr != nil {
+				return nil, svcErr
+			}
+			return counts, nil
+		},
+	}
+	handlers.HandleGet(w, r, cfg)
+}
+
 func (h sessionHandler) List(w http.ResponseWriter, r *http.Request) {
 	cfg := &handlers.HandlerConfig{
 		Action: func() (interface{}, *errors.ServiceError) {

@@ -101,7 +101,7 @@ acpctl create session --name refactor-auth \
 
 # Create an agent
 acpctl agent create \
-  --project-id my-project \
+  --project my-project \
   --name my-agent \
   --prompt "You are a GitHub automation agent."
 
@@ -138,11 +138,11 @@ Supported `kind` values: `Credential` (additional kinds vary by deployment).
 ```bash
 # Start a session for a named agent with an initial prompt
 acpctl agent start <agent-name> \
-  --project-id <project-name> \
+  --project <project-name> \
   --prompt "Open a test issue in org/repo"
 
 # Start and capture the session ID
-SESSION_JSON=$(acpctl agent start my-agent --project-id my-project --prompt "..." -o json)
+SESSION_JSON=$(acpctl agent start my-agent --project my-project --prompt "..." -o json)
 SESSION_ID=$(echo "$SESSION_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 ```
 
@@ -191,7 +191,7 @@ acpctl describe project <project-id>
 acpctl delete session <session-id> -y
 acpctl delete project <project-id> -y
 acpctl delete project-settings <id>
-acpctl credential delete <credential-id> --confirm
+acpctl credential delete <credential-id> -y
 ```
 
 ### 11. Log out
@@ -214,7 +214,7 @@ acpctl get credentials
 GITHUB_TOKEN="ghp_..." acpctl apply -f credential.yaml
 
 # Delete
-acpctl credential delete <credential-id> --confirm
+acpctl credential delete <credential-id> -y
 ```
 
 ### Role bindings

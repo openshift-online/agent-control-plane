@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { Session, SessionList, ListOptions } from 'ambient-sdk'
 import type { SessionsPort } from '@/ports/sessions'
 import { createSessionsAdapter } from '../sdk-sessions'
@@ -190,5 +190,37 @@ describe('sdk-sessions adapter', () => {
 
     expect(capturedOpts?.page).toBe(2)
     expect(capturedOpts?.size).toBe(10)
+  })
+
+  it('phaseCounts() fetches counts from server-side endpoint', async () => {
+    const serverCounts = { Running: 5, Failed: 2, Completed: 10 }
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(serverCounts), { status: 200 })
+    )
+    const fakeAPI = createFakeSessionAPI({})
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const adapter: SessionsPort = createSessionsAdapter(fakeAPI as any)
+
+    const counts = await adapter.phaseCounts('proj-123')
+
+    expect(counts).toEqual({ Running: 5, Failed: 2, Completed: 10 })
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    expect(fetchSpy.mock.calls[0][0]).toContain('/api/ambient/v1/sessions/phase_counts')
+    expect(fetchSpy.mock.calls[0][0]).toContain('project_id=proj-123')
+    fetchSpy.mockRestore()
+  })
+
+  it('phaseCounts() returns empty object on server error', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('error', { status: 500 })
+    )
+    const fakeAPI = createFakeSessionAPI({})
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const adapter: SessionsPort = createSessionsAdapter(fakeAPI as any)
+
+    const counts = await adapter.phaseCounts('proj-123')
+
+    expect(counts).toEqual({})
+    fetchSpy.mockRestore()
   })
 })

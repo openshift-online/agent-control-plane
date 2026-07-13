@@ -15,7 +15,7 @@ repos:
         args: ['--maxkb=1000']
       - id: check-merge-conflict
       - id: detect-private-key
-        exclude: 'components/manifests/overlays/production/github-app-secret\.yaml'
+        exclude: 'components/manifests/overlays/production/github-app-secret\.yaml|\.github/workflows/test-local-dev\.yml|\.github/workflows/vteam-catalog-lab-e2e\.yml|provider_mapping_test\.go'
 
   # ── Python (ruff) ────────────────────────────────────────────────────
   - repo: https://github.com/astral-sh/ruff-pre-commit

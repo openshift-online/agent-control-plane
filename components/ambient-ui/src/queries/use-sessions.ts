@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { SessionsPort } from '@/ports/sessions'
+import type { SessionsPort, SessionPhaseCounts } from '@/ports/sessions'
 import type { DomainSession, DomainSessionCreateRequest, ListParams, SessionPhase } from '@/domain/types'
 import { createSessionsAdapter } from '@/adapters/sdk-sessions'
 import { queryKeys } from './query-keys'
@@ -79,6 +79,20 @@ export function useAllSessions(
     queryKey: queryKeys.sessions.listAll(),
     queryFn: () => adapter.listAll({ size: 200 }),
     refetchInterval: 10_000,
+  })
+}
+
+export function useSessionPhaseCounts(
+  projectId: string,
+  port?: SessionsPort,
+) {
+  const adapter = port ?? getDefaultPort()
+  return useQuery({
+    queryKey: queryKeys.sessions.phaseCounts(projectId),
+    queryFn: () => adapter.phaseCounts(projectId),
+    enabled: !!projectId,
+    staleTime: 4000,
+    refetchInterval: 5000,
   })
 }
 

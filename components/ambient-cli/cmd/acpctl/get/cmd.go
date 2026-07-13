@@ -46,7 +46,7 @@ Valid resource types:
 `,
 	Args:    cobra.RangeArgs(1, 2),
 	RunE:    run,
-	Example: "  acpctl get sessions\n  acpctl get session my-session-id\n  acpctl get projects -o json\n  acpctl get agents\n  acpctl get providers\n  acpctl get policies\n  acpctl get project-agents --project-id <id>\n  acpctl get sessions -w  # Watch for real-time session changes",
+	Example: "  acpctl get sessions\n  acpctl get session my-session-id\n  acpctl get projects -o json\n  acpctl get agents\n  acpctl get providers\n  acpctl get policies\n  acpctl get project-agents --project <id>\n  acpctl get sessions -w  # Watch for real-time session changes",
 }
 
 var projectAgentArgs struct {
@@ -59,8 +59,8 @@ func init() {
 	Cmd.Flags().IntVar(&args.limit, "limit", 100, "Maximum number of items to return")
 	Cmd.Flags().BoolVarP(&args.watch, "watch", "w", false, "Watch for real-time changes (sessions only)")
 	Cmd.Flags().DurationVar(&args.watchTimeout, "watch-timeout", 30*time.Minute, "Timeout for watch mode (e.g. 1h, 10m)")
-	Cmd.Flags().StringVar(&projectAgentArgs.projectID, "project-id", "", "Project ID (required for project-agents)")
-	Cmd.Flags().StringVar(&projectAgentArgs.paID, "project-agent", "", "Filter sessions by project-agent ID (requires --project-id)")
+	Cmd.Flags().StringVar(&projectAgentArgs.projectID, "project", "", "Project ID (required for project-agents)")
+	Cmd.Flags().StringVar(&projectAgentArgs.paID, "project-agent", "", "Filter sessions by project-agent ID (requires --project)")
 }
 
 func run(cmd *cobra.Command, cmdArgs []string) error {
@@ -110,7 +110,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	case "sessions":
 		if projectAgentArgs.paID != "" {
 			if projectAgentArgs.projectID == "" {
-				return fmt.Errorf("--project-id is required when using --project-agent")
+				return fmt.Errorf("--project is required when using --project-agent")
 			}
 			return getSessionsByAgent(ctx, client, printer, projectAgentArgs.projectID, projectAgentArgs.paID)
 		}
@@ -119,7 +119,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return getProjects(ctx, client, printer, name)
 	case "project-agents":
 		if projectAgentArgs.projectID == "" {
-			return fmt.Errorf("--project-id is required for project-agents")
+			return fmt.Errorf("--project is required for project-agents")
 		}
 		return getAgentsByProject(ctx, client, printer, projectAgentArgs.projectID, name)
 	case "project-settings":
@@ -132,7 +132,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 			pid = cfg.GetProject()
 		}
 		if pid == "" {
-			return fmt.Errorf("no project set; use --project-id or run 'acpctl config set project <name>'")
+			return fmt.Errorf("no project set; use --project or run 'acpctl config set project <name>'")
 		}
 		return getAgentsByProject(ctx, client, printer, pid, name)
 	case "providers":

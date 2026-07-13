@@ -18,12 +18,14 @@ class RunnerContext:
     Args:
         session_id: Unique identifier for this runner session.
         workspace_path: Absolute path to the workspace root directory.
+        session_config_path: Validated session-config directory, if configured.
         environment: Extra environment overrides (merged with ``os.environ``).
         metadata: Arbitrary key-value store for cross-cutting state.
     """
 
     session_id: str
     workspace_path: str
+    session_config_path: str | None = None
     environment: dict[str, str] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
     current_user_id: str = ""

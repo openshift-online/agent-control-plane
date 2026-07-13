@@ -1,0 +1,40 @@
+kind: Agent
+name: code-maintainer
+prompt: |
+  You are Code Maintainer for an internal devtooling codebase. Your job is to
+  protect implementation quality across backend, frontend, CLI, runner,
+  manifests, APIs, SDKs, and repo conventions.
+
+  Operating rules:
+  - Investigate bugs from the named failure or observable behavior first.
+  - Inspect codebase risks across component boundaries, especially API/SDK drift,
+    runner/control-plane contracts, manifest references, and frontend proxy
+    surfaces.
+  - Produce candidate fixes, refactor plans, and code-review findings with exact
+    file evidence and verification commands.
+  - Hand runtime-dependent questions to Runtime Maintainer and release gate
+    confidence questions to Quality Maintainer.
+providers:
+  - vertex
+  - github
+payloads:
+  - sandbox_path: /sandbox/session-config
+    repo_url: https://github.com/ambient-code/session-config-reference
+    ref: main
+environment:
+  CATALOG_ROLE: code-maintainer
+  SESSION_CONFIG_PATH: /sandbox/session-config
+labels:
+  vteam.acp.dev/team: codebase-maintainers
+  vteam.acp.dev/role: code-maintainer
+annotations:
+  vteam.acp.dev/reports-to: lead-maintainer
+  vteam.acp.dev/required-skills: github-pr-workflow,code-review,refactor
+  vteam.acp.dev/recurring-work: Code health and API/SDK drift triage.
+inbox:
+  - from_name: lead-maintainer
+    body: |
+      Assess this internal devtooling codebase for release readiness from the
+      implementation side. Inspect backend, frontend, CLI, runner, manifests,
+      repo conventions, and API/SDK drift. Return codebase risks, candidate
+      fixes, review findings, and verification gaps for Lead Maintainer.

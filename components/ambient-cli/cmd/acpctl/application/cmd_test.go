@@ -336,7 +336,7 @@ func TestDeleteApplication_Success(t *testing.T) {
 	})
 
 	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "delete", "fleet-prod", "--confirm")
+	result := testhelper.Run(t, Cmd, "delete", "fleet-prod", "--yes")
 	if result.Err != nil {
 		t.Fatalf("unexpected error: %v\nstdout: %s\nstderr: %s", result.Err, result.Stdout, result.Stderr)
 	}
@@ -350,10 +350,10 @@ func TestDeleteApplication_MissingConfirm(t *testing.T) {
 	testhelper.Configure(t, srv.URL)
 	result := testhelper.Run(t, Cmd, "delete", "fleet-prod")
 	if result.Err == nil {
-		t.Fatal("expected error for missing --confirm")
+		t.Fatal("expected error for missing --yes")
 	}
-	if !strings.Contains(result.Err.Error(), "--confirm") {
-		t.Errorf("expected '--confirm' in error, got: %v", result.Err)
+	if !strings.Contains(result.Err.Error(), "--yes/-y") {
+		t.Errorf("expected '--yes/-y' in error, got: %v", result.Err)
 	}
 }
 

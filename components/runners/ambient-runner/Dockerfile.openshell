@@ -58,14 +58,15 @@ RUN dnf install -y --allowerasing --nodocs \
         nano \
     && dnf clean all
 
+# TODO: separate runner images for each of these
 # Global npm packages (multi-agent sandbox toolset: alternative coding agents
 # available alongside Claude Code for user selection via Agent spec)
-RUN npm install -g \
-        tar@7.5.11 \
-        @hono/node-server@1.19.11 \
-        opencode-ai@1.2.18 \
-        @openai/codex@0.117.0 \
-        @github/copilot@1.0.16
+#RUN npm install -g \
+        #tar@7.5.11 \
+        #@hono/node-server@1.19.11 \
+        #opencode-ai@1.2.18 \
+        #@openai/codex@0.117.0 \
+        #@github/copilot@1.0.16
 
 # GitHub CLI (pinned binary download with pre-committed SHA256 checksums)
 ARG GH_VERSION=2.74.0
@@ -81,7 +82,7 @@ RUN TARBALL="gh_${GH_VERSION}_linux_${TARGETARCH}.tar.gz" && \
     rm -f "/tmp/${TARBALL}"
 
 # uv (Python package/project manager)
-COPY --from=ghcr.io/astral-sh/uv@sha256:3d868e555f8f1dbc324afa005066cd11e1053fc4743b9808ca8025283e65efa5 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv@sha256:0f36cb9361a3346885ca3677e3767016687b5a170c1a6b88465ec14aefec90aa /uv /usr/local/bin/uv
 ENV UV_PYTHON_INSTALL_DIR="/sandbox/.uv/python"
 RUN uv python install 3.14.3 && \
     ln -s $(uv python find 3.14.3) /usr/local/bin/python3 && \
@@ -118,7 +119,7 @@ RUN mkdir -p /sandbox/.claude/skills /sandbox/.agents/skills && \
 # ------------------------------------------------------------
 # Claude Code CLI (pinned npm package instead of curl|bash)
 # ------------------------------------------------------------
-ARG CLAUDE_CODE_VERSION=2.1.195
+ARG CLAUDE_CODE_VERSION=2.1.205
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     && mkdir -p /opt/claude/bin \
     && ln -sf /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe /opt/claude/bin/claude \
@@ -149,6 +150,17 @@ RUN uv pip install --python /sandbox/.venv/bin/python '/runner/ambient-runner[al
 
 RUN mkdir -p /sandbox/workspace/artifacts /sandbox/workspace/file-uploads && \
     chown -R sandbox:sandbox /sandbox/workspace
+
+# OpenShift compatibility: the sandbox runs under the restricted-v2 SCC with an
+# arbitrarily-assigned UID that is always a member of GID 0 (the root group).
+# Every directory and file the agent writes to under $HOME (/sandbox) must
+# therefore be owned by group 0 and be group-writable. Without this, repo
+# payload extraction into /sandbox/* (e.g. session-config) fails with
+# "tar: ...: Cannot mkdir: Permission denied" because the arbitrary UID owns
+# none of the pre-created sandbox-user dirs. This mirrors the "chmod -R g=u"
+# treatment in the file-mode Dockerfile. See:
+# https://docs.redhat.com/en/documentation/openshift_container_platform/latest/html/images/creating-images#use-uid
+RUN chgrp -R 0 /sandbox && chmod -R g=u /sandbox
 
 ENV RUNNER_TYPE=claude-agent-sdk \
     HOME=/sandbox \

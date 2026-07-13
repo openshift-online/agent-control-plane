@@ -34,23 +34,23 @@ func init() {
 	Cmd.AddCommand(markReadCmd)
 	Cmd.AddCommand(deleteCmd)
 
-	listCmd.Flags().StringVar(&listArgs.projectID, "project-id", "", "Project ID (required)")
+	listCmd.Flags().StringVar(&listArgs.projectID, "project", "", "Project ID (required)")
 	listCmd.Flags().StringVar(&listArgs.paID, "pa-id", "", "Project-agent ID (required)")
 	listCmd.Flags().StringVarP(&listArgs.outputFormat, "output", "o", "", "Output format: json|wide")
 	listCmd.Flags().IntVar(&listArgs.limit, "limit", 100, "Maximum number of items to return")
 
-	sendCmd.Flags().StringVar(&sendArgs.projectID, "project-id", "", "Project ID (required)")
+	sendCmd.Flags().StringVar(&sendArgs.projectID, "project", "", "Project ID (required)")
 	sendCmd.Flags().StringVar(&sendArgs.paID, "pa-id", "", "Project-agent ID (required)")
 	sendCmd.Flags().StringVar(&sendArgs.body, "body", "", "Message body (required)")
 	sendCmd.Flags().StringVar(&sendArgs.fromName, "from-name", "", "Sender display name")
 	sendCmd.Flags().StringVar(&sendArgs.fromPAID, "from-pa-id", "", "Sender project-agent ID")
 	sendCmd.Flags().StringVarP(&sendArgs.outputFormat, "output", "o", "", "Output format: json")
 
-	markReadCmd.Flags().StringVar(&markReadArgs.projectID, "project-id", "", "Project ID (required)")
+	markReadCmd.Flags().StringVar(&markReadArgs.projectID, "project", "", "Project ID (required)")
 	markReadCmd.Flags().StringVar(&markReadArgs.paID, "pa-id", "", "Project-agent ID (required)")
 	markReadCmd.Flags().StringVar(&markReadArgs.msgID, "msg-id", "", "Message ID (required)")
 
-	deleteCmd.Flags().StringVar(&deleteArgs.projectID, "project-id", "", "Project ID (required)")
+	deleteCmd.Flags().StringVar(&deleteArgs.projectID, "project", "", "Project ID (required)")
 	deleteCmd.Flags().StringVar(&deleteArgs.paID, "pa-id", "", "Project-agent ID (required)")
 	deleteCmd.Flags().StringVar(&deleteArgs.msgID, "msg-id", "", "Message ID (required)")
 }
@@ -65,11 +65,11 @@ var listArgs struct {
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List inbox messages for a project-agent",
-	Example: `  acpctl inbox list --project-id <id> --pa-id <id>
-  acpctl inbox list --project-id <id> --pa-id <id> -o json`,
+	Example: `  acpctl inbox list --project <id> --pa-id <id>
+  acpctl inbox list --project <id> --pa-id <id> -o json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if listArgs.projectID == "" {
-			return fmt.Errorf("--project-id is required")
+			return fmt.Errorf("--project is required")
 		}
 		if listArgs.paID == "" {
 			return fmt.Errorf("--pa-id is required")
@@ -120,11 +120,11 @@ var sendArgs struct {
 var sendCmd = &cobra.Command{
 	Use:   "send",
 	Short: "Send a message to a project-agent's inbox",
-	Example: `  acpctl inbox send --project-id <id> --pa-id <id> --body "please review PR #42"
-  acpctl inbox send --project-id <id> --pa-id <id> --body "task complete" --from-name "agent-alpha"`,
+	Example: `  acpctl inbox send --project <id> --pa-id <id> --body "please review PR #42"
+  acpctl inbox send --project <id> --pa-id <id> --body "task complete" --from-name "agent-alpha"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if sendArgs.projectID == "" {
-			return fmt.Errorf("--project-id is required")
+			return fmt.Errorf("--project is required")
 		}
 		if sendArgs.paID == "" {
 			return fmt.Errorf("--pa-id is required")
@@ -190,10 +190,10 @@ var markReadArgs struct {
 var markReadCmd = &cobra.Command{
 	Use:     "mark-read",
 	Short:   "Mark an inbox message as read",
-	Example: `  acpctl inbox mark-read --project-id <id> --pa-id <id> --msg-id <id>`,
+	Example: `  acpctl inbox mark-read --project <id> --pa-id <id> --msg-id <id>`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if markReadArgs.projectID == "" {
-			return fmt.Errorf("--project-id is required")
+			return fmt.Errorf("--project is required")
 		}
 		if markReadArgs.paID == "" {
 			return fmt.Errorf("--pa-id is required")
@@ -233,10 +233,10 @@ var deleteArgs struct {
 var deleteCmd = &cobra.Command{
 	Use:     "delete",
 	Short:   "Delete an inbox message",
-	Example: `  acpctl inbox delete --project-id <id> --pa-id <id> --msg-id <id>`,
+	Example: `  acpctl inbox delete --project <id> --pa-id <id> --msg-id <id>`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if deleteArgs.projectID == "" {
-			return fmt.Errorf("--project-id is required")
+			return fmt.Errorf("--project is required")
 		}
 		if deleteArgs.paID == "" {
 			return fmt.Errorf("--pa-id is required")

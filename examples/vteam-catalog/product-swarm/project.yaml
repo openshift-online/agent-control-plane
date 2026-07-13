@@ -1,0 +1,31 @@
+kind: Project
+name: vteam-product-swarm
+description: ACP-native product delivery swarm modeled on vTeam Catalog concepts.
+prompt: |
+  This project is a vTeam Catalog-style swarm. Treat the project as one operating
+  unit: agents have roles, reporting-line annotations, shared providers, and
+  seeded inbox work. Keep coordination explicit in session summaries. When a
+  task needs handoff, send an inbox message to the next responsible agent.
+
+  Current ACP gaps are deliberate: there is no first-class vTeam resource,
+  install preview, reporting-line object, versioned install marker, or scheduled
+  task manifest in acpctl apply. There is also no acpctl session --team or
+  --scr flag yet. This vTeam Catalog models the deployable state those flags would
+  resolve to: project and agent records plus a session-config repo payload at
+  /sandbox/session-config. Use the annotations and seeded inbox messages as the
+  source of truth for vTeam concepts until the platform grows native primitives.
+labels:
+  vteam.acp.dev/type: vteam-catalog
+  vteam.acp.dev/team: product-swarm
+  vteam.acp.dev/source: vteam
+annotations:
+  vteam.acp.dev/key: ambient-code/vteam/product-swarm
+  vteam.acp.dev/kind: bundled
+  vteam.acp.dev/schema: vteam-catalog-v1
+  vteam.acp.dev/version: "2026-07-06"
+  vteam.acp.dev/source-repo: https://github.com/ambient-code/vTeam
+  vteam.acp.dev/persona-source: docs/internal/agents/active
+  vteam.acp.dev/session-config-repo: https://github.com/ambient-code/session-config-reference
+  vteam.acp.dev/session-config-path: /sandbox/session-config
+  vteam.acp.dev/gaps: first-class vTeam resource, install preview, reporting-line object, versioned install state, scheduled-task apply kind
+  vteam.acp.dev/recurring-work: Weekly leadership heartbeat, engineering sync, research review, design review, and docs freshness review are seeded as inbox prompts.

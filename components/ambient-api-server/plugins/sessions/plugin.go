@@ -123,6 +123,7 @@ func init() {
 
 		sessionsRouter := apiV1Router.PathPrefix("/sessions").Subrouter()
 		sessionsRouter.HandleFunc("", sessionHandler.List).Methods(http.MethodGet)
+		sessionsRouter.HandleFunc("/phase_counts", sessionHandler.PhaseCounts).Methods(http.MethodGet)
 		sessionsRouter.HandleFunc("/{id}", sessionHandler.Get).Methods(http.MethodGet)
 		sessionsRouter.HandleFunc("", sessionHandler.Create).Methods(http.MethodPost)
 		sessionsRouter.HandleFunc("/{id}", sessionHandler.Patch).Methods(http.MethodPatch)

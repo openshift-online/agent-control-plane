@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/empty-state'
-import { useSessions } from '@/queries/use-sessions'
+import { useSessions, useSessionPhaseCounts } from '@/queries/use-sessions'
 import { useAgentNames } from '@/queries/use-agents'
 import type { SessionPhase } from '@/domain/types'
 import { buildFolderTree } from '@/domain/folder-tree'
@@ -15,6 +15,8 @@ import { FleetTable } from './_components/fleet-table'
 import { FleetSummary } from './_components/fleet-summary'
 import { FolderTreePanel } from './_components/folder-tree-panel'
 import { CreateSessionSheet } from './_components/create-session-sheet'
+
+const PAGE_SIZE = 20
 
 export default function FleetPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -25,12 +27,33 @@ export default function FleetPage() {
   const [showTestRuns, setShowTestRuns] = useState(false)
   const [showFolderTree, setShowFolderTree] = useState(false)
   const [pathFilter, setPathFilter] = useState<string | null>(null)
-  const { data, isLoading, error } = useSessions(projectId)
+  const [currentPage, setCurrentPage] = useState(1)
+  const { data, isLoading, error } = useSessions(projectId, {
+    page: currentPage,
+    size: PAGE_SIZE,
+    orderBy: 'created_at desc',
+    phase: phaseFilter ?? undefined,
+  })
+  const { data: phaseCounts } = useSessionPhaseCounts(projectId)
   const { data: agentNames } = useAgentNames(projectId)
+
+  const handlePhaseFilter = useCallback((phase: SessionPhase | null) => {
+    setPhaseFilter(phase)
+    setCurrentPage(1)
+  }, [])
 
   const handleFilteredCountChange = useCallback((count: number) => {
     setFilteredCount(count)
   }, [])
+
+  const sessions = data?.items ?? []
+  const serverTotal = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(serverTotal / PAGE_SIZE))
+  const testSessionCount = sessions.filter(
+    (s) => s.annotations['ambient-code.io/ui/test-session'] === 'true',
+  ).length
+  const folderTree = useMemo(() => buildFolderTree(sessions), [sessions])
+  const hasFolders = folderTree.length > 0
 
   if (error) {
     return (
@@ -55,14 +78,7 @@ export default function FleetPage() {
     )
   }
 
-  const sessions = data?.items ?? []
-  const testSessionCount = sessions.filter(
-    (s) => s.annotations['ambient-code.io/ui/test-session'] === 'true',
-  ).length
-  const folderTree = useMemo(() => buildFolderTree(sessions), [sessions])
-  const hasFolders = folderTree.length > 0
-
-  if (sessions.length === 0) {
+  if (sessions.length === 0 && currentPage === 1 && !phaseFilter) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold tracking-tight">Sessions</h1>
@@ -129,10 +145,12 @@ export default function FleetPage() {
         </div>
       </div>
       <FleetSummary
-        sessions={sessions}
+        serverTotal={serverTotal}
+        phaseCounts={phaseCounts ?? {}}
+        pageItemCount={sessions.length}
         filteredCount={filteredCount}
         activePhase={phaseFilter}
-        onPhaseFilter={setPhaseFilter}
+        onPhaseFilter={handlePhaseFilter}
       />
       <div className="flex gap-4">
         {showFolderTree && (
@@ -147,10 +165,14 @@ export default function FleetPage() {
             sessions={sessions}
             searchFilter={search}
             agentNames={agentNames}
-            phaseFilter={phaseFilter}
             showTestRuns={showTestRuns}
             pathFilter={pathFilter}
             onFilteredCountChange={handleFilteredCountChange}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={PAGE_SIZE}
+            serverTotal={serverTotal}
+            onPageChange={setCurrentPage}
           />
         </div>
       </div>

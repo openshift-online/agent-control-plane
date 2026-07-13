@@ -69,7 +69,7 @@ func init() {
 	Cmd.Flags().StringVar(&createArgs.displayName, "display-name", "", "Display name")
 	Cmd.Flags().StringVar(&createArgs.description, "description", "", "Description")
 	Cmd.Flags().StringVarP(&createArgs.outputFormat, "output", "o", "", "Output format: json")
-	Cmd.Flags().StringVar(&createArgs.projectID, "project-id", "", "Project ID")
+	Cmd.Flags().StringVar(&createArgs.projectID, "project", "", "Project ID")
 	Cmd.Flags().StringVar(&createArgs.agentID, "agent-id", "", "Agent ID (project-agent)")
 	Cmd.Flags().IntVar(&createArgs.agentVersion, "agent-version", 0, "Agent version to pin (project-agent)")
 	Cmd.Flags().StringVar(&createArgs.ownerUserID, "owner-user-id", "", "Owner user ID (agent)")
@@ -77,7 +77,7 @@ func init() {
 	Cmd.Flags().StringVar(&createArgs.userID, "user-id", "", "User ID (role-binding)")
 	Cmd.Flags().StringVar(&createArgs.roleID, "role-id", "", "Role ID (role-binding)")
 	Cmd.Flags().StringVar(&createArgs.scope, "scope", "", "Scope (role-binding)")
-	Cmd.Flags().StringVar(&createArgs.bindProjectID, "project-id-fk", "", "Project FK for role-binding")
+	Cmd.Flags().StringVar(&createArgs.bindProjectID, "project-fk", "", "Project FK for role-binding")
 	Cmd.Flags().StringVar(&createArgs.bindAgentID, "agent-id-fk", "", "Agent FK for role-binding")
 	Cmd.Flags().StringVar(&createArgs.bindSessionID, "session-id-fk", "", "Session FK for role-binding")
 	Cmd.Flags().StringVar(&createArgs.bindCredID, "credential-id-fk", "", "Credential FK for role-binding")
@@ -136,7 +136,7 @@ func printCreated(cmd *cobra.Command, kind, id string, obj interface{}) error {
 }
 
 func createSession(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
-	warnUnusedFlags(cmd, "display-name", "owner-user-id", "permissions", "user-id", "role-id", "scope", "project-id-fk", "agent-id-fk", "session-id-fk", "credential-id-fk", "recipient-agent-id", "body")
+	warnUnusedFlags(cmd, "display-name", "owner-user-id", "permissions", "user-id", "role-id", "scope", "project-fk", "agent-id-fk", "session-id-fk", "credential-id-fk", "recipient-agent-id", "body")
 
 	if createArgs.name == "" {
 		return fmt.Errorf("--name is required")
@@ -149,11 +149,11 @@ func createSession(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 	}
 
 	projectID := cfg.GetProject()
-	if cmd.Flags().Changed("project-id") {
+	if cmd.Flags().Changed("project") {
 		projectID = createArgs.projectID
 	}
 	if projectID == "" {
-		return fmt.Errorf("no project set; use --project-id or run 'acpctl project <name>' first")
+		return fmt.Errorf("no project set; use --project or run 'acpctl project <name>' first")
 	}
 
 	builder := sdktypes.NewSessionBuilder().Name(createArgs.name).ProjectID(projectID)
@@ -198,7 +198,7 @@ func createSession(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 }
 
 func createProject(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
-	warnUnusedFlags(cmd, "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "project-id", "owner-user-id", "permissions", "user-id", "role-id", "scope", "project-id-fk", "agent-id-fk", "session-id-fk", "credential-id-fk", "recipient-agent-id", "body")
+	warnUnusedFlags(cmd, "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "project", "owner-user-id", "permissions", "user-id", "role-id", "scope", "project-fk", "agent-id-fk", "session-id-fk", "credential-id-fk", "recipient-agent-id", "body")
 
 	if createArgs.name == "" {
 		return fmt.Errorf("--name is required")
@@ -232,10 +232,10 @@ func createProject(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 }
 
 func createAgent(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
-	warnUnusedFlags(cmd, "repo-url", "model", "max-tokens", "temperature", "timeout", "display-name", "description", "owner-user-id", "permissions", "user-id", "role-id", "scope", "project-id-fk", "agent-id-fk", "session-id-fk", "credential-id-fk")
+	warnUnusedFlags(cmd, "repo-url", "model", "max-tokens", "temperature", "timeout", "display-name", "description", "owner-user-id", "permissions", "user-id", "role-id", "scope", "project-fk", "agent-id-fk", "session-id-fk", "credential-id-fk")
 
 	if createArgs.projectID == "" {
-		return fmt.Errorf("--project-id is required")
+		return fmt.Errorf("--project is required")
 	}
 	if createArgs.name == "" {
 		return fmt.Errorf("--name is required")
@@ -263,7 +263,7 @@ func createAgent(cmd *cobra.Command, ctx context.Context, client *sdkclient.Clie
 }
 
 func createRole(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
-	warnUnusedFlags(cmd, "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "project-id", "owner-user-id", "user-id", "role-id", "scope", "project-id-fk", "agent-id-fk", "session-id-fk", "credential-id-fk", "recipient-agent-id", "body")
+	warnUnusedFlags(cmd, "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "project", "owner-user-id", "user-id", "role-id", "scope", "project-fk", "agent-id-fk", "session-id-fk", "credential-id-fk", "recipient-agent-id", "body")
 
 	if createArgs.name == "" {
 		return fmt.Errorf("--name is required")
@@ -295,7 +295,7 @@ func createRole(cmd *cobra.Command, ctx context.Context, client *sdkclient.Clien
 }
 
 func createRoleBinding(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
-	warnUnusedFlags(cmd, "name", "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "display-name", "description", "project-id", "owner-user-id", "permissions", "recipient-agent-id", "body")
+	warnUnusedFlags(cmd, "name", "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "display-name", "description", "project", "owner-user-id", "permissions", "recipient-agent-id", "body")
 
 	if createArgs.roleID == "" {
 		return fmt.Errorf("--role-id is required")

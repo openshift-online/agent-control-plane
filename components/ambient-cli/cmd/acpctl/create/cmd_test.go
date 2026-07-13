@@ -78,7 +78,7 @@ func TestCreateAgent_Success(t *testing.T) {
 	testhelper.Configure(t, srv.URL)
 	result := testhelper.Run(t, Cmd, "agent",
 		"--name", "overlord",
-		"--project-id", "my-project",
+		"--project", "my-project",
 		"--prompt", "You coordinate the fleet",
 	)
 	if result.Err != nil {
@@ -92,7 +92,7 @@ func TestCreateAgent_Success(t *testing.T) {
 func TestCreateAgent_MissingName(t *testing.T) {
 	srv := testhelper.NewServer(t)
 	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "agent", "--project-id", "p1")
+	result := testhelper.Run(t, Cmd, "agent", "--project", "p1")
 	if result.Err == nil {
 		t.Fatal("expected error for missing --name")
 	}
@@ -106,10 +106,10 @@ func TestCreateAgent_ProjectIDRequired(t *testing.T) {
 	testhelper.Configure(t, srv.URL)
 	result := testhelper.Run(t, Cmd, "agent", "--name", "x")
 	if result.Err == nil {
-		t.Fatal("expected error for missing --project-id")
+		t.Fatal("expected error for missing --project")
 	}
-	if !strings.Contains(result.Err.Error(), "--project-id is required") {
-		t.Errorf("expected '--project-id is required', got: %v", result.Err)
+	if !strings.Contains(result.Err.Error(), "--project is required") {
+		t.Errorf("expected '--project is required', got: %v", result.Err)
 	}
 }
 
@@ -157,7 +157,7 @@ func TestCreateSession_ProjectIDFlag(t *testing.T) {
 	testhelper.Configure(t, srv.URL)
 	result := testhelper.Run(t, Cmd, "session",
 		"--name", "flag-session",
-		"--project-id", "explicit-project",
+		"--project", "explicit-project",
 	)
 	if result.Err != nil {
 		t.Fatalf("unexpected error: %v\nstdout: %s\nstderr: %s", result.Err, result.Stdout, result.Stderr)
@@ -166,7 +166,7 @@ func TestCreateSession_ProjectIDFlag(t *testing.T) {
 		t.Errorf("expected 'session/s-flag created', got: %s", result.Stdout)
 	}
 	if strings.Contains(result.Stderr, "not applicable") {
-		t.Errorf("--project-id should not produce 'not applicable' warning, stderr: %s", result.Stderr)
+		t.Errorf("--project should not produce 'not applicable' warning, stderr: %s", result.Stderr)
 	}
 }
 
@@ -239,7 +239,7 @@ func TestCreateRoleBinding_Success(t *testing.T) {
 		"--user-id", "user-1",
 		"--role-id", "r-1",
 		"--scope", "project",
-		"--project-id-fk", "my-project",
+		"--project-fk", "my-project",
 	)
 	if result.Err != nil {
 		t.Fatalf("unexpected error: %v\nstdout: %s\nstderr: %s", result.Err, result.Stdout, result.Stderr)

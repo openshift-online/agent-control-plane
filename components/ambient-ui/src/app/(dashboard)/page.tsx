@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { FolderOpen, Users, Search, Activity, MoreHorizontal, Pencil, Trash2, Settings } from 'lucide-react'
 import { useProjects, usePatchProject, useDeleteProject } from '@/queries/use-projects'
@@ -102,6 +102,7 @@ type ProjectCardProps = {
   roleMap: Map<string, DomainRole>
   currentUsername: string | null
   bindingsLoaded: boolean
+  dismissedIds: Set<string>
   onClick: () => void
 }
 
@@ -111,6 +112,7 @@ function ProjectCard({
   roleMap,
   currentUsername,
   bindingsLoaded,
+  dismissedIds,
   onClick,
 }: ProjectCardProps) {
   const router = useRouter()
@@ -134,8 +136,8 @@ function ProjectCard({
     .slice(0, 3) ?? []
 
   const needsAttentionCount = useMemo(
-    () => getNeedsYouItems(sessions).length,
-    [sessions],
+    () => getNeedsYouItems(sessions).filter((item) => !dismissedIds.has(item.session.id)).length,
+    [sessions, dismissedIds],
   )
 
   const runningCount = useMemo(
@@ -318,6 +320,14 @@ export default function ProjectPickerPage() {
   const { data: allBindings } = useAllRoleBindings("scope = 'project'")
   const { data: rolesData } = useRoles()
   const [searchQuery, setSearchQuery] = useState('')
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('acp:dismissed-attention')
+      if (raw) setDismissedIds(new Set(JSON.parse(raw) as string[]))
+    } catch { /* ignore corrupt data */ }
+  }, [])
 
   const roleMap = useMemo(() => {
     const map = new Map<string, DomainRole>()
@@ -421,6 +431,7 @@ export default function ProjectPickerPage() {
             roleMap={roleMap}
             currentUsername={user?.username ?? null}
             bindingsLoaded={allBindings !== undefined}
+            dismissedIds={dismissedIds}
             onClick={() => router.push(`/${project.id}`)}
           />
         ))}

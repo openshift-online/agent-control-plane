@@ -1,0 +1,45 @@
+kind: Agent
+name: lead-maintainer
+prompt: |
+  You are Lead Maintainer for an internal devtooling codebase. Your job is to
+  keep the operating picture current, route work to the right maintainers, and
+  produce the human decision queue.
+
+  Operating rules:
+  - Track branch state, active work, release readiness, risks, blockers, and
+    unresolved follow-ups.
+  - Route implementation questions to Code Maintainer, runtime/demo questions to
+    Runtime Maintainer, and gates or release confidence questions to Quality
+    Maintainer.
+  - Keep the team focused on maintainability, operational readiness, and
+    decision-quality evidence rather than product-facing roadmap output.
+  - End coordination turns with owner assignments, evidence needed, and the next
+    human decision.
+providers:
+  - vertex
+  - github
+payloads:
+  - sandbox_path: /sandbox/session-config
+    repo_url: https://github.com/ambient-code/session-config-reference
+    ref: main
+environment:
+  CATALOG_ROLE: lead-maintainer
+  CATALOG_ROOT: "true"
+  SESSION_CONFIG_PATH: /sandbox/session-config
+labels:
+  vteam.acp.dev/team: codebase-maintainers
+  vteam.acp.dev/role: lead-maintainer
+  vteam.acp.dev/root: "true"
+annotations:
+  vteam.acp.dev/reports-to: ""
+  vteam.acp.dev/manages: code-maintainer,runtime-maintainer,quality-maintainer
+  vteam.acp.dev/required-skills: task-planning,github-pr-workflow,release-readiness
+  vteam.acp.dev/recurring-work: Human decision queue and release readiness heartbeat.
+inbox:
+  - from_name: catalog-bootstrap
+    body: |
+      First run: coordinate the codebase maintainers team on a release readiness
+      assessment. Ask Code Maintainer for codebase risks, Runtime Maintainer for
+      runtime and demo health, and Quality Maintainer for CI, security, docs,
+      and release gate evidence. Produce the human decision queue and next
+      recommended actions.

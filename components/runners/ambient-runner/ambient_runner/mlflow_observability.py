@@ -71,28 +71,26 @@ class MLflowSessionTracer:
             )
             return False
 
-        # openshell sandbox env vars use lazy-resolve tokens that the
-        # supervisor resolves at the C library level. Skip explicit
-        # mlflow.set_tracking_uri / set_experiment so MLflow reads from
-        # the environment through its own native (Rust/C) bindings where
-        # the supervisor intercepts getenv() and returns real values.
-        openshell_env = self._is_openshell_token(tracking_uri)
-        exp_name = os.getenv(
-            "MLFLOW_EXPERIMENT_NAME", "ambient-code-sessions"
-        ).strip() or "ambient-code-sessions"
+        exp_name = (
+            os.getenv("MLFLOW_EXPERIMENT_NAME", "ambient-code-sessions").strip()
+            or "ambient-code-sessions"
+        )
 
-        if openshell_env:
-            logger.info(
-                "MLflow: openshell resolve tokens detected — deferring "
-                "tracking URI and experiment config to runtime env resolution"
+        from ambient_runner.observability_config import (
+            check_mlflow_tracking_reachable,
+        )
+
+        if not check_mlflow_tracking_reachable(tracking_uri):
+            return False
+
+        try:
+            mlflow.set_tracking_uri(tracking_uri)
+            mlflow.set_experiment(exp_name)
+        except Exception as e:
+            logger.warning(
+                "MLflow: failed to set tracking URI or experiment: %s", e
             )
-        else:
-            try:
-                mlflow.set_tracking_uri(tracking_uri)
-                mlflow.set_experiment(exp_name)
-            except Exception as e:
-                logger.warning("MLflow: failed to set tracking URI or experiment: %s", e)
-                return False
+            return False
 
         auth_mode = os.getenv("MLFLOW_TRACKING_AUTH", "").strip()
         if auth_mode and not self._is_openshell_token(auth_mode):

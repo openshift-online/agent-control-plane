@@ -20,7 +20,7 @@
 #   - kubectl context set to the cluster
 #
 # VERIFICATION:
-#   acpctl get agents --project-id <namespace>
+#   acpctl get agents --project <namespace>
 #   acpctl get credentials
 #
 
@@ -82,8 +82,8 @@ echo ""
 echo "=== Setup Complete ==="
 echo ""
 echo "Next steps:"
-echo "  acpctl get agents --project-id $NAMESPACE"
+echo "  acpctl get agents --project $NAMESPACE"
 echo "  acpctl get credentials"
 echo ""
 echo "  # Create a session:"
-echo "  acpctl start <agent-name> --project-id $NAMESPACE --prompt 'say hello'"
+echo "  acpctl start <agent-name> --project $NAMESPACE --prompt 'say hello'"

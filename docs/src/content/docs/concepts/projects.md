@@ -9,7 +9,7 @@ Use project terminology when scripting against ACP:
 ```text
 /api/ambient/v1/projects
 acpctl project list
-acpctl agent list --project-id <project-id>
+acpctl agent list --project <project-id>
 ```
 
 ## What a project owns

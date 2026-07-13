@@ -115,3 +115,16 @@ func (d *sessionDaoMock) ActiveByScheduledSessionID(ctx context.Context, schedul
 	}
 	return nil, gorm.ErrRecordNotFound
 }
+
+func (d *sessionDaoMock) PhaseCounts(ctx context.Context, projectId string) (map[string]int64, error) {
+	counts := make(map[string]int64)
+	for _, s := range d.sessions {
+		if projectId != "" && (s.ProjectId == nil || *s.ProjectId != projectId) {
+			continue
+		}
+		if s.Phase != nil {
+			counts[*s.Phase]++
+		}
+	}
+	return counts, nil
+}

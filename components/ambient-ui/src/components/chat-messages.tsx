@@ -3,12 +3,12 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { User, Bot, Wrench, Send, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
+import { User, Bot, Wrench, Send, ChevronDown, ChevronRight, AlertTriangle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
-import type { DomainSessionMessage, SessionEventType } from '@/domain/types'
+import type { DomainSessionMessage, SessionEventType, SessionPhase } from '@/domain/types'
 import { useSendMessage } from '@/queries/use-send-message'
 import { formatRelativeTime } from '@/lib/format-timestamp'
 import { cn } from '@/lib/utils'
@@ -353,7 +353,7 @@ function SimpleChatMessage({ message }: { message: DomainSessionMessage }) {
 
 // ---- Phase Status Indicator ----
 
-const PHASE_STYLES: Record<string, string> = {
+const PHASE_STYLES: Record<SessionPhase, string> = {
   Running: 'bg-status-success text-status-success-foreground border-status-success-border',
   Pending: 'bg-status-warning text-status-warning-foreground border-status-warning-border',
   Creating: 'bg-status-info text-status-info-foreground border-status-info-border',
@@ -363,8 +363,8 @@ const PHASE_STYLES: Record<string, string> = {
   Stopped: 'bg-event-system text-event-system-foreground border-event-system-border',
 }
 
-export function PhaseIndicator({ phase }: { phase: string }) {
-  const style = PHASE_STYLES[phase] ?? PHASE_STYLES.Stopped
+export function PhaseIndicator({ phase }: { phase: SessionPhase }) {
+  const style = PHASE_STYLES[phase]
   return (
     <Badge
       variant="outline"
@@ -379,7 +379,7 @@ export function PhaseIndicator({ phase }: { phase: string }) {
 
 type ChatInputProps = {
   sessionId: string
-  phase: string
+  phase: SessionPhase
   disabled: boolean
 }
 
@@ -505,12 +505,19 @@ export function ChatInput({ sessionId, phase, disabled }: ChatInputProps) {
 
 // ---- Chat Items List (shared between tab and sidebar) ----
 
+const STARTING_PHASES: ReadonlySet<SessionPhase> = new Set(['Pending', 'Creating'])
+const TERMINAL_PHASES: ReadonlySet<SessionPhase> = new Set(['Completed', 'Failed', 'Stopped'])
+
 export function ChatItemsList({
   items,
   isLoading,
+  phase,
+  isThinking,
 }: {
   items: ChatItem[]
   isLoading: boolean
+  phase?: SessionPhase
+  isThinking?: boolean
 }) {
   if (isLoading) {
     return (
@@ -534,6 +541,33 @@ export function ChatItemsList({
   }
 
   if (items.length === 0) {
+    if (phase && STARTING_PHASES.has(phase)) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+          <Loader2 className="h-8 w-8 mb-3 animate-spin opacity-60" aria-hidden="true" />
+          <p className="text-sm">Runner is starting...</p>
+        </div>
+      )
+    }
+
+    if (phase === 'Running') {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+          <Loader2 className="h-8 w-8 mb-3 animate-spin opacity-60" aria-hidden="true" />
+          <p className="text-sm">Runner started. Waiting for messages...</p>
+        </div>
+      )
+    }
+
+    if (phase && TERMINAL_PHASES.has(phase)) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+          <Bot className="h-10 w-10 mb-3 opacity-40" aria-hidden="true" />
+          <p className="text-sm">No conversation messages were recorded.</p>
+        </div>
+      )
+    }
+
     return (
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <Bot className="h-10 w-10 mb-3 opacity-40" aria-hidden="true" />
@@ -553,6 +587,7 @@ export function ChatItemsList({
         }
         return <SimpleChatMessage key={item.message.id} message={item.message} />
       })}
+      {isThinking && <ThinkingIndicator />}
     </div>
   )
 }
@@ -562,4 +597,50 @@ export function buildChatItems(messages: DomainSessionMessage[]): ChatItem[] {
   const filtered = filterEmptyMessages(messages)
   const chatOnly = filtered.filter(m => CHAT_EVENT_TYPES.has(m.eventType))
   return groupChatItems(chatOnly)
+}
+
+// ---- Run-Active Detection ----
+
+function parseLifecycleEvent(payload: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(payload)
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      const obj = parsed as Record<string, unknown>
+      if (typeof obj.event === 'string') return obj.event
+    }
+  } catch { /* plain string */ }
+  return null
+}
+
+export function isRunActive(messages: DomainSessionMessage[]): boolean {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg.eventType === 'assistant') return false
+    if (msg.eventType !== 'lifecycle') continue
+    const event = parseLifecycleEvent(msg.payload)
+    if (event === 'run_started') return true
+    if (event === 'run_finished') return false
+  }
+  return false
+}
+
+// ---- Thinking Indicator ----
+
+export function ThinkingIndicator() {
+  return (
+    <div
+      className="flex gap-3 px-4 py-3"
+      role="status"
+      aria-label="Agent is thinking"
+    >
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-secondary">
+        <Bot className="h-4 w-4 text-secondary-foreground" aria-hidden="true" />
+      </div>
+      <div className="flex items-center gap-1 pt-1.5">
+        <span className="h-2 w-2 rounded-full bg-muted-foreground/60 animate-[thinking-dot_1.4s_ease-in-out_infinite]" />
+        <span className="h-2 w-2 rounded-full bg-muted-foreground/60 animate-[thinking-dot_1.4s_ease-in-out_0.2s_infinite]" />
+        <span className="h-2 w-2 rounded-full bg-muted-foreground/60 animate-[thinking-dot_1.4s_ease-in-out_0.4s_infinite]" />
+      </div>
+    </div>
+  )
 }

@@ -115,7 +115,7 @@ bypasses the platform and creates an unmanaged sandbox.
 
 ```bash
 AGENT_ID=$(acpctl get agents 2>/dev/null | awk '/hello-world/{print $1}')
-acpctl start $AGENT_ID --project-id tenant-a --prompt "Say hello world"
+acpctl start $AGENT_ID --project tenant-a --prompt "Say hello world"
 ```
 
 The control plane will:

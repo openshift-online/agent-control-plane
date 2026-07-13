@@ -1,8 +1,12 @@
 package openshell
 
 import (
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"strings"
 )
 
 var providerTypeMapping = map[string]string{
@@ -107,6 +111,13 @@ func ProviderCredentials(ambientProvider, token string) map[string]string {
 // strips the raw key after configuring refresh). ADC credentials are NOT set as
 // initial credentials — the refresh flow mints the first access token.
 func ProviderCredentialsFromSecret(ambientProvider string, secretData map[string]string) map[string]string {
+	if ambientProvider == "mlflow" {
+		token, ok := secretData["MLFLOW_TRACKING_TOKEN"]
+		if !ok {
+			return map[string]string{}
+		}
+		return map[string]string{"MLFLOW_TRACKING_TOKEN": strings.TrimRight(token, "\r\n")}
+	}
 	if ambientProvider == "vertex" {
 		if token, has := secretData["token"]; has {
 			credType, err := DetectGoogleCredentialType(token)
@@ -175,10 +186,31 @@ func ExtractServiceAccountJWTMaterial(saKeyJSON string) (*ServiceAccountJWTMater
 	if parsed.ClientEmail == "" || parsed.PrivateKey == "" {
 		return nil, fmt.Errorf("service account JSON missing client_email or private_key")
 	}
+	if err := validateRSAPEM(parsed.PrivateKey); err != nil {
+		return nil, fmt.Errorf("private_key is not valid RSA PEM: %w", err)
+	}
 	return &ServiceAccountJWTMaterial{
 		ClientEmail: parsed.ClientEmail,
 		PrivateKey:  parsed.PrivateKey,
 	}, nil
+}
+
+func validateRSAPEM(key string) error {
+	block, _ := pem.Decode([]byte(key))
+	if block == nil {
+		return fmt.Errorf("no PEM block found")
+	}
+	if _, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
+		return nil
+	}
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return fmt.Errorf("key is not PKCS1 or PKCS8: %w", err)
+	}
+	if _, ok := parsed.(*rsa.PrivateKey); !ok {
+		return fmt.Errorf("PKCS8 key is not RSA (got %T)", parsed)
+	}
+	return nil
 }
 
 const DefaultGoogleTokenURI = "https://oauth2.googleapis.com/token"

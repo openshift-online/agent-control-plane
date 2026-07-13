@@ -47,7 +47,7 @@ func resolveProject(projectID string) (string, error) {
 	}
 	p := cfg.GetProject()
 	if p == "" {
-		return "", fmt.Errorf("no project set; use --project-id or run 'acpctl config set project <name>'")
+		return "", fmt.Errorf("no project set; use --project or run 'acpctl config set project <name>'")
 	}
 	return p, nil
 }
@@ -100,7 +100,7 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List agents in a project",
 	Example: `  acpctl agent list
-  acpctl agent list --project-id <id> -o json`,
+  acpctl agent list --project <id> -o json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(listArgs.projectID)
 		if err != nil {
@@ -154,7 +154,7 @@ var getCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl agent get api
   acpctl agent get api -o json
-  acpctl agent get <id> --project-id <id>`,
+  acpctl agent get <id> --project <id>`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(getArgs.projectID)
 		if err != nil {
@@ -212,7 +212,7 @@ var createCmd = &cobra.Command{
 	Short: "Create an agent in a project",
 	Example: `  acpctl agent create --name my-agent
   acpctl agent create --name my-agent --prompt "You are a code reviewer"
-  acpctl agent create --project-id <id> --name my-agent`,
+  acpctl agent create --project <id> --name my-agent`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(createArgs.projectID)
 		if err != nil {
@@ -287,7 +287,7 @@ var updateCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl agent update api --prompt "New instructions"
   acpctl agent update api --name new-name
-  acpctl agent update <id> --project-id <id> --prompt "..."`,
+  acpctl agent update <id> --project <id> --prompt "..."`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(updateArgs.projectID)
 		if err != nil {
@@ -338,22 +338,22 @@ var updateCmd = &cobra.Command{
 
 var deleteArgs struct {
 	projectID string
-	confirm   bool
+	yes       bool
 }
 
 var deleteCmd = &cobra.Command{
 	Use:   "delete <name-or-id>",
 	Short: "Delete an agent",
 	Args:  cobra.ExactArgs(1),
-	Example: `  acpctl agent delete api --confirm
-  acpctl agent delete <id> --project-id <id> --confirm`,
+	Example: `  acpctl agent delete api -y
+  acpctl agent delete <id> --project <id> --yes`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(deleteArgs.projectID)
 		if err != nil {
 			return err
 		}
-		if !deleteArgs.confirm {
-			return fmt.Errorf("add --confirm to delete agent/%s", args[0])
+		if !deleteArgs.yes {
+			return fmt.Errorf("interactive confirmation required; use --yes/-y to skip")
 		}
 
 		client, err := connection.NewClientFromConfig()
@@ -494,7 +494,7 @@ var startPreviewCmd = &cobra.Command{
 	Short: "Preview start context for an agent (dry run)",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl agent start-preview api
-  acpctl agent start-preview <id> --project-id <id>`,
+  acpctl agent start-preview <id> --project <id>`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(startPreviewArgs.projectID)
 		if err != nil {
@@ -540,7 +540,7 @@ var sessionsCmd = &cobra.Command{
 	Short: "List session history for an agent",
 	Args:  cobra.ExactArgs(1),
 	Example: `  acpctl agent sessions api
-  acpctl agent sessions <id> --project-id <id>`,
+  acpctl agent sessions <id> --project <id>`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectID, err := resolveProject(sessionsArgs.projectID)
 		if err != nil {
@@ -748,44 +748,44 @@ func init() {
 	Cmd.AddCommand(sessionsCmd)
 	Cmd.AddCommand(exportCmd)
 
-	listCmd.Flags().StringVar(&listArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	listCmd.Flags().StringVar(&listArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	listCmd.Flags().StringVarP(&listArgs.outputFormat, "output", "o", "", "Output format: json|yaml")
 	listCmd.Flags().IntVar(&listArgs.limit, "limit", 100, "Maximum number of items to return")
 
-	getCmd.Flags().StringVar(&getArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	getCmd.Flags().StringVar(&getArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	getCmd.Flags().StringVarP(&getArgs.outputFormat, "output", "o", "", "Output format: json|yaml")
 
-	createCmd.Flags().StringVar(&createArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	createCmd.Flags().StringVar(&createArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	createCmd.Flags().StringVar(&createArgs.name, "name", "", "Agent name (required)")
 	createCmd.Flags().StringVar(&createArgs.prompt, "prompt", "", "Standing instructions prompt")
 	createCmd.Flags().StringVar(&createArgs.labels, "labels", "", "Labels (JSON string)")
 	createCmd.Flags().StringVar(&createArgs.annotations, "annotations", "", "Annotations (JSON string)")
 	createCmd.Flags().StringVarP(&createArgs.outputFormat, "output", "o", "", "Output format: json")
 
-	updateCmd.Flags().StringVar(&updateArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	updateCmd.Flags().StringVar(&updateArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	updateCmd.Flags().StringVar(&updateArgs.name, "name", "", "New agent name")
 	updateCmd.Flags().StringVar(&updateArgs.prompt, "prompt", "", "New standing instructions prompt")
 	updateCmd.Flags().StringVar(&updateArgs.labels, "labels", "", "New labels (JSON string)")
 	updateCmd.Flags().StringVar(&updateArgs.annotations, "annotations", "", "New annotations (JSON string)")
 
-	deleteCmd.Flags().StringVar(&deleteArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
-	deleteCmd.Flags().BoolVar(&deleteArgs.confirm, "confirm", false, "Confirm deletion")
+	deleteCmd.Flags().StringVar(&deleteArgs.projectID, "project", "", "Project ID (defaults to configured project)")
+	deleteCmd.Flags().BoolVarP(&deleteArgs.yes, "yes", "y", false, "Skip confirmation prompt")
 
-	agentStartCmd.Flags().StringVar(&agentStartArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	agentStartCmd.Flags().StringVar(&agentStartArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	agentStartCmd.Flags().StringVar(&agentStartArgs.prompt, "prompt", "", "Task prompt for this run")
 	agentStartCmd.Flags().StringVarP(&agentStartArgs.outputFormat, "output", "o", "", "Output format: json")
 	agentStartCmd.Flags().BoolVarP(&agentStartArgs.all, "all", "A", false, "Start all agents in the project")
 
-	agentStopCmd.Flags().StringVar(&agentStopArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	agentStopCmd.Flags().StringVar(&agentStopArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	agentStopCmd.Flags().BoolVarP(&agentStopArgs.all, "all", "A", false, "Stop all agents in the project")
 
-	startPreviewCmd.Flags().StringVar(&startPreviewArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	startPreviewCmd.Flags().StringVar(&startPreviewArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 
-	sessionsCmd.Flags().StringVar(&sessionsArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	sessionsCmd.Flags().StringVar(&sessionsArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	sessionsCmd.Flags().StringVarP(&sessionsArgs.outputFormat, "output", "o", "", "Output format: json")
 	sessionsCmd.Flags().IntVar(&sessionsArgs.limit, "limit", 100, "Maximum number of items to return")
 
-	exportCmd.Flags().StringVar(&exportArgs.projectID, "project-id", "", "Project ID (defaults to configured project)")
+	exportCmd.Flags().StringVar(&exportArgs.projectID, "project", "", "Project ID (defaults to configured project)")
 	exportCmd.Flags().StringVar(&exportArgs.namespace, "namespace", "", "Kubernetes namespace for the ConfigMap")
 }
 

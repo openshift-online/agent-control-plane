@@ -19,7 +19,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ambient_runner.app import (
-    _INITIAL_PROMPT_FILE,
     _auto_execute_initial_prompt,
     _push_initial_prompt_via_grpc,
     _push_initial_prompt_via_http,

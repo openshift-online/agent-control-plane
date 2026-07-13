@@ -302,7 +302,7 @@ func TestDeleteCredential_Success(t *testing.T) {
 	})
 
 	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "delete", "cred-d1", "--confirm")
+	result := testhelper.Run(t, Cmd, "delete", "cred-d1", "--yes")
 	if result.Err != nil {
 		t.Fatalf("unexpected error: %v\nstdout: %s\nstderr: %s", result.Err, result.Stdout, result.Stderr)
 	}
@@ -316,17 +316,17 @@ func TestDeleteCredential_MissingConfirm(t *testing.T) {
 	testhelper.Configure(t, srv.URL)
 	result := testhelper.Run(t, Cmd, "delete", "cred-d1")
 	if result.Err == nil {
-		t.Fatal("expected error for missing --confirm")
+		t.Fatal("expected error for missing --yes")
 	}
-	if !strings.Contains(result.Err.Error(), "--confirm") {
-		t.Errorf("expected '--confirm' in error, got: %v", result.Err)
+	if !strings.Contains(result.Err.Error(), "--yes/-y") {
+		t.Errorf("expected '--yes/-y' in error, got: %v", result.Err)
 	}
 }
 
 func TestDeleteCredential_MissingID(t *testing.T) {
 	srv := testhelper.NewServer(t)
 	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "delete", "--confirm")
+	result := testhelper.Run(t, Cmd, "delete", "--yes")
 	if result.Err == nil {
 		t.Fatal("expected error for missing credential ID argument")
 	}

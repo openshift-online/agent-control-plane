@@ -1,61 +1,23 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { FleetSummary } from '../fleet-summary'
-import type { DomainSession, SessionPhase } from '@/domain/types'
-
-function makeSession(overrides: Partial<DomainSession> = {}): DomainSession {
-  return {
-    id: 'sess-001',
-    name: 'test-session',
-    phase: 'Running',
-    agentId: null,
-    agentName: null,
-    projectId: 'proj-001',
-    model: null,
-    temperature: null,
-    maxTokens: null,
-    timeout: null,
-    workflowId: null,
-    prompt: null,
-    sdkRestartCount: 0,
-    startTime: null,
-    completionTime: null,
-    createdAt: '2026-01-15T10:00:00Z',
-    updatedAt: '2026-01-15T10:00:00Z',
-    annotations: {},
-    labels: {},
-    environmentVariables: {},
-    repos: [],
-    reconciledRepos: [],
-    conditions: [],
-    kubeNamespace: null,
-    sandboxLogsSnapshot: null,
-    sandboxPolicySnapshot: null,
-    ...overrides,
-  }
-}
+import type { SessionPhase } from '@/domain/types'
+import type { SessionPhaseCounts } from '@/ports/sessions'
 
 describe('FleetSummary', () => {
   it('shows total session count', () => {
-    const sessions = [
-      makeSession({ id: 'sess-1' }),
-      makeSession({ id: 'sess-2' }),
-      makeSession({ id: 'sess-3' }),
-    ]
-
-    render(<FleetSummary sessions={sessions} />)
+    render(<FleetSummary serverTotal={3} phaseCounts={{ Running: 3 }} pageItemCount={3} />)
     expect(screen.getByText('3 sessions')).toBeInTheDocument()
   })
 
   it('shows phase counts grouped by phase', () => {
-    const sessions = [
-      makeSession({ id: 'sess-1', phase: 'Running' }),
-      makeSession({ id: 'sess-2', phase: 'Running' }),
-      makeSession({ id: 'sess-3', phase: 'Failed' }),
-      makeSession({ id: 'sess-4', phase: 'Completed' }),
-    ]
+    const phaseCounts: SessionPhaseCounts = {
+      Running: 2,
+      Failed: 1,
+      Completed: 1,
+    }
 
-    render(<FleetSummary sessions={sessions} />)
+    render(<FleetSummary serverTotal={4} phaseCounts={phaseCounts} pageItemCount={4} />)
     expect(screen.getByText('4 sessions')).toBeInTheDocument()
     expect(screen.getByText('Running')).toBeInTheDocument()
     expect(screen.getByText('Failed')).toBeInTheDocument()
@@ -65,50 +27,60 @@ describe('FleetSummary', () => {
   })
 
   it('does not render phases with zero count', () => {
-    const sessions = [makeSession({ id: 'sess-1', phase: 'Running' })]
-
-    render(<FleetSummary sessions={sessions} />)
+    render(<FleetSummary serverTotal={1} phaseCounts={{ Running: 1 }} pageItemCount={1} />)
     expect(screen.queryByText('Pending')).not.toBeInTheDocument()
     expect(screen.queryByText('Failed')).not.toBeInTheDocument()
     expect(screen.queryByText('Stopped')).not.toBeInTheDocument()
   })
 
-  it('handles empty sessions array', () => {
-    render(<FleetSummary sessions={[]} />)
+  it('handles empty phase counts', () => {
+    render(<FleetSummary serverTotal={0} phaseCounts={{}} pageItemCount={0} />)
     expect(screen.getByText('0 sessions')).toBeInTheDocument()
   })
 
-  it('shows filtered count when filteredCount differs from total', () => {
-    const sessions = [
-      makeSession({ id: 'sess-1' }),
-      makeSession({ id: 'sess-2' }),
-      makeSession({ id: 'sess-3' }),
-    ]
-
-    render(<FleetSummary sessions={sessions} filteredCount={2} />)
-    expect(screen.getByText('Showing 2 of 3 sessions')).toBeInTheDocument()
+  it('shows filtered count when filteredCount differs from page items', () => {
+    render(
+      <FleetSummary
+        serverTotal={100}
+        phaseCounts={{ Running: 50, Completed: 50 }}
+        pageItemCount={20}
+        filteredCount={5}
+      />
+    )
+    expect(screen.getByText('Showing 5 of 100 sessions')).toBeInTheDocument()
   })
 
-  it('shows normal count when filteredCount equals total', () => {
-    const sessions = [
-      makeSession({ id: 'sess-1' }),
-      makeSession({ id: 'sess-2' }),
-    ]
+  it('shows normal count when filteredCount equals page items', () => {
+    render(
+      <FleetSummary
+        serverTotal={100}
+        phaseCounts={{ Running: 100 }}
+        pageItemCount={20}
+        filteredCount={20}
+      />
+    )
+    expect(screen.getByText('100 sessions')).toBeInTheDocument()
+  })
 
-    render(<FleetSummary sessions={sessions} filteredCount={2} />)
-    expect(screen.getByText('2 sessions')).toBeInTheDocument()
+  it('shows server total even when page has fewer items', () => {
+    render(
+      <FleetSummary
+        serverTotal={100}
+        phaseCounts={{ Running: 50, Completed: 50 }}
+        pageItemCount={20}
+      />
+    )
+    expect(screen.getByText('100 sessions')).toBeInTheDocument()
   })
 
   it('calls onPhaseFilter when a phase chip is clicked', () => {
     const onPhaseFilter = vi.fn()
-    const sessions = [
-      makeSession({ id: 'sess-1', phase: 'Running' }),
-      makeSession({ id: 'sess-2', phase: 'Failed' }),
-    ]
 
     render(
       <FleetSummary
-        sessions={sessions}
+        serverTotal={2}
+        phaseCounts={{ Running: 1, Failed: 1 }}
+        pageItemCount={2}
         onPhaseFilter={onPhaseFilter}
       />
     )
@@ -120,13 +92,12 @@ describe('FleetSummary', () => {
 
   it('clears phase filter when active phase chip is clicked', () => {
     const onPhaseFilter = vi.fn()
-    const sessions = [
-      makeSession({ id: 'sess-1', phase: 'Running' }),
-    ]
 
     render(
       <FleetSummary
-        sessions={sessions}
+        serverTotal={1}
+        phaseCounts={{ Running: 1 }}
+        pageItemCount={1}
         activePhase={'Running' as SessionPhase}
         onPhaseFilter={onPhaseFilter}
       />
@@ -138,13 +109,11 @@ describe('FleetSummary', () => {
   })
 
   it('renders phase chips as buttons when onPhaseFilter is provided', () => {
-    const sessions = [
-      makeSession({ id: 'sess-1', phase: 'Running' }),
-    ]
-
     render(
       <FleetSummary
-        sessions={sessions}
+        serverTotal={1}
+        phaseCounts={{ Running: 1 }}
+        pageItemCount={1}
         onPhaseFilter={() => {}}
       />
     )
@@ -153,11 +122,13 @@ describe('FleetSummary', () => {
   })
 
   it('renders phase chips as non-interactive when onPhaseFilter is not provided', () => {
-    const sessions = [
-      makeSession({ id: 'sess-1', phase: 'Running' }),
-    ]
-
-    render(<FleetSummary sessions={sessions} />)
+    render(
+      <FleetSummary
+        serverTotal={1}
+        phaseCounts={{ Running: 1 }}
+        pageItemCount={1}
+      />
+    )
     expect(screen.queryByRole('button', { name: 'Filter by Running' })).not.toBeInTheDocument()
   })
 })

@@ -1,5 +1,5 @@
 import type { SessionAPI, SessionCreateRequest } from 'ambient-sdk'
-import type { SessionsPort } from '@/ports/sessions'
+import type { SessionsPort, SessionPhaseCounts } from '@/ports/sessions'
 import type { DomainSession, DomainSessionCreateRequest, ListParams, PaginatedResult } from '@/domain/types'
 import { mapSdkSessionToDomain } from './mappers'
 import { getSessionAPI } from './sdk-client'
@@ -9,9 +9,13 @@ function sanitizeSearch(value: string): string {
 }
 
 function buildSdkListOptions(projectId: string, params?: ListParams) {
-  const search = params?.search
-    ? `project_id = '${sanitizeSearch(projectId)}' and name like '%${sanitizeSearch(params.search)}%'`
-    : `project_id = '${sanitizeSearch(projectId)}'`
+  let search = `project_id = '${sanitizeSearch(projectId)}'`
+  if (params?.search) {
+    search += ` and name like '%${sanitizeSearch(params.search)}%'`
+  }
+  if (params?.phase) {
+    search += ` and phase = '${sanitizeSearch(params.phase)}'`
+  }
 
   return {
     page: params?.page ?? 1,
@@ -92,6 +96,13 @@ function createSdkSessionsAdapter(api: SessionAPI): SessionsPort {
 
     async delete(sessionId: string): Promise<void> {
       await api.delete(sessionId)
+    },
+
+    async phaseCounts(projectId: string): Promise<SessionPhaseCounts> {
+      const params = new URLSearchParams({ project_id: sanitizeSearch(projectId) })
+      const res = await fetch(`/api/ambient/v1/sessions/phase_counts?${params}`)
+      if (!res.ok) return {}
+      return (await res.json()) as SessionPhaseCounts
     },
   }
 }

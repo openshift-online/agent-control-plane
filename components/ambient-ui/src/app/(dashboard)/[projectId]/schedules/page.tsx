@@ -35,8 +35,8 @@ export default function SchedulesPage() {
   const [editTarget, setEditTarget] = useState<DomainScheduledSession | null>(null)
   const [runsTarget, setRunsTarget] = useState<DomainScheduledSession | null>(null)
 
-  const { enabled: gatewayMode } = useGatewayMode()
-  const { roleName } = useCurrentUserRole(projectId)
+  const { enabled: gatewayMode, isLoading: gatewayLoading } = useGatewayMode()
+  const { roleName, isLoading: roleLoading } = useCurrentUserRole(projectId)
 
   const schedules = data?.items ?? []
   const showScheduleControls = !gatewayMode || canManageSchedules(roleName)
@@ -89,7 +89,7 @@ export default function SchedulesPage() {
     )
   }
 
-  if (isLoading) {
+  if (isLoading || gatewayLoading || roleLoading) {
     return (
       <div className="space-y-4 p-6">
         <Skeleton className="h-8 w-48" />
@@ -140,11 +140,12 @@ export default function SchedulesPage() {
       <SchedulesTable
         schedules={schedules}
         searchFilter={search}
-        onEdit={showScheduleControls ? (schedule => { setEditTarget(schedule); setCreateOpen(true) }) : () => {}}
-        onDelete={showScheduleControls ? handleDelete : () => {}}
-        onSuspend={showScheduleControls ? handleSuspend : () => {}}
-        onResume={showScheduleControls ? handleResume : () => {}}
-        onTrigger={showScheduleControls ? handleTrigger : () => {}}
+        showControls={showScheduleControls}
+        onEdit={schedule => { setEditTarget(schedule); setCreateOpen(true) }}
+        onDelete={handleDelete}
+        onSuspend={handleSuspend}
+        onResume={handleResume}
+        onTrigger={handleTrigger}
         onViewRuns={schedule => setRunsTarget(schedule)}
       />
 

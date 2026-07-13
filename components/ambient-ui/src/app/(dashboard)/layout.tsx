@@ -104,7 +104,7 @@ export default function DashboardLayout({
             detailName={agentId ? (agent?.displayName ?? agent?.name ?? agentId) : null}
           />
           <PlatformHealthBanner />
-          <div className="flex-1 p-6 pb-10 max-w-7xl">{children}</div>
+          <div className="flex-1 p-6 pb-10">{children}</div>
           <StatusBar />
           <CommandPalette />
         </SidebarInset>

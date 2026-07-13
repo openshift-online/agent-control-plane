@@ -240,7 +240,7 @@ func TestDeleteAgent_Success(t *testing.T) {
 	})
 
 	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "delete", "delete-me", "--confirm")
+	result := testhelper.Run(t, Cmd, "delete", "delete-me", "--yes")
 	if result.Err != nil {
 		t.Fatalf("unexpected error: %v\nstdout: %s\nstderr: %s", result.Err, result.Stdout, result.Stderr)
 	}
@@ -254,17 +254,17 @@ func TestDeleteAgent_MissingConfirm(t *testing.T) {
 	testhelper.Configure(t, srv.URL)
 	result := testhelper.Run(t, Cmd, "delete", "some-agent")
 	if result.Err == nil {
-		t.Fatal("expected error for missing --confirm")
+		t.Fatal("expected error for missing --yes")
 	}
-	if !strings.Contains(result.Err.Error(), "--confirm") {
-		t.Errorf("expected '--confirm' in error, got: %v", result.Err)
+	if !strings.Contains(result.Err.Error(), "--yes/-y") {
+		t.Errorf("expected '--yes/-y' in error, got: %v", result.Err)
 	}
 }
 
 func TestDeleteAgent_MissingArg(t *testing.T) {
 	srv := testhelper.NewServer(t)
 	testhelper.Configure(t, srv.URL)
-	result := testhelper.Run(t, Cmd, "delete", "--confirm")
+	result := testhelper.Run(t, Cmd, "delete", "--yes")
 	if result.Err == nil {
 		t.Fatal("expected error for missing agent argument")
 	}

@@ -22,6 +22,7 @@ import {
   ChatInput,
   buildChatItems,
   PhaseIndicator,
+  isRunActive,
 } from '@/components/chat-messages'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useSession, useStopSession, useDeleteSession, useCreateSession } from '@/queries/use-sessions'
@@ -380,7 +381,8 @@ export function ChatSidebar() {
   if (!isOpen || !activeSessionId) return null
 
   const sessionName = session?.name ?? 'Loading...'
-  const sessionPhase = session?.phase ?? 'Pending'
+  const sessionPhase: SessionPhase = session?.phase ?? 'Pending'
+  const isThinking = sessionPhase === 'Running' && isRunActive(messagesData?.items ?? [])
 
   if (collapsed) {
     return (
@@ -490,7 +492,7 @@ export function ChatSidebar() {
           <div className="absolute top-2 right-3 z-10"><LiveIndicator /></div>
         )}
         <div ref={scrollRef} className="h-full overflow-y-auto" role="log" aria-label="Chat messages" onScroll={handleScroll}>
-          <ChatItemsList items={chatItems} isLoading={messagesLoading} />
+          <ChatItemsList items={chatItems} isLoading={messagesLoading} phase={sessionPhase} isThinking={isThinking} />
           <div ref={sentinelRef} className="h-1" aria-hidden="true" />
         </div>
 

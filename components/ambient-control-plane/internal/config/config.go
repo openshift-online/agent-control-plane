@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -63,6 +65,16 @@ type ControlPlaneConfig struct {
 	SandboxReadinessTimeoutSeconds  int
 	MLflowTrackingURI               string // empty = no default; sandboxes get no URI unless set
 	MLflowExperimentName            string // empty = no default; runner falls back to its own default
+	MLflowCredentialSecretName      string
+	MLflowCredentialSecretNamespace string
+	MLflowTracingEnabled            string
+	MLflowTrackingAuth              string
+	MLflowWorkspace                 string
+	MLflowEnableAsyncTraceLogging   string
+	MLflowAsyncTraceLoggingWorkers  string
+	MLflowAsyncTraceLoggingQueue    string
+	MLflowAutologExcludeFlavors     string
+	MLflowGenAIAutologIntegrations  string
 }
 
 func Load() (*ControlPlaneConfig, error) {
@@ -120,12 +132,28 @@ func Load() (*ControlPlaneConfig, error) {
 		CACertFile:                      envOrDefault("CA_CERT_FILE", "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"),
 		AllowedSandboxRegistries:        parseAllowedRegistries(os.Getenv("ALLOWED_SANDBOX_REGISTRIES")),
 		SandboxReadinessTimeoutSeconds:  envOrDefaultInt("SANDBOX_READINESS_TIMEOUT_SECONDS", 600),
-		MLflowTrackingURI:               os.Getenv("MLFLOW_TRACKING_URI"),
+		MLflowTrackingURI:               strings.TrimSpace(os.Getenv("MLFLOW_TRACKING_URI")),
 		MLflowExperimentName:            os.Getenv("MLFLOW_EXPERIMENT_NAME"),
+		MLflowCredentialSecretName:      envOrDefault("MLFLOW_CREDENTIAL_SECRET_NAME", "mlflow"),
+		MLflowCredentialSecretNamespace: os.Getenv("MLFLOW_CREDENTIAL_SECRET_NAMESPACE"),
+		MLflowTracingEnabled:            os.Getenv("MLFLOW_TRACING_ENABLED"),
+		MLflowTrackingAuth:              os.Getenv("MLFLOW_TRACKING_AUTH"),
+		MLflowWorkspace:                 os.Getenv("MLFLOW_WORKSPACE"),
+		MLflowEnableAsyncTraceLogging:   os.Getenv("MLFLOW_ENABLE_ASYNC_TRACE_LOGGING"),
+		MLflowAsyncTraceLoggingWorkers:  os.Getenv("MLFLOW_ASYNC_TRACE_LOGGING_MAX_WORKERS"),
+		MLflowAsyncTraceLoggingQueue:    os.Getenv("MLFLOW_ASYNC_TRACE_LOGGING_MAX_QUEUE_SIZE"),
+		MLflowAutologExcludeFlavors:     os.Getenv("MLFLOW_AUTOLOG_EXCLUDE_FLAVORS"),
+		MLflowGenAIAutologIntegrations:  os.Getenv("MLFLOW_GENAI_AUTOLOG_INTEGRATIONS"),
 	}
 
 	if cfg.MCPAPIServerURL == "" {
 		cfg.MCPAPIServerURL = cfg.APIServerURL
+	}
+	if cfg.MLflowCredentialSecretNamespace == "" {
+		cfg.MLflowCredentialSecretNamespace = cfg.CPRuntimeNamespace
+	}
+	if err := validateMLflowTrackingURI(cfg.MLflowTrackingURI); err != nil {
+		return nil, err
 	}
 
 	if cfg.APIToken == "" && (cfg.OIDCClientID == "" || cfg.OIDCClientSecret == "") {
@@ -145,6 +173,36 @@ func Load() (*ControlPlaneConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+func validateMLflowTrackingURI(raw string) error {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return fmt.Errorf("MLFLOW_TRACKING_URI is invalid: %w", err)
+	}
+	host := parsed.Hostname()
+	if parsed.Scheme == "" || host == "" {
+		return fmt.Errorf("MLFLOW_TRACKING_URI must be an absolute URL with a host")
+	}
+	if parsed.User != nil {
+		return fmt.Errorf("MLFLOW_TRACKING_URI must not include credentials")
+	}
+	if parsed.Scheme != "https" && !(parsed.Scheme == "http" && isLoopbackHost(host)) {
+		return fmt.Errorf("MLFLOW_TRACKING_URI must use https, except http loopback for local development")
+	}
+	return nil
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func envOrDefault(key, fallback string) string {
