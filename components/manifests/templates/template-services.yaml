@@ -298,11 +298,9 @@ objects:
               - --jwk-cert-url=${KEYCLOAK_REALM_URL}/protocol/openid-connect/certs
               - --enable-https=false
               - --enable-grpc=true
-              - --grpc-enable-tls=false
               - --api-server-bindaddress=:8000
               - --metrics-server-bindaddress=:4433
               - --health-check-server-bindaddress=:4434
-              - --enable-health-check-https=false
               - --db-sslmode=${DB_SSLMODE}
               - --db-max-open-connections=50
               - --enable-db-debug=false
@@ -508,10 +506,6 @@ objects:
                 value: ${MLFLOW_CREDENTIAL_SECRET_NAME}
               - name: MLFLOW_CREDENTIAL_SECRET_NAMESPACE
                 value: ${NAMESPACE}
-            ports:
-              - name: token
-                containerPort: 8080
-                protocol: TCP
             volumeMounts:
               - name: vertex-credentials
                 mountPath: /app/vertex
@@ -561,6 +555,7 @@ objects:
     labels:
       app: ambient-ui
   spec:
+    serviceAccountName: ambient-api-server
     replicas: 1
     selector:
       matchLabels:
@@ -607,6 +602,8 @@ objects:
                 value: ${SSO_REDIRECT_URI}
               - name: NEXT_PUBLIC_PREVIEW_ALLOWED_HOSTS
                 value: ${PREVIEW_ALLOWED_HOSTS}
+              - name: CONTROL_PLANE_URL
+                value: http://ambient-control-plane:8080
             ports:
               - name: http
                 containerPort: 3000
