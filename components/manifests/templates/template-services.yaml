@@ -241,6 +241,7 @@ objects:
               - --db-password-file=/secrets/db/db.password
               - --db-name-file=/secrets/db/db.name
               - --db-sslmode=${DB_SSLMODE}
+              - --db-rootcert=/secrets/db/db.ca_cert
               - --alsologtostderr
               - -v=4
             volumeMounts:
@@ -304,6 +305,7 @@ objects:
               - --health-check-server-bindaddress=:4434
               - --enable-health-check-https=false
               - --db-sslmode=${DB_SSLMODE}
+              - --db-rootcert=/secrets/db/db.ca_cert
               - --db-max-open-connections=50
               - --enable-db-debug=false
               - --enable-metrics-https=false
