@@ -1,0 +1,38 @@
+kind: Policy
+name: mock-llm-permissive
+spec:
+  version: 1
+  filesystem:
+    include_workdir: true
+    read_only:
+      - /usr
+      - /lib
+      - /opt
+      - /proc
+      - /dev/urandom
+      - /app
+      - /runner
+      - /etc
+      - /var/log
+    read_write:
+      - /sandbox
+      - /tmp
+      - /dev/null
+  landlock:
+    compatibility: best_effort
+  process:
+    run_as_user: sandbox
+    run_as_group: sandbox
+  network_policies:
+    mock_llm_inference:
+      name: mock-llm-inference
+      endpoints:
+        - host: mock-llm.ambient-code.svc.cluster.local
+          port: 8000
+      binaries:
+        - path: /usr/local/bin/claude
+        - path: /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe
+        - path: /usr/bin/node
+        - path: /sandbox/.venv/bin/python
+        - path: /sandbox/.venv/bin/python3
+        - path: "/sandbox/.uv/python/**"
