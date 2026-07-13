@@ -67,6 +67,110 @@ to the Kubernetes primitive directly.
 |----------|------|-------|-------|----------|---------|
 | `ambient-agent` | K8s ServiceAccount | SRE | Single Project (Role) | Long-lived | OpenShift build agent: BuildConfig, ImageStream, deploy within one Project |
 
+## Audit-Driven Requirements
+
+> Requirements in this section address findings from the 2026-07 ProdSec security audit.
+> Each requirement references the originating finding ID (fNNN) for traceability.
+
+### Requirement: CP Token Exchange Must Verify Workload Identity (f002)
+
+The control plane token endpoint (`GET /token`) SHALL authenticate callers using
+Kubernetes `TokenReview` against the caller's projected ServiceAccount token — not
+RSA-OAEP encryption of an arbitrary string. The current RSA-OAEP scheme accepts
+any 8+ character string encrypted with the environment-distributed public key,
+which constitutes no authentication at all.
+
+The token endpoint SHALL:
+1. Require callers to present their Kubernetes ServiceAccount token as a Bearer credential
+2. Validate the token via `authentication.k8s.io/v1` `TokenReview`
+3. Verify the authenticated identity matches an active session's ServiceAccount
+   (e.g., `system:serviceaccount:<namespace>:session-<id>-sa`)
+4. Mint a short-lived, session-scoped token granting access only to the session's
+   own project and resolved credentials — not the control plane's own unscoped
+   platform token
+5. Require HTTPS (reject plain `http://` token URLs)
+
+The `AMBIENT_CP_TOKEN_PUBLIC_KEY` environment variable SHALL be removed from
+runner and sandbox environments once TokenReview-based authentication is
+implemented.
+
+#### Scenario: Valid session SA authenticates to token endpoint
+
+- GIVEN a runner pod with session SA `session-abc123-sa`
+- WHEN the runner calls `GET /token` with its mounted SA token as Bearer
+- THEN the CP validates via TokenReview
+- AND confirms the SA matches an active session
+- AND returns a short-lived token scoped to that session's project and credentials
+
+#### Scenario: Arbitrary string rejected by token endpoint
+
+- GIVEN a caller encrypts `'AAAAAAAA'` with the public key
+- WHEN the caller calls `GET /token` with the encrypted string as Bearer
+- THEN the CP rejects the request (TokenReview-based auth does not accept RSA-OAEP)
+
+#### Scenario: Token scoped to session, not platform-wide
+
+- GIVEN session S1 in project P1 with credentials C1, C2
+- WHEN the runner for S1 obtains a token from the CP
+- THEN the token grants access only to P1 resources and C1, C2 tokens
+- AND the token does NOT grant access to other projects or other sessions' credentials
+
+### Requirement: Raw Provider Tokens Must Not Reach Tenant Agent Code (f015)
+
+Integration credential tokens (GitHub, GitLab, Jira, Google, kubeconfig) SHALL NOT
+be present in the runner container's environment variables, filesystem, or accessible
+via the Kubernetes API from the session ServiceAccount. All provider access SHALL be
+brokered through credential sidecars or gateway egress proxies.
+
+Specifically:
+1. `provider_mapping.go` SHALL NOT inject raw tokens as sandbox environment variables
+   (`GITHUB_TOKEN`, `GH_TOKEN`, `COPILOT_GITHUB_TOKEN`, `GOOGLE_SERVICE_ACCOUNT_KEY`, etc.)
+2. The platform Anthropic API key and Vertex AI GCP service account key SHALL NOT
+   be injected into tenant runner/sandbox pods in non-gateway mode — inference SHALL
+   be brokered through the CP or gateway proxy
+3. The session SA Role SHALL NOT grant `get` on credential Secrets (e.g.,
+   `session--credentials`) — the automounted SA token must not provide a
+   Kubernetes API path to read raw tokens
+4. `automountServiceAccountToken` SHALL be `false` on runner pods unless the SA
+   token is required for a brokered authentication path (e.g., TokenReview-based
+   CP token exchange)
+5. Raw secrets SHALL NOT be duplicated into tenant namespaces with predictable
+   names (`ensureVertexSecret` pattern)
+
+#### Scenario: Agent cannot exfiltrate provider tokens via environment
+
+- GIVEN a runner pod with bound GitHub and Vertex AI credentials
+- WHEN the agent runs `printenv | grep -i token` or `env`
+- THEN no integration credential tokens are present
+- AND inference credentials are brokered, not directly accessible
+
+#### Scenario: Agent cannot read credential secrets via K8s API
+
+- GIVEN a runner pod with an automounted SA token
+- WHEN the agent calls the Kubernetes API to list/get Secrets in its namespace
+- THEN the session SA RBAC denies access to credential Secrets
+
+### Requirement: system:image-builder Bound to Session SA Only (f017)
+
+The `system:image-builder` ClusterRole SHALL be bound to the specific session
+ServiceAccount (`session-<id>-sa`), not to the Group
+`system:serviceaccounts:<namespace>`. Binding to the group grants every SA in the
+namespace — including those held by untrusted agent code — push access to the shared
+runner image namespace, enabling cross-tenant image poisoning.
+
+#### Scenario: Only the session SA can push images
+
+- GIVEN session S1 in namespace N1 with SA `session-s1-sa`
+- WHEN `ensureImageBuildAccess` creates the RoleBinding in the runner image namespace
+- THEN the subject is `kind: ServiceAccount, name: session-s1-sa, namespace: N1`
+- AND the subject is NOT `kind: Group, name: system:serviceaccounts:N1`
+
+#### Scenario: Other SAs in the namespace cannot push images
+
+- GIVEN session S1 and session S2 in the same namespace N1
+- WHEN S2's agent code attempts to push to the shared runner image namespace
+- THEN the push is denied because only S1's SA is bound (and vice versa)
+
 ## Requirements
 
 ### Requirement: Control Plane Identity Isolation

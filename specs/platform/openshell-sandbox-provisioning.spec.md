@@ -50,6 +50,35 @@ kubectl apply -f https://github.com/kubernetes-sigs/agent-sandbox/releases/downl
 
 This installs the `agent-sandbox-system` namespace, the CRD, and the sandbox controller. The controller watches for Sandbox CRs and creates pods with ownerReferences — the API version in those ownerReferences must match what the gateway authenticator expects.
 
+### Audit-Driven Requirements
+
+> Requirements in this section address findings from the 2026-07 ProdSec security audit.
+> Each requirement references the originating finding ID (fNNN) for traceability.
+
+#### Requirement: Gateway Config Must Disable Unauthenticated Access and Enforce AppArmor (f038)
+
+The gateway ConfigMap template SHALL set `allow_unauthenticated_users = false` and
+`app_armor_profile = "runtime/default"` (not `"Unconfined"`). The current template
+disables gateway user-level authentication and configures sandbox pods with
+AppArmor `Unconfined`, weakening two independent isolation layers for the
+highest-risk workload.
+
+Additionally, `default_image` and `supervisor_image` SHALL be pinned by digest,
+not floating `:latest` tags.
+
+##### Scenario: Gateway requires authenticated users
+
+- GIVEN the gateway ConfigMap is applied to a tenant namespace
+- WHEN a client connects to the sandbox gateway
+- THEN user identity is required (unauthenticated connections are rejected)
+
+##### Scenario: Sandbox pods use AppArmor runtime/default
+
+- GIVEN the gateway creates a sandbox pod
+- WHEN the pod's security context is configured
+- THEN AppArmor profile is `runtime/default`
+- AND NOT `Unconfined`
+
 ### Iteration 1 Constraints
 
 This iteration is scoped to **scheduled agent runs** (single-run, short-lived sessions). The following are explicitly out of scope:

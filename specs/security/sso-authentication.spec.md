@@ -484,6 +484,47 @@ autonomy without requiring RH SSO realm admin access.
 - THEN the backend ServiceAccount has a ClusterRoleBinding granting `impersonate` verb
   on `users`, `groups`, and `serviceaccounts` resources
 
+## Audit-Driven Requirements
+
+> Requirements in this section address findings from the 2026-07 ProdSec security audit.
+> Each requirement references the originating finding ID (fNNN) for traceability.
+
+### Requirement: JWT Issuer and Audience Validation Required (f028)
+
+JWT validation SHALL enforce `iss` (issuer) and `aud` (audience) claim checks on both
+HTTP and gRPC authentication paths. The current implementation validates only the RSA
+signature and optional time claims — any RSA-signed token from the shared IdP for ANY
+OAuth client is accepted as a login.
+
+Additionally, the `exp` claim SHALL be required (not optional). The `golang-jwt` v4
+`MapClaims` validator only checks `exp` if present — a signed token without `exp`
+never expires.
+
+The `autoProvisionUser` function SHALL NOT create accounts whose `preferred_username`
+matches `GRPC_SERVICE_ACCOUNT` — a `preferred_username` collision with the service
+account identity would grant `platform:admin` via auto-provisioning.
+
+#### Scenario: Wrong audience rejected
+
+- GIVEN a JWT minted by the shared IdP for a different service's OAuth client
+- WHEN the API server validates the token
+- THEN the `aud` claim does not match this platform's client ID
+- AND the request returns 401 Unauthorized
+
+#### Scenario: Missing exp claim rejected
+
+- GIVEN a JWT without an `exp` claim
+- WHEN the API server validates the token
+- THEN validation fails: "`exp` claim is required"
+- AND the request returns 401 Unauthorized
+
+#### Scenario: Service account username collision rejected
+
+- GIVEN a JWT with `preferred_username` matching `GRPC_SERVICE_ACCOUNT`
+- WHEN `autoProvisionUser` processes the token
+- THEN the user is NOT auto-provisioned
+- AND the request returns 403 Forbidden
+
 ## Roadmap
 
 This spec covers **Phase 1** of a broader IAM consolidation. The full roadmap, informed

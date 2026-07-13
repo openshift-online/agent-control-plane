@@ -247,6 +247,65 @@ Before committing code that handles:
 - [ ] Capabilities dropped (ALL)
 - [ ] OwnerReferences set for cleanup
 
+## Audit-Driven Requirements
+
+> Requirements in this section address findings from the 2026-07 ProdSec security audit.
+> Each requirement references the originating finding ID (fNNN) for traceability.
+
+### Requirement: Database Credentials Must Not Be Committed (f023)
+
+PostgreSQL credentials SHALL NOT be committed in the kustomize base or any overlay.
+The `ambient-api-server-db` Secret SHALL be provisioned via external-secrets,
+sealed-secrets, or an `.example-template` pattern (matching the repo's own
+convention for other secrets). The hardcoded password SHALL be rotated everywhere
+the base was deployed.
+
+Database connections SHALL use `--db-sslmode=require` (not `disable`) in all
+overlays including production.
+
+### Requirement: TLS Certificate Validation Must Not Be Disabled (f025)
+
+`NODE_TLS_REJECT_UNAUTHORIZED=0` SHALL NOT be set in any production or
+production-equivalent overlay. The UI BFF SHALL mount the OpenShift service-ca
+bundle and set `NODE_EXTRA_CA_CERTS` to the bundle path instead of disabling
+TLS verification process-wide.
+
+### Requirement: Default-Deny NetworkPolicy with Explicit Allows (f027)
+
+Each namespace SHALL have a default-deny NetworkPolicy. The base
+`runner-networkpolicy.yaml` SHALL NOT contain an empty ingress rule (`- {}`),
+which Kubernetes interprets as "allow all." Explicit per-service allow rules
+SHALL be added for required traffic paths (api-server→postgres, runner→token-svc,
+etc.).
+
+The hcmais overlay SHALL NOT delete the NetworkPolicy entirely.
+
+### Requirement: Egress NetworkPolicy for Tenant Runner Pods (f034)
+
+Session and namespace NetworkPolicies SHALL include egress restrictions (not
+ingress-only). Untrusted agent code SHALL be denied outbound access to:
+- Kubernetes API server (unless required for brokered auth)
+- Cloud metadata endpoints (`169.254.169.254`)
+- Other tenants' unprotected services
+- Arbitrary internet hosts (exfiltration prevention)
+
+The `GCE_METADATA_HOST=metadata.invalid` env var is insufficient — agent code
+can unset it. An explicit egress deny for `169.254.169.254/32` is required.
+
+### Requirement: Pod Security Standards and SecurityContext Hardening (f044)
+
+All workload pods (including PostgreSQL, MinIO, otel-collector, grafana,
+oauth-proxy) SHALL specify a restricted SecurityContext: `runAsNonRoot: true`,
+`allowPrivilegeEscalation: false`, capabilities `drop: [ALL]`, and
+`seccompProfile: type: RuntimeDefault`.
+
+All ACP-managed namespaces SHALL carry the Pod Security Admission label
+`pod-security.kubernetes.io/enforce: restricted` (or `baseline` where restricted
+is infeasible).
+
+The API server Dockerfile SHALL set `USER 1001` (matching all other component
+images).
+
 ## Security Review Resources
 
 - OWASP Top 10: <https://owasp.org/www-project-top-ten/>

@@ -230,6 +230,32 @@ Deleting a `scope=credential` RoleBinding SHALL NOT terminate running sessions t
 - WHEN a new session starts in project P
 - THEN credential A is NOT injected (resolver finds no matching binding)
 
+## Audit-Driven Requirements
+
+> Requirements in this section address findings from the 2026-07 ProdSec security audit.
+> Each requirement references the originating finding ID (fNNN) for traceability.
+
+### Requirement: Group Names Must Be Sanitized in RoleBindings (f056)
+
+Tenant-supplied group names used in `reconcileGroupAccess` SHALL be validated
+against a denylist of `system:` prefixed groups and wildcard-scope groups before
+creating Kubernetes RoleBindings. A project admin can currently bind synthetic
+groups such as `system:authenticated` or `system:serviceaccounts` to project
+roles, silently granting every cluster identity admin access to the namespace.
+
+#### Scenario: system: group binding rejected
+
+- GIVEN a project admin sets a group name of `system:authenticated`
+- WHEN the ProjectSettingsReconciler processes the group access config
+- THEN the group name is rejected (matches `system:` denylist)
+- AND no RoleBinding is created for that group
+
+#### Scenario: Valid group name accepted
+
+- GIVEN a project admin sets a group name of `team-ambient`
+- WHEN the ProjectSettingsReconciler processes the group access config
+- THEN the RoleBinding is created with `kind: Group, name: team-ambient`
+
 ## Migration
 
 ### Existing consumers

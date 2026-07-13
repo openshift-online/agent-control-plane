@@ -535,6 +535,41 @@ Gateway manifests SHALL be:
 
 ---
 
+## Audit-Driven Requirements
+
+> Requirements in this section address findings from the 2026-07 ProdSec security audit.
+> Each requirement references the originating finding ID (fNNN) for traceability.
+
+### Requirement: Gateway Image Registry Allowlist (f018)
+
+Gateway images SHALL be validated against a registry allowlist (matching or stricter
+than `AllowedSandboxRegistries`), not just character-format validation. The current
+`ValidateImageReference` performs only format checks, allowing tenants to specify
+arbitrary container images (e.g., `attacker.registry/evil:latest`) that are deployed
+with the gateway's privileged RBAC — holder of JWT signing keys, server TLS keys,
+cluster-wide TokenReview, and sandbox CRUD.
+
+Additionally:
+1. Gateway TOML configuration overrides SHALL be replaced with a validated schema
+   of tenant-tunable fields — free-form TOML allows weakening sandbox security settings
+2. Gateway images SHOULD be pinned by digest, not mutable tags
+3. The `allow_unauthenticated_users` field SHALL default to `false` and be validated
+   at the reconciler level (see also f038 in openshell-sandbox-provisioning.spec.md)
+
+#### Scenario: Attacker-controlled gateway image rejected
+
+- GIVEN a Gateway resource with `image: attacker.registry/evil:latest`
+- WHEN the GatewayReconciler validates the configuration
+- THEN validation fails: "image registry not in allowlist"
+- AND the gateway is NOT deployed
+
+#### Scenario: Gateway TOML with unsafe settings rejected
+
+- GIVEN a Gateway with config containing `allow_unauthenticated_users = true`
+- WHEN the GatewayReconciler validates the configuration
+- THEN validation fails: "allow_unauthenticated_users must be false"
+- AND the gateway is NOT deployed
+
 ## References
 
 - [OpenShell Gateway Helm Chart](https://github.com/NVIDIA/OpenShell/tree/main/deploy/helm/openshell)

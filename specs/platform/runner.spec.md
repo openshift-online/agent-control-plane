@@ -561,6 +561,104 @@ be discovered and activated by semantic prompt intent.
 
 ---
 
+## Audit-Driven Requirements
+
+> Requirements in this section address findings from the 2026-07 ProdSec security audit.
+> Each requirement references the originating finding ID (fNNN) for traceability.
+
+### Requirement: AGUI_TOKEN Must Be Mandatory (f011)
+
+The `AGUI_TOKEN` session authentication middleware SHALL be fail-closed: the runner
+SHALL refuse to start if `AGUI_TOKEN` is not set. The current opt-in model leaves
+the runner API unauthenticated by default, allowing any pod that can reach port 8001
+to trigger agent runs, spoof caller identity via `x-current-user-id`/`x-caller-token`
+headers, and execute arbitrary git clones.
+
+Caller identity (`x-current-user-id`, `x-caller-token`) SHALL be accepted only
+from trusted sources (the backend, authenticated via the session token or mTLS),
+not from raw request headers.
+
+#### Scenario: Runner refuses to start without AGUI_TOKEN
+
+- GIVEN `AGUI_TOKEN` is not set in the runner environment
+- WHEN the runner starts
+- THEN it SHALL exit with an error: "AGUI_TOKEN is required"
+- AND no endpoints are served
+
+### Requirement: /tasks Endpoint Must Not Glob /tmp (f012)
+
+The `GET /tasks/{task_id}/output` endpoint SHALL serve only paths registered in the
+task registry. The fallback glob over `/tmp` using the task ID as a pattern SHALL
+be removed — it exposes raw credential files (`/tmp/.ambient_github_token`,
+`/tmp/.ambient_gitlab_token`, `/tmp/.ambient_kubeconfig`) to any caller.
+
+#### Scenario: Unknown task ID returns 404
+
+- GIVEN a request to `GET /tasks/ambient_github_token/output`
+- AND no task named `ambient_github_token` is registered
+- WHEN the endpoint processes the request
+- THEN it returns 404 Not Found
+- AND does NOT search /tmp for matching files
+
+### Requirement: Git Credential Helper Must Match Exact Hosts (f013)
+
+The git credential helper SHALL match against exact allowlisted hostnames
+(`github.com`, the configured GitLab hostname), not substring patterns
+(`*github*`, `*gitlab*`). Substring matching causes `github.evil.com` to
+receive the user's GitHub token.
+
+The credential helper SHALL be scoped using git's `credential.<url>.helper`
+syntax rather than a global catch-all helper.
+
+#### Scenario: Attacker-controlled hostname rejected
+
+- GIVEN the credential helper is installed with exact host matching
+- WHEN git requests credentials for `github.evil.com`
+- THEN no token is returned
+- AND the token is not leaked to the attacker's server
+
+### Requirement: Repo and Workflow Path Traversal Prevention (f014)
+
+The `/repos/add`, `/repos/remove`, and workflow-name derivation paths SHALL
+validate names against `^[A-Za-z0-9._-]+$` (rejecting `.`/`..`) or resolve
+and prefix-check against the workspace directory, reusing `content.py`'s
+`_safe_resolve` pattern.
+
+#### Scenario: Path traversal in repo remove rejected
+
+- GIVEN a request to `POST /repos/remove` with `repo_name = "../.."`
+- WHEN the endpoint processes the request
+- THEN the name fails validation (contains `..`)
+- AND no directory is deleted
+
+### Requirement: Git Clone URL Scheme Allowlist (f011, f014)
+
+The `/repos/add` endpoint SHALL validate git clone URLs to allow only `https://`
+scheme before invoking `git clone`. The `ext::` transport, `file://`, and `-`
+prefixed arguments SHALL be rejected.
+
+#### Scenario: ext:: transport clone rejected
+
+- GIVEN a request to `POST /repos/add` with `url = "ext::sh -c evil"`
+- WHEN the endpoint validates the URL
+- THEN the scheme is rejected (not HTTPS)
+- AND no git command is executed
+
+### Requirement: Request Body Size Limits and Server Timeouts (f032)
+
+The API server SHALL enforce:
+1. `http.MaxBytesReader` middleware limiting request bodies to 4 MiB (configurable)
+2. `ReadHeaderTimeout`, `ReadTimeout`, and `IdleTimeout` on the HTTP server
+3. Per-principal rate limits on mutation endpoints (session create/start/clone)
+4. Per-user caps on concurrent SSE streams and active sessions per project
+
+#### Scenario: Oversized request body rejected
+
+- GIVEN a request with a 100 MiB body to `POST /sessions`
+- WHEN the middleware processes the request
+- THEN the read is capped at 4 MiB
+- AND the request returns 413 Request Entity Too Large
+
 ## OpenShell Sandbox Isolation
 
 > **Status:** Implemented — validated end-to-end on ROSA OpenShift (kernel 5.14+)
