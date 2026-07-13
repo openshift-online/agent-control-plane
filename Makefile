@@ -966,6 +966,11 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 		ANTHROPIC_VERTEX_PROJECT_ID="$(ANTHROPIC_VERTEX_PROJECT_ID)" \
 		CLOUD_ML_REGION="$(CLOUD_ML_REGION)" \
 		./scripts/setup-kind-openshell.sh; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building and deploying mock LLM server..."; \
+		$(MAKE) --no-print-directory kind-load-mock-llm; \
+		kubectl apply -k tests/mock-llm/manifests/ $(QUIET_REDIRECT); \
+		kubectl rollout status deployment/mock-llm -n $(NAMESPACE) --timeout=60s; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Mock LLM server deployed"; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Applying tenant fleet definitions via acpctl..."; \
 		ACPCTL=components/ambient-cli/acpctl; \
 		PF_PORT=18766; \
@@ -1340,16 +1345,19 @@ kind-reload-runner-openshell: check-kind check-kubectl check-local-context ## Re
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
 		-t $(RUNNER_OPENSHELL_IMAGE) . $(QUIET_REDIRECT) || \
 		{ echo "$(COLOR_RED)✗$(COLOR_RESET) Build failed. Run without QUIET=1 for full output."; exit 1; }
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading OpenShell runner into kind cluster..."
-	@_IMG=$$(echo "$(RUNNER_OPENSHELL_IMAGE)" | cut -d: -f1) && \
-		$(CONTAINER_ENGINE) tag $(RUNNER_OPENSHELL_IMAGE) localhost/$$_IMG:latest && \
-		kind load docker-image localhost/$$_IMG:latest --name $(KIND_CLUSTER_NAME) && \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell runner image loaded as localhost/$$_IMG:latest"
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Updating control plane env vars to use localhost/acp_runner_openshell:latest..."
-	@kubectl set env deployment/ambient-control-plane -n $(NAMESPACE) \
-		OPENSHELL_RUNNER_IMAGE=localhost/acp_runner_openshell:latest $(QUIET_REDIRECT)
-	@kubectl rollout status deployment/ambient-control-plane -n $(NAMESPACE) --timeout=60s
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell runner reloaded — new sessions will use the updated image"
+	@_TAG=$$(git rev-parse --short HEAD)-$$(date +%s) && \
+	_IMG=$$(echo "$(RUNNER_OPENSHELL_IMAGE)" | cut -d: -f1) && \
+	$(CONTAINER_ENGINE) tag $(RUNNER_OPENSHELL_IMAGE) localhost/$$_IMG:$$_TAG && \
+	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading localhost/$$_IMG:$$_TAG into kind cluster ($(KIND_CLUSTER_NAME))..." && \
+	$(CONTAINER_ENGINE) save localhost/$$_IMG:$$_TAG | \
+		$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
+		ctr --namespace=k8s.io images import - && \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell runner image loaded as localhost/$$_IMG:$$_TAG" && \
+	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Updating control plane env vars to use localhost/$$_IMG:$$_TAG..." && \
+	kubectl set env deployment/ambient-control-plane -n $(NAMESPACE) \
+		OPENSHELL_RUNNER_IMAGE=localhost/$$_IMG:$$_TAG $(QUIET_REDIRECT) && \
+	kubectl rollout status deployment/ambient-control-plane -n $(NAMESPACE) --timeout=60s && \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell runner reloaded (tag: $$_TAG)"
 
 kind-load-runner: build-runner-openshell check-kind check-kubectl check-local-context ## Build OpenShell runner image and load into kind (skips if already present)
 	@_IMG=$$(echo "$(RUNNER_OPENSHELL_IMAGE)" | cut -d: -f1) && \
@@ -1370,6 +1378,18 @@ kind-load-runner: build-runner-openshell check-kind check-kubectl check-local-co
 		fi; \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Runner image loaded: $$_REF"; \
 	fi
+
+build-mock-llm: ## Build mock LLM server image for e2e testing
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building mock-llm image..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t localhost/mock-llm:latest tests/mock-llm $(QUIET_REDIRECT)
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) mock-llm image built"
+
+kind-load-mock-llm: build-mock-llm check-kind check-kubectl check-local-context ## Build and load mock LLM image into kind
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading mock-llm into kind cluster ($(KIND_CLUSTER_NAME))..."
+	@$(CONTAINER_ENGINE) save localhost/mock-llm:latest | \
+		$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
+		ctr --namespace=k8s.io images import -
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) mock-llm image loaded"
 
 kind-sso-toggle: check-kubectl ## Toggle SSO auth on/off in Kind (affects both frontend and backend)
 	@UNLEASH_ADMIN_TOKEN=$$(kubectl get secret unleash-credentials -n $(NAMESPACE) -o jsonpath='{.data.admin-api-token}' | base64 -d); \

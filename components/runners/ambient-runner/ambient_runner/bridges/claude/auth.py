@@ -91,7 +91,7 @@ async def setup_sdk_authentication(context: RunnerContext) -> tuple[str, bool, s
         # The proxy terminates TLS using a self-signed CA whose cert lives at
         # /etc/openshell-tls/openshell-ca.pem.
         os.environ["ANTHROPIC_API_KEY"] = "inference-routing"
-        os.environ["ANTHROPIC_BASE_URL"] = "https://inference.local"
+        os.environ.setdefault("ANTHROPIC_BASE_URL", "https://inference.local")
 
         # HTTPS_PROXY: directs all HTTPS traffic through the supervisor's
         # CONNECT proxy. Required so inference.local resolves — there's no

@@ -1,0 +1,14 @@
+kind: Agent
+name: test-agent-mock-llm
+sandbox_policy: mock-llm-permissive
+prompt: "Say hello world"
+providers:
+  - mock-llm
+payloads:
+  - sandbox_path: /sandbox/CLAUDE.md
+    content: "You are a test agent using a mock LLM backend."
+environment:
+  ANTHROPIC_BASE_URL: http://mock-llm.ambient-code.svc.cluster.local:8000
+  CLAUDE_CODE_ATTRIBUTION_HEADER: "0"
+labels:
+  purpose: e2e-testing

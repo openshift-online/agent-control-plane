@@ -1,0 +1,4 @@
+kind: Provider
+name: mock-llm
+type: generic
+secret: mock-llm-creds
