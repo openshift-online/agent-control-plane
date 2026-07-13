@@ -50,30 +50,30 @@ skills/
 
 ## Reconciliation State
 
-**Last analyzed**: 2026-07-13 (ProdSec security audit spec integration)
-**Spec corpus**: 31 specs across 4 domains
-**Codebase commit**: a452a7b0 (spec/rbac-ownership-remove-owner-fks branch)
+**Last analyzed**: 2026-07-08 (provider/gateway RBAC fix)
+**Spec corpus**: 29 specs across 4 domains
+**Codebase commit**: f564e59e (fix/hcmais-ui-sso-redirect-patch branch)
 
 ### Coverage Summary
 
 | Domain | Specs | Requirements | Present | Partial | Missing | Coverage |
 |--------|-------|-------------|---------|---------|---------|----------|
-| Platform | 13 | 140 | 119 | 3 | 18 | 85.0% |
-| Security | 7 | 79 | 45 | 5 | 29 | 56.9% |
-| UI | 7 | 73 | 62 | 6 | 5 | 84.9% |
+| Platform | 12 | 121 | 116 | 1 | 4 | 95.9% |
+| Security | 6 | 55 | 47 | 3 | 5 | 85.5% |
+| UI | 7 | 70 | 62 | 6 | 2 | 88.6% |
 | CLI | 1 | 13 | 13 | 0 | 0 | 100% |
-| **TOTAL** | **31** | **305** | **239** | **14** | **52** | **78.4%** |
+| **TOTAL** | **29** | **259** | **238** | **10** | **11** | **91.9%** |
 
 ### Spec Dependency Order
 
 Reconciliation processes specs in this topological order:
 
 ```
-Layer 0 (roots):  data-model, identity-boundaries, supply-chain-security, standards/*
+Layer 0 (roots):  data-model, identity-boundaries, standards/*
 Layer 1:          control-plane, sso-authentication, rbac-enforcement
 Layer 2:          runner, agent-sandbox-config, credential-binding, gateway-rbac-policy
 Layer 3:          gateway-provisioning, credential-encryption, openshell-sandbox
-Layer 4:          openshell-sandbox-provisioning, agent-inheritance, mlflow-tracing
+Layer 4:          openshell-sandbox-provisioning, agent-inheritance
 Layer 5:          scheduled-session-execution, session-activity-tracking, mcp-server
 Layer 6 (leaves): architecture, annotations, views, live-preview, project-sharing,
                   scheduled-sessions, work-tracking-dashboard, credentials-tui
@@ -109,56 +109,6 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | S13 | rbac-enforcement | Provider/Gateway RBAC resource registration | BE | **done** | blocker | `provider` and `gateway` resources missing from RBAC permission system — middleware returned 404 before handler ran. Fixed: resource constants, isListEndpoint allowlist, role permissions migration. |
 | S14 | rbac-enforcement | Provider handler SQL injection + missing RBAC | BE | **done** | critical | Provider List handler used raw string concat for project filter (SQL injection). Missing `ApplyListFilter`, input validation, and editor tier check. Fixed to match gateway handler pattern. |
 
-### Security Audit Gaps (2026-07 ProdSec)
-
-> Gaps sourced from the 2026-07 ProdSec security audit. Each row references a
-> finding ID (fNNN) and the spec that now contains the requirement. Status is
-> relative to the **codebase**, not the spec — specs were updated in this PR.
-
-| ID | Spec | Requirement (finding) | Layer | Status | Severity | Notes |
-|----|------|----------------------|-------|--------|----------|-------|
-| SA1 | rbac-enforcement | Credential scope extraction on nested routes (f001) | BE | missing | blocker | `ExtractRequestScope` does not set `CredentialID` on `/credentials/{id}/token`; nil CredentialIDs = authorized. Cross-tenant credential theft. |
-| SA2 | identity-boundaries | CP token exchange must verify workload identity (f002) | CP | missing | blocker | RSA-OAEP exchange accepts any 8+ char string as session ID. Must use TokenReview + session-scoped short-lived tokens. |
-| SA3 | rbac-enforcement | Session/agent-scoped binding target validation (f003) | BE | missing | critical | `CreateRoleBinding` does not verify target session/agent belongs to the binding's project. Cross-tenant binding possible. |
-| SA4 | rbac-enforcement | IsGlobalAdmin derived from role permissions (f004) | BE | missing | critical | `IsGlobalAdmin()` returns true for any `scope=platform` binding regardless of role. `platform:viewer` ≠ admin. |
-| SA5 | rbac-enforcement | gRPC per-method permission evaluation (f005) | BE | missing | critical | gRPC interceptor checks project membership only; any member can update/delete any resource in the project. |
-| SA6 | rbac-enforcement | orderBy parameter sanitization (f006) | BE | missing | critical | Raw SQL column names passed to `ORDER BY` via `orderBy` query param. Blind SQL injection on all list endpoints. |
-| SA7 | control-plane | kube_namespace DNS-1123 validation (f007) | BE | missing | critical | Unvalidated `kube_namespace` used in proxy URL construction. Authority injection → SSRF to internal services. |
-| SA8 | control-plane | Application reconciler URL and path validation (f008) | CP | missing | critical | `ext::` git transport enables RCE. No HTTPS-only enforcement or `filepath.Clean` on clone paths. |
-| SA9 | identity-boundaries | Raw provider tokens must not reach tenant agent code (f015) | CP | missing | critical | `GITHUB_TOKEN`, `ANTHROPIC_API_KEY` injected as env vars into runner container. Agent code has direct access. |
-| SA10 | identity-boundaries | system:image-builder bound to session SA only (f017) | CP | missing | critical | `system:image-builder` ClusterRoleBinding uses `Group` subject matching all SAs in namespace, not specific SA. |
-| SA11 | gateway-provisioning | Gateway image registry allowlist (f018) | CP | missing | critical | Tenant-controlled `image` field validated only by format regex. No registry allowlist, no digest pinning. |
-| SA12 | control-plane | Least-privilege control plane ClusterRole (f019) | Manifests | missing | critical | CP ClusterRole has `escalate`+`bind` on roles, `*` on secrets, `create` on tokenreviews. Cluster-admin equivalent. |
-| SA13 | runner | AGUI_TOKEN must be mandatory (f011) | Runner | missing | critical | AG-UI token validation is opt-in (`AGUI_TOKEN` env var). Without it, anyone on localhost can control the runner. |
-| SA14 | runner | /tasks endpoint must not glob /tmp (f012) | Runner | missing | critical | Fallback `glob.glob('/tmp/**/*')` serves all files under /tmp including credential secrets. |
-| SA15 | runner | Git credential helper must match exact hosts (f013) | Runner | missing | critical | `host.endswith('github.com')` substring match leaks tokens to attacker-controlled `evil-github.com`. |
-| SA16 | runner | Repo and workflow path traversal prevention (f014) | Runner | missing | critical | `repo_name` and `workflow_name` pass unvalidated to `os.path.join`. `../../etc/passwd` traversal possible. |
-| SA17 | live-preview | Preview content must be served from a sandbox origin (f021) | FE | missing | critical | Agent HTML served same-origin in `allow-same-origin` iframe. Full DOM/cookie access to operator session. |
-| SA18 | live-preview | Operator token must not be forwarded to preview targets (f022) | FE | missing | critical | `Authorization: Bearer` header forwarded to agent-controlled preview URLs. Token exfiltration via redirect. |
-| SA19 | credential-encryption | Production overlays must enable encryption (f024) | Manifests | missing | critical | `CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT=true` in production overlay. All credentials stored in cleartext. |
-| SA20 | security | Database credentials must not be committed (f023) | Manifests | missing | critical | Hardcoded PostgreSQL password in base Secret, inherited by all overlays including production. |
-| SA21 | security | TLS certificate validation must not be disabled (f025) | Manifests | missing | major | `NODE_TLS_REJECT_UNAUTHORIZED=0` disables TLS verification process-wide in production UI. |
-| SA22 | supply-chain-security | CI secrets must not be exposed to PR-controlled code (f026) | CI | missing | critical | `AUTO_MERGE_PAT` available to PR-controlled `try-enqueue.sh`. Any same-repo branch PR can exfiltrate it. |
-| SA23 | security | Default-deny NetworkPolicy with explicit allows (f027) | Manifests | missing | major | Base `runner-networkpolicy.yaml` has empty ingress rule (`- {}`). hcmais overlay deletes NetworkPolicy entirely. |
-| SA24 | sso-authentication | JWT issuer and audience validation required (f028) | BE | missing | major | JWT validation performs no `iss` or `aud` checks. Any JWT from any issuer accepted. |
-| SA25 | runner | Request body size limits and server timeouts (f032) | Runner | missing | major | No `MaxBytesReader`, no server timeouts, no rate limiting on runner HTTP endpoints. |
-| SA26 | rbac-enforcement | gRPC session re-parenting prevention (f033) | BE | missing | major | `UpdateSession` accepts `ProjectId` field changes. Sessions can be moved to arbitrary projects. |
-| SA27 | security | Egress NetworkPolicy for tenant runner pods (f034) | CP | missing | major | Session NetworkPolicies are ingress-only. No egress restrictions. Agent code can reach metadata API, K8s API, internet. |
-| SA28 | control-plane | Project namespace naming validation (f035) | CP | missing | major | Project IDs flow unvalidated into namespace names. No denylist for `kube-system`, `default`, etc. |
-| SA29 | mcp-server | Prompt injection resistance for delegation mechanisms (f037) | CP | missing | major | `@mention` in-band text parsing auto-creates sessions. Attacker-controlled issue bodies trigger delegation. |
-| SA30 | openshell-sandbox | Gateway config must disable unauthenticated access and enforce AppArmor (f038) | CP | missing | major | `allow_unauthenticated_users=true` and `app_armor_profile=unconfined` in gateway config. |
-| SA31 | supply-chain-security | PR registry credentials scoped to PR tags (f039) | CI | missing | major | Production `QUAY_USERNAME`/`QUAY_PASSWORD` used in PR-triggered builds. |
-| SA32 | supply-chain-security | Human review required for merges to main (f040) | CI | missing | major | Bot-self-approval pattern allows automated merge without human review. |
-| SA33 | supply-chain-security | Image signing, provenance, and SBOM (f041) | CI | missing | major | No cosign signing, no SLSA provenance, no SBOM generation. SLSA Build L0. |
-| SA34 | supply-chain-security | Deployment images pinned by digest (f042) | Manifests | missing | major | All platform images use mutable `:latest` tags with `imagePullPolicy: Always`. |
-| SA35 | supply-chain-security | Dependency installation must be verified (f043) | CI | missing | major | CodeRabbit installed via `curl | sh` from unversioned URL. `|| echo` masks failures. |
-| SA36 | security | Pod security standards and SecurityContext hardening (f044) | Manifests | missing | major | DB, MinIO, otel-collector, grafana pods have no SecurityContext. No PSA labels on namespaces. |
-| SA37 | credential-binding | Group names must be sanitized in RoleBindings (f056) | CP | missing | minor | `system:authenticated` accepted as group name in `reconcileGroupAccess`. All cluster identities get admin. |
-| SA38 | supply-chain-security | Credential sidecar dependencies pinned (f057) | Runner | missing | minor | Unpinned `pip install` and mutable git tags in credential sidecar Dockerfiles. |
-| SA39 | live-preview | Preview PostMessage bridge origin validation (f060) | FE | missing | minor | PostMessage bridge accepts responses from any origin. No `e.origin` validation. |
-| SA40 | control-plane | Session delete must not deprovision project namespace (f063) | CP | missing | minor | Deleting one session triggers `deprovisionProject` which removes the shared namespace. |
-| SA41 | runner | Git clone URL scheme allowlist (f011+f014) | Runner | missing | major | `ext::` git transport allowed. Only `https://` should be permitted for clone URLs. |
-
 ### Platform Gaps
 
 | ID | Spec | Requirement | Layer | Status | Severity | Notes |
@@ -175,12 +125,8 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | P19 | gateway-provisioning | Gateway Deployment Failure Handling | CP | **done** | major | GatewayReconciler tracks per-gateway failures, updates `ambient.ai/reconcile-status` and `ambient.ai/last-reconciled-at` annotations on Gateway resources. Validation failures annotated as `ValidationFailed`. Reconcile loop counts and warns on partial failures. |
 | P20 | gateway-provisioning | platform-config ConfigMap overlays removal | Manifests | **done** | minor | Deleted `platform-config.yaml` from `overlays/kind/` and `overlays/hcmais-dev/`. Removed references from both `kustomization.yaml` files. |
 | P21 | control-plane | ProjectReconciler namespace lifecycle | CP | **done** | minor | Ordering already enforced: informer `initialSync` syncs `projects` before `sessions`, and `RegisterHandler` in main.go registers ProjectReconciler first. ProjectReconciler runs `ensureNamespace()` which creates namespaces before session reconcilers attempt to use them. |
-| P22 | data-model | `acpctl apply` missing `sandbox_policy`, `sandbox_template`, `entrypoint` on Agent | CLI | missing | critical | `Resource` struct in `kustomize.go` and `buildAgentPatch()` in `apply/cmd.go` silently drop these fields during YAML parsing. API server and SDK fully support them. New deployments cannot declaratively set sandbox policies on agents. |
+| P22 | data-model | `acpctl apply` missing `sandbox_policy`, `sandbox_template`, `entrypoint` on Agent | CLI | missing | critical | `resource` struct and `buildAgentPatch()` in `apply/cmd.go` silently drop these fields during YAML parsing. API server and SDK fully support them. New deployments cannot declaratively set sandbox policies on agents. |
 | P23 | data-model | `acpctl apply` missing `Policy` as supported kind | CLI | missing | critical | Policy has full CRUD in API server (`plugins/policies/`) and SDK (`Policys()` client) but is not in the `apply` dispatch switch. Policies must be created via REST API instead of declarative YAML. |
-| P24 | mlflow-tracing | Runner Image INTERNAL_BUILD conditional CA | Runner | partial | minor | CA cert installed unconditionally via `COPY` in `Dockerfile.openshell`. Missing `INTERNAL_BUILD` build arg, conditional logic, and remote fetch from `certs.corp.redhat.com`. |
-| P25 | mlflow-tracing | OpenShell resolve token handling in autolog | Runner | partial | major | `mlflow_autolog.py` always calls `set_tracking_uri()`/`set_experiment()` unconditionally. Missing detection of `openshell:resolve:env:` prefix to defer URI config to supervisor. |
-| P26 | mlflow-tracing | Tracing Token Security (regex redaction) | Runner | missing | major | No runner-wide regex redaction filter for `MLFLOW_TRACKING_TOKEN` in logs/errors/API responses. Spec acknowledges as TODO — no existing redaction infrastructure to extend. |
-| P27 | mlflow-tracing | MLflow URI domain allowlist validation | BE | missing | minor | Spec requires HTTP 400 at credential-bind time when URI host not in allowlist. Spec acknowledges as TODO — requires new API server capability. |
 | P2 | data-model | Application CLI sync/refresh commands | CLI | **done** | major | SDK `Sync()`/`Refresh()` methods added. CLI calls `POST /sync` and `POST /refresh`. Flags: `--prune`, `--revision`, `--prune-project`. |
 | P3 | data-model | Application frontend UI | FE | **done** | major | Full CRUD UI: domain types, port, adapter, mapper, query hooks, list page, detail page. Gated behind `feature.applications.enabled` flag. |
 | P4 | data-model | SessionEvent runner-side compression | Runner | **done** | major | `EventCompressor` integrated into gRPC transport path. Compressed events pushed to `session_events.push()` with `event_count` and `completed_at`. |
@@ -239,11 +185,7 @@ Gaps grouped by execution wave. Each wave gates the next.
 | ~~13~~ | ~~Examples + Manifests~~ | ~~4~~ | ~~P18, P19, P20, P21~~ | ✅ Completed 2026-07-08 |
 | ~~14~~ | ~~BE (RBAC)~~ | ~~2~~ | ~~S13, S14~~ | ✅ Completed 2026-07-08 |
 
-**Next wave candidates**: SA1, SA2, SA6, SA7 (blockers/critical — cross-tenant credential theft, token exchange, SQL injection, SSRF). P22, P23 (critical — CLI `apply` gaps).
-
-**Partials** (S9, S10, S11, P1, P9, P24, P25) are low-to-major severity and can be addressed opportunistically.
-
-**Spec-acknowledged TODOs** (P26, P27) require new infrastructure; deferred by spec design.
+**Partials** (S9, S10, S11, P1, P9) are low-severity and can be addressed opportunistically.
 
 ---
 
@@ -295,5 +237,4 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-08 | (pending) | Wave 11 executed: P13, P15 | 88.0% | Shared kustomize library extracted to `ambient-sdk/go-sdk/kustomize/`. CLI refactored to use shared library. Gateway kind added to `acpctl apply` with reconcile semantics. |
 | 2026-07-08 | (pending) | Wave 12 executed: P12, P14, P16, P17 | 89.6% | GatewayReconciler created (polling pattern, 30s ticker). ConfigMap-based provisioning eliminated. Manifests and validation consumed by new reconciler. `go build ./...` clean. |
 | 2026-07-08 | (pending) | Wave 13 executed: P18, P19, P20, P21 | 91.1% | Gateway overlay examples added. Failure handling with annotation-based status tracking. platform-config.yaml removed from kind and hcmais-dev overlays. ProjectReconciler ordering verified as already enforced. |
-| 2026-07-08 | b9dfc496 | Reconcile: PR #292 + MLflow spec integration | 90.5% | Removed `owner_user_id`/`created_by_user_id`/`assigned_user_id` FKs from all Kind schemas (PR #292). New MLflow tracing spec (PR #222) analyzed: 6 requirements, 4 present, 2 partial, 2 missing (both spec-acknowledged TODOs). P22/P23 confirmed still open. New gaps: P24-P27. |
-| 2026-07-13 | a452a7b0 | ProdSec security audit: spec integration + gap table | 78.4% | 13 specs updated, 1 new spec (supply-chain-security), 41 audit gaps (SA1-SA41) added. 2 blockers, 18 critical, 15 major, 4 minor. Coverage drops from 90.5% to 78.4% due to 41 new missing requirements. |
+| 2026-07-08 | (pending) | Wave 14 executed: S13, S14 | 91.9% | Provider/Gateway RBAC fix: added ResourceProvider/ResourceGateway to permissions.go, isListEndpoint allowlist, role permissions migration (202607080001). Provider handler hardened: SQL injection fix (TSLEqual), ApplyListFilter, input validation (validIDPattern), CheckEditorTier on writes. Tests added. |
