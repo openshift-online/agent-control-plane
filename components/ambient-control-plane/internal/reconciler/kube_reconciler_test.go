@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/gateway"
@@ -1064,5 +1066,52 @@ func TestIsUploadRetryable(t *testing.T) {
 				t.Errorf("isUploadRetryable(%v) = %v, want %v", tt.err, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestTryClaimExec_PreventsDoubleSpawn(t *testing.T) {
+	r := &SimpleKubeReconciler{
+		activeExecs: make(map[string]struct{}),
+	}
+
+	if !r.tryClaimExec("session-1") {
+		t.Fatal("first claim for session-1 should succeed")
+	}
+	if r.tryClaimExec("session-1") {
+		t.Fatal("second claim for session-1 should be rejected")
+	}
+	if !r.tryClaimExec("session-2") {
+		t.Fatal("claim for different session should succeed")
+	}
+
+	r.releaseExec("session-1")
+
+	if !r.tryClaimExec("session-1") {
+		t.Fatal("claim after release should succeed")
+	}
+}
+
+func TestTryClaimExec_ConcurrentSafety(t *testing.T) {
+	r := &SimpleKubeReconciler{
+		activeExecs: make(map[string]struct{}),
+	}
+
+	const goroutines = 50
+	var claimed atomic.Int32
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			if r.tryClaimExec("contested-session") {
+				claimed.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if got := claimed.Load(); got != 1 {
+		t.Fatalf("expected exactly 1 goroutine to claim the exec slot, got %d", got)
 	}
 }

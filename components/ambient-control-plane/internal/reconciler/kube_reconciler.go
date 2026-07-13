@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ambient-code/platform/components/ambient-control-plane/internal/informer"
@@ -132,6 +133,9 @@ type SimpleKubeReconciler struct {
 	gateway     gatewayClient
 	cfg         KubeReconcilerConfig
 	logger      zerolog.Logger
+
+	execMu      sync.Mutex
+	activeExecs map[string]struct{}
 }
 
 func (r *SimpleKubeReconciler) nsKube() *kubeclient.KubeClient {
@@ -150,7 +154,24 @@ func NewKubeReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, p
 		gateway:     gateway,
 		cfg:         cfg,
 		logger:      logger.With().Str("reconciler", "kube").Logger(),
+		activeExecs: make(map[string]struct{}),
 	}
+}
+
+func (r *SimpleKubeReconciler) tryClaimExec(sessionID string) bool {
+	r.execMu.Lock()
+	defer r.execMu.Unlock()
+	if _, active := r.activeExecs[sessionID]; active {
+		return false
+	}
+	r.activeExecs[sessionID] = struct{}{}
+	return true
+}
+
+func (r *SimpleKubeReconciler) releaseExec(sessionID string) {
+	r.execMu.Lock()
+	defer r.execMu.Unlock()
+	delete(r.activeExecs, sessionID)
 }
 
 func (r *SimpleKubeReconciler) namespaceForSession(session types.Session) string {
@@ -376,6 +397,10 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 			payloads = agent.Payloads
 		}
 		payloads = r.appendInitialPromptPayload(ctx, session, sdk, payloads)
+		if !r.tryClaimExec(session.ID) {
+			r.logger.Info().Str("session_id", session.ID).Str("sandbox", sbxName).Msg("execAfterReady already running for session; skipping duplicate")
+			return nil
+		}
 		go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads)
 		r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 		return nil
@@ -447,6 +472,10 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		payloads = agent.Payloads
 	}
 	payloads = r.appendInitialPromptPayload(ctx, session, sdk, payloads)
+	if !r.tryClaimExec(session.ID) {
+		r.logger.Info().Str("session_id", session.ID).Str("sandbox", sbxName).Msg("execAfterReady already running for session; skipping duplicate")
+		return nil
+	}
 	go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads)
 
 	r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
@@ -641,6 +670,7 @@ func (r *SimpleKubeReconciler) sandboxReadinessTimeout() time.Duration {
 }
 
 func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string, sdk *sdkclient.Client, execEnv map[string]string, payloads []types.Payload) {
+	defer r.releaseExec(sessionID)
 	timeout := r.sandboxReadinessTimeout()
 	pollCtx, pollCancel := context.WithTimeout(context.Background(), timeout)
 	defer pollCancel()
