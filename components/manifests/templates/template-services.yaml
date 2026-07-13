@@ -556,7 +556,7 @@ objects:
     labels:
       app: ambient-ui
   spec:
-    serviceAccountName: ambient-api-server
+    serviceAccountName: ambient-ui
     replicas: 1
     selector:
       matchLabels:
