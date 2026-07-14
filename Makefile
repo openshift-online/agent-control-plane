@@ -195,6 +195,16 @@ vendor-openshell-proto: ## Vendor OpenShell proto files and regenerate Go stubs.
 	@test -n "$(REF)" || (echo "Usage: make vendor-openshell-proto REF=<tag-or-sha>"; exit 1)
 	bash components/ambient-control-plane/scripts/vendor-proto.sh $(REF)
 
+##@ Dependency Updates
+
+update-openshell: ## Update OpenShell to a new version (protos + images). Usage: make update-openshell VERSION=v0.0.83
+	@test -n "$(VERSION)" || (echo "Usage: make update-openshell VERSION=<tag>"; exit 1)
+	bash scripts/update-openshell.sh $(VERSION)
+
+update-agent-sandbox: ## Update agent-sandbox CRD version. Usage: make update-agent-sandbox VERSION=v0.5.1
+	@test -n "$(VERSION)" || (echo "Usage: make update-agent-sandbox VERSION=<tag>"; exit 1)
+	bash scripts/update-agent-sandbox.sh $(VERSION)
+
 ##@ Building
 
 MCP_BUILD_TARGETS := build-mcp build-credential-sidecars

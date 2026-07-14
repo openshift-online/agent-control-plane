@@ -64,23 +64,21 @@ if [[ "$REF" =~ ^v[0-9] ]]; then
   API_RESPONSE=$(curl -fsSL "https://api.github.com/repos/$UPSTREAM_REPO/git/ref/tags/$TAG") \
     || die "GitHub API request failed for tag $TAG"
 
-  SHA=$(python3 - "$UPSTREAM_REPO" <<PYEOF
+  SHA=$(echo "$API_RESPONSE" | python3 -c "
 import json, sys, urllib.request
 
-repo = sys.argv[1]
 d = json.loads(sys.stdin.read())
-obj = d["object"]
+obj = d['object']
 
 # Lightweight tag → commit directly; annotated tag → tag object → commit
-if obj["type"] == "commit":
-    print(obj["sha"])
+if obj['type'] == 'commit':
+    print(obj['sha'])
 else:
-    tag_url = obj["url"]
+    tag_url = obj['url']
     with urllib.request.urlopen(tag_url) as r:
         td = json.loads(r.read())
-    print(td["object"]["sha"])
-PYEOF
-  <<< "$API_RESPONSE") || die "Could not resolve tag $TAG to a commit SHA"
+    print(td['object']['sha'])
+") || die "Could not resolve tag $TAG to a commit SHA"
 
 else
   SHA="$REF"
@@ -114,8 +112,8 @@ FILES=(
 # Written to a temp file so we can pipe the fetched content via stdin without
 # conflicting with a heredoc.
 
-PYSCRIPT="$(mktemp --suffix=.py)"
-PYTMP="$(mktemp)"
+PYSCRIPT="$(mktemp -t vendor_proto).py"
+PYTMP="$(mktemp -t vendor_proto_tmp)"
 trap 'rm -f "$PYSCRIPT" "$PYTMP"' EXIT
 
 cat > "$PYSCRIPT" <<'PYEOF'
@@ -196,6 +194,32 @@ for entry in "${FILES[@]}"; do
 
   echo "    → $local_sub"
 done
+
+# ── rewrite import paths ─────────────────────────────────────────────────────
+#
+# Upstream protos import each other with bare filenames (e.g. import "sandbox.proto")
+# but our local layout nests them (openshell/sandbox/v1/sandbox.proto). Build a sed
+# script from the FILES table and apply it to all vendored protos.
+
+IMPORT_SED=""
+for entry in "${FILES[@]}"; do
+  IFS='|' read -r upstream_path local_sub _ _ <<< "$entry"
+  upstream_basename="$(basename "$upstream_path")"
+  if [[ "$upstream_basename" != "$(basename "$local_sub")" ]] || \
+     [[ "$upstream_basename" != "$local_sub" ]]; then
+    IMPORT_SED="${IMPORT_SED}s|import \"${upstream_basename}\"|import \"${local_sub}\"|g;"
+  fi
+done
+
+if [[ -n "$IMPORT_SED" ]]; then
+  echo "Rewriting import paths ..."
+  for entry in "${FILES[@]}"; do
+    IFS='|' read -r _ local_sub _ _ <<< "$entry"
+    local_file="$PROTO_DIR/$local_sub"
+    sed -i.bak "$IMPORT_SED" "$local_file"
+    rm -f "${local_file}.bak"
+  done
+fi
 
 # ── update VENDOR.md ──────────────────────────────────────────────────────────
 

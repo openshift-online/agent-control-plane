@@ -8,11 +8,11 @@ syntax = "proto3";
 
 package openshell.v1;
 
-import "openshell/datamodel/v1/datamodel.proto";
-import "openshell/sandbox/v1/sandbox.proto";
-import "google/protobuf/struct.proto";
-
 option go_package = "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1;openshell_v1";
+
+import "openshell/datamodel/v1/datamodel.proto";
+import "google/protobuf/struct.proto";
+import "openshell/sandbox/v1/sandbox.proto";
 
 // OpenShell service provides sandbox, provider, and runtime management capabilities.
 //
