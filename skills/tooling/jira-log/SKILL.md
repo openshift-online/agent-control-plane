@@ -214,7 +214,3 @@ Time-box: 3 days
 ## Agent Cold-Start Checklist
 
 A Jira is agent-actionable when it has: a user story (who/why), acceptance criteria (definition of done), repo + file paths (where to edit), constraints (what not to do), and testing requirements (expected coverage). Bug reports additionally need repro steps. Spikes need deliverables and a time-box.
-
-## Context
-
-$ARGUMENTS
