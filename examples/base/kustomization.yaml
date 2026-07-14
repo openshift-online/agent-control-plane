@@ -13,3 +13,6 @@ resources:
   - providers/vertex.yaml
   - providers/github.yaml
   - providers/jira.yaml
+  - providers/mock-llm.yaml
+  - agents/test-agent-mock-llm.yaml
+  - policies/mock-llm-permissive.yaml

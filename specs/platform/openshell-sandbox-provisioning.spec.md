@@ -310,6 +310,14 @@ The control plane SHALL pass session configuration to the sandbox as environment
 - AND Kubernetes-specific `valueFrom` / `fieldRef` entries (e.g., `POD_IP`) SHALL be omitted
 - AND `INITIAL_PROMPT` SHALL NOT be included in the gateway environment — the assembled prompt contains newlines which OpenShell strips; the prompt is delivered via file upload instead (see [Payload Upload via SSH](#requirement-payload-upload-via-ssh))
 
+#### Scenario: Agent-overridable inference base URL
+
+- GIVEN a session with an associated agent that declares `ANTHROPIC_BASE_URL` in its `environment` map
+- WHEN the control plane builds the inference execution environment via `inferenceExecEnv(agent)`
+- THEN it SHALL use the agent's `ANTHROPIC_BASE_URL` value instead of the default `https://inference.local`
+- AND `ANTHROPIC_BASE_URL` SHALL NOT be in the `immutableSandboxEnvKeys` set — agents MAY override it to point to custom inference endpoints (e.g., a mock LLM server for testing)
+- AND all other inference env vars (`ANTHROPIC_API_KEY`, `HTTPS_PROXY`, `NO_PROXY`, `SSL_CERT_FILE`, etc.) SHALL remain immutable
+
 #### Scenario: Provider-injected environment variable protection
 
 - GIVEN a sandbox with attached providers that inject environment variables (e.g., `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`)
@@ -644,9 +652,10 @@ The control plane SHALL configure DNS resolution for sandboxes by patching the S
 - GIVEN a sandbox has been created via `CreateSandbox`
 - WHEN the control plane prepares the sandbox for runner execution
 - THEN it SHALL patch the `agents.x-k8s.io/v1beta1` Sandbox CR using a Kubernetes merge-patch on `spec.podTemplate.spec.dnsConfig` with `options: [{name: ndots, value: "1"}]`
+- AND the patch SHALL retry up to 5 times with linear backoff (attempt * 500ms) on transient failures, logging a warning on each retry with the attempt number
 - AND it SHALL delete the sandbox pod to trigger recreation by the sandbox controller with the updated DNS config
 - AND if the pod deletion fails with NotFound, the error SHALL be ignored (pod may not exist yet)
-- AND DNS patching failures SHALL be logged as warnings but SHALL NOT block sandbox provisioning
+- AND DNS patching failures (after all retries exhausted) SHALL be logged as warnings but SHALL NOT block sandbox provisioning
 
 #### Scenario: DNS configuration on re-reconcile
 

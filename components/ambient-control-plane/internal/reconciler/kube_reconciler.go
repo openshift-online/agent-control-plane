@@ -466,7 +466,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		if err := r.patchSandboxDNSConfig(ctx, namespace, sbxName); err != nil {
 			r.logger.Warn().Err(err).Str("sandbox", sbxName).Msg("failed to patch sandbox dnsConfig; DNS resolution for external FQDNs may fail")
 		}
-		execEnv := r.inferenceExecEnv()
+		execEnv := r.inferenceExecEnv(agent)
 		var payloads []types.Payload
 		if agent != nil {
 			payloads = agent.Payloads
@@ -541,7 +541,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		Int("providers", len(providerNames)).
 		Msg("sandbox created via gateway")
 
-	execEnv := r.inferenceExecEnv()
+	execEnv := r.inferenceExecEnv(agent)
 	var payloads []types.Payload
 	if agent != nil {
 		payloads = agent.Payloads
@@ -601,15 +601,22 @@ func (r *SimpleKubeReconciler) patchSandboxDNSConfig(ctx context.Context, namesp
 		return fmt.Errorf("marshalling dnsConfig patch: %w", err)
 	}
 
-	_, err = r.nsKube().DynamicClient().Resource(sandboxGVR).Namespace(namespace).Patch(
-		ctx, sandboxName, k8stypes.MergePatchType, patchBytes, metav1.PatchOptions{},
-	)
-	if err != nil {
-		return fmt.Errorf("patching sandbox %s dnsConfig: %w", sandboxName, err)
+	const maxRetries = 5
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		_, err = r.nsKube().DynamicClient().Resource(sandboxGVR).Namespace(namespace).Patch(
+			ctx, sandboxName, k8stypes.MergePatchType, patchBytes, metav1.PatchOptions{},
+		)
+		if err == nil {
+			r.logger.Info().Str("sandbox", sandboxName).Str("namespace", namespace).Msg("patched sandbox CR dnsConfig with ndots:1")
+			return nil
+		}
+		if attempt < maxRetries {
+			r.logger.Warn().Err(err).Str("sandbox", sandboxName).Int("attempt", attempt).Msg("retrying dnsConfig patch")
+			time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+		}
 	}
 
-	r.logger.Info().Str("sandbox", sandboxName).Str("namespace", namespace).Msg("patched sandbox CR dnsConfig with ndots:1")
-	return nil
+	return fmt.Errorf("patching sandbox %s dnsConfig after %d attempts: %w", sandboxName, maxRetries, err)
 }
 
 // verifyAndFixDNSConfig checks the sandbox pod's /etc/resolv.conf for the
@@ -655,12 +662,18 @@ func (r *SimpleKubeReconciler) appendPromptToEntrypoint(ctx context.Context, ent
 	return []string{"/bin/sh", "-c", shellCmd}
 }
 
-func (r *SimpleKubeReconciler) inferenceExecEnv() map[string]string {
+func (r *SimpleKubeReconciler) inferenceExecEnv(agent *types.Agent) map[string]string {
 	if !r.cfg.OpenShellUseGateway {
 		return nil
 	}
+	baseURL := "https://inference.local"
+	if agent != nil {
+		if v, ok := agent.Environment["ANTHROPIC_BASE_URL"]; ok && v != "" {
+			baseURL = v
+		}
+	}
 	return map[string]string{
-		"ANTHROPIC_BASE_URL":                     "https://inference.local",
+		"ANTHROPIC_BASE_URL":                     baseURL,
 		"ANTHROPIC_API_KEY":                      "notused",
 		"HTTPS_PROXY":                            "http://10.200.0.1:3128",
 		"NO_PROXY":                               "127.0.0.1,localhost",
@@ -704,7 +717,6 @@ func (r *SimpleKubeReconciler) isAllowedRegistry(image string) bool {
 var immutableSandboxEnvKeys = map[string]bool{
 	"AMBIENT_CP_TOKEN_URL":        true,
 	"AMBIENT_CP_TOKEN_PUBLIC_KEY": true,
-	"ANTHROPIC_BASE_URL":          true,
 	"ANTHROPIC_API_KEY":           true,
 	"ACP_OPENSHELL_INFERENCE":     true,
 	"AMBIENT_GRPC_URL":            true,

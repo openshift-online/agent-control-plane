@@ -6,3 +6,4 @@ resources:
   - credential-vertex.yaml
   - credential-jira.yaml
   - credential-github.yaml
+  - credential-mock-llm.yaml

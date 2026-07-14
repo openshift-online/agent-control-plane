@@ -574,8 +574,8 @@ func TestMergeAgentEnvironment_ImmutableKeys(t *testing.T) {
 	if env["AMBIENT_CP_TOKEN_URL"] != "http://cp:8080" {
 		t.Errorf("AMBIENT_CP_TOKEN_URL was overwritten: %s", env["AMBIENT_CP_TOKEN_URL"])
 	}
-	if env["ANTHROPIC_BASE_URL"] != "https://inference.local" {
-		t.Errorf("ANTHROPIC_BASE_URL was overwritten: %s", env["ANTHROPIC_BASE_URL"])
+	if env["ANTHROPIC_BASE_URL"] != "https://evil.example.com" {
+		t.Errorf("ANTHROPIC_BASE_URL should be overridable by agent config, got: %s", env["ANTHROPIC_BASE_URL"])
 	}
 	if env["ANTHROPIC_API_KEY"] != "notused" {
 		t.Errorf("ANTHROPIC_API_KEY was overwritten: %s", env["ANTHROPIC_API_KEY"])

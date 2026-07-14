@@ -824,11 +824,13 @@ In inference routing mode, the runner sets:
 | Env Var | Value | Purpose |
 |---------|-------|---------|
 | `ANTHROPIC_API_KEY` | `"inference-routing"` | Placeholder — Claude SDK requires a non-empty key |
-| `ANTHROPIC_BASE_URL` | `https://inference.local` | Virtual hostname intercepted by the supervisor proxy |
+| `ANTHROPIC_BASE_URL` | `https://inference.local` (default) | Virtual hostname intercepted by the supervisor proxy; set via `os.environ.setdefault()` so an agent-provided value takes precedence |
 | `HTTPS_PROXY` | `http://10.200.0.1:3128` | Route all HTTPS through the supervisor's CONNECT proxy |
 | `SSL_CERT_FILE` | `/etc/openshell-tls/openshell-ca.pem` | Trust the sandbox's ephemeral CA (Python `ssl` module) |
 | `REQUESTS_CA_BUNDLE` | `/etc/openshell-tls/openshell-ca.pem` | Trust the sandbox's ephemeral CA (`requests` library) |
 | `NODE_EXTRA_CA_CERTS` | `/etc/openshell-tls/openshell-ca.pem` | Trust the sandbox's ephemeral CA (Node.js / Claude Code CLI) |
+
+`ANTHROPIC_BASE_URL` uses `setdefault` rather than a hard assignment. If the agent declares a custom `ANTHROPIC_BASE_URL` in its environment (e.g., pointing to a mock LLM server for e2e testing), the control plane injects it into the sandbox environment before the runner starts, and `setdefault` preserves it. This enables testing workflows that bypass the gateway inference proxy entirely.
 
 The runner also clears `USE_VERTEX` and `CLAUDE_CODE_USE_VERTEX` — inference routing replaces direct Vertex API access with the proxy-mediated path. The model is set from `LLM_MODEL` env var or defaults to `claude-sonnet-4-6`.
 
