@@ -986,8 +986,8 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				}
 			}
 
-			const maxExecRetries = 3
-			const execRetryDelay = 3 * time.Second
+			const maxExecRetries = 29
+			const execRetryDelay = 2 * time.Second
 
 			for attempt := 0; attempt <= maxExecRetries; attempt++ {
 				if attempt > 0 {
@@ -995,7 +995,8 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 						Str("sandbox", sbxName).
 						Str("session_id", sessionID).
 						Int("attempt", attempt+1).
-						Msg("retrying entrypoint exec after relay error")
+						Int("max_attempts", maxExecRetries+1).
+						Msg("retrying entrypoint exec")
 					time.Sleep(execRetryDelay)
 				}
 
@@ -1008,18 +1009,22 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 					break
 				}
 
-				if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable && attempt < maxExecRetries {
-					r.logger.Warn().Err(err).
+				r.logger.Warn().Err(err).
+					Str("sandbox", sbxName).
+					Str("session_id", sessionID).
+					Int("attempt", attempt+1).
+					Int("max_attempts", maxExecRetries+1).
+					Msg("entrypoint exec failed")
+
+				if attempt == maxExecRetries {
+					r.logger.Error().Err(err).
 						Str("sandbox", sbxName).
 						Str("session_id", sessionID).
-						Int("attempt", attempt+1).
-						Msg("exec relay died (likely supervisor reconnect), will retry")
-					continue
+						Int("attempts", maxExecRetries+1).
+						Msg("failed to start runner exec after all retries")
+					failSession(fmt.Sprintf("failed to start runner exec after %d attempts: %v", maxExecRetries+1, err))
+					return
 				}
-
-				r.logger.Error().Err(err).Str("sandbox", sbxName).Str("session_id", sessionID).Msg("failed to start runner exec")
-				failSession(fmt.Sprintf("failed to start runner exec: %v", err))
-				return
 			}
 
 			// FIXME(#223): Mark session PhaseCompleted and set completion_time here once

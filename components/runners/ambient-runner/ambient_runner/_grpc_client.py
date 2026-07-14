@@ -31,7 +31,7 @@ _SERVICE_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
 _SA_TOKEN_FILE = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
 
 
-_CP_TOKEN_FETCH_ATTEMPTS = 3
+_CP_TOKEN_FETCH_ATTEMPTS = 30
 _CP_TOKEN_FETCH_TIMEOUT = 10
 
 
@@ -85,15 +85,13 @@ def _fetch_token_from_cp(
     last_err: Exception = RuntimeError("no attempts made")
     for attempt in range(_CP_TOKEN_FETCH_ATTEMPTS):
         if attempt > 0:
-            backoff = 2 ** (attempt - 1)
             logger.warning(
-                "[GRPC CLIENT] CP token fetch attempt %d/%d failed, retrying in %ds: %s",
+                "[GRPC CLIENT] CP token fetch attempt %d/%d failed, retrying in 2s: %s",
                 attempt,
                 _CP_TOKEN_FETCH_ATTEMPTS,
-                backoff,
                 last_err,
             )
-            time.sleep(backoff)
+            time.sleep(2)
         try:
             req = urllib.request.Request(
                 cp_token_url,

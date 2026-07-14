@@ -1,7 +1,7 @@
 # Runner
 
 **Date:** 2026-04-05
-**Last Updated:** 2026-07-05
+**Last Updated:** 2026-07-13
 **Status:** Living Document — current state documented, desired state (OpenShell) appended
 **Related:** `control-plane.spec.md` — CP provisioning, token endpoint, start context assembly
 
@@ -200,6 +200,12 @@ token  = _fetch_token_from_cp(cp_token_url, bearer)         # HTTP GET
 set_bot_token(token)                                         # cache in utils.py
 ```
 
+`_fetch_token_from_cp` retries up to 30 attempts with a fixed 2-second delay
+between attempts. This accommodates slow-starting control plane pods in large
+clusters where the CP HTTP server may not be listening when the runner first
+boots. Each failed attempt is logged at WARNING with the attempt number and
+error.
+
 `get_bot_token()` priority (platform/utils.py):
 1. CP-fetched token cache (`_cp_fetched_token`)
 2. File mount `/var/run/secrets/ambient/bot-token` (kubelet-rotated)
@@ -251,6 +257,58 @@ SessionManager
 `SessionWorker.query(prompt, session_id)` enqueues the request and yields SDK messages until the `None` sentinel. Worker death is detected on the next `query()` call — dead workers are replaced automatically.
 
 `SessionManager` persists `thread_id → sdk_session_id` to `{state_dir}/claude_session_ids.json` on every new session. This enables `--resume` on pod restart.
+
+### Requirement: Claude CLI Connect Retry
+
+The `SessionWorker._run()` method SHALL retry `client.connect()` with exponential
+backoff when the initial connection to the Claude CLI subprocess fails. Transient
+failures (binary not ready, OpenShell supervisor file lock, temp directory race)
+are common in sandbox environments and MUST NOT cause a permanent worker death.
+
+| Parameter | Default | Env Var Override |
+|-----------|---------|-----------------|
+| Max attempts | 3 | `CLAUDE_CONNECT_MAX_RETRIES` |
+| Initial delay | 2 seconds | `CLAUDE_CONNECT_RETRY_DELAY` |
+| Backoff factor | 2x (exponential) | — |
+
+On each failed attempt, the worker SHALL:
+1. Log at WARNING with the attempt number, delay, exception type, and message
+2. Disconnect and discard the failed client instance
+3. Sleep for the backoff delay
+4. Create a fresh `ClaudeSDKClient` and retry `connect()`
+
+On final failure (all attempts exhausted), the worker SHALL log at ERROR and
+store the exception for immediate caller notification (see below).
+
+#### Requirement: Connect Readiness Signal
+
+`SessionWorker` SHALL expose a connect-readiness mechanism so callers detect
+startup failure immediately instead of hanging on `worker.query()`:
+
+- An `asyncio.Event` (`_connect_ready`) is set after successful `connect()`.
+- If all connect retries fail, the exception is stored in `_connect_error` and
+  the event is set (signaling failure).
+- `wait_for_connect(timeout)` awaits the event and raises `_connect_error` if set.
+- `SessionManager.get_or_create()` SHALL call `await worker.wait_for_connect(timeout=60)`
+  after `worker.start()`. If it fails, the manager destroys the worker and raises
+  so the caller receives an immediate error rather than a hung stream.
+
+#### Scenario: Transient connect failure recovers
+
+- GIVEN the Claude CLI subprocess fails on the first `connect()` call (e.g. sandbox file lock)
+- AND the second `connect()` call succeeds
+- WHEN `SessionManager.get_or_create()` is called
+- THEN the worker connects successfully after one retry
+- AND `wait_for_connect()` returns without error
+- AND subsequent `worker.query()` calls succeed
+
+#### Scenario: All connect retries exhausted
+
+- GIVEN the Claude CLI subprocess fails on all 3 `connect()` attempts
+- WHEN `SessionManager.get_or_create()` calls `wait_for_connect()`
+- THEN `wait_for_connect()` raises the last connection exception
+- AND the worker is destroyed
+- AND the caller receives a `RunErrorEvent` (not a hung stream)
 
 ### Per-Turn Lifecycle
 
@@ -484,6 +542,8 @@ All env vars are injected by the CP at pod creation time.
 | `AGUI_TOKEN` | Session-scoped bearer token; when set, all non-health endpoints require `X-Ambient-Session-Token` header (constant-time comparison) |
 | `PAYLOAD_MCP_CONFIG_FILE` | Path to payload `.mcp.json` (default `/sandbox/.mcp.json`); merged on top of baked-in MCP config |
 | `SDK_OPTIONS` | JSON string of additional Claude SDK options |
+| `CLAUDE_CONNECT_MAX_RETRIES` | Max `client.connect()` attempts before giving up (default: `3`) |
+| `CLAUDE_CONNECT_RETRY_DELAY` | Initial backoff delay in seconds for connect retries (default: `2`) |
 | `MLFLOW_TRACKING_URI` | MLflow tracking server URL (HTTPS); platform-owned global default from control-plane env |
 | `MLFLOW_TRACKING_TOKEN` | MLflow tracking server auth token (secret — must not appear in logs); injected via `mlflow` credential provider |
 | `MLFLOW_EXPERIMENT_NAME` | MLflow experiment name for trace logging; global default from control-plane env, overridable per-agent |
@@ -540,6 +600,48 @@ be discovered and activated by semantic prompt intent.
 
 ---
 
+## Logging
+
+### Requirement: Persistent File Logging
+
+The runner SHALL write logs to `/sandbox/.runner/logs/runner.log` in addition to
+stdout/stderr. This enables post-mortem debugging via `kubectl exec` when container
+stdout has been rotated or truncated by the container runtime.
+
+**Configuration:**
+
+| Parameter | Value |
+|-----------|-------|
+| Log path | `/sandbox/.runner/logs/runner.log` |
+| Handler type | `RotatingFileHandler` |
+| Max file size | 50 MB |
+| Backup count | 3 (total ~200 MB max disk) |
+| Format | Same as stdout handler (`%(levelname)s:%(name)s:%(message)s`) |
+| Failure mode | Graceful degradation — if `/sandbox/.runner/logs` cannot be created or written to, log a warning and continue with stdout-only logging |
+
+The file handler SHALL be added to the root logger alongside the existing
+`StreamHandler` (tee pattern — both stdout and file receive all log output).
+
+The log directory is created at runtime via `os.makedirs(exist_ok=True)`. No
+Dockerfile changes are required — `/sandbox` is already writable in both the
+standard and OpenShell runner images.
+
+#### Scenario: Logs written to file and stdout
+
+- GIVEN the runner starts in a container with `/sandbox/.runner/logs` writable
+- WHEN the runner logs a message
+- THEN the message appears in both stdout (visible via `kubectl logs`) AND `/sandbox/.runner/logs/runner.log`
+
+#### Scenario: Log directory not writable
+
+- GIVEN `/sandbox/.runner/logs` does not exist or is not writable (e.g. read-only rootfs)
+- WHEN the runner starts
+- THEN the runner logs a warning about file logging being unavailable
+- AND continues operating with stdout-only logging
+- AND no crash or startup failure occurs
+
+---
+
 ## Design Decisions
 
 | Decision | Rationale |
@@ -558,6 +660,8 @@ be discovered and activated by semantic prompt intent.
 | LLM credentials (Anthropic/Vertex) remain in runner | These are necessary for inference and cannot be moved to sidecars without changing the SDK contract |
 | `AGUI_TOKEN` session auth middleware | Prevents cross-session attacks where an attacker uses another session's runner URL; uses `secrets.compare_digest()` for constant-time comparison |
 | Runtime model switching via `POST /model` | Allows the frontend/CLI to change `LLM_MODEL` without restarting the pod; acquires a lock to prevent concurrent switches and rejects if agent is mid-generation |
+| Connect retry with readiness signal | `client.connect()` is the most fragile step in the startup chain — sandbox file locks, binary readiness races, and network namespace setup delays all cause transient failures. Retry with backoff matches the pattern used by `_auto_execute_initial_prompt`. The readiness event prevents the caller from hanging indefinitely on a dead worker's queue. |
+| File logging tee (not replacement) | stdout/stderr must remain active for `kubectl logs`; the file handler is additive. `RotatingFileHandler` prevents unbounded disk growth. Graceful degradation (skip file handler on permission error) ensures the runner starts on read-only root filesystems. Log directory placed under `/sandbox/.runner/logs` (not `/var/log/runner`) because `/sandbox` is writable in both standard and OpenShell images and avoids Dockerfile changes. |
 
 ---
 
@@ -622,8 +726,8 @@ propagated to each runner namespace by the reconciler's `ensureOpenShellPolicy()
 
 | Access | Paths |
 |--------|-------|
-| Read-only | `/usr`, `/lib`, `/proc`, `/dev/urandom`, `/app`, `/runner`, `/etc`, `/var/log`, `/home/sandbox` |
-| Read-write | `/workspace`, `/tmp`, `/dev/null`, `/app/.claude` |
+| Read-only | `/usr`, `/lib`, `/opt`, `/proc`, `/dev/urandom`, `/app`, `/runner`, `/etc`, `/var/log` |
+| Read-write | `/sandbox`, `/tmp`, `/dev/null`, `/sandbox/.runner/logs` |
 
 **Network policy** (`policy.yaml`):
 

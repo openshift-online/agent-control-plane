@@ -110,6 +110,7 @@ jobs:
         kind version
 
     - name: Override image tags for built components
+      id: image-override
       if: env.IMAGE_TAG != 'latest'
       run: |
         cd components/manifests/overlays/kind
@@ -132,6 +133,15 @@ jobs:
             echo "  ${image} → latest (unchanged)"
           fi
         done
+
+        # Resolve the runner sandbox image tag (loaded separately via _kind-preload-runner)
+        if echo "$BUILT" | grep -q 'runner_openshell'; then
+          echo "runner_tag=${IMAGE_TAG}-amd64" >> "$GITHUB_OUTPUT"
+          echo "  runner_openshell → ${IMAGE_TAG}-amd64 (built in this PR)"
+        else
+          echo "runner_tag=latest" >> "$GITHUB_OUTPUT"
+          echo "  runner_openshell → latest (unchanged)"
+        fi
 
     - name: Create dummy Vertex credentials
       run: |
@@ -158,7 +168,8 @@ jobs:
         CLOUD_ML_REGION: global
       run: |
         echo "Using Makefile to deploy complete stack..."
-        make kind-up CONTAINER_ENGINE=docker CI_MODE=true VERTEX_CRED=/tmp/vertex.json OPENSHELL_USE_GATEWAY=true
+        make kind-up CONTAINER_ENGINE=docker CI_MODE=true VERTEX_CRED=/tmp/vertex.json OPENSHELL_USE_GATEWAY=true \
+          RUNNER_QUAY_TAG=${{ steps.image-override.outputs.runner_tag || 'latest' }}
 
     - name: Wait for deployments
       run: |

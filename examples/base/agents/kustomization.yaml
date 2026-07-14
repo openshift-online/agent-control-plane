@@ -7,4 +7,4 @@ resources:
   - jira-simple-whoami-with-skill-payload.yaml
   - pr-reviewer.yaml
   - jira-issue-categorizer.yaml
-  - test-agent-with-no-providers.yaml
+  - test-agent-no-providers.yaml

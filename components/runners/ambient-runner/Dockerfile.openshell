@@ -151,6 +151,7 @@ RUN uv pip install --python /sandbox/.venv/bin/python '/runner/ambient-runner[al
 RUN mkdir -p /sandbox/workspace/artifacts /sandbox/workspace/file-uploads && \
     chown -R sandbox:sandbox /sandbox/workspace
 
+
 # OpenShift compatibility: the sandbox runs under the restricted-v2 SCC with an
 # arbitrarily-assigned UID that is always a member of GID 0 (the root group).
 # Every directory and file the agent writes to under $HOME (/sandbox) must

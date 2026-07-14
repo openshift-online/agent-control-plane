@@ -83,6 +83,7 @@ ENV AGUI_PORT=8001
 RUN echo "umask 0022" >> /etc/profile && \
     echo "umask 0022" >> /root/.bashrc
 
+
 # OpenShift compatibility
 RUN chmod -R g=u /app && chmod -R g=u /usr/local && chmod g=u /etc/passwd
 

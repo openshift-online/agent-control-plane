@@ -38,6 +38,10 @@ logger = logging.getLogger(__name__)
 # Sentinel that tells the worker loop to shut down.
 _SHUTDOWN = object()
 
+# Connect retry defaults (overridable via env vars)
+_CONNECT_MAX_RETRIES = int(os.getenv("CLAUDE_CONNECT_MAX_RETRIES", "3"))
+_CONNECT_RETRY_DELAY = float(os.getenv("CLAUDE_CONNECT_RETRY_DELAY", "2.0"))
+
 
 class WorkerError:
     """Wrapper for exceptions forwarded through the output queue.
@@ -93,12 +97,27 @@ class SessionWorker:
         # Session ID returned by the CLI (for resume on restart)
         self.session_id: str | None = None
 
+        # Connect readiness: set after connect() succeeds or all retries fail
+        self._connect_ready: asyncio.Event = asyncio.Event()
+        self._connect_error: Exception | None = None
+
     # ── lifecycle ──
 
     @property
     def is_alive(self) -> bool:
         """True if the background task is still running."""
         return self._task is not None and not self._task.done()
+
+    async def wait_for_connect(self, timeout: float = 60.0) -> None:
+        """Wait for the background task to finish connecting.
+
+        Raises the stored exception if all connect retries failed.
+        Raises ``asyncio.TimeoutError`` if the connect did not complete
+        within *timeout* seconds.
+        """
+        await asyncio.wait_for(self._connect_ready.wait(), timeout=timeout)
+        if self._connect_error is not None:
+            raise self._connect_error
 
     async def start(self) -> None:
         """Spawn the background task that owns the SDK client."""
@@ -112,8 +131,9 @@ class SessionWorker:
     async def _run(self) -> None:
         """Main loop — runs entirely inside one stable async context.
 
-        Connects the SDK client, starts a persistent reader task that
-        routes messages, and loops on the input queue for new queries.
+        Connects the SDK client with retry, starts a persistent reader
+        task that routes messages, and loops on the input queue for new
+        queries.
         """
         from claude_agent_sdk import ClaudeSDKClient
 
@@ -124,15 +144,56 @@ class SessionWorker:
             MockClaudeSDKClient,
         )
 
-        if self._api_key == MOCK_API_KEY:
-            logger.info("[SessionWorker] Using MockClaudeSDKClient (replay mode)")
-            client: Any = MockClaudeSDKClient(options=self._options)
-        else:
-            client = ClaudeSDKClient(options=self._options)
+        is_mock = self._api_key == MOCK_API_KEY
+
+        # -- connect with retry --
+        client: Any = None
+        backoff = _CONNECT_RETRY_DELAY
+        for attempt in range(1, _CONNECT_MAX_RETRIES + 1):
+            if is_mock:
+                if attempt == 1:
+                    logger.info("[SessionWorker] Using MockClaudeSDKClient (replay mode)")
+                client = MockClaudeSDKClient(options=self._options)
+            else:
+                client = ClaudeSDKClient(options=self._options)
+
+            try:
+                await client.connect()
+                break
+            except Exception as exc:
+                if attempt < _CONNECT_MAX_RETRIES:
+                    logger.warning(
+                        "[SessionWorker] connect() attempt %d/%d failed for "
+                        "thread=%s: %s(%s), retrying in %.1fs",
+                        attempt,
+                        _CONNECT_MAX_RETRIES,
+                        self.thread_id,
+                        type(exc).__name__,
+                        exc,
+                        backoff,
+                    )
+                    with suppress(Exception):
+                        await client.disconnect()
+                    client = None
+                    await asyncio.sleep(backoff)
+                    backoff = min(backoff * 2, 30.0)
+                else:
+                    logger.error(
+                        "[SessionWorker] connect() failed after %d attempts "
+                        "for thread=%s: %s(%s)",
+                        _CONNECT_MAX_RETRIES,
+                        self.thread_id,
+                        type(exc).__name__,
+                        exc,
+                    )
+                    self._connect_error = exc
+                    self._connect_ready.set()
+                    return
+
         self._client = client
+        self._connect_ready.set()
 
         try:
-            await client.connect()
             logger.info(f"[SessionWorker] Connected for thread={self.thread_id}")
 
             # Start persistent reader
@@ -433,6 +494,18 @@ class SessionManager:
             thread_id, options, api_key, on_session_id=self._on_session_id
         )
         await worker.start()
+
+        try:
+            await worker.wait_for_connect(timeout=60.0)
+        except Exception as exc:
+            logger.error(
+                "[SessionManager] Worker connect failed for thread=%s: %s",
+                thread_id,
+                exc,
+            )
+            await worker.stop()
+            raise
+
         self._workers[thread_id] = worker
         self._locks[thread_id] = asyncio.Lock()
         logger.debug(f"[SessionManager] Created worker for thread={thread_id}")

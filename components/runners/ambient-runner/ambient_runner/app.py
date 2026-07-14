@@ -23,6 +23,7 @@ Usage::
 
 import asyncio
 import logging
+import logging.handlers
 import os
 import secrets as _secrets_mod
 import uuid
@@ -42,10 +43,33 @@ from ambient_runner.platform.utils import get_bot_token, parse_owner_repo
 
 # Configure root logger so all ambient_runner.* and ag_ui_* loggers
 # have a handler and respect the LOG_LEVEL env var.
-logging.basicConfig(
-    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
-    format="%(levelname)s:%(name)s:%(message)s",
-)
+_log_level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
+_log_format = "%(levelname)s:%(name)s:%(message)s"
+
+logging.basicConfig(level=_log_level, format=_log_format)
+
+# Tee logs to /sandbox/.runner/logs/runner.log via RotatingFileHandler.
+# Graceful degradation: if the directory is not writable, skip file logging.
+_LOG_DIR = "/sandbox/.runner/logs"
+_LOG_FILE = os.path.join(_LOG_DIR, "runner.log")
+_LOG_MAX_BYTES = 50 * 1024 * 1024  # 50 MB
+_LOG_BACKUP_COUNT = 3
+
+try:
+    os.makedirs(_LOG_DIR, exist_ok=True)
+    _file_handler = logging.handlers.RotatingFileHandler(
+        _LOG_FILE,
+        maxBytes=_LOG_MAX_BYTES,
+        backupCount=_LOG_BACKUP_COUNT,
+    )
+    _file_handler.setLevel(_log_level)
+    _file_handler.setFormatter(logging.Formatter(_log_format))
+    logging.getLogger().addHandler(_file_handler)
+    logging.getLogger(__name__).info("File logging enabled: %s", _LOG_FILE)
+except OSError:
+    logging.getLogger(__name__).warning(
+        "File logging unavailable: cannot write to %s", _LOG_DIR
+    )
 
 logger = logging.getLogger(__name__)
 
