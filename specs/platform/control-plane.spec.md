@@ -79,7 +79,7 @@ Watches Gateway resource events via gRPC informer. Reconciles `kind: Gateway` AP
 
 #### `internal/reconciler/cluster_reconciler.go` — ClusterReconciler
 
-Watches Cluster resource events via gRPC informer. Maintains the `ClusterClientPool` — a map of `cluster_id → *KubeClient` with lazy initialization. When a Cluster is added or modified, the reconciler parses the stored kubeconfig and creates (or replaces) the corresponding `KubeClient`. When a Cluster is deleted, the reconciler closes and evicts the client. The local cluster client (`_local`) is always present and initialized from the control plane's own kubeconfig.
+Watches Cluster resource events via gRPC informer. Maintains the `ClusterClientPool` — a map of `cluster_id → *KubeClient` with lazy initialization. When a Cluster is added or modified, the reconciler resolves the Cluster's `credential_id` FK via `sdk.Credentials().GetToken(credentialID)` to obtain the kubeconfig, then parses it and creates (or replaces) the corresponding `KubeClient`. When a Cluster is deleted, the reconciler closes and evicts the client. The local cluster client (`_local`) is always present and initialized from the control plane's own kubeconfig. The Credential's `provider=kubeconfig` token is fetched at runtime using the same `credential:token-reader` role the CP already holds — no new auth mechanism is needed.
 
 #### `internal/placement/strategy.go` — PlacementStrategy
 
