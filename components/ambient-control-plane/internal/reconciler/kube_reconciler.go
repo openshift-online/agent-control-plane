@@ -838,7 +838,7 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				}
 			}
 
-			const maxExecRetries = 9
+			const maxExecRetries = 29
 			const execRetryDelay = 2 * time.Second
 
 			for attempt := 0; attempt <= maxExecRetries; attempt++ {
