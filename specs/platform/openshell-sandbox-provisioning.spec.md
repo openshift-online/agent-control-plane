@@ -370,6 +370,45 @@ The `ExecSandbox` RPC is a server-streaming call that returns stdout, stderr, an
 - THEN it SHALL NOT include `OPENSHELL_SANDBOX_COMMAND` in the environment
 - AND the runner start command SHALL only be delivered via `ExecSandbox` after the sandbox is ready
 
+#### Requirement: ExecSandbox Retry with Backoff
+
+The `execAfterReady` goroutine SHALL retry `ExecSandboxStreaming` on **all** errors
+(not only gRPC `Unavailable`). Transient failures — supervisor reconnects, sandbox
+network namespace setup delays, binary readiness races — are common during the
+first seconds after `SANDBOX_PHASE_READY` and MUST NOT cause a permanent session
+failure.
+
+| Parameter | Value |
+|-----------|-------|
+| Max attempts | 30 (`maxExecRetries = 29`, loop `0..29`) |
+| Retry delay | 2 seconds (fixed) |
+| Total retry window | ~60 seconds |
+
+On each failed attempt, the control plane SHALL:
+1. Log at WARN with sandbox name, session ID, attempt number, max attempts, and the error
+2. Sleep for the retry delay
+3. Retry `ExecSandboxStreaming` with the same request
+
+On final failure (all 30 attempts exhausted), the control plane SHALL:
+1. Log at ERROR with sandbox name, session ID, total attempts, and the error
+2. Transition the session to `Failed` via `failSession()`
+
+#### Scenario: Transient exec failure recovers
+
+- GIVEN a sandbox has reached `SANDBOX_PHASE_READY`
+- AND the first `ExecSandboxStreaming` call fails (e.g. supervisor not yet listening)
+- WHEN the control plane retries after 2 seconds
+- AND the second attempt succeeds
+- THEN the runner starts normally
+- AND a WARN log is emitted for the failed attempt
+
+#### Scenario: All exec retries exhausted
+
+- GIVEN a sandbox has reached `SANDBOX_PHASE_READY`
+- AND all 30 `ExecSandboxStreaming` attempts fail
+- THEN the session SHALL transition to `Failed`
+- AND an ERROR log is emitted with the total attempt count and last error
+
 ### Requirement: Sandbox Deprovisioning
 
 When a session is stopped or deleted, the control plane SHALL delete the sandbox via the OpenShell gateway. Project-scoped providers are NOT deleted as part of session cleanup — they persist in the namespace for use by other sessions.

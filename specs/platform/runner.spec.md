@@ -200,6 +200,12 @@ token  = _fetch_token_from_cp(cp_token_url, bearer)         # HTTP GET
 set_bot_token(token)                                         # cache in utils.py
 ```
 
+`_fetch_token_from_cp` retries up to 30 attempts with a fixed 2-second delay
+between attempts. This accommodates slow-starting control plane pods in large
+clusters where the CP HTTP server may not be listening when the runner first
+boots. Each failed attempt is logged at WARNING with the attempt number and
+error.
+
 `get_bot_token()` priority (platform/utils.py):
 1. CP-fetched token cache (`_cp_fetched_token`)
 2. File mount `/var/run/secrets/ambient/bot-token` (kubelet-rotated)
@@ -598,7 +604,7 @@ be discovered and activated by semantic prompt intent.
 
 ### Requirement: Persistent File Logging
 
-The runner SHALL write logs to `/var/log/runner/runner.log` in addition to
+The runner SHALL write logs to `/sandbox/.runner/logs/runner.log` in addition to
 stdout/stderr. This enables post-mortem debugging via `kubectl exec` when container
 stdout has been rotated or truncated by the container runtime.
 
@@ -606,28 +612,29 @@ stdout has been rotated or truncated by the container runtime.
 
 | Parameter | Value |
 |-----------|-------|
-| Log path | `/var/log/runner/runner.log` |
+| Log path | `/sandbox/.runner/logs/runner.log` |
 | Handler type | `RotatingFileHandler` |
 | Max file size | 50 MB |
 | Backup count | 3 (total ~200 MB max disk) |
 | Format | Same as stdout handler (`%(levelname)s:%(name)s:%(message)s`) |
-| Failure mode | Graceful degradation — if `/var/log/runner` cannot be created or written to, log a warning and continue with stdout-only logging |
+| Failure mode | Graceful degradation — if `/sandbox/.runner/logs` cannot be created or written to, log a warning and continue with stdout-only logging |
 
 The file handler SHALL be added to the root logger alongside the existing
 `StreamHandler` (tee pattern — both stdout and file receive all log output).
 
-The Dockerfile SHALL create the `/var/log/runner` directory with ownership
-`1001:0` and permissions `775` before switching to `USER 1001`.
+The log directory is created at runtime via `os.makedirs(exist_ok=True)`. No
+Dockerfile changes are required — `/sandbox` is already writable in both the
+standard and OpenShell runner images.
 
 #### Scenario: Logs written to file and stdout
 
-- GIVEN the runner starts in a container with `/var/log/runner` writable
+- GIVEN the runner starts in a container with `/sandbox/.runner/logs` writable
 - WHEN the runner logs a message
-- THEN the message appears in both stdout (visible via `kubectl logs`) AND `/var/log/runner/runner.log`
+- THEN the message appears in both stdout (visible via `kubectl logs`) AND `/sandbox/.runner/logs/runner.log`
 
 #### Scenario: Log directory not writable
 
-- GIVEN `/var/log/runner` does not exist or is not writable (e.g. read-only rootfs)
+- GIVEN `/sandbox/.runner/logs` does not exist or is not writable (e.g. read-only rootfs)
 - WHEN the runner starts
 - THEN the runner logs a warning about file logging being unavailable
 - AND continues operating with stdout-only logging
@@ -654,7 +661,7 @@ The Dockerfile SHALL create the `/var/log/runner` directory with ownership
 | `AGUI_TOKEN` session auth middleware | Prevents cross-session attacks where an attacker uses another session's runner URL; uses `secrets.compare_digest()` for constant-time comparison |
 | Runtime model switching via `POST /model` | Allows the frontend/CLI to change `LLM_MODEL` without restarting the pod; acquires a lock to prevent concurrent switches and rejects if agent is mid-generation |
 | Connect retry with readiness signal | `client.connect()` is the most fragile step in the startup chain — sandbox file locks, binary readiness races, and network namespace setup delays all cause transient failures. Retry with backoff matches the pattern used by `_auto_execute_initial_prompt`. The readiness event prevents the caller from hanging indefinitely on a dead worker's queue. |
-| File logging tee (not replacement) | stdout/stderr must remain active for `kubectl logs`; the file handler is additive. `RotatingFileHandler` prevents unbounded disk growth. Graceful degradation (skip file handler on permission error) ensures the runner starts on read-only root filesystems. |
+| File logging tee (not replacement) | stdout/stderr must remain active for `kubectl logs`; the file handler is additive. `RotatingFileHandler` prevents unbounded disk growth. Graceful degradation (skip file handler on permission error) ensures the runner starts on read-only root filesystems. Log directory placed under `/sandbox/.runner/logs` (not `/var/log/runner`) because `/sandbox` is writable in both standard and OpenShell images and avoids Dockerfile changes. |
 
 ---
 
@@ -719,8 +726,8 @@ propagated to each runner namespace by the reconciler's `ensureOpenShellPolicy()
 
 | Access | Paths |
 |--------|-------|
-| Read-only | `/usr`, `/lib`, `/proc`, `/dev/urandom`, `/app`, `/runner`, `/etc`, `/var/log`, `/home/sandbox` |
-| Read-write | `/workspace`, `/tmp`, `/dev/null`, `/app/.claude` |
+| Read-only | `/usr`, `/lib`, `/opt`, `/proc`, `/dev/urandom`, `/app`, `/runner`, `/etc`, `/var/log` |
+| Read-write | `/sandbox`, `/tmp`, `/dev/null`, `/sandbox/.runner/logs` |
 
 **Network policy** (`policy.yaml`):
 
