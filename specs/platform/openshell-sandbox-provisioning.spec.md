@@ -111,21 +111,30 @@ When `OPENSHELL_USE_GATEWAY` is true, the control plane SHALL create agent sandb
 
 ### Requirement: Gateway Discovery via Service
 
-The control plane SHALL discover the OpenShell gateway in each project namespace by looking up the Kubernetes Service associated with the gateway's gRPC endpoint. The gateway SHALL be deployed without a Route to prevent external access from outside the cluster — all communication between ACP and the gateway is cluster-internal.
+The control plane SHALL discover the OpenShell gateway for each project by resolving the gateway's gRPC endpoint. In a single-cluster deployment, the gateway is reached via Kubernetes Service DNS. In a multi-cluster deployment, the gateway may reside on a different cluster — the control plane discovers it via the `ambient-code.io/gateway-external-url` annotation stored on the Gateway API resource. The gateway SHALL be deployed without a Route when co-located with workloads; when deployed on a dedicated gateway cluster, an externally reachable endpoint (LoadBalancer Service, Ingress, or Route) is created by the GatewayReconciler (see [gateway-provisioning.spec.md § Cross-Cluster Gateway Exposure](./gateway-provisioning.spec.md#requirement-cross-cluster-gateway-exposure)).
 
-#### Scenario: Service-based discovery
+#### Scenario: Service-based discovery (same cluster)
 
 - GIVEN an OpenShell gateway is deployed in a namespace matching the project's Name (e.g., project Name `my-project` → namespace `my-project`)
+- AND the Gateway resource has no `cluster_id` or the same `cluster_id` as the session
 - WHEN the control plane needs to reach the gateway
 - THEN it SHALL resolve the namespace from the project's Name field (not the session's `ProjectID`)
 - AND it SHALL connect to the gateway at `<service-name>.<namespace>.svc.cluster.local:<grpc-port>` (configurable via `OPENSHELL_GATEWAY_SERVICE_NAME` and `OPENSHELL_GATEWAY_GRPC_PORT`)
 
+#### Scenario: Cross-cluster gateway discovery
+
+- GIVEN a session's `gateway_cluster_id` differs from its `cluster_id` (gateway and workload on different clusters)
+- WHEN the control plane needs to reach the gateway for sandbox creation
+- THEN it SHALL look up the Gateway API resource and read the `ambient-code.io/gateway-external-url` annotation
+- AND it SHALL connect to the gateway at the external URL instead of using intra-cluster DNS
+- AND the external URL SHALL have been set by the GatewayReconciler when it deployed the gateway on the remote cluster
+
 #### Scenario: Service not found
 
 - GIVEN `OPENSHELL_USE_GATEWAY` is `true`
-- AND no matching Service is found in the project namespace
+- AND no matching Service is found in the project namespace (same-cluster) or the external URL annotation is missing (cross-cluster)
 - WHEN the control plane attempts to discover the gateway
-- THEN it SHALL fail with an error indicating the gateway Service was not found
+- THEN it SHALL fail with an error indicating the gateway endpoint could not be resolved
 
 ### Requirement: Sandbox Identity and Naming
 
@@ -725,14 +734,21 @@ The control plane SHALL vendor OpenShell proto definitions and generate Go gRPC 
 
 ### Requirement: gRPC Connection Management
 
-The control plane SHALL maintain a cache of gRPC connections to OpenShell gateways, one per namespace, with lazy initialization. Connections SHALL handle gateway pod restarts transparently using gRPC's built-in reconnection, following the same resilience patterns used by the control plane's existing gRPC watcher ([watcher.go]).
+The control plane SHALL maintain a cache of gRPC connections to OpenShell gateways, keyed by `(cluster_id, namespace)`, with lazy initialization. In single-cluster deployments, `cluster_id` is always `_local` and the cache key is effectively per-namespace. In multi-cluster deployments, gateways on different clusters require separate connections even if the namespace name matches. Connections SHALL handle gateway pod restarts transparently using gRPC's built-in reconnection, following the same resilience patterns used by the control plane's existing gRPC watcher ([watcher.go]).
 
 #### Scenario: Connection caching
 
-- GIVEN multiple sessions in the same project namespace
+- GIVEN multiple sessions in the same project namespace on the same cluster
 - WHEN the control plane creates sandboxes for each
-- THEN it SHALL reuse a single gRPC connection per namespace
+- THEN it SHALL reuse a single gRPC connection per `(cluster_id, namespace)` pair
 - AND connections SHALL be created lazily on first use
+
+#### Scenario: Cross-cluster connection isolation
+
+- GIVEN two gateways with the same namespace name but on different clusters
+- WHEN the control plane manages connections to both
+- THEN each SHALL have a separate cached gRPC connection keyed by `(cluster_id, namespace)`
+- AND TLS credentials SHALL be loaded from the appropriate cluster via the `ClusterClientPool`
 
 #### Scenario: Connection dial
 

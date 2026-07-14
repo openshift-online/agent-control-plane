@@ -2,7 +2,8 @@
 
 **Date:** 2026-03-20
 **Status:** Active
-**Last Updated:** 2026-07-08 — added `Policy` as supported kind in `acpctl apply` and Application sync; added `sandbox_policy`, `sandbox_template`, `entrypoint` to Agent apply fields; documented implementation gaps in acpctl apply resource struct
+**Last Updated:** 2026-07-13 — added `Cluster` as a first-class API Kind for multi-cluster scheduling; added `cluster_id` FK to Session, Gateway, and Application; introduced `ClusterRole` enum (`gateway`, `workload`, `hybrid`) and `PlacementStrategy` interface with round-robin default; added `gateway_cluster_id` to Session for cross-cluster gateway→workload routing; updated ER diagram, RBAC, CLI, and API reference
+**Previous:** 2026-07-08 — added `Policy` as supported kind in `acpctl apply` and Application sync; added `sandbox_policy`, `sandbox_template`, `entrypoint` to Agent apply fields; documented implementation gaps in acpctl apply resource struct
 **Previous:** 2026-07-03 — added Agent sandbox fields (entrypoint, providers, payloads, environment, sandbox_template, sandbox_policy) for OpenShell gateway integration; split SessionMessage from new SessionEvent (comprehensive AG-UI event stream with compression); added Events API endpoints, gRPC protocol, storage model, compression strategy, migration plan
 **Previous:** 2026-06-03 — added Application (GitOps continuous sync for agent fleets); addressed review feedback: credential_id FK for remote auth, RoleBinding escalation rules, prune safety, health status semantics, gitops role grantability, sync engine kind filtering
 **Previous-2:** 2026-05-12 — migrate Credentials from project-scoped to global routes (`/credentials`); remove `project_id` from model, OpenAPI, and SDK; add drop-column migration; update coverage matrix
@@ -23,7 +24,8 @@ The Ambient API server provides a coordination layer for orchestrating fleets of
 - **Credential** — a global secret. Stores a Personal Access Token or equivalent for an external provider (GitHub, GitLab, Jira, Google, Vertex AI, Kubeconfig). Consumed by runners at session start. Bound to Projects via RoleBindings — a single Credential can be shared across multiple Projects without duplication.
 - **RoleBinding** — binds a Role to a subject (user or project) at a given scope. Ownership and access for all Kinds is expressed through RoleBindings. The subject and scope are each represented as typed nullable FKs — exactly one FK is non-null, determined by `scope`.
 - **Application** — a GitOps binding that continuously syncs agent fleet definitions from a git repository to an Ambient instance. The Ambient equivalent of an Argo CD Application.
-- **Gateway** — a project-scoped declaration that an OpenShell gateway should be deployed in the project’s namespace. Specifies the gateway image, TLS DNS names, and TOML configuration. Applied via `acpctl apply -k` and reconciled by the GatewayReconciler into Kubernetes resources (StatefulSet, Service, RBAC, certgen Job). See [gateway-provisioning.spec.md](./gateway-provisioning.spec.md).
+- **Gateway** — a project-scoped declaration that an OpenShell gateway should be deployed on a specific cluster (or the local cluster by default). Specifies the gateway image, TLS DNS names, and TOML configuration. Applied via `acpctl apply -k` and reconciled by the GatewayReconciler into Kubernetes resources (StatefulSet, Service, RBAC, certgen Job). See [gateway-provisioning.spec.md](./gateway-provisioning.spec.md).
+- **Cluster** — a global registration of a Kubernetes cluster endpoint. Each cluster has a `role` (`gateway`, `workload`, or `hybrid`) that determines what can be scheduled on it. The control plane maintains a `KubeClient` pool keyed by cluster ID and dispatches reconciliation to the appropriate cluster. Cluster credentials are stored as a write-only `kubeconfig` field (encrypted at rest, same storage pattern as Credential tokens).
 
 The stable address of an agent is `{project_name}/{agent_name}`. It holds the inbox and links to the active session.
 
@@ -122,6 +124,8 @@ erDiagram
         string  name "human-readable display name"
         string  project_id FK "nullable — direct project context (no agent)"
         string  agent_id FK "nullable — set when started via agent ignite"
+        string  cluster_id FK "nullable — workload cluster; null = local; set by PlacementStrategy"
+        string  gateway_cluster_id FK "nullable — gateway cluster; null = same as cluster_id"
         string  parent_session_id FK "nullable — source session for clones"
         string  source_scheduled_session_id "nullable — FK to ScheduledSession that triggered this"
         time    scheduled_for "nullable — cron tick time; idempotency key with source_scheduled_session_id"
@@ -254,6 +258,7 @@ erDiagram
     Gateway {
         string ID PK "KSUID"
         string project_id FK "target project (= namespace)"
+        string cluster_id FK "nullable — target cluster; null = local cluster"
         string name "resource name; typically openshell-gateway"
         string image "nullable — gateway container image; defaults to OPENSHELL_GATEWAY_IMAGE"
         jsonb  server_dns_names "DNS names for TLS certificate generation"
@@ -275,6 +280,7 @@ erDiagram
         string source_path "path within repo to kustomize overlay"
         string destination_ambient_url "nullable — target Ambient API URL; null = local"
         string destination_project "target project name; created if CreateProject=true"
+        string destination_cluster_id FK "nullable — target cluster for reconciled K8s resources; null = local"
         string credential_id FK "nullable — Credential for remote Ambient auth; required when destination_ambient_url is set"
         bool   auto_sync "enable automated sync on git change"
         bool   auto_prune "delete resources removed from git"
@@ -317,15 +323,135 @@ erDiagram
     Inbox           }o--o| Agent            : "sent_from"
 
     Project         ||--o{ Gateway          : "owns"
+    Cluster         ||--o{ Gateway          : "hosts"
+    Cluster         ||--o{ Session          : "runs_on"
+    Cluster         ||--o{ Session          : "gateway_on"
 
     Application }o--o| Project        : "syncs_to"
     Application }o--o| Credential     : "credential_id"
+    Application }o--o| Cluster        : "targets"
 
     Session         ||--o{ SessionMessage   : "streams"
     Session         ||--o{ SessionEvent     : "emits"
 
     Role            ||--o{ RoleBinding      : "granted_by"
 ```
+
+---
+
+## Cluster — Multi-Cluster Scheduling
+
+A Cluster is a global registration of a Kubernetes cluster endpoint. The control plane uses registered clusters to dispatch workloads (sessions, gateways) to the appropriate infrastructure based on cluster role and placement strategy.
+
+### Cluster Roles
+
+Each cluster declares a `role` that determines what can be scheduled on it:
+
+ < /dev/null |  Role | Gateways | Sessions | Description |
+|------|----------|----------|-------------|
+| `gateway` | Yes | No | Dedicated gateway infrastructure. Hosts only OpenShell gateways. Sessions are never placed here. |
+| `workload` | No | Yes | Dedicated workload cluster. Hosts only session pods. Gateways are never deployed here. |
+| `hybrid` | Yes | Yes | Hosts both gateways and sessions. Default for backward-compatible single-cluster deployments. |
+
+The local cluster (where the control plane runs) is implicitly registered as `hybrid` with a well-known sentinel ID (`_local`). When `cluster_id` is null on any resource, it resolves to the local cluster. This preserves full backward compatibility — existing single-cluster deployments require zero changes.
+
+### Field Reference
+
+| Field | Notes |
+|-------|-------|
+| `name` | Human-readable, globally unique. The stable address of this cluster registration. |
+| `description` | Nullable. Free-text purpose description (e.g., "US-East gateway cluster"). |
+| `api_server_url` | Kubernetes API server endpoint URL. Used for display and health checks; the actual connection uses `kubeconfig`. |
+| `kubeconfig` | Write-only. Serialized kubeconfig for this cluster. Stored encrypted at rest using the same encryption mechanism as `Credential.token`. Never returned by standard read endpoints. Contains server URL, client certificate/key or bearer token, and CA data. |
+| `role` | Cluster scheduling role: `gateway`, `workload`, or `hybrid`. |
+| `status` | Computed by the ClusterHealthSyncer: `Ready` (API server reachable, auth valid), `NotReady` (unreachable or auth failed), `Unknown` (never checked). |
+| `status_message` | Nullable. Human-readable detail about current status (e.g., "connection refused", "certificate expired"). |
+| `labels` | Queryable key/value tags. Used by PlacementStrategy selectors (e.g., `region=us-east`, `tier=dedicated`, `gpu=true`). |
+| `capacity` | Nullable. JSONB object with reported cluster capacity: `{"cpu": "128", "memory": "512Gi", "gpu": "8"}`. Updated by ClusterHealthSyncer. |
+| `last_heartbeat_at` | Nullable. Timestamp of the last successful health check. Used by PlacementStrategy to exclude stale clusters. |
+
+### Cluster Status Lifecycle
+
+```
+Registered → Unknown → Ready ⇄ NotReady → (soft deleted)
+```
+
+The ClusterHealthSyncer runs on a configurable interval (default: 30 seconds) and probes each registered cluster's API server using its stored kubeconfig. On success, it updates `status=Ready`, `last_heartbeat_at=now()`, and optionally refreshes `capacity` from the cluster's node allocatable resources. On failure, it sets `status=NotReady` with a descriptive `status_message`.
+
+### Cross-Cluster Networking
+
+When sessions run on a different cluster than their gateway, the control plane must route gRPC traffic cross-cluster. The gateway endpoint changes from `svc.cluster.local` (intra-cluster DNS) to the gateway cluster's externally reachable endpoint:
+
+| Topology | Gateway Endpoint |
+|----------|-----------------|
+| Same cluster (gateway + workload on one cluster) | `<service>.<namespace>.svc.cluster.local:<port>` |
+| Different clusters (gateway on cluster A, workload on cluster B) | `<gateway-ingress-url>:<port>` (via Ingress, Route, or LoadBalancer on the gateway cluster) |
+
+When a Gateway resource has `cluster_id` set, the GatewayReconciler SHALL also create an externally reachable Service (LoadBalancer or Ingress/Route) so that workload clusters can reach the gateway. The external endpoint URL is stored in the Gateway's `annotations` (`ambient-code.io/gateway-external-url`) by the GatewayReconciler after the Service is provisioned.
+
+The control plane's `GatewayClient` resolves the endpoint using:
+1. If `Session.gateway_cluster_id == Session.cluster_id` (or both null): use intra-cluster DNS
+2. If different: read `ambient-code.io/gateway-external-url` from the Gateway's annotations
+
+---
+
+## PlacementStrategy — Session-to-Cluster Scheduling
+
+PlacementStrategy is an interface that determines which cluster a session runs on. The control plane invokes PlacementStrategy at session creation time (in `ignite_handler.go`) to set `Session.cluster_id` and `Session.gateway_cluster_id` before the session enters `Pending` phase.
+
+### Interface
+
+```go
+type PlacementStrategy interface {
+    PlaceSession(ctx context.Context, req PlacementRequest) (PlacementDecision, error)
+}
+
+type PlacementRequest struct {
+    ProjectID  string
+    AgentID    string
+    Labels     map[string]string
+    GatewayID  string            // nullable — specific gateway requested
+}
+
+type PlacementDecision struct {
+    ClusterID        string  // workload cluster for the session pod
+    GatewayClusterID string  // gateway cluster; may differ from ClusterID
+}
+```
+
+### Default Implementation: RoundRobinPlacement
+
+The default implementation round-robins across clusters matching the required role:
+
+1. **Gateway cluster selection**: Find all clusters with `role=gateway` or `role=hybrid` and `status=Ready`. If a specific Gateway is associated with the project, use its `cluster_id`. Otherwise, round-robin across eligible gateway clusters.
+
+2. **Workload cluster selection**: Find all clusters with `role=workload` or `role=hybrid` and `status=Ready`. Round-robin across eligible clusters, excluding clusters with `role=gateway` (gateway-only clusters never receive sessions).
+
+3. **Label-based filtering**: If the Agent or Project carries placement labels (e.g., `placement/cluster-selector: gpu=true`), filter the eligible cluster set by matching labels before round-robin.
+
+4. **Fallback**: If no eligible clusters are found, return an error. The session remains in `Pending` phase with a descriptive condition.
+
+### Gateway Affinity
+
+Some deployments require that sessions created through a specific gateway MUST run on the same cluster as that gateway (e.g., when the gateway and session communicate via `svc.cluster.local` without external exposure). This is expressed via a Gateway-level annotation:
+
+```yaml
+kind: Gateway
+name: openshell-gateway
+annotations:
+  ambient-code.io/session-affinity: "colocated"
+```
+
+When `session-affinity: colocated` is set, the PlacementStrategy SHALL place sessions on the same cluster as the gateway (`Session.cluster_id = Session.gateway_cluster_id`). This is the default for backward compatibility — sessions and gateways on the same cluster require no cross-cluster networking.
+
+When `session-affinity: any` is set (or the annotation is absent on a multi-cluster deployment), the PlacementStrategy is free to place sessions on any eligible workload cluster.
+
+### Configuration
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `PLACEMENT_STRATEGY` | `round-robin` | Active placement strategy name |
+| `PLACEMENT_HEARTBEAT_THRESHOLD` | `120s` | Clusters with `last_heartbeat_at` older than this are excluded from placement |
 
 ---
 
@@ -361,6 +487,7 @@ An Application syncs **project-scoped fleet definitions** — a subset of resour
 | `Credential` | Created if not present; idempotent by name |
 | `RoleBinding` | Created if not present; idempotent by user+role+scope key. **Escalation-bound:** the sync engine can only create RoleBindings at or below the level of the service credential it uses (see Design Decisions). |
 | `Gateway` | Created or patched within the destination project; image, serverDnsNames, config updated. Reconciled into K8s gateway resources by the GatewayReconciler. |
+| `Cluster` | Created or patched globally; name is the idempotency key. Kubeconfig is only synced if the Credential used by the Application has `platform:admin` scope. |
 | `Policy` | Created or patched within the destination project; spec, labels, annotations updated. Contains the upstream OpenShell `SandboxPolicy` JSON. Referenced by agents via `sandbox_policy` field. |
 | `Inbox` (seed messages) | Idempotent delivery — only new messages (by `from_agent_id` + `body` content hash dedup) are posted. Uses immutable `from_agent_id` FK, not mutable `from_name`. |
 
@@ -384,6 +511,7 @@ An Application syncs **project-scoped fleet definitions** — a subset of resour
 | `source_path` | Relative path within the repo to a kustomize directory (must contain `kustomization.yaml`). |
 | `credential_id` | Nullable FK → Credential. The stored credential providing authentication for the destination Ambient's REST API. Required when `destination_ambient_url` is set. Uses the same write-only encrypted storage as all Credentials. The credential's token is resolved at sync time via `GET /credentials/{cred_id}/token` (gated by `credential:token-reader`). Null when targeting the local Ambient (controller uses its own service identity). |
 | `destination_ambient_url` | Nullable. The Ambient API server URL to sync to. Null = local Ambient (this API server). When set, `credential_id` must also be set — async polling controllers have no request context to forward a token from. |
+| `destination_cluster_id` | Nullable FK to Cluster. The target cluster where reconciled Kubernetes resources (namespaces, gateway deployments) are created. Null = local cluster. When set alongside `destination_ambient_url`, the Application syncs fleet definitions to the remote Ambient AND reconciles K8s resources to the specified cluster. |
 | `destination_project` | Target project name. The project is created on first sync if `CreateProject=true` is in `sync_options`. |
 | `auto_sync` | If true, the controller polls the git repo and syncs automatically when changes are detected. If false, sync is manual via `POST /sync`. |
 | `auto_prune` | If true, resources in the live state that are absent from the target state are deleted. If false, orphaned resources are left in place. **WARNING: Pruning a Project is permanently destructive.** All Agents, Sessions, Inbox messages, and SessionMessages in the project are cascade-deleted. The sync engine will never auto-prune a Project — Project removal requires manual confirmation via `POST /sync` with explicit `prune: true` and `prune_project: true` flags. Agent-level pruning operates normally under `auto_prune`. |
@@ -1120,7 +1248,8 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `Project` | `name`, `description`, `prompt`, `labels`, `annotations` |
 | `Agent` | `name`, `prompt`, `providers`, `payloads`, `environment`, `entrypoint`, `sandbox_policy`, `sandbox_template`, `labels`, `annotations`, `inbox` (seed messages) |
 | `Credential` | `name`, `description`, `provider`, `token` (env var reference), `url`, `email`, `labels`, `annotations` — global resource; use `credential bind` to grant project access |
-| `Gateway` | `name`, `project`, `image`, `serverDnsNames`, `config`, `labels`, `annotations` — project-scoped; declares an OpenShell gateway deployment in the project namespace |
+| `Cluster` | `name`, `description`, `api_server_url`, `kubeconfig` (env var reference), `role`, `labels`, `annotations` — global resource; requires `platform:admin` |
+| `Gateway` | `name`, `project`, `cluster`, `image`, `serverDnsNames`, `config`, `labels`, `annotations` — project-scoped; declares an OpenShell gateway deployment in the project namespace |
 | `Policy` | `name`, `spec`, `labels`, `annotations` — project-scoped; declares a sandbox policy containing upstream OpenShell `SandboxPolicy` JSON. Referenced by agents via `sandbox_policy` field. See [agent-sandbox-config.spec.md](./agent-sandbox-config.spec.md) § Policy Declarations |
 
 `Agent` resources in `.ambient/teams/` files also carry an `inbox` list of seed messages. On apply, any message in the list is posted to the agent's inbox if an identical message (same `from_name` + `body`) does not already exist there.
@@ -1585,27 +1714,31 @@ See [Security Spec — Credential Access via RoleBindings](../security/identity-
 | `credential:owner` | Full CRUD on credentials the user created. Bind credentials to projects the user has `project:owner` on. |
 | `credential:viewer` | Read metadata (not token) on credentials bound to projects the user has access to. |
 | `credential:token-reader` | Fetch the raw token via `GET /credentials/{cred_id}/token`. Granted only to runner service accounts at session start. Human users do not hold this role. |
+| `cluster:admin` | Full CRUD on Clusters (register, update, deregister). Platform-scoped — grantable only by `platform:admin`. |
+| `cluster:viewer` | Read-only on Clusters and their status. Platform-scoped — grantable only by `platform:admin`. |
 | `gitops:admin` | Full CRUD on Applications; trigger sync/refresh. Platform-scoped — grantable only by `platform:admin`. |
 | `gitops:viewer` | Read-only on Applications and their status. Platform-scoped — grantable only by `platform:admin`. |
 
 ### Permission Matrix
 
-| Role | Projects | Agents | Sessions | Inbox | Credentials | Apps | Home | RBAC |
-|---|---|---|---|---|---|---|---|---|
-| `platform:admin` | full | full | full | full | full | full | full | full |
-| `platform:viewer` | read/list | read/list | read/list | — | read/list | read/list | read | read/list |
-| `project:owner` | full | full | full | full | manage bindings | local-only (own project) | read | project+agent bindings |
-| `project:editor` | read | create/update/ignite | read/list | send/read | — | — | read | — |
-| `project:viewer` | read | read/list | read/list | — | — | — | read | — |
-| `gitops:admin` | — | — | — | — | — | full (any destination) | — | — |
-| `gitops:viewer` | — | — | — | — | — | read/list | — | — |
-| `agent:operator` | — | update/ignite | read/list | send/read | — | — | — | — |
-| `agent:editor` | — | update | — | — | — | — | — | — |
-| `agent:observer` | — | read | read/list | — | — | — | — | — |
-| `agent:runner` | — | read | read | send | — | — | — | — |
-| `credential:owner` | — | — | — | — | create/update/delete + bind | — | — | — |
-| `credential:viewer` | — | — | — | — | read/list (metadata only) | — | — | — |
-| `credential:token-reader` | — | — | — | — | token: read | — | — | — |
+| Role | Projects | Agents | Sessions | Inbox | Credentials | Apps | Clusters | Home | RBAC |
+|---|---|---|---|---|---|---|---|---|---|
+| `platform:admin` | full | full | full | full | full | full | full | full | full |
+| `platform:viewer` | read/list | read/list | read/list | — | read/list | read/list | read/list | read | read/list |
+| `project:owner` | full | full | full | full | manage bindings | local-only (own project) | — | read | project+agent bindings |
+| `project:editor` | read | create/update/ignite | read/list | send/read | — | — | — | read | — |
+| `project:viewer` | read | read/list | read/list | — | — | — | — | read | — |
+| `cluster:admin` | — | — | — | — | — | — | full | — | — |
+| `cluster:viewer` | — | — | — | — | — | — | read/list | — | — |
+| `gitops:admin` | — | — | — | — | — | full (any destination) | — | — | — |
+| `gitops:viewer` | — | — | — | — | — | read/list | — | — | — |
+| `agent:operator` | — | update/ignite | read/list | send/read | — | — | — | — | — |
+| `agent:editor` | — | update | — | — | — | — | — | — | — |
+| `agent:observer` | — | read | read/list | — | — | — | — | — | — |
+| `agent:runner` | — | read | read | send | — | — | — | — | — |
+| `credential:owner` | — | — | — | — | create/update/delete + bind | — | — | — | — |
+| `credential:viewer` | — | — | — | — | read/list (metadata only) | — | — | — | — |
+| `credential:token-reader` | — | — | — | — | token: read | — | — | — | — |
 
 ### RBAC Endpoints
 
@@ -1633,6 +1766,23 @@ The `credential:token-reader` role is platform-internal. Credential CRUD is gove
 RoleBindings with `credential` scope. See
 [Security Spec — Token Reader Role Grant](../security/identity-boundaries.spec.md#requirement-token-reader-role-grant) for
 grant semantics and runtime authorization rules.
+
+---
+
+### Clusters (Global)
+
+```
+GET    /api/ambient/v1/clusters                                            list clusters
+POST   /api/ambient/v1/clusters                                            register cluster
+GET    /api/ambient/v1/clusters/{id}                                       read cluster (metadata only; kubeconfig never returned)
+PATCH  /api/ambient/v1/clusters/{id}                                       update cluster
+DELETE /api/ambient/v1/clusters/{id}                                       soft delete (deregistration)
+GET    /api/ambient/v1/clusters/{id}/status                                read cluster health status and capacity
+POST   /api/ambient/v1/clusters/{id}/heartbeat                             manual health check trigger
+```
+
+`kubeconfig` is accepted on `POST` and `PATCH` but **never returned** by standard read endpoints.
+`GET .../status` returns `status`, `status_message`, `capacity`, and `last_heartbeat_at`.
 
 ---
 
@@ -1739,7 +1889,7 @@ Every first-class Kind carries two JSONB columns:
 | `labels` | Queryable key/value tags. Use for filtering, grouping, and selection. | `{"env": "prod", "team": "platform", "tier": "critical"}` |
 | `annotations` | Freeform key/value metadata. Use for tooling notes, human remarks, external references. | `{"last-reviewed": "2026-03-21", "jira": "PLAT-123", "owner-slack": "@mturansk"}` |
 
-**Kinds with `labels` + `annotations`:** User, Project, Agent, Session, Credential (global), Application
+**Kinds with `labels` + `annotations`:** User, Project, Agent, Session, Credential (global), Cluster (global), Application
 
 **Kinds without:** Inbox (ephemeral message queue), SessionMessage (append-only event stream), Role, RoleBinding (RBAC internals — structured by design)
 
@@ -1986,6 +2136,10 @@ _Last updated: 2026-07-05. Use this as the authoritative index — click into co
 | **RBAC — roles** | ✅ full CRUD | ✅ `RoleAPI` | ✅ `create role`, `get roles`, `get roles <id>`, `delete role` | |
 | **RBAC — role bindings** | ✅ full CRUD | ✅ `RoleBindingAPI` | ✅ `create role-binding`, `get role-bindings`, `get role-bindings <id>`, `delete role-binding` | |
 | **RBAC — scoped role_bindings queries** | ✅ agents only; 🔲 users/projects/sessions/credentials | n/a | n/a | `GET /projects/{id}/agents/{agent_id}/role_bindings` implemented; other 4 scoped endpoints not yet |
+| **Clusters — CRUD** | 🔲 `plugins/clusters/` | 🔲 `ClusterAPI.{Get,List,Create,Update,Delete}` | 🔲 `cluster register/get/update/deregister` | Multi-cluster scheduling |
+| **Clusters — status/heartbeat** | 🔲 `status`/`heartbeat` handlers | 🔲 `ClusterAPI.{Status,Heartbeat}` | 🔲 `cluster status/heartbeat` | |
+| **Clusters — health syncer** | 🔲 CP `ClusterHealthSyncer` | n/a | n/a | Periodic health check of registered clusters |
+| **PlacementStrategy** | 🔲 CP `internal/placement/` | n/a | n/a | Round-robin default; interface for custom strategies |
 | **Credentials — CRUD** | ✅ `plugins/credentials/` (global at `/credentials`) | ✅ `credential_api.go` + `credential_extensions.go` | ✅ `credential list/get/create/update/delete/token/bind` | |
 | **Credentials — token fetch** | ✅ `GET /credentials/{cred_id}/token` | ✅ `GetToken()` in `credential_extensions.go` | ✅ `credential token <id>` | Gated by `credential:token-reader`; granted to runner SA by operator |
 | **ScheduledSessions — CRUD** | ✅ scheduledSessions plugin | ✅ `ScheduledSessionAPI.{List,Get,Create,Update,Delete,GetByName}` | ✅ `scheduled-session list/get/create/update/delete` | |
