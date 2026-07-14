@@ -247,7 +247,26 @@ else
   skip "Agent 'repo-clone-workspace'" "not found — repo payload tests will be skipped"
 fi
 
-section "6. Verify provider and credential"
+section "6. Apply sandbox policies"
+
+# Policies must exist before any session starts — agents reference them by
+# name (sandbox_policy: permissive) and the control plane will fail the
+# session if the policy is not found.
+if $ACPCTL apply -f "$REPO_ROOT/examples/base/policies/permissive.yaml" \
+  --project "$TENANT" >/dev/null 2>&1; then
+  pass "Permissive policy applied to ${TENANT}"
+else
+  fail "Could not apply permissive policy to ${TENANT}"
+fi
+
+if $ACPCTL apply -f "$REPO_ROOT/examples/base/policies/locked-down.yaml" \
+  --project "$TENANT" >/dev/null 2>&1; then
+  pass "Locked-down policy applied to ${TENANT}"
+else
+  fail "Could not apply locked-down policy to ${TENANT}"
+fi
+
+section "7. Verify provider and credential"
 
 PROVIDERS_RESP=$(api GET "/api/ambient/v1/providers?size=50" || echo "")
 PROVIDER_NAME=$(echo "$PROVIDERS_RESP" \
@@ -269,7 +288,7 @@ else
   skip "Vertex credential" "not configured (non-fatal)"
 fi
 
-section "7. OpenShell gateway healthy"
+section "8. OpenShell gateway healthy"
 
 GW_READY=$(kubectl get statefulset openshell-gateway -n "$TENANT" \
   -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
@@ -291,7 +310,7 @@ else
   fail "agent-sandbox controller not ready"
 fi
 
-section "8. Start agent session"
+section "9. Start agent session"
 
 START_RESP=$(api POST "/api/ambient/v1/projects/${PROJECT_ID}/agents/${AGENT_ID}/start" \
   -d '{"prompt": "gateway-e2e-test: say hello"}' || echo "")
@@ -306,7 +325,7 @@ else
   echo "  Response: $(echo "$START_RESP" | head -c 200)"
 fi
 
-section "9. Session state verification"
+section "10. Session state verification"
 
 if [ -n "$CREATED_SESSION_ID" ]; then
   sleep 3
@@ -342,7 +361,7 @@ else
   skip "Session state verification" "session not created"
 fi
 
-section "10. Sandbox configuration verification"
+section "11. Sandbox configuration verification"
 
 if [ -n "$CREATED_SESSION_ID" ]; then
   # Derive sandbox pod name: "session-" + lowercased session ID (first 40 chars)
@@ -470,7 +489,7 @@ else
   fail "Sandbox configuration verification — session not created"
 fi
 
-section "11. Repository payload verification"
+section "12. Repository payload verification"
 
 REPO_SESSION_ID=""
 if [ -n "$REPO_AGENT_ID" ]; then
@@ -572,22 +591,13 @@ else
   fail "Repo payload verification requires agent 'repo-clone-workspace' (not found)"
 fi
 
-section "12. Network policy enforcement"
+section "13. Network policy enforcement"
 
 LOCKED_SESSION_ID=""
 PERM_SESSION_ID=""
 
-# 11a. Apply policies and test agents
-$ACPCTL apply -f "$REPO_ROOT/examples/base/policies/locked-down.yaml" \
-  --project "$TENANT" >/dev/null 2>&1 && \
-  pass "Locked-down policy applied to ${TENANT}" || \
-  fail "Could not apply locked-down policy"
-
-$ACPCTL apply -f "$REPO_ROOT/examples/base/policies/permissive.yaml" \
-  --project "$TENANT" >/dev/null 2>&1 && \
-  pass "Permissive policy applied to ${TENANT}" || \
-  fail "Could not apply permissive policy"
-
+# Policies were already applied in section 6; only the test-specific agents
+# need to be created here.
 $ACPCTL apply -k "$SCRIPT_DIR/fixtures/network-policy-test" \
   --project "$TENANT" >/dev/null 2>&1 && \
   pass "Network test agents applied to ${TENANT}" || \
