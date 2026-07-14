@@ -45,6 +45,7 @@ Extract from user input, per ticket:
 | Description | (from context) | Sub-bullets, multi-line text, or gathered interactively |
 | Epic link | — | If a ticket should belong to an epic |
 | Blocking | — | "X blocks Y" relationships |
+| Related | — | "X related to Y" relationships |
 
 Type prefix syntax: `[Bug] Session crashes` → type=Bug, summary="Session crashes".
 
@@ -56,11 +57,13 @@ To make a Jira actionable by an agent picking it up cold, gather the information
 
 **Bugs** need: steps to reproduce, expected vs actual behavior, and environment info if relevant.
 
-**Spikes** need: the question to answer, expected deliverables, and a time-box.
+**Spikes** need: the question to answer, expected deliverables, and a time-box. Always include a time-box — spikes without one tend to expand indefinitely.
+
+**Epics** need: a high-level overview of the initiative and the child stories/tasks that make it up. Epics are containers, so they don't need Testing Requirements or Acceptance Criteria of their own — their children carry those.
 
 **All types** benefit from: relevant file paths, related issues/PRs/specs, constraints, and testing requirements.
 
-In batch mode, skip this interactive step — use whatever context the sub-bullets provide and fill in reasonable defaults for the rest.
+In batch mode, skip this interactive step — use whatever context the sub-bullets provide and fill in reasonable defaults for the rest. But don't skip content just because it's batch: every non-Epic ticket still needs Testing Requirements and Relevant Paths in its description, even if you have to infer them from the component. Going back to add these later is painful.
 
 ### Step 3 — Build Description
 
@@ -103,6 +106,13 @@ As a [type of user], I want [goal], so that [benefit].
 **Time-box**: [e.g. 2 days]
 ```
 
+**Section guidance by type:**
+- **Epics**: Overview only. No Acceptance Criteria, Testing Requirements, or User Story — those belong on the children.
+- **Stories**: Overview, User Story, Acceptance Criteria, Technical Context (with Relevant Paths), Testing Requirements.
+- **Bugs**: Overview, Bug Details (Steps/Expected/Actual), Technical Context (with Relevant Paths), Testing Requirements.
+- **Tasks**: Overview, Acceptance Criteria, Technical Context (with Relevant Paths), Testing Requirements.
+- **Spikes**: Overview, Spike Deliverables (must include Time-box), Technical Context (with Relevant Paths).
+
 ### Step 4 — Confirm
 
 **Single ticket:**
@@ -132,6 +142,7 @@ About to create N ENGPROD tickets:
 | 3 | Bug   | Fix Z                          | —             |
 
 Blocking: #2 blocks #3
+Related: #4 related to #5
 
 Create all? (yes/no/edit)
 ```
@@ -157,6 +168,10 @@ Use `mcp__jira__jira_create_issue` with:
 3. Link child tickets to their epics via `mcp__jira__jira_link_to_epic`
 4. Create blocking relationships via `mcp__jira__jira_create_issue_link` with `link_type: "Blocks"`
 5. Create related links via `mcp__jira__jira_create_issue_link` with `link_type: "Related"`
+
+**Important**: the Jira link type for related issues is `"Related"` (not "Relates"). Using the wrong name silently fails.
+
+Parallelize where possible: all epics can be created in parallel, then all non-epics in parallel, then all links in parallel. But each phase must complete before the next begins.
 
 ### Step 6 — Report
 
@@ -244,16 +259,41 @@ Time-box: 3 days
 ```
 Creates 1 epic + 2 stories + 1 bug, links stories to the epic.
 
+### Batch with Blocking
+```
+/jira-log
+- [Epic] RBAC Hardening
+- [Task] Audit existing ClusterRole permissions
+  - Component: manifests
+  - Files: components/manifests/base/rbac/
+  - blocks: Implement namespace-scoped RBAC
+- [Story] Implement namespace-scoped RBAC for sessions
+  - Component: ambient-api-server
+  - Acceptance: users can only see sessions in their namespace
+- [Spike] Investigate OPA integration for policy enforcement
+  - Deliverables: findings doc with recommendation
+  - Time-box: 3 days
+```
+Creates 1 epic + 1 story + 1 task + 1 spike, links all to the epic, creates blocking relationship from audit → RBAC story.
+
 ## Field Reference
 
 | Field | Value | Notes |
 |-------|-------|-------|
 | Project | ENGPROD | Engineering Productivity |
-| Component | acp | Agent Control Plane |
+| Component | acp | Agent Control Plane (lowercase) |
 | Label | `team:acp` | Set on create |
 | Issue Type | Story | Default; also Bug, Task, Spike, Epic |
 | Browse URL | `https://redhat.atlassian.net/browse/` | |
+| Board | 348 | ENGPROD kanban board (no sprints) |
+
+## Jira Link Types
+
+| Relationship | `link_type` value | Notes |
+|-------------|-------------------|-------|
+| Blocking | `"Blocks"` | inward issue blocks outward issue |
+| Related | `"Related"` | Not "Relates" — wrong name silently fails |
 
 ## What Makes a Jira Agent-Actionable
 
-A Jira is ready for cold-start work when it has: a user story (who/why), acceptance criteria (definition of done), repo + file paths (where to edit), constraints (what not to do), and testing requirements (expected coverage). Bug reports additionally need repro steps. Spikes need deliverables and a time-box.
+A Jira is ready for cold-start work when it has: a user story (who/why), acceptance criteria (definition of done), repo + file paths (where to edit), constraints (what not to do), and testing requirements (expected coverage). Bug reports additionally need repro steps. Spikes need deliverables and a time-box. Epics need an overview and linked children — their actionability comes from the children being well-structured, not from the epic itself.

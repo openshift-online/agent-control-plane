@@ -28,5 +28,23 @@
     "expected_tool_call": "Skill",
     "expected_args": { "skill": "jira-log", "args": "[Spike] Evaluate gRPC streaming alternatives" },
     "description": "Spike issue type creation"
+  },
+  {
+    "input": "/jira-log\n- [Epic] Observability Overhaul\n- Add structured logging to control plane\n  - Component: ambient-control-plane\n  - Files: components/ambient-control-plane/internal/reconciler/\n- Add Prometheus metrics endpoint\n  - Component: ambient-api-server\n  - Acceptance: /metrics endpoint returns request latency and error rate\n- [Task] Configure Grafana dashboards for SLOs\n  - Component: manifests",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "jira-log", "args": "[Epic] Observability Overhaul\n- Add structured logging to control plane\n  - Component: ambient-control-plane\n  - Files: components/ambient-control-plane/internal/reconciler/\n- Add Prometheus metrics endpoint\n  - Component: ambient-api-server\n  - Acceptance: /metrics endpoint returns request latency and error rate\n- [Task] Configure Grafana dashboards for SLOs\n  - Component: manifests" },
+    "description": "Batch creation with epic, stories, and task — verifies epic-first ordering and child linking"
+  },
+  {
+    "input": "/jira-log\n- [Bug] Runner crashes on empty prompt\n  - Steps: create session with empty prompt, observe crash\n  - Component: ambient-runner\n- [Bug] UI shows stale session status after deletion\n  - Steps: delete session, observe list still shows it\n  - Component: ambient-ui\n- [Task] Add retry logic to gRPC watch stream\n  - Component: ambient-control-plane\n  - Files: components/ambient-control-plane/internal/reconciler/kube_reconciler.go",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "jira-log", "args": "[Bug] Runner crashes on empty prompt\n  - Steps: create session with empty prompt, observe crash\n  - Component: ambient-runner\n- [Bug] UI shows stale session status after deletion\n  - Steps: delete session, observe list still shows it\n  - Component: ambient-ui\n- [Task] Add retry logic to gRPC watch stream\n  - Component: ambient-control-plane\n  - Files: components/ambient-control-plane/internal/reconciler/kube_reconciler.go" },
+    "description": "Batch with multiple bugs and a task — no epic, verifies flat batch without linking"
+  },
+  {
+    "input": "/jira-log\n- [Epic] RBAC Hardening\n- [Story] Implement namespace-scoped RBAC for sessions\n  - Component: ambient-api-server\n  - Acceptance: users can only see sessions in their namespace\n- [Spike] Investigate OPA integration for policy enforcement\n  - Deliverables: findings doc with recommendation\n  - Time-box: 3 days\n- [Task] Audit existing ClusterRole permissions\n  - Component: manifests\n  - Files: components/manifests/base/rbac/\n  - blocks: Implement namespace-scoped RBAC",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "jira-log", "args": "[Epic] RBAC Hardening\n- [Story] Implement namespace-scoped RBAC for sessions\n  - Component: ambient-api-server\n  - Acceptance: users can only see sessions in their namespace\n- [Spike] Investigate OPA integration for policy enforcement\n  - Deliverables: findings doc with recommendation\n  - Time-box: 3 days\n- [Task] Audit existing ClusterRole permissions\n  - Component: manifests\n  - Files: components/manifests/base/rbac/\n  - blocks: Implement namespace-scoped RBAC" },
+    "description": "Batch with epic, story, spike, task, and blocking relationship — verifies mixed types, spike time-box, and cross-ticket blocking"
   }
 ]
