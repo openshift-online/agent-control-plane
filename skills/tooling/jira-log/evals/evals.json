@@ -1,0 +1,32 @@
+[
+  {
+    "input": "/jira-log Add dark mode toggle to session viewer",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "jira-log", "args": "Add dark mode toggle to session viewer" },
+    "description": "Quick story creation with summary only"
+  },
+  {
+    "input": "/jira-log [Bug] Session list doesn't refresh after deletion",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "jira-log", "args": "[Bug] Session list doesn't refresh after deletion" },
+    "description": "Bug report with type prefix"
+  },
+  {
+    "input": "create a jira for adding OwnerReferences to reconciler secrets",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "jira-log", "args": "adding OwnerReferences to reconciler secrets" },
+    "description": "Natural language Jira creation request"
+  },
+  {
+    "input": "log a ticket for the MCP connection pooling investigation",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "jira-log", "args": "MCP connection pooling investigation" },
+    "description": "Natural language ticket logging request"
+  },
+  {
+    "input": "/jira-log [Spike] Evaluate gRPC streaming alternatives",
+    "expected_tool_call": "Skill",
+    "expected_args": { "skill": "jira-log", "args": "[Spike] Evaluate gRPC streaming alternatives" },
+    "description": "Spike issue type creation"
+  }
+]
