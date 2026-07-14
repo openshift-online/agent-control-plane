@@ -43,6 +43,7 @@ fi
 TOKEN="${TEST_TOKEN:-}"
 
 PF_PID=""
+GW_PF_PID=""
 PF_PORT=18767
 if [ -n "${API_URL:-}" ] && [ "${API_URL}" != "http://localhost:" ]; then
   :
@@ -51,7 +52,7 @@ elif [ -n "${1:-}" ]; then
 else
   API_URL="http://localhost:${PF_PORT}"
 fi
-trap 'kill "${PF_PID}" 2>/dev/null || true' EXIT
+trap 'kill "${PF_PID}" 2>/dev/null || true; kill "${GW_PF_PID}" 2>/dev/null || true' EXIT
 
 _ensure_port_forward() {
   local port
@@ -74,6 +75,62 @@ _ensure_port_forward() {
 }
 
 _ensure_port_forward
+
+_ensure_gateway_port_forward() {
+  if ! command -v openshell &>/dev/null; then
+    return 1
+  fi
+
+  # Check if existing gateway registration is reachable
+  if openshell sandbox list --gateway "${TENANT}" &>/dev/null 2>&1; then
+    return 0
+  fi
+
+  # Start a port-forward to the gateway gRPC port
+  local gw_log
+  gw_log=$(mktemp)
+  kubectl port-forward -n "${TENANT}" statefulset/openshell-gateway ":8080" \
+    >"$gw_log" 2>&1 &
+  GW_PF_PID=$!
+
+  local gw_port=""
+  for _i in $(seq 1 30); do
+    if [ -s "$gw_log" ]; then
+      gw_port=$(grep -oE 'Forwarding from 127\.0\.0\.1:[0-9]+' "$gw_log" | grep -oE '[0-9]+$' | head -1)
+      [ -n "$gw_port" ] && break
+    fi
+    sleep 0.2
+  done
+  rm -f "$gw_log"
+
+  if [ -z "$gw_port" ]; then
+    return 1
+  fi
+
+  # Remove stale registration and re-register with fresh port
+  openshell gateway remove "${TENANT}" 2>/dev/null || true
+
+  local cert_dir="$HOME/.config/openshell/gateways/${TENANT}/mtls"
+  mkdir -p "$cert_dir"
+  kubectl get secret openshell-server-tls -n "${TENANT}" \
+    -o jsonpath='{.data.ca\.crt}' | base64 -d > "$cert_dir/ca.crt"
+  kubectl get secret openshell-server-tls -n "${TENANT}" \
+    -o jsonpath='{.data.tls\.crt}' | base64 -d > "$cert_dir/tls.crt"
+  kubectl get secret openshell-server-tls -n "${TENANT}" \
+    -o jsonpath='{.data.tls\.key}' | base64 -d > "$cert_dir/tls.key"
+
+  openshell gateway add --name "${TENANT}" --local "https://localhost:${gw_port}" 2>/dev/null || true
+
+  # Re-extract certs after registration (gateway add may overwrite them)
+  kubectl get secret openshell-server-tls -n "${TENANT}" \
+    -o jsonpath='{.data.ca\.crt}' | base64 -d > "$cert_dir/ca.crt"
+  kubectl get secret openshell-server-tls -n "${TENANT}" \
+    -o jsonpath='{.data.tls\.crt}' | base64 -d > "$cert_dir/tls.crt"
+  kubectl get secret openshell-server-tls -n "${TENANT}" \
+    -o jsonpath='{.data.tls\.key}' | base64 -d > "$cert_dir/tls.key"
+
+  openshell sandbox list --gateway "${TENANT}" &>/dev/null 2>&1
+}
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -146,6 +203,19 @@ section "3. Gateway deployment via acpctl apply"
 E2E_GW_PROJECT="e2e-gateway-apply"
 E2E_GW_FIXTURE="$SCRIPT_DIR/fixtures/gateway-apply"
 E2E_GW_CLEANUP=true
+
+# Purge any soft-deleted project from a prior run. The API server's uniqueness
+# constraint includes soft-deleted rows, so acpctl apply would fail with 409 if
+# a previous run left behind a soft-deleted record.
+_db_pod=$(kubectl get pods -n "${NAMESPACE}" -l app=ambient-api-server,component=database -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+if [ -n "$_db_pod" ]; then
+  _db_user=$(kubectl get secret ambient-api-server-db -n "${NAMESPACE}" -o jsonpath='{.data.db\.user}' | base64 -d 2>/dev/null)
+  _db_name=$(kubectl get secret ambient-api-server-db -n "${NAMESPACE}" -o jsonpath='{.data.db\.name}' | base64 -d 2>/dev/null)
+  kubectl exec -n "${NAMESPACE}" "$_db_pod" -- \
+    psql -U "$_db_user" -d "$_db_name" -c \
+    "DELETE FROM projects WHERE name = '${E2E_GW_PROJECT}' AND deleted_at IS NOT NULL" \
+    >/dev/null 2>&1 || true
+fi
 
 if $ACPCTL apply -k "$E2E_GW_FIXTURE" --project "$E2E_GW_PROJECT" >/dev/null 2>&1; then
   pass "acpctl apply -k fixtures/gateway-apply succeeded"
@@ -541,8 +611,19 @@ section "13. Network policy enforcement"
 LOCKED_SESSION_ID=""
 PERM_SESSION_ID=""
 
+# Ensure the openshell gateway port-forward is alive. The ssh-proxy command
+# used below needs a local port-forward to the gateway's gRPC endpoint.
+if _ensure_gateway_port_forward; then
+  GW_AVAILABLE=true
+else
+  GW_AVAILABLE=false
+  skip "Network policy enforcement" "openshell CLI not available or gateway port-forward failed"
+fi
+
 # Policies were already applied in section 6; only the test-specific agents
 # need to be created here.
+if [ "$GW_AVAILABLE" = "true" ]; then
+
 $ACPCTL apply -k "$SCRIPT_DIR/fixtures/network-policy-test" \
   --project "$TENANT" >/dev/null 2>&1 && \
   pass "Network test agents applied to ${TENANT}" || \
@@ -554,7 +635,6 @@ LOCKED_AGENT_ID=$(echo "$AGENTS_RESP" \
   | jq -r '.items[] | select(.name == "network-test-locked-down") | .id' 2>/dev/null | head -1 || echo "")
 
 if [ -n "$LOCKED_AGENT_ID" ]; then
-  # 11b. Start locked-down session and wait for sandbox pod
   LOCKED_START_RESP=$(api POST "/api/ambient/v1/projects/${PROJECT_ID}/agents/${LOCKED_AGENT_ID}/start" \
     -d '{"prompt": "gateway-e2e-test: network policy enforcement"}' || echo "")
 
@@ -592,7 +672,7 @@ if [ -n "$LOCKED_AGENT_ID" ]; then
         sleep 2
       done
 
-      # 11c. Verify locked-down policy blocks external network access
+      # Verify locked-down policy blocks external network access.
       # SSH into the sandbox and curl a known endpoint over plain HTTP so
       # the proxy can intercept the GET and return policy_denied JSON.
       # (HTTPS would fail at the CONNECT tunnel level with no response body.)
@@ -624,9 +704,9 @@ else
   fail "Agent 'network-test-locked-down' not found after apply"
 fi
 
-# 11d. Verify permissive policy allows external network access
-# Start a dedicated permissive session and curl api.anthropic.com via the
-# sandbox proxy. The request should succeed (not return policy_denied).
+# Verify permissive policy allows external network access.
+# Start a dedicated permissive session and curl update.code.visualstudio.com
+# via the sandbox proxy. The request should succeed (not return policy_denied).
 PERM_AGENT_ID=$(echo "$AGENTS_RESP" \
   | jq -r '.items[] | select(.name == "network-test-permissive") | .id' 2>/dev/null | head -1 || echo "")
 
@@ -700,6 +780,8 @@ if [ -n "$PERM_AGENT_ID" ]; then
 else
   fail "Agent 'network-test-permissive' not found after apply"
 fi
+
+fi # GW_AVAILABLE
 
 section "Cleanup"
 
