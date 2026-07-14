@@ -57,10 +57,6 @@ Performs an initial list+watch sync at startup. Converts proto events to SDK typ
 
 Handles `session ADDED` and `session MODIFIED (phase=Pending)` events by provisioning resources on the target cluster. The reconciler resolves the target cluster from `Session.cluster_id` (set by PlacementStrategy at ignite time) and obtains the appropriate `KubeClient` from the `ClusterClientPool`. When `Session.cluster_id` is null, the local cluster client is used (backward compatible).
 
-If the placed cluster is `NotReady` when the reconciler processes the `Pending` session, the reconciler SHALL set a Condition (`type=PlacementFailed`, `reason=ClusterNotReady`) on the session and re-invoke the PlacementStrategy on the next reconcile cycle. The PlacementStrategy may select a different cluster — `cluster_id` is rewritten, not locked. This prevents sessions from stalling indefinitely when a cluster becomes unavailable between placement and provisioning.
-
-**Partial provisioning cleanup:** When re-placement selects a different cluster, the reconciler SHALL first clean up any partially-created resources (Pod, Secret, ServiceAccount, Service, RoleBinding) on the original cluster before provisioning on the new cluster. Cleanup uses the same `cleanupSession` logic with the original cluster's `KubeClient` from the `ClusterClientPool`. If cleanup fails (e.g., original cluster is unreachable), the reconciler logs a warning and proceeds with provisioning on the new cluster — orphaned resources on the unreachable cluster are acceptable because they will be garbage-collected when the cluster recovers and the namespace is reconciled. The reconciler SHALL NOT block re-placement on cleanup success.
-
 Provisions:
 
 1. Namespace (named `{project_id}`)
@@ -75,7 +71,7 @@ On `DELETED` → calls `cleanupSession` (deletes pod, secret, service account, s
 
 #### `internal/reconciler/project_reconciler.go` — ProjectReconciler
 
-Watches Project events via gRPC informer. Creates Kubernetes namespaces for each Project via `ensureNamespace()`, provisions runner secrets, and sets up control plane RBAC. Project = Namespace — the ProjectReconciler is the sole owner of namespace lifecycle on all clusters. In multi-cluster deployments, the ProjectReconciler provisions namespaces on every registered cluster (via the `ClusterClientPool`) so that session pods and gateway deployments can be placed on any eligible cluster. Namespace creation is idempotent — if the namespace already exists on a cluster, the reconciler no-ops (applies managed labels if missing, otherwise skips).
+Watches Project events via gRPC informer. Creates Kubernetes namespaces for each Project via `ensureNamespace()`, provisions runner secrets, and sets up control plane RBAC. Project = Namespace — the ProjectReconciler is the sole owner of namespace lifecycle.
 
 #### `internal/reconciler/gateway_reconciler.go` — GatewayReconciler
 
@@ -83,9 +79,7 @@ Watches Gateway resource events via gRPC informer. Reconciles `kind: Gateway` AP
 
 #### `internal/reconciler/cluster_reconciler.go` — ClusterReconciler
 
-Watches Cluster and Credential resource events via gRPC informer. Maintains the `ClusterClientPool` — a map of `cluster_id → *KubeClient` with lazy initialization. When a Cluster is added or modified, the reconciler resolves the Cluster's `credential_id` FK via `sdk.Credentials().GetToken(credentialID)` to obtain the kubeconfig, then parses it and creates (or replaces) the corresponding `KubeClient`. When a Cluster is deleted, the reconciler closes and evicts the client. The local cluster client (`_local`) is always present and initialized from the control plane's own kubeconfig. The Credential's `provider=kubeconfig` token is fetched at runtime using the same `credential:token-reader` role the CP already holds — no new auth mechanism is needed.
-
-The ClusterReconciler also watches Credential events. When a Credential is modified (e.g., kubeconfig rotation via `PATCH /credentials/{id}`), the reconciler checks if any registered Cluster references that `credential_id`. If so, it re-fetches the token and rebuilds the corresponding `KubeClient` in the pool. This ensures credential rotation takes effect without requiring a separate PATCH to the Cluster resource.
+Watches Cluster resource events via gRPC informer. Maintains the `ClusterClientPool` — a map of `cluster_id → *KubeClient` with lazy initialization. When a Cluster is added or modified, the reconciler parses the stored kubeconfig and creates (or replaces) the corresponding `KubeClient`. When a Cluster is deleted, the reconciler closes and evicts the client. The local cluster client (`_local`) is always present and initialized from the control plane's own kubeconfig.
 
 #### `internal/placement/strategy.go` — PlacementStrategy
 

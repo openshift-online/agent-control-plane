@@ -25,7 +25,7 @@ The Ambient API server provides a coordination layer for orchestrating fleets of
 - **RoleBinding** — binds a Role to a subject (user or project) at a given scope. Ownership and access for all Kinds is expressed through RoleBindings. The subject and scope are each represented as typed nullable FKs — exactly one FK is non-null, determined by `scope`.
 - **Application** — a GitOps binding that continuously syncs agent fleet definitions from a git repository to an Ambient instance. The Ambient equivalent of an Argo CD Application.
 - **Gateway** — a project-scoped declaration that an OpenShell gateway should be deployed on a specific cluster (or the local cluster by default). Specifies the gateway image, TLS DNS names, and TOML configuration. Applied via `acpctl apply -k` and reconciled by the GatewayReconciler into Kubernetes resources (StatefulSet, Service, RBAC, certgen Job). See [gateway-provisioning.spec.md](./gateway-provisioning.spec.md).
-- **Cluster** — a global registration of a Kubernetes cluster endpoint. Each cluster has a `role` (`gateway`, `workload`, or `hybrid`) that determines what can be scheduled on it. The control plane maintains a `KubeClient` pool keyed by cluster ID and dispatches reconciliation to the appropriate cluster. Cluster credentials are stored as a `Credential(provider=kubeconfig)` referenced via `credential_id` FK — reusing the existing encrypted write-only Credential infrastructure.
+- **Cluster** — a global registration of a Kubernetes cluster endpoint. Each cluster has a `role` (`gateway`, `workload`, or `hybrid`) that determines what can be scheduled on it. The control plane maintains a `KubeClient` pool keyed by cluster ID and dispatches reconciliation to the appropriate cluster. Cluster credentials are stored as a write-only `kubeconfig` field (encrypted at rest, same storage pattern as Credential tokens).
 
 The stable address of an agent is `{project_name}/{agent_name}`. It holds the inbox and links to the active session.
 
@@ -124,8 +124,8 @@ erDiagram
         string  name "human-readable display name"
         string  project_id FK "nullable — direct project context (no agent)"
         string  agent_id FK "nullable — set when started via agent ignite"
-        string  cluster_id FK "nullable — workload cluster; null = local; readOnly; set by PlacementStrategy"
-        string  gateway_cluster_id FK "nullable — gateway cluster; null = same as cluster_id; readOnly; set by PlacementStrategy"
+        string  cluster_id FK "nullable — workload cluster; null = local; set by PlacementStrategy"
+        string  gateway_cluster_id FK "nullable — gateway cluster; null = same as cluster_id"
         string  parent_session_id FK "nullable — source session for clones"
         string  source_scheduled_session_id "nullable — FK to ScheduledSession that triggered this"
         time    scheduled_for "nullable — cron tick time; idempotency key with source_scheduled_session_id"
@@ -253,26 +253,6 @@ erDiagram
         time   deleted_at
     }
 
-    %% ── Cluster (global — registered K8s cluster endpoint) ─────────────
-
-    Cluster {
-        string ID PK "KSUID"
-        string name "globally unique; stable address"
-        string description "nullable — free-text purpose"
-        string api_server_url "K8s API endpoint; display and health checks"
-        string credential_id FK "nullable — Credential(provider=kubeconfig); null = local cluster"
-        string role "gateway | workload | hybrid"
-        string status "Ready | NotReady | Unknown"
-        string status_message "nullable — human-readable status detail"
-        jsonb  labels "placement selectors (region, tier, gpu, etc.)"
-        jsonb  annotations
-        jsonb  capacity "nullable — reported node allocatable"
-        time   last_heartbeat_at "nullable — last successful health check"
-        time   created_at
-        time   updated_at
-        time   deleted_at
-    }
-
     %% ── Gateway (project-scoped OpenShell gateway declaration) ──────────
 
     Gateway {
@@ -300,6 +280,7 @@ erDiagram
         string source_path "path within repo to kustomize overlay"
         string destination_ambient_url "nullable — target Ambient API URL; null = local"
         string destination_project "target project name; created if CreateProject=true"
+        string destination_cluster_id FK "nullable — target cluster for reconciled K8s resources; null = local"
         string credential_id FK "nullable — Credential for remote Ambient auth; required when destination_ambient_url is set"
         bool   auto_sync "enable automated sync on git change"
         bool   auto_prune "delete resources removed from git"
@@ -345,10 +326,10 @@ erDiagram
     Cluster         ||--o{ Gateway          : "hosts"
     Cluster         ||--o{ Session          : "runs_on"
     Cluster         ||--o{ Session          : "gateway_on"
-    Cluster         }o--o| Credential       : "credential_id"
 
     Application }o--o| Project        : "syncs_to"
     Application }o--o| Credential     : "credential_id"
+    Application }o--o| Cluster        : "targets"
 
     Session         ||--o{ SessionMessage   : "streams"
     Session         ||--o{ SessionEvent     : "emits"
@@ -380,8 +361,8 @@ The local cluster (where the control plane runs) is implicitly registered as `hy
 |-------|-------|
 | `name` | Human-readable, globally unique. The stable address of this cluster registration. |
 | `description` | Nullable. Free-text purpose description (e.g., "US-East gateway cluster"). |
-| `api_server_url` | Kubernetes API server endpoint URL. Used for display and health checks; the actual connection uses the referenced Credential's kubeconfig. |
-| `credential_id` | Nullable FK to `Credential(provider=kubeconfig)`. The Credential's `token` field contains the serialized kubeconfig. Null for the local cluster (`_local`), which uses the control plane's own SA token. Reuses the existing Credential infrastructure: encrypted at rest, write-only token, rotation via `PATCH /credentials/{id}`, RBAC via `credential:owner`/`credential:token-reader`. |
+| `api_server_url` | Kubernetes API server endpoint URL. Used for display and health checks; the actual connection uses `kubeconfig`. |
+| `kubeconfig` | Write-only. Serialized kubeconfig for this cluster. Stored encrypted at rest using the same encryption mechanism as `Credential.token`. Never returned by standard read endpoints. Contains server URL, client certificate/key or bearer token, and CA data. |
 | `role` | Cluster scheduling role: `gateway`, `workload`, or `hybrid`. |
 | `status` | Computed by the ClusterHealthSyncer: `Ready` (API server reachable, auth valid), `NotReady` (unreachable or auth failed), `Unknown` (never checked). |
 | `status_message` | Nullable. Human-readable detail about current status (e.g., "connection refused", "certificate expired"). |
@@ -395,9 +376,7 @@ The local cluster (where the control plane runs) is implicitly registered as `hy
 Registered → Unknown → Ready ⇄ NotReady → (soft deleted)
 ```
 
-**Deregistration guard:** A Cluster cannot be soft-deleted while active sessions exist on it. `DELETE /clusters/{id}` returns `409 Conflict` with a message listing the count of active sessions. This prevents orphaning running workloads. The guard checks Sessions where `cluster_id = {id}` OR `gateway_cluster_id = {id}` with phase NOT IN (`Completed`, `Failed`, `Stopped`). Deregistration is an API-level operation only — it removes the Cluster record from PostgreSQL and evicts the `KubeClient` from the `ClusterClientPool`. It does not delete namespaces, pods, or any other resources on the underlying Kubernetes cluster.
-
-The ClusterHealthSyncer runs on a configurable interval (default: 30 seconds) and probes each registered cluster's API server using the kubeconfig from the referenced Credential. On success, it updates `status=Ready`, `last_heartbeat_at=now()`, and optionally refreshes `capacity` from the cluster's node allocatable resources. On failure, it sets `status=NotReady` with a descriptive `status_message`.
+The ClusterHealthSyncer runs on a configurable interval (default: 30 seconds) and probes each registered cluster's API server using its stored kubeconfig. On success, it updates `status=Ready`, `last_heartbeat_at=now()`, and optionally refreshes `capacity` from the cluster's node allocatable resources. On failure, it sets `status=NotReady` with a descriptive `status_message`.
 
 ### Cross-Cluster Networking
 
@@ -420,8 +399,6 @@ The control plane's `GatewayClient` resolves the endpoint using:
 
 PlacementStrategy is an interface that determines which cluster a session runs on. The control plane invokes PlacementStrategy at session creation time (in `ignite_handler.go`) to set `Session.cluster_id` and `Session.gateway_cluster_id` before the session enters `Pending` phase.
 
-`cluster_id` and `gateway_cluster_id` are **server-managed, read-only fields**. They are excluded from the create and patch request schemas (`readOnly: true` in OpenAPI). Clients cannot set or override them — only the PlacementStrategy (at ignite time) and the KubeReconciler (on re-placement) may write these fields.
-
 ### Interface
 
 ```go
@@ -443,8 +420,6 @@ type PlacementDecision struct {
 ```
 
 ### Default Implementation: RoundRobinPlacement
-
-> **Prototype.** RoundRobinPlacement is the initial implementation. The in-memory counter resets on CP restart, producing uneven distribution under HA or rolling deployments. This is acceptable for initial multi-cluster validation. TODO: future iterations should explore persistent counters (e.g., ConfigMap or Cluster annotations), weighted round-robin based on `capacity`, or bin-packing strategies.
 
 The default implementation round-robins across clusters matching the required role:
 
@@ -512,6 +487,7 @@ An Application syncs **project-scoped fleet definitions** — a subset of resour
 | `Credential` | Created if not present; idempotent by name |
 | `RoleBinding` | Created if not present; idempotent by user+role+scope key. **Escalation-bound:** the sync engine can only create RoleBindings at or below the level of the service credential it uses (see Design Decisions). |
 | `Gateway` | Created or patched within the destination project; image, serverDnsNames, config updated. Reconciled into K8s gateway resources by the GatewayReconciler. |
+| `Cluster` | Created or patched globally; name is the idempotency key. Kubeconfig is only synced if the Credential used by the Application has `platform:admin` scope. |
 | `Policy` | Created or patched within the destination project; spec, labels, annotations updated. Contains the upstream OpenShell `SandboxPolicy` JSON. Referenced by agents via `sandbox_policy` field. |
 | `Inbox` (seed messages) | Idempotent delivery — only new messages (by `from_agent_id` + `body` content hash dedup) are posted. Uses immutable `from_agent_id` FK, not mutable `from_name`. |
 
@@ -535,6 +511,7 @@ An Application syncs **project-scoped fleet definitions** — a subset of resour
 | `source_path` | Relative path within the repo to a kustomize directory (must contain `kustomization.yaml`). |
 | `credential_id` | Nullable FK → Credential. The stored credential providing authentication for the destination Ambient's REST API. Required when `destination_ambient_url` is set. Uses the same write-only encrypted storage as all Credentials. The credential's token is resolved at sync time via `GET /credentials/{cred_id}/token` (gated by `credential:token-reader`). Null when targeting the local Ambient (controller uses its own service identity). |
 | `destination_ambient_url` | Nullable. The Ambient API server URL to sync to. Null = local Ambient (this API server). When set, `credential_id` must also be set — async polling controllers have no request context to forward a token from. |
+| `destination_cluster_id` | Nullable FK to Cluster. The target cluster where reconciled Kubernetes resources (namespaces, gateway deployments) are created. Null = local cluster. When set alongside `destination_ambient_url`, the Application syncs fleet definitions to the remote Ambient AND reconciles K8s resources to the specified cluster. |
 | `destination_project` | Target project name. The project is created on first sync if `CreateProject=true` is in `sync_options`. |
 | `auto_sync` | If true, the controller polls the git repo and syncs automatically when changes are detected. If false, sync is manual via `POST /sync`. |
 | `auto_prune` | If true, resources in the live state that are absent from the target state are deleted. If false, orphaned resources are left in place. **WARNING: Pruning a Project is permanently destructive.** All Agents, Sessions, Inbox messages, and SessionMessages in the project are cascade-deleted. The sync engine will never auto-prune a Project — Project removal requires manual confirmation via `POST /sync` with explicit `prune: true` and `prune_project: true` flags. Agent-level pruning operates normally under `auto_prune`. |
@@ -1271,7 +1248,7 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `Project` | `name`, `description`, `prompt`, `labels`, `annotations` |
 | `Agent` | `name`, `prompt`, `providers`, `payloads`, `environment`, `entrypoint`, `sandbox_policy`, `sandbox_template`, `labels`, `annotations`, `inbox` (seed messages) |
 | `Credential` | `name`, `description`, `provider`, `token` (env var reference), `url`, `email`, `labels`, `annotations` — global resource; use `credential bind` to grant project access |
-| `Cluster` | `name`, `description`, `api_server_url`, `credential` (reference to a `Credential(provider=kubeconfig)` by name), `role`, `labels`, `annotations` — global resource; requires `platform:admin` |
+| `Cluster` | `name`, `description`, `api_server_url`, `kubeconfig` (env var reference), `role`, `labels`, `annotations` — global resource; requires `platform:admin` |
 | `Gateway` | `name`, `project`, `cluster`, `image`, `serverDnsNames`, `config`, `labels`, `annotations` — project-scoped; declares an OpenShell gateway deployment in the project namespace |
 | `Policy` | `name`, `spec`, `labels`, `annotations` — project-scoped; declares a sandbox policy containing upstream OpenShell `SandboxPolicy` JSON. Referenced by agents via `sandbox_policy` field. See [agent-sandbox-config.spec.md](./agent-sandbox-config.spec.md) § Policy Declarations |
 
@@ -1797,16 +1774,15 @@ grant semantics and runtime authorization rules.
 ```
 GET    /api/ambient/v1/clusters                                            list clusters
 POST   /api/ambient/v1/clusters                                            register cluster
-GET    /api/ambient/v1/clusters/{id}                                       read cluster (credential_id visible; credential token never inlined)
+GET    /api/ambient/v1/clusters/{id}                                       read cluster (metadata only; kubeconfig never returned)
 PATCH  /api/ambient/v1/clusters/{id}                                       update cluster
-DELETE /api/ambient/v1/clusters/{id}                                       soft delete (deregistration); blocked if active sessions exist
+DELETE /api/ambient/v1/clusters/{id}                                       soft delete (deregistration)
 GET    /api/ambient/v1/clusters/{id}/status                                read cluster health status and capacity
 POST   /api/ambient/v1/clusters/{id}/heartbeat                             manual health check trigger
 ```
 
-`credential_id` references a `Credential(provider=kubeconfig)`. The Credential must be created separately via `POST /credentials` before registering the Cluster. The kubeconfig token is never inlined in Cluster responses — it lives on the Credential and follows the existing write-only pattern.
+`kubeconfig` is accepted on `POST` and `PATCH` but **never returned** by standard read endpoints.
 `GET .../status` returns `status`, `status_message`, `capacity`, and `last_heartbeat_at`.
-`DELETE` is rejected with `409 Conflict` if any Session with `cluster_id` or `gateway_cluster_id` referencing this cluster exists in a non-terminal phase (`Pending`, `Creating`, `Running`, `Stopping`). This is an API-level guard only — deregistration does not deprovision the underlying Kubernetes cluster or its workloads. Operators must drain sessions before deregistering a cluster.
 
 ---
 
@@ -2050,7 +2026,7 @@ This structure means you can define and compose bespoke agent suites — entire 
 | `labels` / `annotations` are JSONB, not strings | Enables GIN-indexed key/value queries (`@>` operator) without joins; every row carries its own metadata without a separate EAV table. `labels` = queryable tags; `annotations` = freeform notes. Applied to first-class Kinds: User, Project, Agent, Session. Not applied to Inbox, SessionMessage, Role/RoleBinding. |
 | Credential is global, not project-scoped | Eliminates duplication when the same PAT is used across multiple Projects. Access controlled via RoleBindings with `credential` scope. A single Credential can be shared across Projects without creating copies. |
 | Application syncs fleet definitions, not infrastructure | Application syncs Projects, Agents, Credentials, RoleBindings, and Inbox seeds. Sessions, Users, and Roles are not synced. |
-| Application targets Ambient API, not K8s API | Application works at the Ambient REST API layer, not the K8s API. Remote sync uses the SDK client pointed at `destination_ambient_url`. The remote Ambient's own control plane handles K8s reconciliation (namespace creation, gateway deployment, session provisioning) — the local Application never talks directly to a remote cluster's K8s API. This is why Application has no `destination_cluster_id`. |
+| Application targets Ambient API, not K8s API | Unlike Sessions (which use kubeconfig for direct K8s provisioning), Application works at the Ambient REST API layer. Remote sync uses the SDK client pointed at `destination_ambient_url`. |
 | Promotion via multiple Applications | Each environment gets its own Application pointing to a different git overlay and destination Ambient URL. Promotion = merge changes between overlay branches. |
 | Kustomize engine shared between CLI and API server | The sync engine reuses the same kustomize rendering logic as `acpctl apply -k`. |
 | Git polling, not webhooks (v1) | Simplicity. Webhook-triggered refresh is a v2 optimization. |

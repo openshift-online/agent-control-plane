@@ -427,8 +427,7 @@ When a Gateway is deployed on a cluster different from where sessions run, the G
 - THEN it SHALL deploy gateway K8s resources on the target cluster using the `ClusterClientPool`
 - AND it SHALL create a `LoadBalancer` Service (or Ingress/Route, depending on cluster capabilities) exposing the gateway's gRPC port externally
 - AND it SHALL store the external endpoint URL in the Gateway's `annotations` as `ambient-code.io/gateway-external-url`
-- AND the annotation SHALL be written back to the API server (PostgreSQL) via `PATCH /api/ambient/v1/projects/{project_id}/gateways/{gateway_id}` after the external Service IP/hostname is assigned — this is the same status write-back pattern used by the Session reconciler (`sdk.Sessions().UpdateStatus()`)
-- AND the GatewayReconciler SHALL poll the LoadBalancer Service's `.status.loadBalancer.ingress` until an IP or hostname is assigned, then write the annotation
+- AND the annotation SHALL be written to the API server (PostgreSQL), not just to the Kubernetes resource
 
 #### Scenario: Gateway on local cluster (backward compatible)
 
@@ -443,9 +442,8 @@ When a Gateway is deployed on a cluster different from where sessions run, the G
 - GIVEN a Gateway targets a remote cluster via `cluster_id`
 - AND the project namespace does not yet exist on that cluster
 - WHEN the GatewayReconciler processes the Gateway event
-- THEN the ProjectReconciler SHALL have already provisioned the namespace on the target cluster via the `ClusterClientPool` (the ProjectReconciler owns namespace lifecycle on all clusters)
-- AND the GatewayReconciler SHALL log a warning and skip reconciliation until the namespace exists, retrying on subsequent events
-- AND the GatewayReconciler SHALL NOT create namespaces — namespace lifecycle is exclusively owned by the ProjectReconciler
+- THEN it SHALL create the namespace on the remote cluster using the `ClusterClientPool`
+- AND it SHALL apply the same managed labels as the local ProjectReconciler (`ambient-code.io/managed=true`, etc.)
 
 ---
 

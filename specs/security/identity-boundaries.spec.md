@@ -27,7 +27,7 @@ to the Kubernetes primitive directly.
 |----------|------|-------|-------|----------|---------|
 | `ambient-control-plane` | K8s ServiceAccount | SRE | Cluster (ClusterRole) | Long-lived (token Secret) | Watches API server, reconciles sessions/projects to K8s on the local cluster, writes status back |
 | `ambient-control-plane` OIDC token | OAuth2 client_credentials | SRE | API server | Auto-refreshed (30s buffer) | CP authenticates to API server for session/credential CRUD |
-| Remote cluster credential | `Credential(provider=kubeconfig)` | SRE | Remote cluster (ClusterRole) | Stored as Credential token, encrypted at rest | CP authenticates to remote clusters via `credential_id` FK on Cluster; reuses existing Credential CRUD, rotation, and RBAC |
+| Remote cluster kubeconfig | Kubeconfig (SA token or client cert) | SRE | Remote cluster (ClusterRole) | Stored on Cluster resource, encrypted at rest | CP authenticates to remote clusters for cross-cluster session/gateway provisioning |
 
 ### Platform Service Identities
 
@@ -94,10 +94,9 @@ tokens rather than sharing its own.
 - GIVEN the Control Plane is running with registered remote Clusters
 - WHEN a session is placed on a remote cluster by the PlacementStrategy
 - THEN the CP SHALL obtain a `KubeClient` for that cluster from the `ClusterClientPool`
-- AND the remote `KubeClient` SHALL authenticate using the kubeconfig from the `Credential(provider=kubeconfig)` referenced by the Cluster's `credential_id` FK
-- AND the CP SHALL resolve the credential at runtime via `sdk.Credentials().GetToken()` using its existing `credential:token-reader` role
+- AND the remote `KubeClient` SHALL authenticate using the kubeconfig stored on the Cluster resource (encrypted at rest, write-only in API)
 - AND the CP's local SA token SHALL NOT be used for remote cluster operations
-- AND the remote cluster credential SHALL be scoped to the minimum required permissions (namespace CRUD, pod/service/secret management)
+- AND the remote kubeconfig credential SHALL be scoped to the minimum required permissions (namespace CRUD, pod/service/secret management)
 
 ### Requirement: Vertex AI Credential Scoping
 
@@ -430,8 +429,8 @@ These endpoints MUST validate the caller is cluster-internal to prevent token ex
 4. The Control Plane SA is the only identity that spans Projects and Clusters
 5. Integration credentials are isolated in sidecar containers; the agent process has no access to integration tokens via environment, filesystem, or process inheritance
 6. LLM provider credentials (Anthropic API key, Vertex SA) are exempt from sidecar isolation — they remain in the runner container
-7. Remote cluster credentials are stored as `Credential(provider=kubeconfig)` — encrypted in PostgreSQL, write-only in API, and loaded into the `ClusterClientPool` at runtime via `credential_id` FK. They are never exposed to runners, sidecars, or end users
-8. Each remote cluster credential is scoped to the minimum permissions required for session and gateway provisioning — it does not grant cluster-admin or access to non-ACP namespaces
+7. Remote cluster kubeconfigs are stored encrypted in PostgreSQL (write-only in API) and loaded into the `ClusterClientPool` at runtime — they are never exposed to runners, sidecars, or end users
+8. Each remote cluster kubeconfig is scoped to the minimum permissions required for session and gateway provisioning — it does not grant cluster-admin or access to non-ACP namespaces
 
 ## Design Decisions
 
@@ -452,8 +451,8 @@ These endpoints MUST validate the caller is cluster-internal to prevent token ex
 | Credential rotation is user-managed | Users update the token via `PATCH` or `acpctl credential update`. No platform-side rotation or expiry tracking. |
 | No migration utility for existing K8s Secrets | Users re-enter credentials via the new API. The old Secret-based path is removed when the new API is live. |
 | Dedicated tokens, not personal credentials | Users are expected to create dedicated Robot Accounts or PATs, not share their personal credentials. A single credential can be bound to multiple Projects. |
-| Cluster credential reuses Credential Kind | Cluster references a `Credential(provider=kubeconfig)` via `credential_id` FK instead of storing an inline kubeconfig. This reuses the existing encrypted write-only storage, rotation (`PATCH /credentials/{id}`), and RBAC (`credential:owner`/`credential:token-reader`). No new credential infrastructure is needed. |
-| Per-cluster credential isolation in ClusterClientPool | Each remote cluster has its own `KubeClient` with its own Credential-backed kubeconfig. A compromised remote cluster credential does not grant access to other clusters or the hub. The local cluster client uses the CP's own SA token and is always present. |
-| Remote cluster SA permissions are least-privilege | The Credential referenced by a Cluster should grant only the permissions needed for ACP operations (namespace, pod, service, secret, statefulset, role, rolebinding CRUD in managed namespaces). Cluster-admin is not required and should not be used. |
+| Remote cluster kubeconfigs stored encrypted, write-only | Cluster kubeconfigs follow the same pattern as Credential tokens: stored in PostgreSQL encrypted at rest, never returned in GET responses. The `ClusterClientPool` loads them at runtime from the Cluster resource. This prevents kubeconfig exfiltration via the API. |
+| Per-cluster credential isolation in ClusterClientPool | Each remote cluster has its own `KubeClient` with its own kubeconfig credential. A compromised remote cluster credential does not grant access to other clusters or the hub. The local cluster client uses the CP's own SA token and is always present. |
+| Remote cluster SA permissions are least-privilege | The kubeconfig stored on a Cluster resource should grant only the permissions needed for ACP operations (namespace, pod, service, secret, statefulset, role, rolebinding CRUD in managed namespaces). Cluster-admin is not required and should not be used. |
 
 ---
