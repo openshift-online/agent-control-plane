@@ -397,6 +397,8 @@ The local cluster (where the control plane runs) is implicitly registered as `hy
 Registered → Unknown → Ready ⇄ NotReady → (soft deleted)
 ```
 
+**Deregistration guard:** A Cluster cannot be soft-deleted while active sessions exist on it. `DELETE /clusters/{id}` returns `409 Conflict` with a message listing the count of active sessions. This prevents orphaning running workloads. The guard checks Sessions where `cluster_id = {id}` OR `gateway_cluster_id = {id}` with phase NOT IN (`Completed`, `Failed`, `Stopped`). Deregistration is an API-level operation only — it removes the Cluster record from PostgreSQL and evicts the `KubeClient` from the `ClusterClientPool`. It does not delete namespaces, pods, or any other resources on the underlying Kubernetes cluster.
+
 The ClusterHealthSyncer runs on a configurable interval (default: 30 seconds) and probes each registered cluster's API server using the kubeconfig from the referenced Credential. On success, it updates `status=Ready`, `last_heartbeat_at=now()`, and optionally refreshes `capacity` from the cluster's node allocatable resources. On failure, it sets `status=NotReady` with a descriptive `status_message`.
 
 ### Cross-Cluster Networking
@@ -1797,13 +1799,14 @@ GET    /api/ambient/v1/clusters                                            list 
 POST   /api/ambient/v1/clusters                                            register cluster
 GET    /api/ambient/v1/clusters/{id}                                       read cluster (credential_id visible; credential token never inlined)
 PATCH  /api/ambient/v1/clusters/{id}                                       update cluster
-DELETE /api/ambient/v1/clusters/{id}                                       soft delete (deregistration)
+DELETE /api/ambient/v1/clusters/{id}                                       soft delete (deregistration); blocked if active sessions exist
 GET    /api/ambient/v1/clusters/{id}/status                                read cluster health status and capacity
 POST   /api/ambient/v1/clusters/{id}/heartbeat                             manual health check trigger
 ```
 
 `credential_id` references a `Credential(provider=kubeconfig)`. The Credential must be created separately via `POST /credentials` before registering the Cluster. The kubeconfig token is never inlined in Cluster responses — it lives on the Credential and follows the existing write-only pattern.
 `GET .../status` returns `status`, `status_message`, `capacity`, and `last_heartbeat_at`.
+`DELETE` is rejected with `409 Conflict` if any Session with `cluster_id` or `gateway_cluster_id` referencing this cluster exists in a non-terminal phase (`Pending`, `Creating`, `Running`, `Stopping`). This is an API-level guard only — deregistration does not deprovision the underlying Kubernetes cluster or its workloads. Operators must drain sessions before deregistering a cluster.
 
 ---
 

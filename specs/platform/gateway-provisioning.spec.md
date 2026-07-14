@@ -442,8 +442,9 @@ When a Gateway is deployed on a cluster different from where sessions run, the G
 - GIVEN a Gateway targets a remote cluster via `cluster_id`
 - AND the project namespace does not yet exist on that cluster
 - WHEN the GatewayReconciler processes the Gateway event
-- THEN it SHALL create the namespace on the remote cluster using the `ClusterClientPool`
-- AND it SHALL apply the same managed labels as the local ProjectReconciler (`ambient-code.io/managed=true`, etc.)
+- THEN the ProjectReconciler SHALL have already provisioned the namespace on the target cluster via the `ClusterClientPool` (the ProjectReconciler owns namespace lifecycle on all clusters)
+- AND the GatewayReconciler SHALL log a warning and skip reconciliation until the namespace exists, retrying on subsequent events
+- AND the GatewayReconciler SHALL NOT create namespaces — namespace lifecycle is exclusively owned by the ProjectReconciler
 
 ---
 

@@ -71,7 +71,7 @@ On `DELETED` → calls `cleanupSession` (deletes pod, secret, service account, s
 
 #### `internal/reconciler/project_reconciler.go` — ProjectReconciler
 
-Watches Project events via gRPC informer. Creates Kubernetes namespaces for each Project via `ensureNamespace()`, provisions runner secrets, and sets up control plane RBAC. Project = Namespace — the ProjectReconciler is the sole owner of namespace lifecycle.
+Watches Project events via gRPC informer. Creates Kubernetes namespaces for each Project via `ensureNamespace()`, provisions runner secrets, and sets up control plane RBAC. Project = Namespace — the ProjectReconciler is the sole owner of namespace lifecycle on all clusters. In multi-cluster deployments, the ProjectReconciler provisions namespaces on every registered cluster (via the `ClusterClientPool`) so that session pods and gateway deployments can be placed on any eligible cluster. Namespace creation is idempotent — if the namespace already exists on a cluster, the reconciler no-ops (applies managed labels if missing, otherwise skips).
 
 #### `internal/reconciler/gateway_reconciler.go` — GatewayReconciler
 
