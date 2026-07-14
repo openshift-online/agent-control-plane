@@ -85,9 +85,13 @@ for NS in "${NAMESPACES[@]}"; do
     openshell gateway remove "$GW_NAME" 2>/dev/null || true
   fi
 
-  # Extract mTLS certs from the cluster secret BEFORE registering the
-  # gateway — the openshell CLI expects client TLS material to exist at
-  # registration time.
+  echo "  Registering gateway $GW_NAME -> https://localhost:$PORT..."
+  openshell gateway add --name "$GW_NAME" --local "https://localhost:$PORT"
+
+  # Extract mTLS certs from the cluster secret AFTER registering —
+  # `gateway add --local` generates self-signed certs that don't match the
+  # gateway's PKI.  Overwriting them with the real cluster certs fixes the
+  # BadSignature / DecryptError TLS failures.
   mkdir -p "$CERT_DIR"
   echo "  Extracting mTLS certs from openshell-server-tls..."
   kubectl get secret openshell-server-tls -n "$NS" \
@@ -96,9 +100,6 @@ for NS in "${NAMESPACES[@]}"; do
     -o jsonpath='{.data.tls\.crt}' | base64 -d > "$CERT_DIR/tls.crt"
   kubectl get secret openshell-server-tls -n "$NS" \
     -o jsonpath='{.data.tls\.key}' | base64 -d > "$CERT_DIR/tls.key"
-
-  echo "  Registering gateway $GW_NAME -> https://localhost:$PORT..."
-  openshell gateway add --name "$GW_NAME" --local "https://localhost:$PORT"
 
   # Verify mTLS connectivity
   if openshell provider list --gateway "$GW_NAME" &>/dev/null; then

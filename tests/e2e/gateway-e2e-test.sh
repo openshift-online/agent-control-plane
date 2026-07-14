@@ -218,12 +218,12 @@ section "5. Verify agent exists"
 
 AGENTS_RESP=$(api GET "/api/ambient/v1/projects/${PROJECT_ID}/agents?size=50" || echo "")
 AGENT_ID=$(echo "$AGENTS_RESP" \
-  | jq -r '.items[] | select(.name == "hello-world") | .id' 2>/dev/null | head -1 || echo "")
+  | jq -r '.items[] | select(.name == "test-agent-no-providers") | .id' 2>/dev/null | head -1 || echo "")
 
 if [ -n "$AGENT_ID" ]; then
-  pass "Agent 'hello-world' exists (id: ${AGENT_ID})"
+  pass "Agent 'test-agent-no-providers' exists (id: ${AGENT_ID})"
 else
-  fail "Agent 'hello-world' not found in project '${TENANT}'"
+  fail "Agent 'test-agent-no-providers' not found in project '${TENANT}'"
   echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
   exit 1
 fi
@@ -302,7 +302,7 @@ CREATED_SESSION_ID=$(echo "$START_RESP" \
 if [ -n "$CREATED_SESSION_ID" ]; then
   pass "Session started (id: ${CREATED_SESSION_ID})"
 else
-  fail "Failed to start session for agent 'hello-world'"
+  fail "Failed to start session for agent 'test-agent-no-providers'"
   echo "  Response: $(echo "$START_RESP" | head -c 200)"
 fi
 
