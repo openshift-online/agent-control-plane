@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-echo "======================================"
-echo "Setting up kind cluster for Ambient"
-echo "======================================"
+echo "=================================================="
+echo "Setting up kind cluster for Agent Control Plane"
+echo "=================================================="
 
 # Cluster name (override via env var for multi-worktree support)
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-ambient-local}"
