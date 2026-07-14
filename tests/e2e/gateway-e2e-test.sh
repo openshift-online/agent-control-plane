@@ -187,9 +187,9 @@ fi
 
 section "2. Login acpctl"
 
-if $ACPCTL login --url "$API_URL" --token "$TOKEN" >/dev/null 2>&1 && \
+if $ACPCTL login --url "$API_URL" --token "$TOKEN" --project "$TENANT" >/dev/null 2>&1 && \
    $ACPCTL whoami >/dev/null 2>&1; then
-  pass "acpctl login succeeded (${API_URL})"
+  pass "acpctl login succeeded (${API_URL}, project: ${TENANT})"
 else
   fail "acpctl login failed — is the API server reachable at ${API_URL}?"
   echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
