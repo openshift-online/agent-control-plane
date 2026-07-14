@@ -18,7 +18,7 @@ spec:
         runAsNonRoot: false # Keycloak upstream image requires root; acceptable in Kind dev only
       containers:
         - name: keycloak
-          image: quay.io/keycloak/keycloak:26.0
+          image: quay.io/keycloak/keycloak:26.6.3
           args:
             - start-dev
             - --import-realm
