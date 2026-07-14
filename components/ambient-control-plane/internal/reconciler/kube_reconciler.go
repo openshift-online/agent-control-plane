@@ -136,6 +136,12 @@ type SimpleKubeReconciler struct {
 
 	execMu      sync.Mutex
 	activeExecs map[string]struct{}
+
+	provisionMu      sync.Mutex
+	activeProvisions map[string]struct{}
+
+	deprovisionMu      sync.Mutex
+	activeDeprovisions map[string]struct{}
 }
 
 func (r *SimpleKubeReconciler) nsKube() *kubeclient.KubeClient {
@@ -147,14 +153,16 @@ func (r *SimpleKubeReconciler) nsKube() *kubeclient.KubeClient {
 
 func NewKubeReconciler(factory *SDKClientFactory, kube *kubeclient.KubeClient, projectKube *kubeclient.KubeClient, provisioner kubeclient.NamespaceProvisioner, gateway gatewayClient, cfg KubeReconcilerConfig, logger zerolog.Logger) *SimpleKubeReconciler {
 	return &SimpleKubeReconciler{
-		factory:     factory,
-		kube:        kube,
-		projectKube: projectKube,
-		provisioner: provisioner,
-		gateway:     gateway,
-		cfg:         cfg,
-		logger:      logger.With().Str("reconciler", "kube").Logger(),
-		activeExecs: make(map[string]struct{}),
+		factory:            factory,
+		kube:               kube,
+		projectKube:        projectKube,
+		provisioner:        provisioner,
+		gateway:            gateway,
+		cfg:                cfg,
+		logger:             logger.With().Str("reconciler", "kube").Logger(),
+		activeExecs:        make(map[string]struct{}),
+		activeProvisions:   make(map[string]struct{}),
+		activeDeprovisions: make(map[string]struct{}),
 	}
 }
 
@@ -172,6 +180,38 @@ func (r *SimpleKubeReconciler) releaseExec(sessionID string) {
 	r.execMu.Lock()
 	defer r.execMu.Unlock()
 	delete(r.activeExecs, sessionID)
+}
+
+func (r *SimpleKubeReconciler) tryClaimProvision(sessionID string) bool {
+	r.provisionMu.Lock()
+	defer r.provisionMu.Unlock()
+	if _, active := r.activeProvisions[sessionID]; active {
+		return false
+	}
+	r.activeProvisions[sessionID] = struct{}{}
+	return true
+}
+
+func (r *SimpleKubeReconciler) releaseProvision(sessionID string) {
+	r.provisionMu.Lock()
+	defer r.provisionMu.Unlock()
+	delete(r.activeProvisions, sessionID)
+}
+
+func (r *SimpleKubeReconciler) tryClaimDeprovision(sessionID string) bool {
+	r.deprovisionMu.Lock()
+	defer r.deprovisionMu.Unlock()
+	if _, active := r.activeDeprovisions[sessionID]; active {
+		return false
+	}
+	r.activeDeprovisions[sessionID] = struct{}{}
+	return true
+}
+
+func (r *SimpleKubeReconciler) releaseDeprovision(sessionID string) {
+	r.deprovisionMu.Lock()
+	defer r.deprovisionMu.Unlock()
+	delete(r.activeDeprovisions, sessionID)
 }
 
 func (r *SimpleKubeReconciler) namespaceForSession(session types.Session) string {
@@ -222,27 +262,62 @@ func (r *SimpleKubeReconciler) Reconcile(ctx context.Context, event informer.Res
 	switch event.Type {
 	case informer.EventAdded:
 		if session.Phase == PhasePending || session.Phase == "" {
-			return r.provisionSession(ctx, session)
+			if !r.tryClaimProvision(session.ID) {
+				r.logger.Info().Str("session_id", session.ID).Msg("provisioning already in progress; skipping")
+				return nil
+			}
+			go r.provisionAsync(session)
+			return nil
 		}
 	case informer.EventModified:
 		switch session.Phase {
 		case PhasePending:
-			return r.provisionSession(ctx, session)
+			if !r.tryClaimProvision(session.ID) {
+				r.logger.Info().Str("session_id", session.ID).Msg("provisioning already in progress; skipping")
+				return nil
+			}
+			go r.provisionAsync(session)
+			return nil
 		case PhaseStopping:
-			return r.deprovisionSession(ctx, session, PhaseStopped)
+			go r.deprovisionAsync(session, PhaseStopped)
+			return nil
 		case PhaseFailed:
-			return r.deprovisionSession(ctx, session, session.Phase)
+			go r.deprovisionAsync(session, session.Phase)
+			return nil
 		case PhaseCompleted:
 			// FIXME(#223): Enable gateway sandbox cleanup once session lifecycle is ironed out.
 			// Merge back into the PhaseFailed case above to auto-delete the sandbox on completion.
 			if !r.cfg.OpenShellUseGateway {
-				return r.deprovisionSession(ctx, session, session.Phase)
+				go r.deprovisionAsync(session, session.Phase)
+				return nil
 			}
 		}
 	case informer.EventDeleted:
 		return r.cleanupSession(ctx, session)
 	}
 	return nil
+}
+
+func (r *SimpleKubeReconciler) provisionAsync(session types.Session) {
+	defer r.releaseProvision(session.ID)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	if err := r.provisionSession(ctx, session); err != nil {
+		r.logger.Error().Err(err).Str("session_id", session.ID).Msg("provisioning failed")
+	}
+}
+
+func (r *SimpleKubeReconciler) deprovisionAsync(session types.Session, nextPhase string) {
+	if !r.tryClaimDeprovision(session.ID) {
+		r.logger.Info().Str("session_id", session.ID).Msg("deprovisioning already in progress; skipping")
+		return
+	}
+	defer r.releaseDeprovision(session.ID)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	if err := r.deprovisionSession(ctx, session, nextPhase); err != nil {
+		r.logger.Error().Err(err).Str("session_id", session.ID).Msg("deprovisioning failed")
+	}
 }
 
 func (r *SimpleKubeReconciler) provisionSession(ctx context.Context, session types.Session) error {
