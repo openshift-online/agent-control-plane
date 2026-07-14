@@ -613,16 +613,14 @@ PERM_SESSION_ID=""
 
 # Ensure the openshell gateway port-forward is alive. The ssh-proxy command
 # used below needs a local port-forward to the gateway's gRPC endpoint.
-if _ensure_gateway_port_forward; then
-  GW_AVAILABLE=true
-else
-  GW_AVAILABLE=false
-  skip "Network policy enforcement" "openshell CLI not available or gateway port-forward failed"
+if ! _ensure_gateway_port_forward; then
+  fail "Gateway port-forward could not be established — openshell CLI missing or gateway unreachable"
+  echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
+  exit 1
 fi
 
 # Policies were already applied in section 6; only the test-specific agents
 # need to be created here.
-if [ "$GW_AVAILABLE" = "true" ]; then
 
 $ACPCTL apply -k "$SCRIPT_DIR/fixtures/network-policy-test" \
   --project "$TENANT" >/dev/null 2>&1 && \
@@ -780,8 +778,6 @@ if [ -n "$PERM_AGENT_ID" ]; then
 else
   fail "Agent 'network-test-permissive' not found after apply"
 fi
-
-fi # GW_AVAILABLE
 
 section "Cleanup"
 
