@@ -42,6 +42,19 @@ type Gateway struct {
 	Labels *string `json:"labels,omitempty"`
 	// JSON-encoded annotations
 	Annotations *string `json:"annotations,omitempty"`
+	// OIDC authentication configuration
+	Oidc *GatewayOidc `json:"oidc,omitempty"`
+}
+
+// GatewayOidc OIDC authentication configuration for the gateway
+type GatewayOidc struct {
+	Issuer      string `json:"issuer,omitempty"`
+	Audience    string `json:"audience,omitempty"`
+	JwksTtl     int    `json:"jwks_ttl,omitempty"`
+	RolesClaim  string `json:"roles_claim,omitempty"`
+	AdminRole   string `json:"admin_role,omitempty"`
+	UserRole    string `json:"user_role,omitempty"`
+	ScopesClaim string `json:"scopes_claim,omitempty"`
 }
 
 type _Gateway Gateway
@@ -465,6 +478,9 @@ func (o Gateway) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Annotations) {
 		toSerialize["annotations"] = o.Annotations
+	}
+	if !IsNil(o.Oidc) {
+		toSerialize["oidc"] = o.Oidc
 	}
 	return toSerialize, nil
 }

@@ -13,6 +13,49 @@ from ._base import ListMeta, _parse_datetime
 
 
 @dataclass(frozen=True)
+class GatewayOidc:
+    issuer: str = ""
+    audience: str = ""
+    jwks_ttl: int = 0
+    roles_claim: str = ""
+    admin_role: str = ""
+    user_role: str = ""
+    scopes_claim: str = ""
+
+    @classmethod
+    def from_dict(cls, data: Optional[dict]) -> Optional[GatewayOidc]:
+        if not data:
+            return None
+        return cls(
+            issuer=data.get("issuer", ""),
+            audience=data.get("audience", ""),
+            jwks_ttl=data.get("jwks_ttl", 0),
+            roles_claim=data.get("roles_claim", ""),
+            admin_role=data.get("admin_role", ""),
+            user_role=data.get("user_role", ""),
+            scopes_claim=data.get("scopes_claim", ""),
+        )
+
+    def to_dict(self) -> dict:
+        d: dict[str, Any] = {}
+        if self.issuer:
+            d["issuer"] = self.issuer
+        if self.audience:
+            d["audience"] = self.audience
+        if self.jwks_ttl:
+            d["jwks_ttl"] = self.jwks_ttl
+        if self.roles_claim:
+            d["roles_claim"] = self.roles_claim
+        if self.admin_role:
+            d["admin_role"] = self.admin_role
+        if self.user_role:
+            d["user_role"] = self.user_role
+        if self.scopes_claim:
+            d["scopes_claim"] = self.scopes_claim
+        return d
+
+
+@dataclass(frozen=True)
 class Gateway:
     id: str = ""
     kind: str = ""
@@ -24,6 +67,7 @@ class Gateway:
     image: str = ""
     labels: str = ""
     name: str = ""
+    oidc: Optional[GatewayOidc] = None
     project_id: str = ""
     server_dns_names: list[str] = ""
 
@@ -40,6 +84,7 @@ class Gateway:
             image=data.get("image", ""),
             labels=data.get("labels", ""),
             name=data.get("name", ""),
+            oidc=GatewayOidc.from_dict(data.get("oidc")),
             project_id=data.get("project_id", ""),
             server_dns_names=data.get("server_dns_names", ""),
         )
@@ -97,6 +142,10 @@ class GatewayBuilder:
         self._data["project_id"] = value
         return self
 
+    def oidc(self, value: GatewayOidc) -> GatewayBuilder:
+        self._data["oidc"] = value.to_dict()
+        return self
+
     def server_dns_names(self, value: list[str]) -> GatewayBuilder:
         self._data["server_dns_names"] = value
         return self
@@ -132,6 +181,10 @@ class GatewayPatch:
 
     def name(self, value: str) -> GatewayPatch:
         self._data["name"] = value
+        return self
+
+    def oidc(self, value: GatewayOidc) -> GatewayPatch:
+        self._data["oidc"] = value.to_dict()
         return self
 
     def server_dns_names(self, value: list[str]) -> GatewayPatch:

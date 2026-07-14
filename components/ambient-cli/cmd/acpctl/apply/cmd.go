@@ -891,6 +891,9 @@ func applyGateway(ctx context.Context, client *sdkclient.Client, doc kustomize.R
 	if len(doc.Annotations) > 0 {
 		builder = builder.Annotations(marshalStringMap(doc.Annotations))
 	}
+	if oidc := oidcFromResource(doc); oidc != nil {
+		builder = builder.Oidc(oidc)
+	}
 	gw, buildErr := builder.Build()
 	if buildErr != nil {
 		return applyResult{}, buildErr
@@ -924,10 +927,46 @@ func buildGatewayPatch(existing sdktypes.Gateway, doc kustomize.Resource) map[st
 		patch = patch.Annotations(marshalStringMap(doc.Annotations))
 		changed = true
 	}
+	if oidc := oidcFromResource(doc); oidc != nil {
+		patch = patch.Oidc(oidc)
+		changed = true
+	}
 	if !changed {
 		return nil
 	}
 	return patch.Build()
+}
+
+func oidcFromResource(doc kustomize.Resource) *sdktypes.GatewayOidc {
+	if len(doc.Oidc) == 0 {
+		return nil
+	}
+	oidc := &sdktypes.GatewayOidc{}
+	if v, ok := doc.Oidc["issuer"].(string); ok {
+		oidc.Issuer = v
+	}
+	if v, ok := doc.Oidc["audience"].(string); ok {
+		oidc.Audience = v
+	}
+	if v, ok := doc.Oidc["jwks_ttl"].(int); ok {
+		oidc.JwksTtl = v
+	}
+	if v, ok := doc.Oidc["roles_claim"].(string); ok {
+		oidc.RolesClaim = v
+	}
+	if v, ok := doc.Oidc["admin_role"].(string); ok {
+		oidc.AdminRole = v
+	}
+	if v, ok := doc.Oidc["user_role"].(string); ok {
+		oidc.UserRole = v
+	}
+	if v, ok := doc.Oidc["scopes_claim"].(string); ok {
+		oidc.ScopesClaim = v
+	}
+	if oidc.Issuer == "" {
+		return nil
+	}
+	return oidc
 }
 
 func stringSliceEqual(a, b []string) bool {

@@ -14,6 +14,7 @@ type Gateway struct {
 	Config         *string `json:"config"`
 	Labels         *string `json:"labels"            gorm:"type:jsonb"`
 	Annotations    *string `json:"annotations"       gorm:"type:jsonb"`
+	Oidc           *string `json:"oidc"              gorm:"type:jsonb"`
 }
 
 type GatewayList []*Gateway

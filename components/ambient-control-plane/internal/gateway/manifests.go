@@ -136,6 +136,51 @@ func ApplyConfigOverrides(obj *unstructured.Unstructured, config GatewayConfig) 
 		}
 	}
 
+	// Inject OIDC configuration into gateway.toml (only when no custom config override)
+	if kind == "ConfigMap" && obj.GetName() == "openshell-gateway-config" && config.Oidc != nil && config.Oidc.Issuer != "" && config.Config == "" {
+		data, found, err := unstructured.NestedMap(obj.Object, "data")
+		if err != nil || !found {
+			return fmt.Errorf("configmap data not found")
+		}
+
+		toml, ok := data["gateway.toml"].(string)
+		if !ok {
+			return fmt.Errorf("gateway.toml not found in configmap")
+		}
+
+		// Flip allow_unauthenticated_users to false when OIDC is enabled
+		toml = strings.ReplaceAll(toml, "allow_unauthenticated_users = true", "allow_unauthenticated_users = false")
+
+		// Build the OIDC section
+		oidcSection := "\n[openshell.gateway.oidc]\n"
+		oidcSection += fmt.Sprintf("    issuer   = %q\n", config.Oidc.Issuer)
+		if config.Oidc.Audience != "" {
+			oidcSection += fmt.Sprintf("    audience = %q\n", config.Oidc.Audience)
+		}
+		if config.Oidc.JwksTtl > 0 {
+			oidcSection += fmt.Sprintf("    jwks_ttl = %d\n", config.Oidc.JwksTtl)
+		}
+		if config.Oidc.RolesClaim != "" {
+			oidcSection += fmt.Sprintf("    roles_claim = %q\n", config.Oidc.RolesClaim)
+		}
+		if config.Oidc.AdminRole != "" {
+			oidcSection += fmt.Sprintf("    admin_role = %q\n", config.Oidc.AdminRole)
+		}
+		if config.Oidc.UserRole != "" {
+			oidcSection += fmt.Sprintf("    user_role = %q\n", config.Oidc.UserRole)
+		}
+		if config.Oidc.ScopesClaim != "" {
+			oidcSection += fmt.Sprintf("    scopes_claim = %q\n", config.Oidc.ScopesClaim)
+		}
+
+		toml += oidcSection
+		data["gateway.toml"] = toml
+
+		if err := unstructured.SetNestedMap(obj.Object, data, "data"); err != nil {
+			return fmt.Errorf("set configmap data: %w", err)
+		}
+	}
+
 	// Update ConfigMap server_sans if serverDnsNames provided (and no custom config)
 	if kind == "ConfigMap" && obj.GetName() == "openshell-gateway-config" && len(config.ServerDnsNames) > 0 && config.Config == "" {
 		data, found, err := unstructured.NestedMap(obj.Object, "data")

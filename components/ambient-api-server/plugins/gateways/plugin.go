@@ -82,4 +82,5 @@ func init() {
 	presenters.RegisterKind(&Gateway{}, "Gateway")
 
 	db.RegisterMigration(migration())
+	db.RegisterMigration(migrationAddOidc())
 }

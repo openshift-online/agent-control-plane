@@ -20,12 +20,13 @@ var _ MappedNullable = &GatewayPatchRequest{}
 
 // GatewayPatchRequest struct for GatewayPatchRequest
 type GatewayPatchRequest struct {
-	Name           *string  `json:"name,omitempty"`
-	Image          *string  `json:"image,omitempty"`
-	ServerDnsNames []string `json:"server_dns_names,omitempty"`
-	Config         *string  `json:"config,omitempty"`
-	Labels         *string  `json:"labels,omitempty"`
-	Annotations    *string  `json:"annotations,omitempty"`
+	Name           *string      `json:"name,omitempty"`
+	Image          *string      `json:"image,omitempty"`
+	ServerDnsNames []string     `json:"server_dns_names,omitempty"`
+	Config         *string      `json:"config,omitempty"`
+	Labels         *string      `json:"labels,omitempty"`
+	Annotations    *string      `json:"annotations,omitempty"`
+	Oidc           *GatewayOidc `json:"oidc,omitempty"`
 }
 
 // NewGatewayPatchRequest instantiates a new GatewayPatchRequest object
@@ -264,6 +265,9 @@ func (o GatewayPatchRequest) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Annotations) {
 		toSerialize["annotations"] = o.Annotations
+	}
+	if !IsNil(o.Oidc) {
+		toSerialize["oidc"] = o.Oidc
 	}
 	return toSerialize, nil
 }

@@ -10,16 +10,27 @@ import (
 	"fmt"
 )
 
+type GatewayOidc struct {
+	Issuer      string `json:"issuer,omitempty"`
+	Audience    string `json:"audience,omitempty"`
+	JwksTtl     int    `json:"jwks_ttl,omitempty"`
+	RolesClaim  string `json:"roles_claim,omitempty"`
+	AdminRole   string `json:"admin_role,omitempty"`
+	UserRole    string `json:"user_role,omitempty"`
+	ScopesClaim string `json:"scopes_claim,omitempty"`
+}
+
 type Gateway struct {
 	ObjectReference
 
-	Annotations    string   `json:"annotations,omitempty"`
-	Config         string   `json:"config,omitempty"`
-	Image          string   `json:"image,omitempty"`
-	Labels         string   `json:"labels,omitempty"`
-	Name           string   `json:"name"`
-	ProjectID      string   `json:"project_id"`
-	ServerDnsNames []string `json:"server_dns_names"`
+	Annotations    string       `json:"annotations,omitempty"`
+	Config         string       `json:"config,omitempty"`
+	Image          string       `json:"image,omitempty"`
+	Labels         string       `json:"labels,omitempty"`
+	Name           string       `json:"name"`
+	Oidc           *GatewayOidc `json:"oidc,omitempty"`
+	ProjectID      string       `json:"project_id"`
+	ServerDnsNames []string     `json:"server_dns_names"`
 }
 
 type GatewayList struct {
@@ -71,6 +82,11 @@ func (b *GatewayBuilder) ProjectID(v string) *GatewayBuilder {
 	return b
 }
 
+func (b *GatewayBuilder) Oidc(v *GatewayOidc) *GatewayBuilder {
+	b.resource.Oidc = v
+	return b
+}
+
 func (b *GatewayBuilder) ServerDnsNames(v []string) *GatewayBuilder {
 	b.resource.ServerDnsNames = v
 	return b
@@ -119,6 +135,11 @@ func (b *GatewayPatchBuilder) Labels(v string) *GatewayPatchBuilder {
 
 func (b *GatewayPatchBuilder) Name(v string) *GatewayPatchBuilder {
 	b.patch["name"] = v
+	return b
+}
+
+func (b *GatewayPatchBuilder) Oidc(v *GatewayOidc) *GatewayPatchBuilder {
+	b.patch["oidc"] = v
 	return b
 }
 

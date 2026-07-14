@@ -5,12 +5,23 @@
 
 import type { ObjectReference, ListMeta } from './base';
 
+export type GatewayOidc = {
+  issuer?: string;
+  audience?: string;
+  jwks_ttl?: number;
+  roles_claim?: string;
+  admin_role?: string;
+  user_role?: string;
+  scopes_claim?: string;
+};
+
 export type Gateway = ObjectReference & {
   annotations: string;
   config: string;
   image: string;
   labels: string;
   name: string;
+  oidc?: GatewayOidc;
   project_id: string;
   server_dns_names: string[];
 };
@@ -25,6 +36,7 @@ export type GatewayCreateRequest = {
   image?: string;
   labels?: string;
   name: string;
+  oidc?: GatewayOidc;
   project_id: string;
   server_dns_names: string[];
 };
@@ -35,6 +47,7 @@ export type GatewayPatchRequest = {
   image?: string;
   labels?: string;
   name?: string;
+  oidc?: GatewayOidc;
   server_dns_names?: string[];
 };
 
@@ -69,6 +82,11 @@ export class GatewayBuilder {
 
   projectId(value: string): this {
     this.data['project_id'] = value;
+    return this;
+  }
+
+  oidc(value: GatewayOidc): this {
+    this.data['oidc'] = value;
     return this;
   }
 
@@ -114,6 +132,11 @@ export class GatewayPatchBuilder {
 
   name(value: string): this {
     this.data['name'] = value;
+    return this;
+  }
+
+  oidc(value: GatewayOidc): this {
+    this.data['oidc'] = value;
     return this;
   }
 

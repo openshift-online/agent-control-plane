@@ -249,6 +249,37 @@ components:
             annotations:
               type: string
               description: JSON-encoded annotations
+            oidc:
+              $ref: '#/components/schemas/GatewayOidc'
+    # NEW SCHEMA START
+    GatewayOidc:
+    # NEW SCHEMA END
+      type: object
+      description: OIDC authentication configuration for the gateway
+      properties:
+        issuer:
+          type: string
+          description: OIDC issuer URL; empty disables OIDC
+        audience:
+          type: string
+          description: Expected aud claim value in JWT
+          default: "openshell-cli"
+        jwks_ttl:
+          type: integer
+          description: JWKS key cache retention in seconds
+          default: 3600
+        roles_claim:
+          type: string
+          description: Dot-delimited path to roles array in JWT claims
+        admin_role:
+          type: string
+          description: Role name conferring admin access
+        user_role:
+          type: string
+          description: Role name conferring standard user access
+        scopes_claim:
+          type: string
+          description: Dot-delimited path to scopes array in JWT claims
     # NEW SCHEMA START
     GatewayList:
     # NEW SCHEMA END
@@ -279,6 +310,8 @@ components:
           type: string
         annotations:
           type: string
+        oidc:
+          $ref: '#/components/schemas/GatewayOidc'
   parameters:
       id:
         name: id

@@ -109,8 +109,19 @@ func deployGateway(
 		configTomlChanged = changed
 	}
 
-	// Only restart pods if DNS or config changed (image changes trigger K8s rolling update automatically)
-	needsRestart := dnsNamesChanged || configTomlChanged
+	// Check OIDC config changes
+	oidcChanged := false
+	if nsConfig.Gateway.Oidc != nil && nsConfig.Gateway.Oidc.Issuer != "" {
+		changed, err := oidcConfigChanged(ctx, dynamicClient, nsConfig.Name, nsConfig.Gateway.Oidc)
+		if err != nil {
+			log.Warn().Err(err).Msg("failed to check if OIDC config changed, assuming changed")
+			changed = true
+		}
+		oidcChanged = changed
+	}
+
+	// Only restart pods if DNS, config, or OIDC changed (image changes trigger K8s rolling update automatically)
+	needsRestart := dnsNamesChanged || configTomlChanged || oidcChanged
 
 	// Apply manifests in order: RBAC → ServiceAccount → ConfigMap → Job → Service → StatefulSet → NetworkPolicy
 	order := []string{
@@ -239,6 +250,41 @@ func gatewayConfigTomlChanged(ctx context.Context, dynamicClient dynamic.Interfa
 
 	// Compare configs (simple string comparison)
 	return currentConfig != desiredConfig, nil
+}
+
+// oidcConfigChanged checks if the OIDC section in the ConfigMap differs from the desired config
+func oidcConfigChanged(ctx context.Context, dynamicClient dynamic.Interface, namespace string, desired *OidcConfig) (bool, error) {
+	configMapGVR := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}
+
+	obj, err := dynamicClient.Resource(configMapGVR).Namespace(namespace).Get(ctx, "openshell-gateway-config", metav1.GetOptions{})
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("get openshell-gateway-config: %w", err)
+	}
+
+	data, found, err := unstructured.NestedMap(obj.Object, "data")
+	if err != nil || !found {
+		return true, nil
+	}
+
+	toml, ok := data["gateway.toml"].(string)
+	if !ok {
+		return true, nil
+	}
+
+	hasOidcSection := strings.Contains(toml, "[openshell.gateway.oidc]")
+	if !hasOidcSection {
+		return true, nil
+	}
+
+	// Check if issuer value matches
+	if !strings.Contains(toml, fmt.Sprintf("issuer   = %q", desired.Issuer)) {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // extractServerSansFromToml parses server_sans array from TOML string

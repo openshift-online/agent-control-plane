@@ -133,7 +133,7 @@ VERTEX_CRED ?= $(GOOGLE_APPLICATION_CREDENTIALS)
 # Provisions tenant namespaces with an OpenShell gateway each.
 # Override with OPENSHELL_TENANTS="ns1 ns2" to change the set of tenant namespaces.
 OPENSHELL_USE_GATEWAY ?= true
-OPENSHELL_TENANTS ?= tenant-a tenant-b vteam-product-swarm codebase-maintainers
+OPENSHELL_TENANTS ?= tenant-a tenant-b tenant-c vteam-product-swarm codebase-maintainers
 AGENT_SANDBOX_VERSION ?= v0.5.1
 
 # Colors for output (using tput for better compatibility, with fallback to printf-compatible codes)
