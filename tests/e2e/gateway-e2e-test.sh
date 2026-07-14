@@ -570,6 +570,19 @@ if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; the
     pass "acpctl session messages returned ${MSG_COUNT} message(s)"
   else
     fail "acpctl session messages returned no messages after 180s"
+    # Dump diagnostics to help debug CI-only failures
+    echo "--- DIAGNOSTIC: sandbox pod status ---"
+    kubectl get pod "${SBX_NAME}" -n "${TENANT}" -o wide 2>&1 || true
+    echo "--- DIAGNOSTIC: sandbox ANTHROPIC_BASE_URL ---"
+    kubectl exec -n "${TENANT}" "${SBX_NAME}" -- printenv ANTHROPIC_BASE_URL 2>&1 || echo "(not set or pod gone)"
+    echo "--- DIAGNOSTIC: runner log (last 80 lines) ---"
+    kubectl exec -n "${TENANT}" "${SBX_NAME}" -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
+    echo "--- DIAGNOSTIC: sandbox supervisor log (last 40 lines) ---"
+    kubectl logs -n "${TENANT}" "${SBX_NAME}" -c agent --tail=40 2>&1 || true
+    echo "--- DIAGNOSTIC: control plane log for session (last 20 matches) ---"
+    kubectl logs -n "${NAMESPACE}" -l app=ambient-control-plane --tail=500 2>&1 \
+      | grep -i "${CREATED_SESSION_ID}\|${SBX_NAME}" | tail -20 || true
+    echo "--- END DIAGNOSTICS ---"
   fi
 
   # 11a. Verify the initial prompt was delivered as a user message
