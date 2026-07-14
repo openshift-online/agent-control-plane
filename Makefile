@@ -74,6 +74,7 @@ MCP_IMAGE ?= acp_mcp:$(IMAGE_TAG)
 
 # Quay runner image reference and tag for kind pre-loading
 RUNNER_QUAY_IMAGE ?= quay.io/ambient_code/acp_runner_openshell
+RUNNER_QUAY_TAG ?= latest
 RUNNER_PRELOAD_TAG ?= kind-preloaded
 RUNNER_PRELOAD_REF := localhost/acp_runner_openshell:$(RUNNER_PRELOAD_TAG)
 
@@ -1563,8 +1564,8 @@ endif
 _kind-preload-runner: ## Internal: Pull runner image from Quay, retag, and load into kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Pre-loading runner image into kind ($(KIND_CLUSTER_NAME))..."
 	@_LOG=/tmp/runner-preload-$$$$.log; \
-	printf '  Pulling $(RUNNER_QUAY_IMAGE):latest '; \
-	$(CONTAINER_ENGINE) pull $(RUNNER_QUAY_IMAGE):latest >"$$_LOG" 2>&1 & \
+	printf '  Pulling $(RUNNER_QUAY_IMAGE):$(RUNNER_QUAY_TAG) '; \
+	$(CONTAINER_ENGINE) pull $(RUNNER_QUAY_IMAGE):$(RUNNER_QUAY_TAG) >"$$_LOG" 2>&1 & \
 	_PID=$$!; \
 	_CHARS='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'; \
 	while kill -0 $$_PID 2>/dev/null; do \
@@ -1581,7 +1582,7 @@ _kind-preload-runner: ## Internal: Pull runner image from Quay, retag, and load 
 		exit 1; \
 	fi; \
 	rm -f "$$_LOG"
-	@$(CONTAINER_ENGINE) tag $(RUNNER_QUAY_IMAGE):latest $(RUNNER_PRELOAD_REF)
+	@$(CONTAINER_ENGINE) tag $(RUNNER_QUAY_IMAGE):$(RUNNER_QUAY_TAG) $(RUNNER_PRELOAD_REF)
 	@printf '  Loading image into cluster '
 	@_LOG=/tmp/runner-load-$$$$.log; \
 	if [ "$(CONTAINER_ENGINE)" = "podman" ] || [ -n "$(KIND_HOST)" ]; then \
