@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Vendored from github.com/NVIDIA/OpenShell/proto/sandbox.proto at 709aa0fe3e9e4d2b5fea336b5d6e393b45481898
+// Vendored from github.com/NVIDIA/OpenShell/proto/sandbox.proto at e3d26dd3ae0dee247bbc5db368545832757ac493
 
 syntax = "proto3";
 

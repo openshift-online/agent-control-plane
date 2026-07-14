@@ -1,6 +1,6 @@
 kind: Gateway
 name: openshell-gateway
-image: ghcr.io/nvidia/openshell/gateway:0.0.80
+image: ghcr.io/nvidia/openshell/gateway:0.0.83
 server_dns_names:
   - openshell-gateway.vteam-product-swarm.svc.cluster.local
 labels:

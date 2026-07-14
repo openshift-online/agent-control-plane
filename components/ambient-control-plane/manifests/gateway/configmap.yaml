@@ -21,7 +21,7 @@ data:
     log_level             = "info"
     sandbox_namespace     = "NAMESPACE_PLACEHOLDER"
     default_image         = "ghcr.io/nvidia/openshell-community/sandboxes/base:latest"
-    supervisor_image      = "ghcr.io/nvidia/openshell/supervisor:0.0.80"
+    supervisor_image      = "ghcr.io/nvidia/openshell/supervisor:0.0.83"
     client_tls_secret_name = "openshell-client-tls"
     enable_loopback_service_http = true
     server_sans = ["openshell-gateway.NAMESPACE_PLACEHOLDER.svc.cluster.local"]
