@@ -59,6 +59,8 @@ Handles `session ADDED` and `session MODIFIED (phase=Pending)` events by provisi
 
 If the placed cluster is `NotReady` when the reconciler processes the `Pending` session, the reconciler SHALL set a Condition (`type=PlacementFailed`, `reason=ClusterNotReady`) on the session and re-invoke the PlacementStrategy on the next reconcile cycle. The PlacementStrategy may select a different cluster — `cluster_id` is rewritten, not locked. This prevents sessions from stalling indefinitely when a cluster becomes unavailable between placement and provisioning.
 
+**Partial provisioning cleanup:** When re-placement selects a different cluster, the reconciler SHALL first clean up any partially-created resources (Pod, Secret, ServiceAccount, Service, RoleBinding) on the original cluster before provisioning on the new cluster. Cleanup uses the same `cleanupSession` logic with the original cluster's `KubeClient` from the `ClusterClientPool`. If cleanup fails (e.g., original cluster is unreachable), the reconciler logs a warning and proceeds with provisioning on the new cluster — orphaned resources on the unreachable cluster are acceptable because they will be garbage-collected when the cluster recovers and the namespace is reconciled. The reconciler SHALL NOT block re-placement on cleanup success.
+
 Provisions:
 
 1. Namespace (named `{project_id}`)

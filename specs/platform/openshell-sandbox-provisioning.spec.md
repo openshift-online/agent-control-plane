@@ -786,14 +786,25 @@ The gateway is not exposed outside the cluster (no Route), so the only clients a
 
 The control plane SHALL load client TLS credentials dynamically from a Kubernetes Secret in each project namespace, enabling per-namespace certificate isolation. The `openshell-client-tls` Secret (configurable via `OPENSHELL_GATEWAY_CLIENT_TLS_SECRET`) contains the client certificate, private key, and CA certificate for verifying the gateway's server certificate.
 
+**Cross-cluster credential delivery:** When the gateway runs on a remote cluster (`Session.gateway_cluster_id` differs from the local cluster), the `openshell-client-tls` Secret resides on the gateway cluster, not the local cluster. The control plane reads the Secret via `ClusterClientPool.ClientForCluster(gatewayClusterID)` — the same mechanism used for all cross-cluster K8s API calls. No secret copying or mirroring between clusters is required. The ClusterReconciler ensures the `KubeClient` for the gateway cluster is always available and uses the credential referenced by the Cluster's `credential_id` FK.
+
+#### Scenario: Cross-cluster mTLS credential delivery
+
+- GIVEN a session with `gateway_cluster_id` pointing to a remote cluster
+- WHEN the control plane needs to establish an mTLS connection to the gateway
+- THEN it SHALL obtain the `KubeClient` for the gateway cluster via `ClusterClientPool.ClientForCluster(gatewayClusterID)`
+- AND it SHALL read the `openshell-client-tls` Secret from the project namespace on the gateway cluster using that client
+- AND the TLS credentials SHALL be cached per `(cluster_id, namespace)` — not per namespace alone
+- AND credential rotation on the gateway cluster's Cluster resource SHALL evict all TLS cache entries for that cluster
+
 #### Scenario: mTLS connection
 
 - GIVEN `OPENSHELL_GATEWAY_TLS` is not set to `false`
 - WHEN the control plane connects to a gateway in a project namespace
-- THEN it SHALL read the `openshell-client-tls` Secret from that namespace
+- THEN it SHALL read the `openshell-client-tls` Secret from that namespace on the gateway's cluster (local cluster if `gateway_cluster_id` is null; remote cluster otherwise)
 - AND it SHALL use `tls.crt` and `tls.key` as the client certificate
 - AND it SHALL use `ca.crt` as the root CA for server verification
-- AND TLS credentials SHALL be cached per namespace and evicted on connection errors
+- AND TLS credentials SHALL be cached per `(cluster_id, namespace)` tuple and evicted on connection errors
 - AND the control plane SHALL attach its Kubernetes ServiceAccount token as a Bearer token in gRPC call metadata for application-layer authentication
 
 #### Scenario: Gateway authentication configuration

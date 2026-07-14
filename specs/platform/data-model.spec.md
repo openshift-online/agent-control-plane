@@ -124,8 +124,8 @@ erDiagram
         string  name "human-readable display name"
         string  project_id FK "nullable — direct project context (no agent)"
         string  agent_id FK "nullable — set when started via agent ignite"
-        string  cluster_id FK "nullable — workload cluster; null = local; set by PlacementStrategy"
-        string  gateway_cluster_id FK "nullable — gateway cluster; null = same as cluster_id"
+        string  cluster_id FK "nullable — workload cluster; null = local; readOnly; set by PlacementStrategy"
+        string  gateway_cluster_id FK "nullable — gateway cluster; null = same as cluster_id; readOnly; set by PlacementStrategy"
         string  parent_session_id FK "nullable — source session for clones"
         string  source_scheduled_session_id "nullable — FK to ScheduledSession that triggered this"
         time    scheduled_for "nullable — cron tick time; idempotency key with source_scheduled_session_id"
@@ -419,6 +419,8 @@ The control plane's `GatewayClient` resolves the endpoint using:
 ## PlacementStrategy — Session-to-Cluster Scheduling
 
 PlacementStrategy is an interface that determines which cluster a session runs on. The control plane invokes PlacementStrategy at session creation time (in `ignite_handler.go`) to set `Session.cluster_id` and `Session.gateway_cluster_id` before the session enters `Pending` phase.
+
+`cluster_id` and `gateway_cluster_id` are **server-managed, read-only fields**. They are excluded from the create and patch request schemas (`readOnly: true` in OpenAPI). Clients cannot set or override them — only the PlacementStrategy (at ignite time) and the KubeReconciler (on re-placement) may write these fields.
 
 ### Interface
 
