@@ -238,6 +238,38 @@ func (o *GatewayPatchRequest) SetAnnotations(v string) {
 	o.Annotations = &v
 }
 
+// GetOidc returns the Oidc field value if set, zero value otherwise.
+func (o *GatewayPatchRequest) GetOidc() GatewayOidc {
+	if o == nil || IsNil(o.Oidc) {
+		var ret GatewayOidc
+		return ret
+	}
+	return *o.Oidc
+}
+
+// GetOidcOk returns a tuple with the Oidc field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *GatewayPatchRequest) GetOidcOk() (*GatewayOidc, bool) {
+	if o == nil || IsNil(o.Oidc) {
+		return nil, false
+	}
+	return o.Oidc, true
+}
+
+// HasOidc returns a boolean if a field has been set.
+func (o *GatewayPatchRequest) HasOidc() bool {
+	if o != nil && !IsNil(o.Oidc) {
+		return true
+	}
+
+	return false
+}
+
+// SetOidc gets a reference to the given GatewayOidc and assigns it to the Oidc field.
+func (o *GatewayPatchRequest) SetOidc(v GatewayOidc) {
+	o.Oidc = &v
+}
+
 func (o GatewayPatchRequest) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {

@@ -99,29 +99,18 @@ func deployGateway(
 		}
 	}
 
-	// Check custom TOML config
-	if nsConfig.Gateway.Config != "" {
-		changed, err := gatewayConfigTomlChanged(ctx, dynamicClient, nsConfig.Name, nsConfig.Gateway.Config)
+	// Check if fully-rendered config TOML changed (covers custom config, OIDC, and serverDnsNames)
+	{
+		changed, err := renderedConfigChanged(ctx, dynamicClient, nsConfig.Name, nsConfig.Gateway)
 		if err != nil {
-			log.Warn().Err(err).Msg("failed to check if config TOML changed, assuming changed")
-			changed = true // If we can't check, assume changed to be safe
+			log.Warn().Err(err).Msg("failed to check if rendered config changed, assuming changed")
+			changed = true
 		}
 		configTomlChanged = changed
 	}
 
-	// Check OIDC config changes
-	oidcChanged := false
-	if nsConfig.Gateway.Oidc != nil && nsConfig.Gateway.Oidc.Issuer != "" {
-		changed, err := oidcConfigChanged(ctx, dynamicClient, nsConfig.Name, nsConfig.Gateway.Oidc)
-		if err != nil {
-			log.Warn().Err(err).Msg("failed to check if OIDC config changed, assuming changed")
-			changed = true
-		}
-		oidcChanged = changed
-	}
-
-	// Only restart pods if DNS, config, or OIDC changed (image changes trigger K8s rolling update automatically)
-	needsRestart := dnsNamesChanged || configTomlChanged || oidcChanged
+	// Only restart pods if DNS or config changed (image changes trigger K8s rolling update automatically)
+	needsRestart := dnsNamesChanged || configTomlChanged
 
 	// Apply manifests in order: RBAC → ServiceAccount → ConfigMap → Job → Service → StatefulSet → NetworkPolicy
 	order := []string{
@@ -252,8 +241,10 @@ func gatewayConfigTomlChanged(ctx context.Context, dynamicClient dynamic.Interfa
 	return currentConfig != desiredConfig, nil
 }
 
-// oidcConfigChanged checks if the OIDC section in the ConfigMap differs from the desired config
-func oidcConfigChanged(ctx context.Context, dynamicClient dynamic.Interface, namespace string, desired *OidcConfig) (bool, error) {
+// renderedConfigChanged builds the fully-rendered gateway.toml (with all overrides
+// including OIDC, serverDnsNames, and custom config) and compares it against the
+// ConfigMap currently in the cluster. This catches changes to any config field.
+func renderedConfigChanged(ctx context.Context, dynamicClient dynamic.Interface, namespace string, config GatewayConfig) (bool, error) {
 	configMapGVR := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}
 
 	obj, err := dynamicClient.Resource(configMapGVR).Namespace(namespace).Get(ctx, "openshell-gateway-config", metav1.GetOptions{})
@@ -269,22 +260,28 @@ func oidcConfigChanged(ctx context.Context, dynamicClient dynamic.Interface, nam
 		return true, nil
 	}
 
-	toml, ok := data["gateway.toml"].(string)
+	currentToml, ok := data["gateway.toml"].(string)
 	if !ok {
 		return true, nil
 	}
 
-	hasOidcSection := strings.Contains(toml, "[openshell.gateway.oidc]")
-	if !hasOidcSection {
+	// Build the desired TOML by applying overrides to a copy of the current ConfigMap
+	desired := obj.DeepCopy()
+	if err := ApplyConfigOverrides(desired, config); err != nil {
 		return true, nil
 	}
 
-	// Check if issuer value matches
-	if !strings.Contains(toml, fmt.Sprintf("issuer   = %q", desired.Issuer)) {
+	desiredData, found, err := unstructured.NestedMap(desired.Object, "data")
+	if err != nil || !found {
 		return true, nil
 	}
 
-	return false, nil
+	desiredToml, ok := desiredData["gateway.toml"].(string)
+	if !ok {
+		return true, nil
+	}
+
+	return currentToml != desiredToml, nil
 }
 
 // extractServerSansFromToml parses server_sans array from TOML string

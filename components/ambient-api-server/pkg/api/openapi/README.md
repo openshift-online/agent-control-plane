@@ -189,6 +189,7 @@ Class | Method | HTTP request | Description
  - [Error](docs/Error.md)
  - [Gateway](docs/Gateway.md)
  - [GatewayList](docs/GatewayList.md)
+ - [GatewayOidc](docs/GatewayOidc.md)
  - [GatewayPatchRequest](docs/GatewayPatchRequest.md)
  - [GpuRequirements](docs/GpuRequirements.md)
  - [InboxMessage](docs/InboxMessage.md)

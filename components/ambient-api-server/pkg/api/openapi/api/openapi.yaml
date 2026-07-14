@@ -7849,6 +7849,8 @@ components:
           annotations:
             description: JSON-encoded annotations
             type: string
+          oidc:
+            $ref: "#/components/schemas/GatewayOidc"
         required:
         - name
         - project_id
@@ -7856,19 +7858,27 @@ components:
         type: object
       example:
         image: image
-        updated_at: 2000-01-23T04:56:07.000+00:00
-        project_id: project_id
         kind: kind
         server_dns_names:
         - server_dns_names
         - server_dns_names
-        name: name
         created_at: 2000-01-23T04:56:07.000+00:00
         annotations: annotations
+        oidc:
+          scopes_claim: scopes_claim
+          user_role: user_role
+          audience: openshell-cli
+          admin_role: admin_role
+          jwks_ttl: 5
+          roles_claim: roles_claim
+          issuer: issuer
+        labels: labels
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        project_id: project_id
+        name: name
         id: id
         href: href
         config: config
-        labels: labels
     GatewayList:
       allOf:
       - $ref: "#/components/schemas/List"
@@ -7885,33 +7895,49 @@ components:
         page: 0
         items:
         - image: image
-          updated_at: 2000-01-23T04:56:07.000+00:00
-          project_id: project_id
           kind: kind
           server_dns_names:
           - server_dns_names
           - server_dns_names
-          name: name
           created_at: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
+          oidc:
+            scopes_claim: scopes_claim
+            user_role: user_role
+            audience: openshell-cli
+            admin_role: admin_role
+            jwks_ttl: 5
+            roles_claim: roles_claim
+            issuer: issuer
+          labels: labels
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          name: name
           id: id
           href: href
           config: config
-          labels: labels
         - image: image
-          updated_at: 2000-01-23T04:56:07.000+00:00
-          project_id: project_id
           kind: kind
           server_dns_names:
           - server_dns_names
           - server_dns_names
-          name: name
           created_at: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
+          oidc:
+            scopes_claim: scopes_claim
+            user_role: user_role
+            audience: openshell-cli
+            admin_role: admin_role
+            jwks_ttl: 5
+            roles_claim: roles_claim
+            issuer: issuer
+          labels: labels
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          project_id: project_id
+          name: name
           id: id
           href: href
           config: config
-          labels: labels
     GatewayPatchRequest:
       example:
         image: image
@@ -7921,6 +7947,14 @@ components:
         name: name
         annotations: annotations
         config: config
+        oidc:
+          scopes_claim: scopes_claim
+          user_role: user_role
+          audience: openshell-cli
+          admin_role: admin_role
+          jwks_ttl: 5
+          roles_claim: roles_claim
+          issuer: issuer
         labels: labels
       properties:
         name:
@@ -7937,6 +7971,8 @@ components:
           type: string
         annotations:
           type: string
+        oidc:
+          $ref: "#/components/schemas/GatewayOidc"
       type: object
     Payload:
       example:
@@ -8027,6 +8063,41 @@ components:
         count:
           description: Number of GPUs to allocate. Default 0.
           type: integer
+      type: object
+    GatewayOidc:
+      description: OIDC authentication configuration for the gateway
+      example:
+        scopes_claim: scopes_claim
+        user_role: user_role
+        audience: openshell-cli
+        admin_role: admin_role
+        jwks_ttl: 5
+        roles_claim: roles_claim
+        issuer: issuer
+      properties:
+        issuer:
+          description: OIDC issuer URL; empty disables OIDC
+          type: string
+        audience:
+          default: openshell-cli
+          description: Expected aud claim value in JWT
+          type: string
+        jwks_ttl:
+          default: 3600
+          description: JWKS key cache retention in seconds
+          type: integer
+        roles_claim:
+          description: Dot-delimited path to roles array in JWT claims
+          type: string
+        admin_role:
+          description: Role name conferring admin access
+          type: string
+        user_role:
+          description: Role name conferring standard user access
+          type: string
+        scopes_claim:
+          description: Dot-delimited path to scopes array in JWT claims
+          type: string
       type: object
   securitySchemes:
     Bearer:

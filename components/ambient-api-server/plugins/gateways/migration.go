@@ -34,18 +34,13 @@ func migration() *gormigrate.Migration {
 }
 
 func migrationAddOidc() *gormigrate.Migration {
-	type Gateway struct {
-		db.Model
-		Oidc *string `gorm:"type:jsonb"`
-	}
-
 	return &gormigrate.Migration{
 		ID: "202607140001",
 		Migrate: func(tx *gorm.DB) error {
-			return tx.AutoMigrate(&Gateway{})
+			return tx.Exec(`ALTER TABLE gateways ADD COLUMN IF NOT EXISTS oidc JSONB`).Error
 		},
 		Rollback: func(tx *gorm.DB) error {
-			return tx.Migrator().DropColumn(&Gateway{}, "oidc")
+			return tx.Exec(`ALTER TABLE gateways DROP COLUMN IF EXISTS oidc`).Error
 		},
 	}
 }

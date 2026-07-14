@@ -22,6 +22,7 @@ docs/DefaultAPI.md
 docs/Error.md
 docs/Gateway.md
 docs/GatewayList.md
+docs/GatewayOidc.md
 docs/GatewayPatchRequest.md
 docs/GpuRequirements.md
 docs/InboxMessage.md
@@ -86,6 +87,7 @@ model_credential_token_response.go
 model_error.go
 model_gateway.go
 model_gateway_list.go
+model_gateway_oidc.go
 model_gateway_patch_request.go
 model_gpu_requirements.go
 model_inbox_message.go
