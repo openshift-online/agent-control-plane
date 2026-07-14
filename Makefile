@@ -1484,7 +1484,7 @@ kind-setup-openshell-cli: check-kubectl _kind-require-cluster ## Auto-discover t
 		exit 1; \
 	fi; \
 	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Found openshell-gateway in: $$NAMESPACES"; \
-	PF_DIR=$(KIND_PF_DIR) ./scripts/setup-gateway-cli.sh $$NAMESPACES
+	PF_DIR=$(KIND_PF_DIR) KEYCLOAK_PORT=$(KIND_FWD_KEYCLOAK_PORT) ./scripts/setup-gateway-cli.sh $$NAMESPACES
 
 kind-setup-openshell-cli-stop: ## Stop background openshell gateway port-forwards
 	@STOPPED=0; \
