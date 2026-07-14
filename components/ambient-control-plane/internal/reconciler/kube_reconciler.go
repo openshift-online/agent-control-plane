@@ -703,6 +703,7 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 	const maxNdotsRetries = 5
 	awaitingPodRestart := false
 	sawNonReady := false
+	var podDeletedAt time.Time
 	var firstErrorSeen time.Time
 
 	for {
@@ -778,12 +779,18 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 			}
 			if awaitingPodRestart {
 				if !sawNonReady {
-					r.logger.Debug().Str("sandbox", sbxName).Msg("sandbox still READY during graceful pod termination, waiting")
-					continue
+					if !podDeletedAt.IsZero() && time.Since(podDeletedAt) > 10*time.Second {
+						r.logger.Info().Str("sandbox", sbxName).Dur("elapsed", time.Since(podDeletedAt)).Msg("sandbox remained READY after pod deletion; assuming fast pod recreation")
+					} else {
+						r.logger.Debug().Str("sandbox", sbxName).Msg("sandbox still READY during graceful pod termination, waiting")
+						continue
+					}
+				} else {
+					r.logger.Info().Str("sandbox", sbxName).Msg("sandbox READY after pod recreation, re-verifying DNS")
 				}
-				r.logger.Info().Str("sandbox", sbxName).Msg("sandbox READY after pod recreation, re-verifying DNS")
 				awaitingPodRestart = false
 				sawNonReady = false
+				podDeletedAt = time.Time{}
 			}
 
 			sandboxID := sbxName
@@ -810,6 +817,7 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 					return
 				}
 				awaitingPodRestart = true
+				podDeletedAt = time.Now()
 				r.logger.Warn().Str("sandbox", sbxName).Int("ndots_retry", ndotsRetries).Msg("sandbox pod had ndots:5; deleted pod, waiting for recreation")
 				continue
 			}
@@ -2428,7 +2436,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 				"serviceAccountName":            saName,
 				"automountServiceAccountToken":  true,
 				"restartPolicy":                 "Never",
-				"terminationGracePeriodSeconds": int64(60),
+				"terminationGracePeriodSeconds": int64(15),
 				"volumes":                       r.buildVolumes(credTmpVolumes),
 				"containers":                    containers,
 			},

@@ -481,8 +481,10 @@ class SessionManager:
     async def shutdown(self) -> None:
         """Stop all workers gracefully.  Call on server shutdown."""
         thread_ids = list(self._workers.keys())
-        for tid in thread_ids:
-            await self.destroy(tid)
+        await asyncio.gather(
+            *(self.destroy(tid) for tid in thread_ids),
+            return_exceptions=True,
+        )
         logger.info("[SessionManager] All workers shut down")
 
     # ── session ID persistence ──
