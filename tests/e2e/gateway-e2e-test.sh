@@ -477,14 +477,20 @@ fi
 section "11. Mock LLM response verification via acpctl"
 
 if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; then
-  # Poll acpctl session messages until we see messages appear (up to 120s).
-  # The session may stay in Running — we don't require a terminal phase.
+  # Poll acpctl session messages until we see an assistant response (up to 180s).
+  # The user message arrives immediately at session creation, but the assistant
+  # message only appears after the sandbox pod starts and the runner calls the
+  # mock LLM (~30-90s). We must keep polling until we see the assistant message,
+  # not just any message.
   MESSAGES_OUTPUT="[]"
   MSG_COUNT=0
-  for i in $(seq 1 60); do
+  LLM_RESPONSE_FOUND=0
+  for i in $(seq 1 90); do
     MESSAGES_OUTPUT=$($ACPCTL session messages "$CREATED_SESSION_ID" -o json 2>/dev/null || echo "[]")
     MSG_COUNT=$(echo "$MESSAGES_OUTPUT" | jq 'length' 2>/dev/null || echo "0")
-    if [ "${MSG_COUNT}" -gt 0 ]; then
+    LLM_RESPONSE_FOUND=$(echo "$MESSAGES_OUTPUT" \
+      | jq -r '[.[] | select(.event_type == "assistant" or .event_type == "TEXT_MESSAGE_CONTENT" or .event_type == "MESSAGES_SNAPSHOT")] | length' 2>/dev/null || echo "0")
+    if [ "${LLM_RESPONSE_FOUND}" -gt 0 ]; then
       break
     fi
     sleep 2
@@ -493,7 +499,7 @@ if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; the
   if [ "${MSG_COUNT}" -gt 0 ]; then
     pass "acpctl session messages returned ${MSG_COUNT} message(s)"
   else
-    fail "acpctl session messages returned no messages after 120s"
+    fail "acpctl session messages returned no messages after 180s"
   fi
 
   # 11a. Verify the initial prompt was delivered as a user message
@@ -507,8 +513,6 @@ if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; the
 
   # 11b. Verify the mock LLM response is present (assistant message or text content)
   # The mock LLM echoes back "Mock LLM response: <user message>"
-  LLM_RESPONSE_FOUND=$(echo "$MESSAGES_OUTPUT" \
-    | jq -r '[.[] | select(.event_type == "assistant" or .event_type == "TEXT_MESSAGE_CONTENT" or .event_type == "MESSAGES_SNAPSHOT")] | length' 2>/dev/null || echo "0")
   if [ "${LLM_RESPONSE_FOUND}" -gt 0 ]; then
     pass "LLM response message(s) found in session messages (${LLM_RESPONSE_FOUND})"
   else
