@@ -83,8 +83,6 @@ ENV AGUI_PORT=8001
 RUN echo "umask 0022" >> /etc/profile && \
     echo "umask 0022" >> /root/.bashrc
 
-# Persistent log directory for RotatingFileHandler tee
-RUN mkdir -p /var/log/runner && chown 1001:0 /var/log/runner && chmod 775 /var/log/runner
 
 # OpenShift compatibility
 RUN chmod -R g=u /app && chmod -R g=u /usr/local && chmod g=u /etc/passwd

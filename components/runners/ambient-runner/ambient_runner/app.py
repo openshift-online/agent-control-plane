@@ -48,9 +48,9 @@ _log_format = "%(levelname)s:%(name)s:%(message)s"
 
 logging.basicConfig(level=_log_level, format=_log_format)
 
-# Tee logs to /var/log/runner/runner.log via RotatingFileHandler.
+# Tee logs to /sandbox/.runner/logs/runner.log via RotatingFileHandler.
 # Graceful degradation: if the directory is not writable, skip file logging.
-_LOG_DIR = "/var/log/runner"
+_LOG_DIR = "/sandbox/.runner/logs"
 _LOG_FILE = os.path.join(_LOG_DIR, "runner.log")
 _LOG_MAX_BYTES = 50 * 1024 * 1024  # 50 MB
 _LOG_BACKUP_COUNT = 3
