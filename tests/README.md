@@ -51,7 +51,6 @@ Cluster lifecycle scripts consumed by `make kind-up`, `make kind-down`, and CI w
 | `cleanup.sh` | Delete Kind cluster, clean test artifacts |
 | `extract-token.sh` | Extract test-user-token (K8s SA or Keycloak SSO) |
 | `init-minio.sh` | Initialize MinIO S3 bucket |
-| `load-images.sh` | Load container images into Kind |
 | `refresh-env.sh` | Update K8s secrets and images from .env |
 | `deploy.sh` | Deploy manifests with kustomize |
 | `deploy-langfuse.sh` | Deploy Langfuse to OpenShift |

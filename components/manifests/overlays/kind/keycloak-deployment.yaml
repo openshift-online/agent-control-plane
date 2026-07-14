@@ -70,14 +70,14 @@ spec:
             httpGet:
               path: /realms/ambient-code
               port: 8080
-            initialDelaySeconds: 60
+            initialDelaySeconds: 15
             periodSeconds: 10
             failureThreshold: 10
           livenessProbe:
             httpGet:
               path: /realms/ambient-code
               port: 8080
-            initialDelaySeconds: 120
+            initialDelaySeconds: 30
             periodSeconds: 30
             failureThreshold: 5
       volumes:

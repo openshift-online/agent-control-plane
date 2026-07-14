@@ -936,15 +936,13 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 				OPENSHELL_RUNNER_IMAGE=$(RUNNER_PRELOAD_REF) $(QUIET_REDIRECT); \
 		fi; \
 	fi
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods..."
-	@./tests/infra/wait-for-ready.sh
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring OpenShell mode (gateway=$(OPENSHELL_USE_GATEWAY))..."
 	@kubectl set env deployment/ambient-api-server -n $(NAMESPACE) \
 		OPENSHELL_USE_GATEWAY=$(OPENSHELL_USE_GATEWAY) $(QUIET_REDIRECT)
 	@kubectl set env deployment/ambient-control-plane -n $(NAMESPACE) \
 		OPENSHELL_USE_GATEWAY=$(OPENSHELL_USE_GATEWAY) $(QUIET_REDIRECT)
-	@kubectl rollout status deployment/ambient-api-server -n $(NAMESPACE) --timeout=60s $(QUIET_REDIRECT)
-	@kubectl rollout status deployment/ambient-control-plane -n $(NAMESPACE) --timeout=60s $(QUIET_REDIRECT)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods..."
+	@./tests/infra/wait-for-ready.sh
 	@if [ "$(OPENSHELL_USE_GATEWAY)" = "true" ]; then \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell: gateway mode (default)"; \
 	else \
