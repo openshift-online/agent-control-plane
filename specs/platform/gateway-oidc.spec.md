@@ -138,23 +138,45 @@ When a Gateway has OIDC enabled (non-empty `oidc.issuer`), the GatewayReconciler
   ```
 - AND `allow_unauthenticated_users` SHALL be `false` (overriding the default `true`)
 
-#### Scenario: OIDC section injected into custom gateway.toml
+#### Scenario: Custom config overrides bypass OIDC injection
 
-- GIVEN a Gateway with OIDC enabled AND a custom `config` field
+- GIVEN a Gateway with OIDC enabled AND a custom `config` field (raw TOML)
 - WHEN the GatewayReconciler generates the ConfigMap
-- THEN the custom `config` SHALL be used as the base `gateway.toml`
-- AND the `[openshell.gateway.oidc]` section SHALL be appended to or merged into the custom config
-- AND `allow_unauthenticated_users` SHALL be set to `false` in the `[openshell.gateway.auth]` section
+- THEN the custom `config` SHALL be used verbatim as the `gateway.toml`
+- AND the GatewayReconciler SHALL NOT inject the `[openshell.gateway.oidc]` section
+- AND the user is responsible for including OIDC settings directly in the custom TOML
 
-#### Scenario: OIDC fields with defaults omitted
+#### Scenario: Only non-empty OIDC fields written to TOML
 
-- GIVEN a Gateway with only `oidc.issuer` set (all other fields at defaults)
+- GIVEN a Gateway with only `oidc.issuer` set (all other fields at zero values)
 - WHEN the GatewayReconciler generates the ConfigMap
-- THEN `gateway.toml` SHALL contain the OIDC section with:
-  - `issuer` = the configured value
-  - `audience` = `"openshell-cli"` (default)
-  - `jwks_ttl` = `3600` (default)
-  - All other fields empty strings
+- THEN `gateway.toml` SHALL contain the OIDC section with only non-empty/non-zero fields:
+  - `issuer` = the configured value (always present when OIDC is enabled)
+  - Other fields (audience, jwks_ttl, roles_claim, etc.) are omitted when empty/zero
+- AND the upstream OpenShell gateway SHALL apply its own defaults for omitted fields
+
+---
+
+### Requirement: mTLS Disabled for OIDC Gateways
+
+When OIDC is enabled on a gateway, mTLS (client certificate verification) SHALL be disabled. OIDC clients authenticate via Bearer tokens in the `Authorization` header — requiring client certificates is incompatible with OIDC authentication flows (CLI users, browser-based flows, and external service accounts do not possess gateway client certificates).
+
+The GatewayReconciler SHALL remove the `client_ca_path` setting from the `[openshell.gateway.tls]` section when OIDC is enabled. Server-side TLS (`cert_path`, `key_path`) SHALL remain active for transport encryption.
+
+#### Scenario: OIDC gateway has mTLS disabled
+
+- GIVEN a Gateway with OIDC enabled (non-empty `oidc.issuer`)
+- WHEN the GatewayReconciler generates the ConfigMap
+- THEN `gateway.toml` SHALL NOT contain a `client_ca_path` setting in the `[openshell.gateway.tls]` section
+- AND `cert_path` and `key_path` SHALL remain present (server TLS preserved)
+- AND the gateway SHALL accept clients authenticating via Bearer tokens without requiring a client certificate
+
+#### Scenario: Non-OIDC gateway retains mTLS
+
+- GIVEN a Gateway with no OIDC configuration (or `oidc.issuer` is empty)
+- WHEN the GatewayReconciler generates the ConfigMap
+- THEN `gateway.toml` SHALL retain the `client_ca_path` setting in the `[openshell.gateway.tls]` section
+- AND mTLS behavior SHALL be unchanged from the current default
 
 ---
 

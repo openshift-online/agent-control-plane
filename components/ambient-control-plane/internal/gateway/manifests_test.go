@@ -3,6 +3,7 @@ package gateway
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -86,6 +87,77 @@ metadata:
 	if err == nil {
 		t.Error("LoadGatewayManifests() expected error for missing required files, got nil")
 	}
+}
+
+func TestApplyConfigOverrides_OIDCDisablesMTLS(t *testing.T) {
+	configMapJSON := `{
+		"apiVersion": "v1",
+		"kind": "ConfigMap",
+		"metadata": {"name": "openshell-gateway-config", "namespace": "tenant-a"},
+		"data": {
+			"gateway.toml": "[openshell]\nversion = 1\n\n[openshell.gateway]\nbind_address = \"0.0.0.0:8080\"\n\n[openshell.gateway.tls]\n    cert_path = \"/etc/openshell-tls/server/tls.crt\"\n    key_path = \"/etc/openshell-tls/server/tls.key\"\n    client_ca_path = \"/etc/openshell-tls/client-ca/ca.crt\"\n\n[openshell.gateway.auth]\n    allow_unauthenticated_users = true\n"
+		}
+	}`
+
+	t.Run("OIDC enabled removes client_ca_path", func(t *testing.T) {
+		obj := &unstructured.Unstructured{}
+		if err := obj.UnmarshalJSON([]byte(configMapJSON)); err != nil {
+			t.Fatalf("failed to unmarshal: %v", err)
+		}
+
+		config := GatewayConfig{
+			Oidc: &OidcConfig{
+				Issuer:   "https://keycloak.example.com/realms/ambient-code",
+				Audience: "openshell-cli",
+			},
+		}
+
+		if err := ApplyConfigOverrides(obj, config); err != nil {
+			t.Fatalf("ApplyConfigOverrides() error = %v", err)
+		}
+
+		data, _, _ := unstructured.NestedMap(obj.Object, "data")
+		toml := data["gateway.toml"].(string)
+
+		if !strings.Contains(toml, "[openshell.gateway.oidc]") {
+			t.Error("expected OIDC section in gateway.toml")
+		}
+		if strings.Contains(toml, "client_ca_path") {
+			t.Error("expected client_ca_path to be removed when OIDC is enabled")
+		}
+		if !strings.Contains(toml, "cert_path") {
+			t.Error("expected cert_path to be preserved (server TLS)")
+		}
+		if !strings.Contains(toml, "key_path") {
+			t.Error("expected key_path to be preserved (server TLS)")
+		}
+		if strings.Contains(toml, "allow_unauthenticated_users = true") {
+			t.Error("expected allow_unauthenticated_users to be false when OIDC is enabled")
+		}
+	})
+
+	t.Run("no OIDC retains client_ca_path", func(t *testing.T) {
+		obj := &unstructured.Unstructured{}
+		if err := obj.UnmarshalJSON([]byte(configMapJSON)); err != nil {
+			t.Fatalf("failed to unmarshal: %v", err)
+		}
+
+		config := GatewayConfig{}
+
+		if err := ApplyConfigOverrides(obj, config); err != nil {
+			t.Fatalf("ApplyConfigOverrides() error = %v", err)
+		}
+
+		data, _, _ := unstructured.NestedMap(obj.Object, "data")
+		toml := data["gateway.toml"].(string)
+
+		if strings.Contains(toml, "[openshell.gateway.oidc]") {
+			t.Error("expected no OIDC section when OIDC is not configured")
+		}
+		if !strings.Contains(toml, "client_ca_path") {
+			t.Error("expected client_ca_path to be retained when OIDC is not configured")
+		}
+	})
 }
 
 func TestApplyManifestToNamespace(t *testing.T) {

@@ -78,6 +78,9 @@ jobs:
           {"type":"service_account","project_id":"test","private_key_id":"dummy","private_key":"-----BEGIN RSA PRIVATE KEY-----\nMIIBogIBAAJBALRiMLAH\n-----END RSA PRIVATE KEY-----\n","client_email":"test@test.iam.gserviceaccount.com","client_id":"0","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token"}
           JSON
 
+      - name: Add Keycloak host entry for OIDC gateway auth
+        run: echo "127.0.0.1 keycloak-service.ambient-code.svc.cluster.local" | sudo tee -a /etc/hosts
+
       - name: Bring up ACP lab cluster
         run: |
           make kind-up CONTAINER_ENGINE=docker CI_MODE=true VERTEX_CRED=/tmp/vertex.json OPENSHELL_USE_GATEWAY=true

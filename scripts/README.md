@@ -18,10 +18,10 @@ Configures SSO credentials for local Kind development. **Automatically called by
 - `KIND_FWD_AMBIENT_UI_PORT` - Port for UI callback redirect
 - `KIND_FWD_KEYCLOAK_PORT` - Port for Keycloak frontend
 
-Each worktree/branch gets unique ports via `CLUSTER_SLUG` hash in the Makefile.
+Ports are fixed in the Makefile and can be overridden via Make variables.
 
 **Dual-Issuer Pattern:**
-The UI pod fetches OIDC discovery from the backend issuer (`http://keycloak-service:8080/realms/ambient-code`) which it can reach via cluster DNS. It then selectively rewrites browser-facing endpoints (`authorization_endpoint`, `end_session_endpoint`) to use the frontend issuer (`http://localhost:$KIND_FWD_KEYCLOAK_PORT/realms/ambient-code`) so login redirects work from your browser. Server-to-server endpoints (`token_endpoint`, `userinfo_endpoint`, `jwks_uri`) stay unchanged so the pod can still call them.
+The UI pod fetches OIDC discovery from the backend issuer (`http://keycloak-service:11080/realms/ambient-code`) which it can reach via cluster DNS. It then selectively rewrites browser-facing endpoints (`authorization_endpoint`, `end_session_endpoint`) to use the frontend issuer (`http://localhost:$KIND_FWD_KEYCLOAK_PORT/realms/ambient-code`) so login redirects work from your browser. Server-to-server endpoints (`token_endpoint`, `userinfo_endpoint`, `jwks_uri`) stay unchanged so the pod can still call them.
 
 **Default Users:**
 - Developer: `developer` / `developer` (ambient-users group)

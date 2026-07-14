@@ -4,7 +4,7 @@ image: ghcr.io/nvidia/openshell/gateway:0.0.80
 server_dns_names:
   - openshell-gateway.tenant-c.svc.cluster.local
 oidc:
-  issuer: http://keycloak-service.ambient-code.svc.cluster.local:8080/realms/ambient-code
+  issuer: http://keycloak-service.ambient-code.svc.cluster.local:11880/realms/ambient-code
   audience: openshell-cli
   roles_claim: realm_access.roles
   admin_role: openshell-admin

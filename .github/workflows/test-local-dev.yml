@@ -161,6 +161,9 @@ jobs:
         }, open('/tmp/vertex.json', 'w'))
         " <<< "$RSA_KEY"
 
+    - name: Add Keycloak host entry for OIDC gateway auth
+      run: echo "127.0.0.1 keycloak-service.ambient-code.svc.cluster.local" | sudo tee -a /etc/hosts
+
     - name: Deploy using Makefile
       env:
         GOOGLE_APPLICATION_CREDENTIALS: /tmp/vertex.json
@@ -207,10 +210,25 @@ jobs:
     - name: Run Gateway E2E tests
       run: |
         kubectl port-forward -n ambient-code svc/ambient-api-server 13592:8000 &
-        kubectl port-forward -n ambient-code svc/keycloak-service 18592:8080 &
+        kubectl port-forward -n ambient-code svc/keycloak-service 18592:11880 &
         sleep 3
 
         PF_DIR=/tmp/ambient-code ./scripts/setup-gateway-cli.sh tenant-a
+
+        # setup-gateway-cli.sh sets up port-forwards but no longer auto-registers
+        # gateways. Register the mTLS gateway so the e2e test can use it.
+        GW_PORT=$(cat /tmp/ambient-code/kind-pf-openshell-tenant-a.log | grep -oE 'Forwarding from 127\.0\.0\.1:[0-9]+' | grep -oE '[0-9]+$' | head -1)
+        if [ -n "$GW_PORT" ]; then
+          CERT_DIR="$HOME/.config/openshell/gateways/tenant-a/mtls"
+          openshell gateway add --name tenant-a --local "https://localhost:${GW_PORT}"
+          # Re-extract certs after registration (gateway add may overwrite them)
+          kubectl get secret openshell-server-tls -n tenant-a \
+            -o jsonpath='{.data.ca\.crt}' | base64 -d > "$CERT_DIR/ca.crt"
+          kubectl get secret openshell-server-tls -n tenant-a \
+            -o jsonpath='{.data.tls\.crt}' | base64 -d > "$CERT_DIR/tls.crt"
+          kubectl get secret openshell-server-tls -n tenant-a \
+            -o jsonpath='{.data.tls\.key}' | base64 -d > "$CERT_DIR/tls.key"
+        fi
 
         TEST_TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d) \
         API_URL=http://localhost:13592 \
