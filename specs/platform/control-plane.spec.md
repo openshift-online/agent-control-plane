@@ -57,6 +57,8 @@ Performs an initial list+watch sync at startup. Converts proto events to SDK typ
 
 Handles `session ADDED` and `session MODIFIED (phase=Pending)` events by provisioning resources on the target cluster. The reconciler resolves the target cluster from `Session.cluster_id` (set by PlacementStrategy at ignite time) and obtains the appropriate `KubeClient` from the `ClusterClientPool`. When `Session.cluster_id` is null, the local cluster client is used (backward compatible).
 
+If the placed cluster is `NotReady` when the reconciler processes the `Pending` session, the reconciler SHALL set a Condition (`type=PlacementFailed`, `reason=ClusterNotReady`) on the session and re-invoke the PlacementStrategy on the next reconcile cycle. The PlacementStrategy may select a different cluster — `cluster_id` is rewritten, not locked. This prevents sessions from stalling indefinitely when a cluster becomes unavailable between placement and provisioning.
+
 Provisions:
 
 1. Namespace (named `{project_id}`)
@@ -79,7 +81,9 @@ Watches Gateway resource events via gRPC informer. Reconciles `kind: Gateway` AP
 
 #### `internal/reconciler/cluster_reconciler.go` — ClusterReconciler
 
-Watches Cluster resource events via gRPC informer. Maintains the `ClusterClientPool` — a map of `cluster_id → *KubeClient` with lazy initialization. When a Cluster is added or modified, the reconciler resolves the Cluster's `credential_id` FK via `sdk.Credentials().GetToken(credentialID)` to obtain the kubeconfig, then parses it and creates (or replaces) the corresponding `KubeClient`. When a Cluster is deleted, the reconciler closes and evicts the client. The local cluster client (`_local`) is always present and initialized from the control plane's own kubeconfig. The Credential's `provider=kubeconfig` token is fetched at runtime using the same `credential:token-reader` role the CP already holds — no new auth mechanism is needed.
+Watches Cluster and Credential resource events via gRPC informer. Maintains the `ClusterClientPool` — a map of `cluster_id → *KubeClient` with lazy initialization. When a Cluster is added or modified, the reconciler resolves the Cluster's `credential_id` FK via `sdk.Credentials().GetToken(credentialID)` to obtain the kubeconfig, then parses it and creates (or replaces) the corresponding `KubeClient`. When a Cluster is deleted, the reconciler closes and evicts the client. The local cluster client (`_local`) is always present and initialized from the control plane's own kubeconfig. The Credential's `provider=kubeconfig` token is fetched at runtime using the same `credential:token-reader` role the CP already holds — no new auth mechanism is needed.
+
+The ClusterReconciler also watches Credential events. When a Credential is modified (e.g., kubeconfig rotation via `PATCH /credentials/{id}`), the reconciler checks if any registered Cluster references that `credential_id`. If so, it re-fetches the token and rebuilds the corresponding `KubeClient` in the pool. This ensures credential rotation takes effect without requiring a separate PATCH to the Cluster resource.
 
 #### `internal/placement/strategy.go` — PlacementStrategy
 

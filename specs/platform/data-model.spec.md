@@ -300,7 +300,6 @@ erDiagram
         string source_path "path within repo to kustomize overlay"
         string destination_ambient_url "nullable — target Ambient API URL; null = local"
         string destination_project "target project name; created if CreateProject=true"
-        string destination_cluster_id FK "nullable — target cluster for reconciled K8s resources; null = local"
         string credential_id FK "nullable — Credential for remote Ambient auth; required when destination_ambient_url is set"
         bool   auto_sync "enable automated sync on git change"
         bool   auto_prune "delete resources removed from git"
@@ -350,7 +349,6 @@ erDiagram
 
     Application }o--o| Project        : "syncs_to"
     Application }o--o| Credential     : "credential_id"
-    Application }o--o| Cluster        : "targets"
 
     Session         ||--o{ SessionMessage   : "streams"
     Session         ||--o{ SessionEvent     : "emits"
@@ -444,6 +442,8 @@ type PlacementDecision struct {
 
 ### Default Implementation: RoundRobinPlacement
 
+> **Prototype.** RoundRobinPlacement is the initial implementation. The in-memory counter resets on CP restart, producing uneven distribution under HA or rolling deployments. This is acceptable for initial multi-cluster validation. TODO: future iterations should explore persistent counters (e.g., ConfigMap or Cluster annotations), weighted round-robin based on `capacity`, or bin-packing strategies.
+
 The default implementation round-robins across clusters matching the required role:
 
 1. **Gateway cluster selection**: Find all clusters with `role=gateway` or `role=hybrid` and `status=Ready`. If a specific Gateway is associated with the project, use its `cluster_id`. Otherwise, round-robin across eligible gateway clusters.
@@ -510,7 +510,6 @@ An Application syncs **project-scoped fleet definitions** — a subset of resour
 | `Credential` | Created if not present; idempotent by name |
 | `RoleBinding` | Created if not present; idempotent by user+role+scope key. **Escalation-bound:** the sync engine can only create RoleBindings at or below the level of the service credential it uses (see Design Decisions). |
 | `Gateway` | Created or patched within the destination project; image, serverDnsNames, config updated. Reconciled into K8s gateway resources by the GatewayReconciler. |
-| `Cluster` | Created or patched globally; name is the idempotency key. `credential_id` FK is resolved at sync time. Only synced if the Credential used by the Application has `platform:admin` scope. |
 | `Policy` | Created or patched within the destination project; spec, labels, annotations updated. Contains the upstream OpenShell `SandboxPolicy` JSON. Referenced by agents via `sandbox_policy` field. |
 | `Inbox` (seed messages) | Idempotent delivery — only new messages (by `from_agent_id` + `body` content hash dedup) are posted. Uses immutable `from_agent_id` FK, not mutable `from_name`. |
 
@@ -534,7 +533,6 @@ An Application syncs **project-scoped fleet definitions** — a subset of resour
 | `source_path` | Relative path within the repo to a kustomize directory (must contain `kustomization.yaml`). |
 | `credential_id` | Nullable FK → Credential. The stored credential providing authentication for the destination Ambient's REST API. Required when `destination_ambient_url` is set. Uses the same write-only encrypted storage as all Credentials. The credential's token is resolved at sync time via `GET /credentials/{cred_id}/token` (gated by `credential:token-reader`). Null when targeting the local Ambient (controller uses its own service identity). |
 | `destination_ambient_url` | Nullable. The Ambient API server URL to sync to. Null = local Ambient (this API server). When set, `credential_id` must also be set — async polling controllers have no request context to forward a token from. |
-| `destination_cluster_id` | Nullable FK to Cluster. The target cluster where reconciled Kubernetes resources (namespaces, gateway deployments) are created. Null = local cluster. When set alongside `destination_ambient_url`, the Application syncs fleet definitions to the remote Ambient AND reconciles K8s resources to the specified cluster. |
 | `destination_project` | Target project name. The project is created on first sync if `CreateProject=true` is in `sync_options`. |
 | `auto_sync` | If true, the controller polls the git repo and syncs automatically when changes are detected. If false, sync is manual via `POST /sync`. |
 | `auto_prune` | If true, resources in the live state that are absent from the target state are deleted. If false, orphaned resources are left in place. **WARNING: Pruning a Project is permanently destructive.** All Agents, Sessions, Inbox messages, and SessionMessages in the project are cascade-deleted. The sync engine will never auto-prune a Project — Project removal requires manual confirmation via `POST /sync` with explicit `prune: true` and `prune_project: true` flags. Agent-level pruning operates normally under `auto_prune`. |
@@ -2050,7 +2048,7 @@ This structure means you can define and compose bespoke agent suites — entire 
 | `labels` / `annotations` are JSONB, not strings | Enables GIN-indexed key/value queries (`@>` operator) without joins; every row carries its own metadata without a separate EAV table. `labels` = queryable tags; `annotations` = freeform notes. Applied to first-class Kinds: User, Project, Agent, Session. Not applied to Inbox, SessionMessage, Role/RoleBinding. |
 | Credential is global, not project-scoped | Eliminates duplication when the same PAT is used across multiple Projects. Access controlled via RoleBindings with `credential` scope. A single Credential can be shared across Projects without creating copies. |
 | Application syncs fleet definitions, not infrastructure | Application syncs Projects, Agents, Credentials, RoleBindings, and Inbox seeds. Sessions, Users, and Roles are not synced. |
-| Application targets Ambient API, not K8s API | Unlike Sessions (which use Cluster credentials for direct K8s provisioning), Application works at the Ambient REST API layer. Remote sync uses the SDK client pointed at `destination_ambient_url`. |
+| Application targets Ambient API, not K8s API | Application works at the Ambient REST API layer, not the K8s API. Remote sync uses the SDK client pointed at `destination_ambient_url`. The remote Ambient's own control plane handles K8s reconciliation (namespace creation, gateway deployment, session provisioning) — the local Application never talks directly to a remote cluster's K8s API. This is why Application has no `destination_cluster_id`. |
 | Promotion via multiple Applications | Each environment gets its own Application pointing to a different git overlay and destination Ambient URL. Promotion = merge changes between overlay branches. |
 | Kustomize engine shared between CLI and API server | The sync engine reuses the same kustomize rendering logic as `acpctl apply -k`. |
 | Git polling, not webhooks (v1) | Simplicity. Webhook-triggered refresh is a v2 optimization. |

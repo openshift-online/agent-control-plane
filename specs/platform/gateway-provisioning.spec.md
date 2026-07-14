@@ -427,7 +427,8 @@ When a Gateway is deployed on a cluster different from where sessions run, the G
 - THEN it SHALL deploy gateway K8s resources on the target cluster using the `ClusterClientPool`
 - AND it SHALL create a `LoadBalancer` Service (or Ingress/Route, depending on cluster capabilities) exposing the gateway's gRPC port externally
 - AND it SHALL store the external endpoint URL in the Gateway's `annotations` as `ambient-code.io/gateway-external-url`
-- AND the annotation SHALL be written to the API server (PostgreSQL), not just to the Kubernetes resource
+- AND the annotation SHALL be written back to the API server (PostgreSQL) via `PATCH /api/ambient/v1/projects/{project_id}/gateways/{gateway_id}` after the external Service IP/hostname is assigned — this is the same status write-back pattern used by the Session reconciler (`sdk.Sessions().UpdateStatus()`)
+- AND the GatewayReconciler SHALL poll the LoadBalancer Service's `.status.loadBalancer.ingress` until an IP or hostname is assigned, then write the annotation
 
 #### Scenario: Gateway on local cluster (backward compatible)
 
