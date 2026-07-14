@@ -1266,9 +1266,42 @@ screenshots-clean: ## Remove generated screenshots
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Screenshot output cleaned"
 
 kind-rebuild: check-kind check-kubectl check-local-context _kind-require-cluster ## Rebuild, reload, and restart all components in kind
-	@$(MAKE) --no-print-directory kind-reload-ambient-ui
-	@$(MAKE) --no-print-directory kind-reload-ambient-control-plane
-	@$(MAKE) --no-print-directory kind-reload-ambient-api-server
+	@_CHANGED=$$(git diff --name-only HEAD -- 2>/dev/null; git diff --name-only --cached -- 2>/dev/null; git ls-files --others --exclude-standard -- 2>/dev/null); \
+	_DO_UI=false; _DO_CP=false; _DO_API=false; \
+	if [ -z "$$_CHANGED" ]; then \
+		echo "$(COLOR_YELLOW)▶$(COLOR_RESET) No changed files detected — rebuilding all components"; \
+		_DO_UI=true; _DO_CP=true; _DO_API=true; \
+	else \
+		if echo "$$_CHANGED" | grep -q '^components/ambient-sdk/'; then \
+			echo "$(COLOR_YELLOW)▶$(COLOR_RESET) ambient-sdk changed — rebuilding all consumers"; \
+			_DO_UI=true; _DO_CP=true; _DO_API=true; \
+		fi; \
+		if echo "$$_CHANGED" | grep -q '^components/ambient-ui/'; then _DO_UI=true; fi; \
+		if echo "$$_CHANGED" | grep -q '^components/ambient-control-plane/'; then _DO_CP=true; fi; \
+		if echo "$$_CHANGED" | grep -q '^components/ambient-api-server/'; then _DO_API=true; _DO_CP=true; fi; \
+		: "control-plane copies ambient-api-server/ and imports its gRPC package, so api-server changes also rebuild control-plane"; \
+		if ! $$_DO_UI && ! $$_DO_CP && ! $$_DO_API; then \
+			echo "$(COLOR_YELLOW)▶$(COLOR_RESET) No component paths changed — rebuilding all components"; \
+			_DO_UI=true; _DO_CP=true; _DO_API=true; \
+		fi; \
+	fi; \
+	_PIDS=""; _FAIL=0; \
+	if $$_DO_UI; then \
+		$(MAKE) --no-print-directory kind-reload-ambient-ui & _PIDS="$$_PIDS $$!"; \
+	fi; \
+	if $$_DO_CP; then \
+		$(MAKE) --no-print-directory kind-reload-ambient-control-plane & _PIDS="$$_PIDS $$!"; \
+	fi; \
+	if $$_DO_API; then \
+		$(MAKE) --no-print-directory kind-reload-ambient-api-server & _PIDS="$$_PIDS $$!"; \
+	fi; \
+	for _pid in $$_PIDS; do \
+		if ! wait $$_pid; then _FAIL=1; fi; \
+	done; \
+	if [ $$_FAIL -ne 0 ]; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) One or more component rebuilds failed"; \
+		exit 1; \
+	fi
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All components rebuilt and restarted"
 
 kind-reload-ambient-ui: check-kind check-kubectl check-local-context ## Rebuild and reload ambient-ui only (kind)
@@ -1613,17 +1646,27 @@ _kind-preload-runner: ## Internal: Pull runner image from Quay, retag, and load 
 
 _kind-load-images: ## Internal: Load images into kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Loading images into kind ($(KIND_CLUSTER_NAME))..."
-	@for img in $(KIND_CORE_IMAGES) $(KIND_MCP_IMAGES); do \
-		echo "  Loading $$img -> $(KIND_IMAGE_PREFIX)$$img..."; \
-		$(CONTAINER_ENGINE) tag $$img $(KIND_IMAGE_PREFIX)$$img 2>/dev/null || true; \
-		if [ -n "$(KIND_HOST)" ] || [ "$(CONTAINER_ENGINE)" = "podman" ]; then \
-			$(CONTAINER_ENGINE) save $(KIND_IMAGE_PREFIX)$$img | \
-			$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
-			ctr --namespace=k8s.io images import -; \
-		else \
-			kind load docker-image $(KIND_IMAGE_PREFIX)$$img --name $(KIND_CLUSTER_NAME); \
-		fi; \
-	done
+	@_PIDS=""; _FAIL=0; \
+	for img in $(KIND_CORE_IMAGES) $(KIND_MCP_IMAGES); do \
+		( \
+			echo "  Loading $$img -> $(KIND_IMAGE_PREFIX)$$img..."; \
+			$(CONTAINER_ENGINE) tag $$img $(KIND_IMAGE_PREFIX)$$img 2>/dev/null || true; \
+			if [ -n "$(KIND_HOST)" ] || [ "$(CONTAINER_ENGINE)" = "podman" ]; then \
+				$(CONTAINER_ENGINE) save $(KIND_IMAGE_PREFIX)$$img | \
+				$(CONTAINER_ENGINE) exec -i $(KIND_CLUSTER_NAME)-control-plane \
+				ctr --namespace=k8s.io images import -; \
+			else \
+				kind load docker-image $(KIND_IMAGE_PREFIX)$$img --name $(KIND_CLUSTER_NAME); \
+			fi \
+		) & _PIDS="$$_PIDS $$!"; \
+	done; \
+	for _pid in $$_PIDS; do \
+		if ! wait $$_pid; then _FAIL=1; fi; \
+	done; \
+	if [ $$_FAIL -ne 0 ]; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) One or more image loads failed"; \
+		exit 1; \
+	fi
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Images loaded"
 
 _restart-all: ## Internal: Restart all deployments
