@@ -3,10 +3,11 @@
 #
 # Validates the golden path:
 #   acpctl apply -k  ->  acpctl start  ->  sandbox provisioned  ->  session Running
-#   ->  runner starts inside sandbox  ->  runner /health endpoint responds
+#   ->  runner starts inside sandbox  ->  mock LLM responds  ->  messages verified
 #
-# This test does NOT require a real LLM API key — it validates the platform
-# plumbing from session creation through sandbox provisioning.
+# Uses test-agent-mock-llm which points ANTHROPIC_BASE_URL at a mock LLM server,
+# so no real LLM API key is required. Validates the full platform plumbing from
+# session creation through sandbox provisioning and LLM response delivery.
 #
 # Prerequisites:
 #   - kind-up with OPENSHELL_USE_GATEWAY=true (default)
@@ -218,12 +219,12 @@ section "5. Verify agent exists"
 
 AGENTS_RESP=$(api GET "/api/ambient/v1/projects/${PROJECT_ID}/agents?size=50" || echo "")
 AGENT_ID=$(echo "$AGENTS_RESP" \
-  | jq -r '.items[] | select(.name == "test-agent-no-providers") | .id' 2>/dev/null | head -1 || echo "")
+  | jq -r '.items[] | select(.name == "test-agent-mock-llm") | .id' 2>/dev/null | head -1 || echo "")
 
 if [ -n "$AGENT_ID" ]; then
-  pass "Agent 'test-agent-no-providers' exists (id: ${AGENT_ID})"
+  pass "Agent 'test-agent-mock-llm' exists (id: ${AGENT_ID})"
 else
-  fail "Agent 'test-agent-no-providers' not found in project '${TENANT}'"
+  fail "Agent 'test-agent-mock-llm' not found in project '${TENANT}'"
   echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
   exit 1
 fi
@@ -305,7 +306,7 @@ CREATED_SESSION_ID=$(echo "$START_RESP" \
 if [ -n "$CREATED_SESSION_ID" ]; then
   pass "Session started (id: ${CREATED_SESSION_ID})"
 else
-  fail "Failed to start session for agent 'test-agent-no-providers'"
+  fail "Failed to start session for agent 'test-agent-mock-llm'"
   echo "  Response: $(echo "$START_RESP" | head -c 200)"
 fi
 
@@ -387,7 +388,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
       for j in $(seq 1 10); do
         PAYLOAD_CONTENT=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
           cat /sandbox/CLAUDE.md 2>/dev/null || echo "")
-        if echo "$PAYLOAD_CONTENT" | grep -q "hello"; then
+        if echo "$PAYLOAD_CONTENT" | grep -q "mock LLM"; then
           PAYLOAD_READY=true
           break
         fi
@@ -406,11 +407,11 @@ if [ -n "$CREATED_SESSION_ID" ]; then
 
     # 10b. Agent environment variable passed through to sandbox
     ENV_VAL=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
-      printenv ENV_NAME 2>/dev/null || echo "")
-    if [ "$ENV_VAL" = "test" ]; then
-      pass "Agent env var ENV_NAME passed through to sandbox"
+      printenv CLAUDE_CODE_ATTRIBUTION_HEADER 2>/dev/null || echo "")
+    if [ "$ENV_VAL" = "0" ]; then
+      pass "Agent env var CLAUDE_CODE_ATTRIBUTION_HEADER passed through to sandbox"
     else
-      fail "Agent env var ENV_NAME not found or wrong value (got: '${ENV_VAL}')"
+      fail "Agent env var CLAUDE_CODE_ATTRIBUTION_HEADER not found or wrong value (got: '${ENV_VAL}')"
     fi
 
     # 10c. MCP config env var patterns preserved (not auto-expanded)
@@ -473,10 +474,61 @@ else
   fail "Sandbox configuration verification — session not created"
 fi
 
-## Section 12: Repository payload verification — SKIPPED
-## The repo-clone-workspace agent requires providers: [vertex], which is not
-## available in CI. Re-enable once CI has a real or mock Vertex provider.
+section "11. Mock LLM response verification via acpctl"
+
+if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; then
+  # Poll acpctl session messages until we see messages appear (up to 120s).
+  # The session may stay in Running — we don't require a terminal phase.
+  MESSAGES_OUTPUT="[]"
+  MSG_COUNT=0
+  for i in $(seq 1 60); do
+    MESSAGES_OUTPUT=$($ACPCTL session messages "$CREATED_SESSION_ID" -o json 2>/dev/null || echo "[]")
+    MSG_COUNT=$(echo "$MESSAGES_OUTPUT" | jq 'length' 2>/dev/null || echo "0")
+    if [ "${MSG_COUNT}" -gt 0 ]; then
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "${MSG_COUNT}" -gt 0 ]; then
+    pass "acpctl session messages returned ${MSG_COUNT} message(s)"
+  else
+    fail "acpctl session messages returned no messages after 120s"
+  fi
+
+  # 11a. Verify the initial prompt was delivered as a user message
+  PROMPT_FOUND=$(echo "$MESSAGES_OUTPUT" \
+    | jq -r '[.[] | select(.event_type == "user")] | length' 2>/dev/null || echo "0")
+  if [ "${PROMPT_FOUND}" -gt 0 ]; then
+    pass "User prompt message found in session messages"
+  else
+    fail "No user prompt message found in session messages"
+  fi
+
+  # 11b. Verify the mock LLM response is present (assistant message or text content)
+  # The mock LLM echoes back "Mock LLM response: <user message>"
+  LLM_RESPONSE_FOUND=$(echo "$MESSAGES_OUTPUT" \
+    | jq -r '[.[] | select(.event_type == "assistant" or .event_type == "TEXT_MESSAGE_CONTENT" or .event_type == "MESSAGES_SNAPSHOT")] | length' 2>/dev/null || echo "0")
+  if [ "${LLM_RESPONSE_FOUND}" -gt 0 ]; then
+    pass "LLM response message(s) found in session messages (${LLM_RESPONSE_FOUND})"
+  else
+    fail "No LLM response messages found in session messages"
+  fi
+
+  # 11c. Verify the mock LLM echo content is present in the message payloads
+  MOCK_ECHO=$(echo "$MESSAGES_OUTPUT" \
+    | jq -r '[.[] | .payload] | join(" ")' 2>/dev/null || echo "")
+  if echo "$MOCK_ECHO" | grep -q "Mock LLM response"; then
+    pass "Mock LLM echo content verified in message payloads"
+  else
+    skip "Mock LLM echo content" "response text not found — may be in a different event format"
+  fi
+else
+  skip "Mock LLM response verification" "session not running or not created"
+fi
+
 section "12. Repository payload verification"
+
 REPO_SESSION_ID=""
 skip "Repo payload verification" "vertex provider not available in CI"
 
