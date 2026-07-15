@@ -312,7 +312,12 @@ fi
 # 1. Fetch Keycloak JWKS and update the API server auth ConfigMap so the
 #    API server can validate JWTs signed by this Keycloak instance.
 echo "  Fetching Keycloak JWKS..."
-KC_JWKS=$(curl -sf "${KC_URL}/realms/${KC_REALM}/protocol/openid-connect/certs" || true)
+KC_JWKS=""
+for _jwks_try in $(seq 1 30); do
+  KC_JWKS=$(curl -sf "${KC_URL}/realms/${KC_REALM}/protocol/openid-connect/certs" || true)
+  [[ -n "$KC_JWKS" && "$KC_JWKS" != "null" ]] && break
+  sleep 2
+done
 if [[ -z "$KC_JWKS" || "$KC_JWKS" == "null" ]]; then
   echo "FATAL: Cannot fetch Keycloak JWKS from ${KC_URL}/realms/${KC_REALM}/protocol/openid-connect/certs"
   exit 1
