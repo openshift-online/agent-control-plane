@@ -147,6 +147,12 @@ fail() { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
 skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
 section() { echo ""; echo -e "${BOLD}$1${NC}"; }
 
+_cleanup_sandboxes() {
+  if [ "$SKIP_CLEANUP" = "true" ]; then return 0; fi
+  openshell sandbox delete --all --gateway "$TENANT" >/dev/null 2>&1 && \
+    echo "  Cleaned up sandboxes on gateway ${TENANT}" || true
+}
+
 api() {
   local method="$1" path="$2"
   shift 2
@@ -614,6 +620,8 @@ else
   skip "Mock LLM response verification" "session not running or not created"
 fi
 
+_cleanup_sandboxes
+
 section "12. Repository payload verification"
 
 REPO_SESSION_ID=""
@@ -715,6 +723,8 @@ else
   fail "Agent 'network-test-locked-down' not found after apply"
 fi
 
+_cleanup_sandboxes
+
 # Verify permissive policy allows external network access.
 # Start a dedicated permissive session and curl update.code.visualstudio.com
 # via the sandbox proxy. The request should succeed (not return policy_denied).
@@ -792,6 +802,8 @@ else
   fail "Agent 'network-test-permissive' not found after apply"
 fi
 
+_cleanup_sandboxes
+
 section "Cleanup"
 
 if [ "$SKIP_CLEANUP" = "true" ]; then
@@ -807,26 +819,12 @@ if [ "$SKIP_CLEANUP" = "true" ]; then
     fi
   done
 else
-  if [ -n "$CREATED_SESSION_ID" ]; then
-    api DELETE "/api/ambient/v1/sessions/${CREATED_SESSION_ID}" >/dev/null 2>&1 && \
-      echo "  Deleted session ${CREATED_SESSION_ID}" || \
-      echo "  Could not delete session (non-fatal)"
-  fi
-  if [ -n "$REPO_SESSION_ID" ]; then
-    api DELETE "/api/ambient/v1/sessions/${REPO_SESSION_ID}" >/dev/null 2>&1 && \
-      echo "  Deleted repo session ${REPO_SESSION_ID}" || \
-      echo "  Could not delete repo session (non-fatal)"
-  fi
-  if [ -n "$LOCKED_SESSION_ID" ]; then
-    api DELETE "/api/ambient/v1/sessions/${LOCKED_SESSION_ID}" >/dev/null 2>&1 && \
-      echo "  Deleted locked-down session ${LOCKED_SESSION_ID}" || \
-      echo "  Could not delete locked-down session (non-fatal)"
-  fi
-  if [ -n "${PERM_SESSION_ID:-}" ]; then
-    api DELETE "/api/ambient/v1/sessions/${PERM_SESSION_ID}" >/dev/null 2>&1 && \
-      echo "  Deleted permissive session ${PERM_SESSION_ID}" || \
-      echo "  Could not delete permissive session (non-fatal)"
-  fi
+  for _sid in "$CREATED_SESSION_ID" "$REPO_SESSION_ID" "$LOCKED_SESSION_ID" "${PERM_SESSION_ID:-}"; do
+    [ -z "$_sid" ] && continue
+    api DELETE "/api/ambient/v1/sessions/${_sid}" >/dev/null 2>&1 && \
+      echo "  Deleted session ${_sid}" || \
+      echo "  Could not delete session ${_sid} (non-fatal)"
+  done
 fi
 
 echo ""

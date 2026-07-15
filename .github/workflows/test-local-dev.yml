@@ -172,6 +172,7 @@ jobs:
       run: |
         echo "Using Makefile to deploy complete stack..."
         make kind-up CONTAINER_ENGINE=docker CI_MODE=true VERTEX_CRED=/tmp/vertex.json OPENSHELL_USE_GATEWAY=true \
+          OPENSHELL_TENANTS="tenant-a" \
           RUNNER_QUAY_TAG=${{ steps.image-override.outputs.runner_tag || 'latest' }}
 
     - name: Wait for deployments
