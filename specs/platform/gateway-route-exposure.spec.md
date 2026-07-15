@@ -24,7 +24,7 @@ This extends the existing gateway provisioning model with:
 ### Route Data Flow
 
 ```
-External Client (openshell CLI, browser)
+External Client (openshell CLI)
     │  TLS (cluster ingress certificate — trusted by default)
     ▼
 OpenShift Router (HAProxy Ingress Controller)
@@ -59,6 +59,8 @@ The `destinationCACertificate` field on the Route is populated from the `ca.crt`
 
 The Gateway resource SHALL support an optional `route` field that declares external exposure via an OpenShift Route. When `route` is present, the GatewayReconciler SHALL create and reconcile a Route resource in the project namespace. Only Admin tier users SHALL be permitted to set or modify the `route` field, since it exposes the gateway externally (see `gateway-rbac-policy.spec.md`).
 
+The Gateway resource SHALL also support an optional `internalServiceHostname` field specifying the internal service hostname used for TLS certificate generation. If `internalServiceHostname` is not set, it SHALL default to `openshell-gateway.<project>.svc.cluster.local`, where `<project>` is the Gateway's project name.
+
 #### Scenario: Gateway with explicit route host
 
 - GIVEN a Gateway resource with route configuration:
@@ -67,8 +69,6 @@ The Gateway resource SHALL support an optional `route` field that declares exter
   name: openshell-gateway
   project: tenant-a
   image: ghcr.io/nvidia/openshell:v0.0.70
-  serverDnsNames:
-    - openshell-gateway.tenant-a.svc.cluster.local
   route:
     host: gateway.tenant-a.example.com
   ```
@@ -88,6 +88,7 @@ The Gateway resource SHALL support an optional `route` field that declares exter
   ```
 - WHEN the GatewayReconciler reconciles this Gateway
 - THEN it SHALL create a Route resource with `.spec.host` left empty
+- AND the GatewayReconciler SHALL use the default `internalServiceHostname` of `openshell-gateway.tenant-a.svc.cluster.local` (derived from the project name)
 - AND OpenShift SHALL assign a hostname based on the cluster's default routing suffix (e.g., `openshell-gateway-tenant-a.apps.cluster.example.com`)
 - AND the GatewayReconciler SHALL read the assigned hostname from the Route's `.status.ingress[].host` field
 
@@ -132,7 +133,7 @@ The Route SHALL use re-encrypt TLS termination with the gateway's CA certificate
 #### Scenario: Certificates regenerated after DNS name change
 
 - GIVEN a Gateway with an existing Route
-- AND the `serverDnsNames` field is updated, triggering certificate regeneration
+- AND the `internalServiceHostname` field is updated, triggering certificate regeneration
 - WHEN the new `openshell-server-tls` Secret is created
 - THEN the GatewayReconciler SHALL update the Route's `destinationCACertificate` with the new CA certificate
 - AND existing connections through the Route MAY experience a brief interruption during the certificate rotation
@@ -141,7 +142,7 @@ The Route SHALL use re-encrypt TLS termination with the gateway's CA certificate
 
 ### Requirement: Route Status Reconciliation
 
-The GatewayReconciler SHALL detect Route status changes to populate the Gateway's `routeAddress` field. Because Route status is updated asynchronously by the OpenShift router (not by a Gateway gRPC event), the reconciler SHALL use Route resource watches or periodic resync to detect when the hostname becomes available.
+The GatewayReconciler SHALL detect Route status changes to populate the Gateway's `routeAddress` field. Because Route status is updated asynchronously by the OpenShift router (not by a Gateway gRPC event), the reconciler SHALL use Route resource watches or periodic resync to detect when the hostname becomes available. The control plane ServiceAccount requires Route CRUD permissions for this — see the "RBAC for Route Resources" section below.
 
 #### Scenario: Route status populated via watch
 
@@ -399,7 +400,7 @@ The control plane ServiceAccount SHALL have permissions to manage Route resource
 | `name` | Yes | — | Resource name (typically `openshell-gateway`) |
 | `project` | Yes | — | Project name (determines target namespace) |
 | `image` | No | `OPENSHELL_GATEWAY_IMAGE` env var | Gateway container image reference |
-| `serverDnsNames` | Yes | — | DNS names for TLS certificate generation |
+| `internalServiceHostname` | No | `openshell-gateway.<project>.svc.cluster.local` | Internal service hostname for TLS certificate generation. Derived from the project name if not explicitly set |
 | `config` | No | — | OpenShell gateway TOML configuration |
 | `oidc` | No | — | OIDC authentication configuration |
 | `route` | No | — | Route configuration for external exposure |
@@ -413,8 +414,6 @@ kind: Gateway
 name: openshell-gateway
 project: tenant-a
 image: ghcr.io/nvidia/openshell:v0.0.70
-serverDnsNames:
-  - openshell-gateway.tenant-a.svc.cluster.local
 oidc:
   issuer: https://keycloak.example.com/realms/acp
   audience: openshell-gateway
@@ -429,8 +428,6 @@ kind: Gateway
 name: openshell-gateway
 project: tenant-b
 image: ghcr.io/nvidia/openshell:v0.0.70
-serverDnsNames:
-  - openshell-gateway.tenant-b.svc.cluster.local
 oidc:
   issuer: https://keycloak.example.com/realms/acp
   audience: openshell-gateway
@@ -485,9 +482,17 @@ The project SHALL provide a Makefile target and kustomize overlay to deploy the 
   1. Build container images and push them to the OpenShift internal registry (or load them via `oc image mirror`)
   2. Apply the `openshift-local` kustomize overlay to create the `ambient-code` namespace with all ACP components
   3. Configure Keycloak for SSO (reusing the same realm configuration as Kind)
-  4. Create tenant namespaces and provision gateway resources with `route: {}` configuration
+  4. Create tenant namespaces and provision gateway resources with `route: {}` configuration (unless `SKIP_TENANT_SETUP` is set — see below)
   5. Wait for all deployments to reach ready state
   6. Print the Route URLs for the API server, UI, and gateway endpoints
+
+#### Scenario: Skip tenant setup for end-to-end demo
+
+- GIVEN an OpenShift Local instance is running and `oc` is authenticated
+- WHEN a developer runs `make crc-up SKIP_TENANT_SETUP=tenant-a`
+- THEN tenant namespace creation and gateway provisioning SHALL be skipped for the specified tenants
+- AND the developer can manually provision tenants and gateways to demo the full setup flow end-to-end
+- AND this SHALL follow the same `SKIP_TENANT_SETUP` behavior as `make kind-up`
 
 #### Scenario: Teardown OpenShift Local deployment
 
@@ -505,7 +510,7 @@ The project SHALL provide a Makefile target and kustomize overlay to deploy the 
 
 ### Requirement: OpenShift Local Kustomize Overlay
 
-A kustomize overlay SHALL exist at `components/manifests/overlays/openshift-local/` that configures the ACP stack for OpenShift Local. This overlay SHALL reuse existing kustomize components and the base manifests, following the same pattern as the existing `kind/` overlay.
+A kustomize overlay SHALL exist at `components/manifests/overlays/openshift-local/` that configures the ACP stack for OpenShift Local. This overlay SHALL reuse existing kustomize components and the base manifests, following the same pattern as the existing `kind/` overlay. The existing OpenShift Template at `components/manifests/templates/template-services.yaml` serves as a reference for the production OpenShift deployment structure and should be consulted when building the overlay.
 
 #### Scenario: Overlay structure
 
@@ -547,6 +552,8 @@ The OpenShift Local deployment SHALL provide the same development experience as 
 - AND the mock-LLM server SHALL be deployed for self-contained testing (per `e2e-test-tooling.spec.md`)
 
 #### Scenario: Gateway Route e2e test
+
+> **Note:** This e2e test cannot run in GitHub CI at this point. OpenShift Local's resource footprint is too intensive for a GitHub-hosted runner. This test is intended for local developer execution only.
 
 - GIVEN the ACP stack is deployed on OpenShift Local
 - AND a gateway is provisioned for `tenant-a` with `route: {}`
