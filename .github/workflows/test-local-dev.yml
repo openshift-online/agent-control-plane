@@ -256,12 +256,20 @@ jobs:
 
     - name: Run RBAC enforcement E2E tests
       run: |
+        kubectl port-forward -n ambient-code svc/ambient-api-server 13592:8000 &
+        kubectl port-forward -n ambient-code svc/keycloak-service 18592:11880 &
+        sleep 3
+
         API_URL=http://localhost:13592/api/ambient/v1 \
         KC_URL=http://localhost:18592 \
         bash tests/e2e/rbac_e2e_test.sh
 
     - name: Run Scheduled Sessions E2E tests
       run: |
+        kubectl port-forward -n ambient-code svc/ambient-api-server 13592:8000 &
+        kubectl port-forward -n ambient-code svc/keycloak-service 18592:11880 &
+        sleep 3
+
         API_URL=http://localhost:13592/api/ambient/v1 \
         KC_URL=http://localhost:18592 \
         bash tests/e2e/scheduled_sessions_e2e_test.sh
