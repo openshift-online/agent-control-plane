@@ -909,6 +909,8 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 		$(MAKE) --no-print-directory _kind-load-images; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying with locally-built images..."; \
 		kubectl apply --validate=false -k components/manifests/overlays/kind-local/; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting deployments to pick up freshly built images..."; \
+		kubectl rollout restart deployment -n $(NAMESPACE); \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching agent registry for local images..."; \
 		REGISTRY=$$(kubectl get configmap ambient-agent-registry -n $(NAMESPACE) -o jsonpath='{.data.agent-registry\.json}'); \
 		kubectl patch configmap ambient-agent-registry -n $(NAMESPACE) --type=merge \
