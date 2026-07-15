@@ -243,6 +243,40 @@ func sessionEventsMigration() *gormigrate.Migration {
 	}
 }
 
+func clusterPlacementMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202607150003",
+		Migrate: func(tx *gorm.DB) error {
+			stmts := []string{
+				`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS cluster_id TEXT`,
+				`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS gateway_cluster_id TEXT`,
+				`CREATE INDEX IF NOT EXISTS idx_sessions_cluster_id ON sessions(cluster_id)`,
+				`CREATE INDEX IF NOT EXISTS idx_sessions_gateway_cluster_id ON sessions(gateway_cluster_id)`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			stmts := []string{
+				`DROP INDEX IF EXISTS idx_sessions_gateway_cluster_id`,
+				`DROP INDEX IF EXISTS idx_sessions_cluster_id`,
+				`ALTER TABLE sessions DROP COLUMN IF EXISTS gateway_cluster_id`,
+				`ALTER TABLE sessions DROP COLUMN IF EXISTS cluster_id`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+}
+
 func schemaExpansionMigration() *gormigrate.Migration {
 	migrateStatements := []string{
 		`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS repos TEXT`,

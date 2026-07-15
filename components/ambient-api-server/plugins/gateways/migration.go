@@ -7,6 +7,36 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
 )
 
+func clusterIdMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202607150004",
+		Migrate: func(tx *gorm.DB) error {
+			stmts := []string{
+				`ALTER TABLE gateways ADD COLUMN IF NOT EXISTS cluster_id TEXT`,
+				`CREATE INDEX IF NOT EXISTS idx_gateways_cluster_id ON gateways(cluster_id)`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			stmts := []string{
+				`DROP INDEX IF EXISTS idx_gateways_cluster_id`,
+				`ALTER TABLE gateways DROP COLUMN IF EXISTS cluster_id`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+}
+
 func migration() *gormigrate.Migration {
 	type Gateway struct {
 		db.Model

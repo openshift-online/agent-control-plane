@@ -51,11 +51,3 @@ Mock LLM inference service for self-contained e2e testing in kind. Covers the mo
 ### Multi-Cluster Scheduling
 
 Cluster registration, placement strategy, and cross-cluster session/gateway routing. The `Cluster` Kind models registered clusters with roles (`gateway`, `workload`, `hybrid`). The `PlacementStrategy` interface determines which cluster a session runs on (default: round-robin). Gateways can be deployed to dedicated gateway clusters while sessions run on workload clusters. See [data-model.spec.md § Cluster](data-model.spec.md#cluster--multi-cluster-scheduling) and [control-plane.spec.md § ClusterReconciler](control-plane.spec.md#internal-reconciler-cluster_reconcilergo--clusterreconciler).
-
-### [E2E Test Tooling](e2e-test-tooling.spec.md)
-
-Mock LLM inference service for self-contained e2e testing in kind. Covers the mock server (OpenAI-compatible `/v1/chat/completions`), Kubernetes deployment, Makefile integration, example agent/provider/credential configurations, and OpenShell sandbox network policy for sandbox-to-mock connectivity.
-
-### Multi-Cluster Scheduling
-
-Cluster registration, placement strategy, and cross-cluster session/gateway routing. The `Cluster` Kind models registered clusters with roles (`gateway`, `workload`, `hybrid`). The `PlacementStrategy` interface determines which cluster a session runs on (default: round-robin). Gateways can be deployed to dedicated gateway clusters while sessions run on workload clusters. See [data-model.spec.md § Cluster](data-model.spec.md#cluster--multi-cluster-scheduling) and [control-plane.spec.md § ClusterReconciler](control-plane.spec.md#internal-reconciler-cluster_reconcilergo--clusterreconciler).

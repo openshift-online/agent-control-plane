@@ -46,6 +46,8 @@ type Session struct {
 	LastActivityAt        *time.Time `json:"last_activity_at"`
 	SandboxLogsSnapshot   *string    `json:"sandbox_logs_snapshot"`
 	SandboxPolicySnapshot *string    `json:"sandbox_policy_snapshot"`
+	ClusterId             *string    `json:"cluster_id"         gorm:"index"`
+	GatewayClusterId      *string    `json:"gateway_cluster_id" gorm:"index"`
 }
 
 type SessionList []*Session

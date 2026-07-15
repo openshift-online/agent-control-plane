@@ -83,4 +83,5 @@ func init() {
 
 	db.RegisterMigration(migration())
 	db.RegisterMigration(migrationAddOidc())
+	db.RegisterMigration(clusterIdMigration())
 }
