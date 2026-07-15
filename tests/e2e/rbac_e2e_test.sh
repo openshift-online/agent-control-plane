@@ -296,7 +296,7 @@ if [[ "$KC_CUR_HOSTNAME" != "$KC_WANT_HOSTNAME" ]]; then
         fuser -k "${KC_PORT}/tcp" 2>/dev/null || true
       fi
       sleep 1
-      kubectl port-forward -n "$NS" svc/keycloak-service "${KC_PORT}:8080" &>/dev/null &
+      kubectl port-forward -n "$NS" svc/keycloak-service "${KC_PORT}:11880" &>/dev/null &
       for _i in $(seq 1 15); do
         _s=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "${KC_URL}/realms/${KC_REALM}" 2>/dev/null || true)
         [[ "$_s" != "000" && -n "$_s" ]] && break
