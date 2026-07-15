@@ -174,6 +174,9 @@ func (h sessionHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			if patch.Annotations != nil {
 				found.SessionAnnotations = patch.Annotations
 			}
+			if patch.StopOnRunFinished != nil {
+				found.StopOnRunFinished = patch.StopOnRunFinished
+			}
 
 			sessionModel, err := h.session.Replace(ctx, found)
 			if err != nil {
@@ -382,6 +385,7 @@ func (h sessionHandler) Clone(w http.ResponseWriter, r *http.Request) {
 				SessionAnnotations:   src.SessionAnnotations,
 				ProjectId:            src.ProjectId,
 				AgentId:              src.AgentId,
+				StopOnRunFinished:    src.StopOnRunFinished,
 			}
 			cloneID := src.ID
 			clone.ParentSessionId = &cloneID

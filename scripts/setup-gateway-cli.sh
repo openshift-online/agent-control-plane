@@ -2,7 +2,7 @@
 #
 # setup-gateway-cli.sh — Configure openshell CLI connectivity to tenant
 # gateways. Extracts mTLS certs from each namespace, registers the gateway,
-# and starts a port-forward on a random local port.
+# and starts a port-forward on a fixed local port (GATEWAY_BASE_PORT + index).
 #
 # Port-forwards run in the background with PIDs saved to $PF_DIR so they
 # can be stopped later via `make kind-setup-openshell-cli-stop`.
@@ -10,11 +10,13 @@
 # USAGE:
 #   ./scripts/setup-gateway-cli.sh [NAMESPACE...]
 #
-#   Each namespace gets a gateway registered as "<namespace>" on a random port.
+#   Each namespace gets a gateway on a fixed port (GATEWAY_BASE_PORT + index).
 #   With no arguments, defaults to tenant-a.
 #
 # ENVIRONMENT:
-#   PF_DIR  — directory for PID/log files (default: /tmp/ambient-code)
+#   PF_DIR             — directory for PID/log files (default: /tmp/ambient-code)
+#   GATEWAY_BASE_PORT  — first fixed local port for gateway port-forwards (default: 15080);
+#                        each namespace gets base+index (e.g. 15080, 15081, 15082)
 #
 # EXAMPLES:
 #   ./scripts/setup-gateway-cli.sh                    # tenant-a
@@ -30,7 +32,9 @@ set -e
 NAMESPACES=("${@:-tenant-a}")
 CERT_BASE="$HOME/.config/openshell/gateways"
 PF_DIR="${PF_DIR:-/tmp/ambient-code}"
+GATEWAY_BASE_PORT="${GATEWAY_BASE_PORT:-15080}"
 GW_PORTS=()
+NS_INDEX=0
 
 mkdir -p "$PF_DIR"
 
@@ -65,27 +69,25 @@ for NS in "${NAMESPACES[@]}"; do
     rm -f "$PID_FILE" "$LOG_FILE"
   fi
 
-  # Start port-forward on :0 (kernel picks a free port), capture the assigned port
-  kubectl port-forward -n "$NS" statefulset/openshell-gateway ":8080" \
+  # Assign a fixed local port: base + namespace index
+  PORT=$(( GATEWAY_BASE_PORT + NS_INDEX ))
+  NS_INDEX=$(( NS_INDEX + 1 ))
+
+  kubectl port-forward -n "$NS" statefulset/openshell-gateway "$PORT:8080" \
     >"$LOG_FILE" 2>&1 &
   PF_PID=$!
   echo "$PF_PID" > "$PID_FILE"
 
-  # Wait for kubectl to print the assigned port
-  PORT=""
+  # Wait for port-forward to be ready
   for attempt in $(seq 1 30); do
-    if [ -s "$LOG_FILE" ]; then
-      PORT=$(grep -oE 'Forwarding from 127\.0\.0\.1:[0-9]+' "$LOG_FILE" | grep -oE '[0-9]+$' | head -1)
-      if [ -n "$PORT" ]; then
-        break
-      fi
+    if [ -s "$LOG_FILE" ] && grep -q 'Forwarding from' "$LOG_FILE"; then
+      break
     fi
     sleep 0.2
   done
 
-  if [ -z "$PORT" ]; then
-    echo "  Error: Failed to determine port-forward port for '$NS'; skipping"
-    kill "$PF_PID" 2>/dev/null || true
+  if ! ps -p "$PF_PID" >/dev/null 2>&1; then
+    echo "  Error: Port-forward failed for '$NS' on port $PORT (port in use?); skipping"
     rm -f "$PID_FILE" "$LOG_FILE"
     echo ""
     continue
@@ -99,35 +101,68 @@ for NS in "${NAMESPACES[@]}"; do
     openshell gateway remove "$GW_NAME" 2>/dev/null || true
   fi
 
-  # Extract mTLS certs BEFORE registering — the openshell CLI expects client
-  # TLS material to exist at registration time.
-  mkdir -p "$CERT_DIR"
-  echo "  Extracting mTLS certs from openshell-server-tls..."
-  kubectl get secret openshell-server-tls -n "$NS" \
-    -o jsonpath='{.data.ca\.crt}' | base64 -d > "$CERT_DIR/ca.crt"
-  kubectl get secret openshell-server-tls -n "$NS" \
-    -o jsonpath='{.data.tls\.crt}' | base64 -d > "$CERT_DIR/tls.crt"
-  kubectl get secret openshell-server-tls -n "$NS" \
-    -o jsonpath='{.data.tls\.key}' | base64 -d > "$CERT_DIR/tls.key"
+  # Detect OIDC authentication from the gateway ConfigMap
+  OIDC_ISSUER=""
+  OIDC_AUDIENCE=""
+  GW_TOML=$(kubectl get configmap openshell-gateway-config -n "$NS" \
+    -o jsonpath='{.data.gateway\.toml}' 2>/dev/null || true)
+  if echo "$GW_TOML" | grep -q '\[openshell\.gateway\.oidc\]'; then
+    OIDC_ISSUER=$(echo "$GW_TOML" | sed -n '/\[openshell\.gateway\.oidc\]/,/^\[/{ s/.*issuer *= *"\(.*\)"/\1/p; }')
+    OIDC_AUDIENCE=$(echo "$GW_TOML" | sed -n '/\[openshell\.gateway\.oidc\]/,/^\[/{ s/.*audience *= *"\(.*\)"/\1/p; }')
+    OIDC_AUDIENCE="${OIDC_AUDIENCE:-openshell-cli}"
 
-  echo "  Registering gateway $GW_NAME -> https://localhost:$PORT..."
-  openshell gateway add --name "$GW_NAME" --local "https://localhost:$PORT"
+    # The Keycloak service port (11880) matches the local port-forward, so
+    # developers can reach the same issuer URL from the host via /etc/hosts:
+    #   127.0.0.1 keycloak-service.ambient-code.svc.cluster.local
+  fi
 
-  # Re-extract certs after registering — `gateway add --local` may generate
-  # self-signed certs that don't match the gateway's PKI.  Overwriting them
-  # with the real cluster certs fixes BadSignature / DecryptError TLS failures.
-  kubectl get secret openshell-server-tls -n "$NS" \
-    -o jsonpath='{.data.ca\.crt}' | base64 -d > "$CERT_DIR/ca.crt"
-  kubectl get secret openshell-server-tls -n "$NS" \
-    -o jsonpath='{.data.tls\.crt}' | base64 -d > "$CERT_DIR/tls.crt"
-  kubectl get secret openshell-server-tls -n "$NS" \
-    -o jsonpath='{.data.tls\.key}' | base64 -d > "$CERT_DIR/tls.key"
+  if [ -n "$OIDC_ISSUER" ]; then
+    # OIDC-authenticated gateway — extract the CA cert so the CLI can verify
+    # TLS, then print the registration command for the user to run manually.
+    # Running `gateway add` here triggers a browser-based OIDC login flow,
+    # which is not suitable for automated setup.
+    mkdir -p "$CERT_DIR"
+    echo "  Extracting CA cert from openshell-server-tls..."
+    kubectl get secret openshell-server-tls -n "$NS" \
+      -o jsonpath='{.data.ca\.crt}' | base64 -d > "$CERT_DIR/ca.crt"
 
-  # Verify mTLS connectivity
-  if openshell provider list --gateway "$GW_NAME" &>/dev/null; then
-    echo "  ✓ Gateway $GW_NAME connected successfully"
+    echo "  OIDC gateway $GW_NAME -> https://localhost:$PORT"
+    echo "    issuer:   $OIDC_ISSUER"
+    echo "    audience: $OIDC_AUDIENCE"
+    echo "    CA cert:  $CERT_DIR/ca.crt"
+    echo ""
+    echo "  To register this gateway, run:"
+    echo "    openshell gateway add --name $GW_NAME \\"
+    echo "      --oidc-issuer $OIDC_ISSUER \\"
+    echo "      --oidc-client-id $OIDC_AUDIENCE \\"
+    echo "      --oidc-audience $OIDC_AUDIENCE \\"
+    echo "      --gateway-insecure \\"
+    echo "      https://localhost:$PORT"
   else
-    echo "  ✗ Gateway $GW_NAME connectivity check failed — check gateway pod logs:"
+    # mTLS-authenticated gateway — extract certs and print the registration
+    # command for the user to run manually.
+    mkdir -p "$CERT_DIR"
+    echo "  Extracting mTLS certs from openshell-server-tls..."
+    kubectl get secret openshell-server-tls -n "$NS" \
+      -o jsonpath='{.data.ca\.crt}' | base64 -d > "$CERT_DIR/ca.crt"
+    kubectl get secret openshell-server-tls -n "$NS" \
+      -o jsonpath='{.data.tls\.crt}' | base64 -d > "$CERT_DIR/tls.crt"
+    kubectl get secret openshell-server-tls -n "$NS" \
+      -o jsonpath='{.data.tls\.key}' | base64 -d > "$CERT_DIR/tls.key"
+
+    echo "  mTLS gateway $GW_NAME -> https://localhost:$PORT"
+    echo "  Certs extracted to: $CERT_DIR"
+    echo ""
+    echo "  To register this gateway, run:"
+    echo "    openshell gateway add --name $GW_NAME --local https://localhost:$PORT"
+  fi
+
+  # Verify the gateway port-forward is reachable (avoid openshell commands that
+  # trigger OIDC browser login during automated setup).
+  if curl -sk --max-time 3 "https://localhost:$PORT" >/dev/null 2>&1; then
+    echo "  ✓ Gateway $GW_NAME is reachable on port $PORT"
+  else
+    echo "  ✗ Gateway $GW_NAME not reachable on port $PORT — check gateway pod logs:"
     echo "    kubectl logs -l app.kubernetes.io/instance=openshell-gateway -n $NS"
   fi
 
@@ -153,7 +188,7 @@ echo ""
 
 echo "=== Gateway CLI Setup Complete ==="
 echo ""
-echo "Registered gateways:"
+echo "Gateways (port-forwards active, register manually with commands above):"
 for i in "${!NAMESPACES[@]}"; do
   if [ "$i" -lt "${#GW_PORTS[@]}" ]; then
     echo "  ${NAMESPACES[$i]} -> localhost:${GW_PORTS[$i]}"

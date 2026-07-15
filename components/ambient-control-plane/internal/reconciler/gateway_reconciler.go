@@ -198,6 +198,18 @@ func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient 
 		Config:         gw.Config,
 	}
 
+	if gw.Oidc != nil && gw.Oidc.Issuer != "" {
+		gwConfig.Oidc = &gateway.OidcConfig{
+			Issuer:      gw.Oidc.Issuer,
+			Audience:    gw.Oidc.Audience,
+			JwksTtl:     gw.Oidc.JwksTtl,
+			RolesClaim:  gw.Oidc.RolesClaim,
+			AdminRole:   gw.Oidc.AdminRole,
+			UserRole:    gw.Oidc.UserRole,
+			ScopesClaim: gw.Oidc.ScopesClaim,
+		}
+	}
+
 	if err := gateway.ValidateGatewayConfig(gwConfig); err != nil {
 		r.logger.Warn().Err(err).
 			Str("gateway_name", gw.Name).

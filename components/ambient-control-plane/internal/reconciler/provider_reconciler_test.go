@@ -37,6 +37,7 @@ type mockGateway struct {
 	configureProviderRefreshFn func(ctx context.Context, namespace string, req *pb.ConfigureProviderRefreshRequest) (*pb.ConfigureProviderRefreshResponse, error)
 	rotateProviderCredentialFn func(ctx context.Context, namespace string, req *pb.RotateProviderCredentialRequest) (*pb.RotateProviderCredentialResponse, error)
 	execSandboxFn              func(ctx context.Context, namespace string, req *pb.ExecSandboxRequest) (*openshell.ExecResult, error)
+	execSandboxStreamingFn     func(ctx context.Context, namespace string, req *pb.ExecSandboxRequest) error
 }
 
 func (m *mockGateway) CreateSandbox(_ context.Context, _ string, _ *pb.CreateSandboxRequest) (*pb.SandboxResponse, error) {
@@ -93,7 +94,10 @@ func (m *mockGateway) ExecSandbox(ctx context.Context, namespace string, req *pb
 	return &openshell.ExecResult{}, nil
 }
 
-func (m *mockGateway) ExecSandboxStreaming(_ context.Context, _ string, _ *pb.ExecSandboxRequest) error {
+func (m *mockGateway) ExecSandboxStreaming(ctx context.Context, namespace string, req *pb.ExecSandboxRequest) error {
+	if m.execSandboxStreamingFn != nil {
+		return m.execSandboxStreamingFn(ctx, namespace, req)
+	}
 	return nil
 }
 

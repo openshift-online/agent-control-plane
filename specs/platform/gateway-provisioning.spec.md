@@ -48,6 +48,16 @@ Kubernetes (StatefulSet, Service, RBAC, certgen Job, NetworkPolicy)
 
 **Project = Namespace.** The ProjectReconciler already creates a Kubernetes namespace for each Project via `ensureNamespace()`. A Gateway resource references a Project by name. When the GatewayReconciler processes a Gateway event, the target namespace already exists because the ProjectReconciler runs first in the reconciler chain.
 
+### Relationship to Clusters (Multi-Cluster)
+
+A Gateway resource carries an optional `cluster_id` FK that targets a specific registered Cluster. When `cluster_id` is null, the gateway is deployed on the local cluster (backward compatible). When set, the GatewayReconciler obtains the target cluster's `KubeClient` from the `ClusterClientPool` and deploys gateway K8s resources on that cluster.
+
+This enables dedicated gateway clusters — clusters with `role=gateway` that host nothing but OpenShell gateways, while session workloads run on separate `role=workload` clusters. The GatewayReconciler is responsible for:
+
+1. Deploying gateway K8s resources (StatefulSet, Service, RBAC, certgen Job) on the target cluster
+2. Creating an externally reachable endpoint (LoadBalancer Service or Ingress/Route) when the gateway serves workloads on a different cluster
+3. Storing the external endpoint URL in the Gateway's `annotations` (`ambient-code.io/gateway-external-url`) for cross-cluster discovery by the `GatewayClient`
+
 ### Relationship to ApplicationReconciler
 
 The ApplicationReconciler performs GitOps continuous sync from git repositories. It uses the shared kustomize library to render manifests, which may include `kind: Gateway` documents. The sync engine applies Gateway resources to the API server just like any other kind. The GatewayReconciler then reconciles them into Kubernetes.
@@ -67,6 +77,7 @@ Gateway SHALL be a first-class ACP resource kind, persisted in PostgreSQL and ex
   kind: Gateway
   name: openshell-gateway
   project: tenant-a
+  cluster: us-east-gw-1
   image: ghcr.io/nvidia/openshell:v0.0.70
   serverDnsNames:
     - openshell-gateway.tenant-a.svc.cluster.local
@@ -401,6 +412,38 @@ The gateway StatefulSet SHALL specify:
 - WHEN the GatewayReconciler reconciles again
 - THEN it SHALL apply the latest configuration using SSA or equivalent
 - AND it SHALL NOT create duplicate resources
+
+---
+
+### Requirement: Cross-Cluster Gateway Exposure
+
+When a Gateway is deployed on a cluster different from where sessions run, the GatewayReconciler SHALL create an externally reachable Service to enable cross-cluster gRPC connectivity.
+
+#### Scenario: Gateway on dedicated gateway cluster
+
+- GIVEN a Gateway resource with `cluster_id` set to a `role=gateway` cluster
+- AND sessions will run on `role=workload` clusters
+- WHEN the GatewayReconciler reconciles the Gateway
+- THEN it SHALL deploy gateway K8s resources on the target cluster using the `ClusterClientPool`
+- AND it SHALL create a `LoadBalancer` Service (or Ingress/Route, depending on cluster capabilities) exposing the gateway's gRPC port externally
+- AND it SHALL store the external endpoint URL in the Gateway's `annotations` as `ambient-code.io/gateway-external-url`
+- AND the annotation SHALL be written to the API server (PostgreSQL), not just to the Kubernetes resource
+
+#### Scenario: Gateway on local cluster (backward compatible)
+
+- GIVEN a Gateway resource with `cluster_id` null
+- WHEN the GatewayReconciler reconciles the Gateway
+- THEN it SHALL deploy gateway K8s resources on the local cluster
+- AND it SHALL NOT create an external Service (intra-cluster DNS is sufficient)
+- AND the `ambient-code.io/gateway-external-url` annotation SHALL NOT be set
+
+#### Scenario: Namespace provisioning on remote cluster
+
+- GIVEN a Gateway targets a remote cluster via `cluster_id`
+- AND the project namespace does not yet exist on that cluster
+- WHEN the GatewayReconciler processes the Gateway event
+- THEN it SHALL create the namespace on the remote cluster using the `ClusterClientPool`
+- AND it SHALL apply the same managed labels as the local ProjectReconciler (`ambient-code.io/managed=true`, etc.)
 
 ---
 

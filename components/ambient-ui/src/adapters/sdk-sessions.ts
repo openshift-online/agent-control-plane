@@ -36,6 +36,7 @@ function mapDomainCreateToSdk(request: DomainSessionCreateRequest): SessionCreat
   if (request.temperature !== undefined) sdkReq.llm_temperature = request.temperature
   if (request.maxTokens !== undefined) sdkReq.llm_max_tokens = request.maxTokens
   if (request.timeout !== undefined) sdkReq.timeout = request.timeout
+  if (request.stopOnRunFinished !== undefined) sdkReq.stop_on_run_finished = request.stopOnRunFinished
   if (request.annotations) sdkReq.annotations = JSON.stringify(request.annotations)
   return sdkReq
 }

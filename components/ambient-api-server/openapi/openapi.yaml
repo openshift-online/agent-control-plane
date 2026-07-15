@@ -112,6 +112,14 @@ paths:
     $ref: 'openapi.gateways.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1gateways'
   /api/ambient/v1/projects/{id}/gateways/{gateway_id}:
     $ref: 'openapi.gateways.yaml#/paths/~1api~1ambient~1v1~1projects~1{id}~1gateways~1{gateway_id}'
+  /api/ambient/v1/clusters:
+    $ref: 'openapi.clusters.yaml#/paths/~1api~1ambient~1v1~1clusters'
+  /api/ambient/v1/clusters/{cluster_id}:
+    $ref: 'openapi.clusters.yaml#/paths/~1api~1ambient~1v1~1clusters~1{cluster_id}'
+  /api/ambient/v1/clusters/{cluster_id}/status:
+    $ref: 'openapi.clusters.yaml#/paths/~1api~1ambient~1v1~1clusters~1{cluster_id}~1status'
+  /api/ambient/v1/clusters/{cluster_id}/heartbeat:
+    $ref: 'openapi.clusters.yaml#/paths/~1api~1ambient~1v1~1clusters~1{cluster_id}~1heartbeat'
   # AUTO-ADD NEW PATHS
 components:
   securitySchemes:
@@ -301,6 +309,14 @@ components:
       $ref: 'openapi.gateways.yaml#/components/schemas/GatewayList'
     GatewayPatchRequest:
       $ref: 'openapi.gateways.yaml#/components/schemas/GatewayPatchRequest'
+    Cluster:
+      $ref: 'openapi.clusters.yaml#/components/schemas/Cluster'
+    ClusterList:
+      $ref: 'openapi.clusters.yaml#/components/schemas/ClusterList'
+    ClusterPatchRequest:
+      $ref: 'openapi.clusters.yaml#/components/schemas/ClusterPatchRequest'
+    ClusterStatusResponse:
+      $ref: 'openapi.clusters.yaml#/components/schemas/ClusterStatusResponse'
     # AUTO-ADD NEW SCHEMAS
   parameters:
     id:

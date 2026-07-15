@@ -20,12 +20,13 @@ var _ MappedNullable = &GatewayPatchRequest{}
 
 // GatewayPatchRequest struct for GatewayPatchRequest
 type GatewayPatchRequest struct {
-	Name           *string  `json:"name,omitempty"`
-	Image          *string  `json:"image,omitempty"`
-	ServerDnsNames []string `json:"server_dns_names,omitempty"`
-	Config         *string  `json:"config,omitempty"`
-	Labels         *string  `json:"labels,omitempty"`
-	Annotations    *string  `json:"annotations,omitempty"`
+	Name           *string      `json:"name,omitempty"`
+	Image          *string      `json:"image,omitempty"`
+	ServerDnsNames []string     `json:"server_dns_names,omitempty"`
+	Config         *string      `json:"config,omitempty"`
+	Labels         *string      `json:"labels,omitempty"`
+	Annotations    *string      `json:"annotations,omitempty"`
+	Oidc           *GatewayOidc `json:"oidc,omitempty"`
 }
 
 // NewGatewayPatchRequest instantiates a new GatewayPatchRequest object
@@ -237,6 +238,38 @@ func (o *GatewayPatchRequest) SetAnnotations(v string) {
 	o.Annotations = &v
 }
 
+// GetOidc returns the Oidc field value if set, zero value otherwise.
+func (o *GatewayPatchRequest) GetOidc() GatewayOidc {
+	if o == nil || IsNil(o.Oidc) {
+		var ret GatewayOidc
+		return ret
+	}
+	return *o.Oidc
+}
+
+// GetOidcOk returns a tuple with the Oidc field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *GatewayPatchRequest) GetOidcOk() (*GatewayOidc, bool) {
+	if o == nil || IsNil(o.Oidc) {
+		return nil, false
+	}
+	return o.Oidc, true
+}
+
+// HasOidc returns a boolean if a field has been set.
+func (o *GatewayPatchRequest) HasOidc() bool {
+	if o != nil && !IsNil(o.Oidc) {
+		return true
+	}
+
+	return false
+}
+
+// SetOidc gets a reference to the given GatewayOidc and assigns it to the Oidc field.
+func (o *GatewayPatchRequest) SetOidc(v GatewayOidc) {
+	o.Oidc = &v
+}
+
 func (o GatewayPatchRequest) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -264,6 +297,9 @@ func (o GatewayPatchRequest) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Annotations) {
 		toSerialize["annotations"] = o.Annotations
+	}
+	if !IsNil(o.Oidc) {
+		toSerialize["oidc"] = o.Oidc
 	}
 	return toSerialize, nil
 }

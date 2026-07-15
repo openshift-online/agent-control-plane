@@ -108,7 +108,7 @@ export function ChatTab({ session }: { session: DomainSession }) {
         {/* Header with pop-out button */}
         <div className="flex items-center justify-between border-b px-4 py-2">
           <div className="flex items-center gap-2">
-            {isAtBottom && chatItemCount > 0 && <LiveIndicator />}
+            {chatItemCount > 0 && <LiveIndicator isLive={session.phase === 'Running'} />}
           </div>
           <Button
             variant="ghost"

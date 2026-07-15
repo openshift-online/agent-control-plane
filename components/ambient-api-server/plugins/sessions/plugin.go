@@ -217,4 +217,6 @@ func init() {
 	db.RegisterMigration(scheduledSessionLinkMigration())
 	db.RegisterMigration(sessionEventsMigration())
 	db.RegisterMigration(sandboxSnapshotMigration())
+	db.RegisterMigration(stopOnRunFinishedMigration())
+	db.RegisterMigration(clusterPlacementMigration())
 }

@@ -117,12 +117,12 @@ Benchmark notes:
 - Developer: `developer` / `developer` (ambient-users group)
 - Admin: `admin` / `admin` (ambient-users, ambient-admins groups)
 
-**Access URLs** (ports assigned per worktree/branch via `CLUSTER_SLUG`):
-- Frontend: `http://localhost:$KIND_FWD_AMBIENT_UI_PORT`
-- Keycloak admin: `http://localhost:$KIND_FWD_KEYCLOAK_PORT` (admin/admin)
-- API Server: `http://localhost:$KIND_FWD_API_SERVER_PORT`
+**Access URLs** (fixed ports, overridable via Make variables):
+- Frontend: `http://localhost:14080`
+- Keycloak admin: `http://localhost:11880` (admin/admin)
+- API Server: `http://localhost:13080`
 
-Run `make kind-status` to see your assigned ports.
+Run `make kind-status` to see ports.
 
 **How it works:**
 - `scripts/setup-kind-sso.sh` runs during `kind-up` to patch `sso-credentials` secret with port-specific URLs

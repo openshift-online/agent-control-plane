@@ -123,6 +123,63 @@
       ]
     },
     {
+      "clientId": "openshell-cli",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "redirectUris": [
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "fullScopeAllowed": true,
+      "defaultClientScopes": [
+        "openid",
+        "email",
+        "profile"
+      ],
+      "protocolMappers": [
+        {
+          "name": "audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "openshell-cli",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
       "clientId": "ambient-e2e",
       "enabled": true,
       "protocol": "openid-connect",
@@ -301,6 +358,18 @@
       ]
     }
   ],
+  "roles": {
+    "realm": [
+      {
+        "name": "openshell-admin",
+        "description": "OpenShell gateway administrator role"
+      },
+      {
+        "name": "openshell-user",
+        "description": "OpenShell gateway standard user role"
+      }
+    ]
+  },
   "users": [
     {
       "username": "developer",
@@ -318,6 +387,9 @@
       ],
       "groups": [
         "/ambient-users"
+      ],
+      "realmRoles": [
+        "openshell-user"
       ]
     },
     {
@@ -337,6 +409,9 @@
       "groups": [
         "/ambient-users",
         "/ambient-admins"
+      ],
+      "realmRoles": [
+        "openshell-admin"
       ]
     }
   ],

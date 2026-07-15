@@ -55,7 +55,9 @@ Performs an initial list+watch sync at startup. Converts proto events to SDK typ
 
 #### `internal/reconciler/kube_reconciler.go` — KubeReconciler
 
-Handles `session ADDED` and `session MODIFIED (phase=Pending)` events by provisioning:
+Handles `session ADDED` and `session MODIFIED (phase=Pending)` events by provisioning resources on the target cluster. The reconciler resolves the target cluster from `Session.cluster_id` (set by PlacementStrategy at ignite time) and obtains the appropriate `KubeClient` from the `ClusterClientPool`. When `Session.cluster_id` is null, the local cluster client is used (backward compatible).
+
+Provisions:
 
 1. Namespace (named `{project_id}`)
 2. K8s Secret with `BOT_TOKEN` (the runner's api-server credential)
@@ -75,6 +77,18 @@ Watches Project events via gRPC informer. Creates Kubernetes namespaces for each
 
 Watches Gateway resource events via gRPC informer. Reconciles `kind: Gateway` API resources into Kubernetes gateway deployments (StatefulSet, Service, RBAC, certgen Job, NetworkPolicy) in the project namespace. Replaces the previous ConfigMap-based `internal/gateway/` package. Reuses manifest templating from `internal/gateway/manifests.go` and validation from `internal/gateway/validation.go`. See [gateway-provisioning.spec.md](./gateway-provisioning.spec.md) for the full specification.
 
+#### `internal/reconciler/cluster_reconciler.go` — ClusterReconciler
+
+Watches Cluster resource events via gRPC informer. Maintains the `ClusterClientPool` — a map of `cluster_id → *KubeClient` with lazy initialization. When a Cluster is added or modified, the reconciler parses the stored kubeconfig and creates (or replaces) the corresponding `KubeClient`. When a Cluster is deleted, the reconciler closes and evicts the client. The local cluster client (`_local`) is always present and initialized from the control plane's own kubeconfig.
+
+#### `internal/placement/strategy.go` — PlacementStrategy
+
+Interface that determines which cluster a session runs on. Invoked by the ignite handler at session creation time. The default `RoundRobinPlacement` implementation cycles through `Ready` clusters matching the required role, filtered by label selectors from the Agent or Project. See [data-model.spec.md § PlacementStrategy](./data-model.spec.md#placementstrategy--session-to-cluster-scheduling).
+
+#### `internal/reconciler/cluster_health_syncer.go` — ClusterHealthSyncer
+
+Periodic health checker that probes each registered cluster's API server on a configurable interval (default 30s). Updates `Cluster.status`, `status_message`, `capacity`, and `last_heartbeat_at` via `sdk.Clusters().UpdateStatus()`. Runs alongside the existing `PodStatusSyncer`.
+
 #### `internal/reconciler/application_reconciler.go` — ApplicationReconciler
 
 Git-based GitOps reconciler that syncs agent fleet definitions from git repositories. Uses the shared kustomize library (extracted from `acpctl apply`) to render manifests. Supports `kind: Gateway` documents in rendered manifests, applying them to the API server alongside Project, Agent, Credential, and RoleBinding resources.
@@ -86,6 +100,10 @@ Mints and caches per-project SDK clients. Each project uses the same bearer toke
 #### `internal/kubeclient/kubeclient.go` — KubeClient
 
 Thin wrapper over `k8s.io/client-go` dynamic client. Provides typed `Create/Get/Delete` methods for Pod, Service, Secret, ServiceAccount, Namespace, RoleBinding. Eliminates raw unstructured map construction from reconciler code.
+
+#### `internal/kubeclient/cluster_client_pool.go` — ClusterClientPool
+
+Manages a map of `cluster_id → *KubeClient`. The local cluster is always present under the sentinel key `_local`. Remote clusters are added/removed by the ClusterReconciler when Cluster resources change. The pool provides `ClientForCluster(clusterID string) (*KubeClient, error)` — the reconciler calls this instead of using `r.kube` or `r.nsKube()` directly. When `clusterID` is empty or `_local`, the local cluster client is returned.
 
 ### Pod Provisioning
 

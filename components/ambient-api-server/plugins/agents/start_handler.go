@@ -92,87 +92,91 @@ func (h *startHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg := &handlers.HandlerConfig{
-		Action: func() (interface{}, *pkgerrors.ServiceError) {
-			unread, inboxErr := h.inbox.UnreadByAgentID(ctx, agentID)
-			if inboxErr != nil {
-				return nil, inboxErr
-			}
-
-			var requestPrompt *string
-			var body struct {
-				Prompt string `json:"prompt"`
-			}
-			if r.ContentLength > 0 {
-				if decErr := json.NewDecoder(r.Body).Decode(&body); decErr == nil && body.Prompt != "" {
-					requestPrompt = &body.Prompt
-				}
-			}
-
-			sess := &sessions.Session{
-				Name:      fmt.Sprintf("%s-%d", agent.Name, time.Now().Unix()),
-				Prompt:    requestPrompt,
-				ProjectId: &agent.ProjectId,
-				AgentId:   &agentID,
-			}
-
-			username := auth.GetUsernameFromContext(ctx)
-			if username != "" {
-				sess.CreatedByUserId = &username
-			}
-
-			created, sessErr := h.session.Create(ctx, sess)
-			if sessErr != nil {
-				return nil, sessErr
-			}
-
-			for _, msg := range unread {
-				read := true
-				msgCopy := *msg
-				msgCopy.Read = &read
-				if _, replErr := h.inbox.Replace(ctx, &msgCopy); replErr != nil {
-					glog.Warningf("Start agent %s: mark inbox message %s read: %v", agentID, msg.ID, replErr)
-				}
-			}
-
-			peers, peersErr := h.agent.AllByProjectID(ctx, agent.ProjectId)
-			if peersErr != nil {
-				return nil, peersErr
-			}
-
-			var projectPrompt *string
-			if h.project != nil {
-				if pp, ppErr := h.project.GetPrompt(ctx, agent.ProjectId); ppErr == nil {
-					projectPrompt = pp
-				}
-			}
-
-			prompt := buildStartPrompt(agent, peers, unread, projectPrompt, requestPrompt)
-
-			if prompt != "" {
-				if _, pushErr := h.msg.Push(ctx, created.ID, "user", prompt); pushErr != nil {
-					glog.Errorf("Start agent %s: store start prompt for session %s: %v", agentID, created.ID, pushErr)
-				}
-			}
-
-			agentCopy := *agent
-			agentCopy.CurrentSessionId = &created.ID
-			if _, replErr := h.agent.Replace(ctx, &agentCopy); replErr != nil {
-				return nil, replErr
-			}
-
-			if _, startErr := h.session.Start(ctx, created.ID); startErr != nil {
-				return nil, startErr
-			}
-
-			return &StartResponse{
-				Session:        sessions.PresentSession(created),
-				StartingPrompt: prompt,
-			}, nil
-		},
-		ErrorHandler: handlers.HandleError,
+	var requestPrompt *string
+	var body struct {
+		Prompt            string `json:"prompt"`
+		StopOnRunFinished *bool  `json:"stop_on_run_finished,omitempty"`
 	}
-	handlers.Handle(w, r, cfg, http.StatusCreated)
+	if r.ContentLength > 0 {
+		if decErr := json.NewDecoder(r.Body).Decode(&body); decErr == nil && body.Prompt != "" {
+			requestPrompt = &body.Prompt
+		}
+	}
+
+	unread, inboxErr := h.inbox.UnreadByAgentID(ctx, agentID)
+	if inboxErr != nil {
+		handlers.HandleError(ctx, w, inboxErr)
+		return
+	}
+
+	sess := &sessions.Session{
+		Name:              fmt.Sprintf("%s-%d", agent.Name, time.Now().Unix()),
+		Prompt:            requestPrompt,
+		ProjectId:         &agent.ProjectId,
+		AgentId:           &agentID,
+		StopOnRunFinished: body.StopOnRunFinished,
+	}
+
+	username := auth.GetUsernameFromContext(ctx)
+	if username != "" {
+		sess.CreatedByUserId = &username
+	}
+
+	created, sessErr := h.session.Create(ctx, sess)
+	if sessErr != nil {
+		handlers.HandleError(ctx, w, sessErr)
+		return
+	}
+
+	for _, msg := range unread {
+		read := true
+		msgCopy := *msg
+		msgCopy.Read = &read
+		if _, replErr := h.inbox.Replace(ctx, &msgCopy); replErr != nil {
+			glog.Warningf("Start agent %s: mark inbox message %s read: %v", agentID, msg.ID, replErr)
+		}
+	}
+
+	peers, peersErr := h.agent.AllByProjectID(ctx, agent.ProjectId)
+	if peersErr != nil {
+		handlers.HandleError(ctx, w, peersErr)
+		return
+	}
+
+	var projectPrompt *string
+	if h.project != nil {
+		if pp, ppErr := h.project.GetPrompt(ctx, agent.ProjectId); ppErr == nil {
+			projectPrompt = pp
+		}
+	}
+
+	prompt := buildStartPrompt(agent, peers, unread, projectPrompt, requestPrompt)
+
+	if prompt != "" {
+		if _, pushErr := h.msg.Push(ctx, created.ID, "user", prompt); pushErr != nil {
+			glog.Errorf("Start agent %s: store start prompt for session %s: %v", agentID, created.ID, pushErr)
+		}
+	}
+
+	agentCopy := *agent
+	agentCopy.CurrentSessionId = &created.ID
+	if _, replErr := h.agent.Replace(ctx, &agentCopy); replErr != nil {
+		handlers.HandleError(ctx, w, replErr)
+		return
+	}
+
+	if _, startErr := h.session.Start(ctx, created.ID); startErr != nil {
+		handlers.HandleError(ctx, w, startErr)
+		return
+	}
+
+	resp := &StartResponse{
+		Session:        sessions.PresentSession(created),
+		StartingPrompt: prompt,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *startHandler) StartPreview(w http.ResponseWriter, r *http.Request) {

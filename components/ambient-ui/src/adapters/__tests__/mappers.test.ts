@@ -45,6 +45,7 @@ function makeSdkSession(overrides: Partial<Session> = {}): Session {
     scheduled_for: '',
     sandbox_logs_snapshot: '',
     sandbox_policy_snapshot: '',
+    stop_on_run_finished: true,
     ...overrides,
   }
 }

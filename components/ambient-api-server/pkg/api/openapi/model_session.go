@@ -43,6 +43,8 @@ type Session struct {
 	ParentSessionId *string  `json:"parent_session_id,omitempty"`
 	// ID of the ScheduledSession that created this session.
 	SourceScheduledSessionId *string `json:"source_scheduled_session_id,omitempty"`
+	// Whether to stop the session when the run finishes
+	StopOnRunFinished *bool `json:"stop_on_run_finished,omitempty"`
 	// The cron tick time this session was created for.
 	ScheduledFor         *time.Time `json:"scheduled_for,omitempty"`
 	BotAccountName       *string    `json:"bot_account_name,omitempty"`
@@ -659,6 +661,38 @@ func (o *Session) HasSourceScheduledSessionId() bool {
 // SetSourceScheduledSessionId gets a reference to the given string and assigns it to the SourceScheduledSessionId field.
 func (o *Session) SetSourceScheduledSessionId(v string) {
 	o.SourceScheduledSessionId = &v
+}
+
+// GetStopOnRunFinished returns the StopOnRunFinished field value if set, zero value otherwise.
+func (o *Session) GetStopOnRunFinished() bool {
+	if o == nil || IsNil(o.StopOnRunFinished) {
+		var ret bool
+		return ret
+	}
+	return *o.StopOnRunFinished
+}
+
+// GetStopOnRunFinishedOk returns a tuple with the StopOnRunFinished field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetStopOnRunFinishedOk() (*bool, bool) {
+	if o == nil || IsNil(o.StopOnRunFinished) {
+		return nil, false
+	}
+	return o.StopOnRunFinished, true
+}
+
+// HasStopOnRunFinished returns a boolean if a field has been set.
+func (o *Session) HasStopOnRunFinished() bool {
+	if o != nil && !IsNil(o.StopOnRunFinished) {
+		return true
+	}
+
+	return false
+}
+
+// SetStopOnRunFinished gets a reference to the given bool and assigns it to the StopOnRunFinished field.
+func (o *Session) SetStopOnRunFinished(v bool) {
+	o.StopOnRunFinished = &v
 }
 
 // GetScheduledFor returns the ScheduledFor field value if set, zero value otherwise.
@@ -1426,6 +1460,9 @@ func (o Session) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.SourceScheduledSessionId) {
 		toSerialize["source_scheduled_session_id"] = o.SourceScheduledSessionId
+	}
+	if !IsNil(o.StopOnRunFinished) {
+		toSerialize["stop_on_run_finished"] = o.StopOnRunFinished
 	}
 	if !IsNil(o.ScheduledFor) {
 		toSerialize["scheduled_for"] = o.ScheduledFor

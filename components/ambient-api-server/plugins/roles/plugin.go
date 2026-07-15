@@ -84,4 +84,5 @@ func init() {
 	db.RegisterMigration(viewerRoleBindingReadMigration())
 	db.RegisterMigration(editorCredentialUnbindMigration())
 	db.RegisterMigration(providerGatewayPermissionsMigration())
+	db.RegisterMigration(clusterRolesMigration())
 }

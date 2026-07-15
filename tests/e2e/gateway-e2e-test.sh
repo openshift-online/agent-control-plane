@@ -15,9 +15,11 @@
 #   - TEST_TOKEN set or tests/cypress/.env.test present
 #
 # Usage:
-#   ./tests/e2e/gateway-e2e-test.sh [--skip-cleanup] [API_URL]
+#   ./tests/e2e/gateway-e2e-test.sh [--skip-cleanup] [--test PATTERN] [API_URL]
 #   API_URL defaults to http://localhost:13000
 #   --skip-cleanup  Retain created sessions for manual inspection
+#   --test NAME     Run only the test matching NAME (short underscore name)
+#                   Available: long_running, short_running, repo_payload, network_policy
 
 set -euo pipefail
 
@@ -27,11 +29,13 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 NAMESPACE="${NAMESPACE:-ambient-code}"
 TENANT="tenant-a"
 SKIP_CLEANUP=false
+TEST_FILTER=""
 
 # Parse flags
 while [[ "${1:-}" == --* ]]; do
   case "$1" in
     --skip-cleanup) SKIP_CLEANUP=true; shift ;;
+    --test) TEST_FILTER="${2:?--test requires a PATTERN argument}"; shift 2 ;;
     *) echo "Unknown flag: $1"; exit 1 ;;
   esac
 done
@@ -146,6 +150,31 @@ pass() { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
 fail() { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
 skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
 section() { echo ""; echo -e "${BOLD}$1${NC}"; }
+
+should_run_test() {
+  local name="$1"
+  [ -z "$TEST_FILTER" ] && return 0
+  [ "$TEST_FILTER" = "$name" ]
+}
+
+_delete_session() {
+  local sid="$1"
+  [ -z "$sid" ] && return 0
+  if [ "$SKIP_CLEANUP" = "true" ]; then return 0; fi
+  api DELETE "/api/ambient/v1/sessions/${sid}" >/dev/null 2>&1 && \
+    echo "  Deleted session ${sid}" || true
+  local pod="session-$(echo "${sid:0:40}" | tr '[:upper:]' '[:lower:]')"
+  for _i in $(seq 1 15); do
+    kubectl get pod "$pod" -n "$TENANT" &>/dev/null || break
+    sleep 2
+  done
+}
+
+_cleanup_sandboxes() {
+  if [ "$SKIP_CLEANUP" = "true" ]; then return 0; fi
+  openshell sandbox delete --all --gateway "$TENANT" >/dev/null 2>&1 && \
+    echo "  Cleaned up sandboxes on gateway ${TENANT}" || true
+}
 
 api() {
   local method="$1" path="$2"
@@ -365,7 +394,18 @@ else
   fail "agent-sandbox controller not ready"
 fi
 
-section "9. Start agent session"
+# Register the gateway with the openshell CLI early so _cleanup_sandboxes works
+# throughout the test. Section 13 will re-check and refresh if needed.
+if command -v openshell &>/dev/null; then
+  if _ensure_gateway_port_forward; then
+    pass "openshell CLI gateway '${TENANT}' registered"
+  else
+    skip "openshell CLI gateway registration" "will retry in section 13"
+  fi
+fi
+
+if should_run_test "long_running"; then
+section "9. Start agent session (long-running) [long_running]"
 
 START_RESP=$(api POST "/api/ambient/v1/projects/${PROJECT_ID}/agents/${AGENT_ID}/start" \
   -d '{"prompt": "gateway-e2e-test: say hello"}' || echo "")
@@ -544,7 +584,7 @@ else
   fail "Sandbox configuration verification — session not created"
 fi
 
-section "11. Mock LLM response verification via acpctl"
+section "11. Long-running session: LLM response and sandbox persistence"
 
 if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; then
   # Poll acpctl session messages until we see an assistant response (up to 180s).
@@ -610,16 +650,149 @@ if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; the
   else
     skip "Mock LLM echo content" "response text not found — may be in a different event format"
   fi
+
+  # 11d. Long-running session — sandbox remains alive after LLM response.
+  # When stop_on_run_finished is false (the default), the session stays Running
+  # and the sandbox pod stays up after the runner exec stream finishes.
+  # Poll every 10s for 2 minutes to confirm neither the session nor the sandbox
+  # is being torn down. A single check after a short sleep is unreliable because
+  # deprovisioning can take up to ~2 minutes to kick in.
+  LONGRUN_STABLE=true
+  LONGRUN_FAIL_REASON=""
+  for i in $(seq 1 12); do
+    sleep 10
+    LONGRUN_PHASE=$(api GET "/api/ambient/v1/sessions/${CREATED_SESSION_ID}" 2>/dev/null \
+      | jq -r '.phase // empty' 2>/dev/null || echo "")
+    LONGRUN_POD_PHASE=$(kubectl get pod "${SBX_NAME}" -n "$TENANT" \
+      -o jsonpath='{.status.phase}' 2>/dev/null || echo "gone")
+
+    if [ "$LONGRUN_PHASE" != "Running" ]; then
+      LONGRUN_STABLE=false
+      LONGRUN_FAIL_REASON="session phase changed to '${LONGRUN_PHASE}' after $((i * 10))s"
+      break
+    fi
+    if [ "$LONGRUN_POD_PHASE" != "Running" ]; then
+      LONGRUN_STABLE=false
+      LONGRUN_FAIL_REASON="sandbox pod phase changed to '${LONGRUN_POD_PHASE}' after $((i * 10))s"
+      break
+    fi
+  done
+
+  if [ "$LONGRUN_STABLE" = "true" ]; then
+    pass "Long-running session and sandbox remained Running for 120s after LLM response"
+  else
+    fail "Long-running sandbox was torn down: ${LONGRUN_FAIL_REASON}"
+  fi
 else
-  skip "Mock LLM response verification" "session not running or not created"
+  skip "Long-running session verification" "session not running or not created"
 fi
 
-section "12. Repository payload verification"
+_delete_session "$CREATED_SESSION_ID"
+_cleanup_sandboxes
+fi # end long_running
+
+if should_run_test "short_running"; then
+section "12. Short-running session lifecycle (stop_on_run_finished) [short_running]"
+
+# Start a new session with stop_on_run_finished=true in the request body.
+# The flag must be set at creation time so the sandbox is provisioned with the
+# STOP_ON_RUN_FINISHED env var — PATCHing after start is too late because the
+# runner has already launched without the env var.
+
+SHORT_SESSION_ID=""
+SHORT_START_RESP=$(api POST "/api/ambient/v1/projects/${PROJECT_ID}/agents/${AGENT_ID}/start" \
+  -d '{"prompt": "gateway-e2e-test: short-running session", "stop_on_run_finished": true}' || echo "")
+
+SHORT_SESSION_ID=$(echo "$SHORT_START_RESP" \
+  | jq -r '.session.id // empty' 2>/dev/null || echo "")
+
+if [ -n "$SHORT_SESSION_ID" ]; then
+  pass "Short-running session started (id: ${SHORT_SESSION_ID})"
+
+  # Verify the flag was persisted on the session
+  SHORT_SESSION_RESP=$(api GET "/api/ambient/v1/sessions/${SHORT_SESSION_ID}" || echo "")
+  SHORT_FLAG=$(echo "$SHORT_SESSION_RESP" | jq -r '.stop_on_run_finished // empty' 2>/dev/null || echo "")
+  if [ "$SHORT_FLAG" = "true" ]; then
+    pass "stop_on_run_finished set to true at creation"
+  else
+    fail "stop_on_run_finished not set on session (got: '${SHORT_FLAG}')"
+  fi
+
+  SHORT_SBX_NAME="session-$(echo "${SHORT_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
+
+  # Wait for LLM response (same polling as long-running)
+  SHORT_LLM_FOUND=0
+  for i in $(seq 1 90); do
+    SHORT_MESSAGES=$($ACPCTL session messages "$SHORT_SESSION_ID" -o json 2>/dev/null || echo "[]")
+    SHORT_LLM_FOUND=$(echo "$SHORT_MESSAGES" \
+      | jq -r '[.[] | select(.event_type == "assistant" or .event_type == "TEXT_MESSAGE_CONTENT" or .event_type == "MESSAGES_SNAPSHOT")] | length' 2>/dev/null || echo "0")
+    if [ "${SHORT_LLM_FOUND}" -gt 0 ]; then
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "${SHORT_LLM_FOUND}" -gt 0 ]; then
+    pass "Short-running session received LLM response"
+  else
+    fail "Short-running session did not receive LLM response after 180s"
+  fi
+
+  # After the runner finishes with stop_on_run_finished=true, the control plane
+  # marks the session as Completed and deprovisions the sandbox.
+  SHORT_COMPLETED=false
+  for i in $(seq 1 60); do
+    SHORT_PHASE=$(api GET "/api/ambient/v1/sessions/${SHORT_SESSION_ID}" 2>/dev/null \
+      | jq -r '.phase // empty' 2>/dev/null || echo "")
+    if [ "$SHORT_PHASE" = "Completed" ] || [ "$SHORT_PHASE" = "Succeeded" ]; then
+      SHORT_COMPLETED=true
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$SHORT_COMPLETED" = "true" ]; then
+    pass "Short-running session transitioned to ${SHORT_PHASE}"
+  else
+    fail "Short-running session phase is '${SHORT_PHASE}' (expected Completed)"
+  fi
+
+  # Verify sandbox pod is terminated after session completion (up to 120s).
+  # The sandbox controller may take up to ~2 minutes to fully deprovision.
+  SHORT_SBX_GONE=false
+  for i in $(seq 1 60); do
+    SHORT_POD_PHASE=$(kubectl get pod "$SHORT_SBX_NAME" -n "$TENANT" \
+      -o jsonpath='{.status.phase}' 2>/dev/null || echo "gone")
+    if [ "$SHORT_POD_PHASE" = "gone" ] || [ "$SHORT_POD_PHASE" = "Succeeded" ] || [ "$SHORT_POD_PHASE" = "Failed" ]; then
+      SHORT_SBX_GONE=true
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$SHORT_SBX_GONE" = "true" ]; then
+    pass "Short-running sandbox terminated after session completion"
+  else
+    fail "Short-running sandbox pod still running (phase: ${SHORT_POD_PHASE})"
+  fi
+else
+  fail "Failed to start short-running session"
+  echo "  Response: $(echo "$SHORT_START_RESP" | head -c 200)"
+fi
+
+_delete_session "$SHORT_SESSION_ID"
+_cleanup_sandboxes
+fi # end short_running
+
+if should_run_test "repo_payload"; then
+section "13. Repository payload verification [repo_payload]"
 
 REPO_SESSION_ID=""
 skip "Repo payload verification" "vertex provider not available in CI"
+fi # end repo_payload
 
-section "13. Network policy enforcement"
+if should_run_test "network_policy"; then
+section "14. Network policy enforcement [network_policy]"
 
 LOCKED_SESSION_ID=""
 PERM_SESSION_ID=""
@@ -630,6 +803,31 @@ if ! _ensure_gateway_port_forward; then
   fail "Gateway port-forward could not be established — openshell CLI missing or gateway unreachable"
   echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
   exit 1
+fi
+
+# Wait for gateway pod to be fully ready — the reconciler may have restarted
+# the StatefulSet during sections 9-11 (DNS or config change detection).
+GW_READY_FOR_NET=false
+for _i in $(seq 1 30); do
+  _gw_phase=$(kubectl get pod openshell-gateway-0 -n "$TENANT" \
+    -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+  _gw_ready=$(kubectl get pod openshell-gateway-0 -n "$TENANT" \
+    -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || echo "")
+  if [ "$_gw_phase" = "Running" ] && [ "$_gw_ready" = "true" ]; then
+    GW_READY_FOR_NET=true
+    break
+  fi
+  sleep 2
+done
+
+if [ "$GW_READY_FOR_NET" = "true" ]; then
+  pass "Gateway pod ready for network policy tests"
+  # Re-establish port-forward if gateway restarted (old PF would be stale)
+  if ! openshell sandbox list --gateway "${TENANT}" &>/dev/null 2>&1; then
+    _ensure_gateway_port_forward || true
+  fi
+else
+  fail "Gateway pod not ready after 60s — network tests may fail"
 fi
 
 # Policies were already applied in section 6; only the test-specific agents
@@ -715,6 +913,21 @@ else
   fail "Agent 'network-test-locked-down' not found after apply"
 fi
 
+_delete_session "$LOCKED_SESSION_ID"
+_cleanup_sandboxes
+
+# Brief gateway readiness check — cleanup may coincide with a reconciler restart
+for _i in $(seq 1 15); do
+  _gw_ready=$(kubectl get pod openshell-gateway-0 -n "$TENANT" \
+    -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || echo "")
+  [ "$_gw_ready" = "true" ] && break
+  sleep 2
+done
+# Re-check CLI connectivity after potential gateway restart
+if ! openshell sandbox list --gateway "${TENANT}" &>/dev/null 2>&1; then
+  _ensure_gateway_port_forward || true
+fi
+
 # Verify permissive policy allows external network access.
 # Start a dedicated permissive session and curl update.code.visualstudio.com
 # via the sandbox proxy. The request should succeed (not return policy_denied).
@@ -792,11 +1005,15 @@ else
   fail "Agent 'network-test-permissive' not found after apply"
 fi
 
+_delete_session "$PERM_SESSION_ID"
+_cleanup_sandboxes
+fi # end network_policy
+
 section "Cleanup"
 
 if [ "$SKIP_CLEANUP" = "true" ]; then
   echo -e "  ${YELLOW}Skipping cleanup (--skip-cleanup)${NC}"
-  for _sid in "$CREATED_SESSION_ID" "$REPO_SESSION_ID" "$LOCKED_SESSION_ID" "${PERM_SESSION_ID:-}"; do
+  for _sid in "$CREATED_SESSION_ID" "$REPO_SESSION_ID" "${SHORT_SESSION_ID:-}" "$LOCKED_SESSION_ID" "${PERM_SESSION_ID:-}"; do
     [ -z "$_sid" ] && continue
     _pod="session-$(echo "${_sid:0:40}" | tr '[:upper:]' '[:lower:]')"
     _phase=$(kubectl get pod "$_pod" -n "$TENANT" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
@@ -807,26 +1024,12 @@ if [ "$SKIP_CLEANUP" = "true" ]; then
     fi
   done
 else
-  if [ -n "$CREATED_SESSION_ID" ]; then
-    api DELETE "/api/ambient/v1/sessions/${CREATED_SESSION_ID}" >/dev/null 2>&1 && \
-      echo "  Deleted session ${CREATED_SESSION_ID}" || \
-      echo "  Could not delete session (non-fatal)"
-  fi
-  if [ -n "$REPO_SESSION_ID" ]; then
-    api DELETE "/api/ambient/v1/sessions/${REPO_SESSION_ID}" >/dev/null 2>&1 && \
-      echo "  Deleted repo session ${REPO_SESSION_ID}" || \
-      echo "  Could not delete repo session (non-fatal)"
-  fi
-  if [ -n "$LOCKED_SESSION_ID" ]; then
-    api DELETE "/api/ambient/v1/sessions/${LOCKED_SESSION_ID}" >/dev/null 2>&1 && \
-      echo "  Deleted locked-down session ${LOCKED_SESSION_ID}" || \
-      echo "  Could not delete locked-down session (non-fatal)"
-  fi
-  if [ -n "${PERM_SESSION_ID:-}" ]; then
-    api DELETE "/api/ambient/v1/sessions/${PERM_SESSION_ID}" >/dev/null 2>&1 && \
-      echo "  Deleted permissive session ${PERM_SESSION_ID}" || \
-      echo "  Could not delete permissive session (non-fatal)"
-  fi
+  for _sid in "$CREATED_SESSION_ID" "$REPO_SESSION_ID" "${SHORT_SESSION_ID:-}" "$LOCKED_SESSION_ID" "${PERM_SESSION_ID:-}"; do
+    [ -z "$_sid" ] && continue
+    api DELETE "/api/ambient/v1/sessions/${_sid}" >/dev/null 2>&1 && \
+      echo "  Deleted session ${_sid}" || \
+      echo "  Could not delete session ${_sid} (non-fatal)"
+  done
 fi
 
 echo ""

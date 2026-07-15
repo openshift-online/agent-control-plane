@@ -2,6 +2,7 @@ package openshell
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -246,6 +247,34 @@ func TestAuthContext_ValidToken(t *testing.T) {
 	if len(vals) != 1 || vals[0] != "Bearer test-sa-token" {
 		t.Errorf("authorization = %v, want [Bearer test-sa-token]", vals)
 	}
+}
+
+func TestExecExitError(t *testing.T) {
+	t.Run("implements error interface", func(t *testing.T) {
+		var err error = &ExecExitError{Code: 42}
+		if err.Error() != "exec process exited with code 42" {
+			t.Errorf("unexpected message: %s", err.Error())
+		}
+	})
+
+	t.Run("errors.As unwraps ExecExitError", func(t *testing.T) {
+		wrapped := fmt.Errorf("outer: %w", &ExecExitError{Code: 1})
+		var exitErr *ExecExitError
+		if !errors.As(wrapped, &exitErr) {
+			t.Fatal("errors.As should find ExecExitError")
+		}
+		if exitErr.Code != 1 {
+			t.Errorf("exit code = %d, want 1", exitErr.Code)
+		}
+	})
+
+	t.Run("errors.As returns false for non-ExecExitError", func(t *testing.T) {
+		err := fmt.Errorf("not an exit error")
+		var exitErr *ExecExitError
+		if errors.As(err, &exitErr) {
+			t.Fatal("errors.As should return false for non-ExecExitError")
+		}
+	})
 }
 
 func TestAuthContext_MissingFile(t *testing.T) {

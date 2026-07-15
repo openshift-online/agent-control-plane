@@ -1,0 +1,314 @@
+openapi: 3.0.0
+info:
+  title: Ambient API Server — Clusters
+  version: "1.0.0"
+
+paths:
+  /api/ambient/v1/clusters:
+    get:
+      summary: List clusters
+      operationId: listClusters
+      parameters:
+        - $ref: 'openapi.yaml#/components/parameters/page'
+        - $ref: 'openapi.yaml#/components/parameters/size'
+        - $ref: 'openapi.yaml#/components/parameters/search'
+        - $ref: 'openapi.yaml#/components/parameters/orderBy'
+        - $ref: 'openapi.yaml#/components/parameters/fields'
+      responses:
+        '200':
+          description: A list of clusters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterList'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+      security:
+        - Bearer: []
+    post:
+      summary: Register a new cluster
+      operationId: registerCluster
+      requestBody:
+        description: Cluster data
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Cluster'
+        required: true
+      responses:
+        '201':
+          description: Cluster registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cluster'
+        '400':
+          description: Validation errors occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '401':
+          description: Auth token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '403':
+          description: Unauthorized to perform operation
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '409':
+          description: A cluster with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+      security:
+        - Bearer: []
+
+  /api/ambient/v1/clusters/{cluster_id}:
+    parameters:
+      - name: cluster_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get a cluster by ID
+      operationId: getCluster
+      responses:
+        '200':
+          description: Cluster found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cluster'
+        '404':
+          description: Cluster not found
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+      security:
+        - Bearer: []
+    patch:
+      summary: Update a cluster
+      operationId: updateCluster
+      requestBody:
+        description: Fields to update
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClusterPatchRequest'
+        required: true
+      responses:
+        '200':
+          description: Cluster updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cluster'
+        '400':
+          description: Validation errors occurred
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '404':
+          description: Cluster not found
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+      security:
+        - Bearer: []
+    delete:
+      summary: Deregister a cluster
+      operationId: deregisterCluster
+      responses:
+        '204':
+          description: Cluster deregistered successfully
+        '404':
+          description: Cluster not found
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+        '409':
+          description: Cluster has active sessions and cannot be deregistered
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+      security:
+        - Bearer: []
+
+  /api/ambient/v1/clusters/{cluster_id}/status:
+    parameters:
+      - name: cluster_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get cluster health status
+      operationId: getClusterStatus
+      responses:
+        '200':
+          description: Cluster status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterStatusResponse'
+        '404':
+          description: Cluster not found
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+      security:
+        - Bearer: []
+
+  /api/ambient/v1/clusters/{cluster_id}/heartbeat:
+    parameters:
+      - name: cluster_id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Trigger manual health check
+      operationId: heartbeatCluster
+      responses:
+        '200':
+          description: Heartbeat recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterStatusResponse'
+        '404':
+          description: Cluster not found
+          content:
+            application/json:
+              schema:
+                $ref: 'openapi.yaml#/components/schemas/Error'
+      security:
+        - Bearer: []
+
+components:
+  schemas:
+    Cluster:
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/ObjectReference'
+        - type: object
+          required:
+            - name
+            - api_server_url
+            - role
+          properties:
+            name:
+              type: string
+              description: Globally unique cluster name
+            description:
+              type: string
+              description: Free-text purpose description
+            api_server_url:
+              type: string
+              description: Kubernetes API server endpoint URL
+            credential_id:
+              type: string
+              description: FK to Credential(provider=kubeconfig); null for local cluster
+            role:
+              type: string
+              enum:
+                - gateway
+                - workload
+                - hybrid
+              description: Cluster scheduling role
+            status:
+              type: string
+              enum:
+                - Ready
+                - NotReady
+                - Unknown
+              readOnly: true
+              description: Health status (server-managed)
+            status_message:
+              type: string
+              readOnly: true
+              description: Human-readable status detail
+            labels:
+              type: string
+              description: JSONB placement selectors
+            annotations:
+              type: string
+              description: JSONB freeform metadata
+            capacity:
+              type: string
+              readOnly: true
+              description: JSONB reported node allocatable
+            last_heartbeat_at:
+              type: string
+              format: date-time
+              readOnly: true
+              description: Last successful health check timestamp
+
+    ClusterList:
+      allOf:
+        - $ref: 'openapi.yaml#/components/schemas/List'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Cluster'
+
+    ClusterPatchRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        api_server_url:
+          type: string
+        credential_id:
+          type: string
+        role:
+          type: string
+          enum:
+            - gateway
+            - workload
+            - hybrid
+        labels:
+          type: string
+        annotations:
+          type: string
+
+    ClusterStatusResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+        status_message:
+          type: string
+        capacity:
+          type: string
+        last_heartbeat_at:
+          type: string
+          format: date-time

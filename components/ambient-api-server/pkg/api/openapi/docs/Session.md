@@ -22,6 +22,7 @@ Name | Type | Description | Notes
 **LlmMaxTokens** | Pointer to **int32** |  | [optional] 
 **ParentSessionId** | Pointer to **string** |  | [optional] 
 **SourceScheduledSessionId** | Pointer to **string** | ID of the ScheduledSession that created this session. | [optional] [readonly] 
+**StopOnRunFinished** | Pointer to **bool** | Whether to stop the session when the run finishes | [optional] 
 **ScheduledFor** | Pointer to **time.Time** | The cron tick time this session was created for. | [optional] [readonly] 
 **BotAccountName** | Pointer to **string** |  | [optional] 
 **ResourceOverrides** | Pointer to **string** |  | [optional] 
@@ -508,6 +509,31 @@ SetSourceScheduledSessionId sets SourceScheduledSessionId field to given value.
 `func (o *Session) HasSourceScheduledSessionId() bool`
 
 HasSourceScheduledSessionId returns a boolean if a field has been set.
+
+### GetStopOnRunFinished
+
+`func (o *Session) GetStopOnRunFinished() bool`
+
+GetStopOnRunFinished returns the StopOnRunFinished field if non-nil, zero value otherwise.
+
+### GetStopOnRunFinishedOk
+
+`func (o *Session) GetStopOnRunFinishedOk() (*bool, bool)`
+
+GetStopOnRunFinishedOk returns a tuple with the StopOnRunFinished field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetStopOnRunFinished
+
+`func (o *Session) SetStopOnRunFinished(v bool)`
+
+SetStopOnRunFinished sets StopOnRunFinished field to given value.
+
+### HasStopOnRunFinished
+
+`func (o *Session) HasStopOnRunFinished() bool`
+
+HasStopOnRunFinished returns a boolean if a field has been set.
 
 ### GetScheduledFor
 

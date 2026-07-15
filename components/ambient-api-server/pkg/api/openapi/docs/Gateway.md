@@ -16,6 +16,7 @@ Name | Type | Description | Notes
 **Config** | Pointer to **string** | OpenShell gateway TOML configuration | [optional] 
 **Labels** | Pointer to **string** | JSON-encoded labels | [optional] 
 **Annotations** | Pointer to **string** | JSON-encoded annotations | [optional] 
+**Oidc** | Pointer to [**GatewayOidc**](GatewayOidc.md) |  | [optional] 
 
 ## Methods
 
@@ -320,6 +321,31 @@ SetAnnotations sets Annotations field to given value.
 `func (o *Gateway) HasAnnotations() bool`
 
 HasAnnotations returns a boolean if a field has been set.
+
+### GetOidc
+
+`func (o *Gateway) GetOidc() GatewayOidc`
+
+GetOidc returns the Oidc field if non-nil, zero value otherwise.
+
+### GetOidcOk
+
+`func (o *Gateway) GetOidcOk() (*GatewayOidc, bool)`
+
+GetOidcOk returns a tuple with the Oidc field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetOidc
+
+`func (o *Gateway) SetOidc(v GatewayOidc)`
+
+SetOidc sets Oidc field to given value.
+
+### HasOidc
+
+`func (o *Gateway) HasOidc() bool`
+
+HasOidc returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

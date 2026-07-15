@@ -76,5 +76,17 @@ func ValidateGatewayConfig(config GatewayConfig) error {
 		return fmt.Errorf("config contains null bytes")
 	}
 
+	// Validate OIDC config if provided
+	if config.Oidc != nil && config.Oidc.Issuer != "" {
+		if !strings.HasPrefix(config.Oidc.Issuer, "http://") && !strings.HasPrefix(config.Oidc.Issuer, "https://") {
+			return fmt.Errorf("oidc issuer must be an HTTP(S) URL: %q", config.Oidc.Issuer)
+		}
+		hasAdmin := config.Oidc.AdminRole != ""
+		hasUser := config.Oidc.UserRole != ""
+		if hasAdmin != hasUser {
+			return fmt.Errorf("oidc admin_role and user_role must both be set or both be empty")
+		}
+	}
+
 	return nil
 }

@@ -27,6 +27,13 @@ func ConvertGateway(gw openapi.Gateway) *Gateway {
 		}
 	}
 
+	if gw.Oidc != nil {
+		if raw, err := json.Marshal(gw.Oidc); err == nil {
+			s := string(raw)
+			c.Oidc = &s
+		}
+	}
+
 	if gw.CreatedAt != nil {
 		c.CreatedAt = *gw.CreatedAt
 		c.UpdatedAt = *gw.UpdatedAt
@@ -53,6 +60,13 @@ func PresentGateway(gw *Gateway) openapi.Gateway {
 		var dnsNames []string
 		if err := json.Unmarshal([]byte(*gw.ServerDnsNames), &dnsNames); err == nil {
 			result.ServerDnsNames = dnsNames
+		}
+	}
+
+	if gw.Oidc != nil {
+		var oidc openapi.GatewayOidc
+		if err := json.Unmarshal([]byte(*gw.Oidc), &oidc); err == nil {
+			result.Oidc = &oidc
 		}
 	}
 

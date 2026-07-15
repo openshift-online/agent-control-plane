@@ -161,6 +161,9 @@ jobs:
         }, open('/tmp/vertex.json', 'w'))
         " <<< "$RSA_KEY"
 
+    - name: Add Keycloak host entry for OIDC gateway auth
+      run: echo "127.0.0.1 keycloak-service.ambient-code.svc.cluster.local" | sudo tee -a /etc/hosts
+
     - name: Deploy using Makefile
       env:
         GOOGLE_APPLICATION_CREDENTIALS: /tmp/vertex.json
@@ -169,6 +172,7 @@ jobs:
       run: |
         echo "Using Makefile to deploy complete stack..."
         make kind-up CONTAINER_ENGINE=docker CI_MODE=true VERTEX_CRED=/tmp/vertex.json OPENSHELL_USE_GATEWAY=true \
+          OPENSHELL_TENANTS="tenant-a" \
           RUNNER_QUAY_TAG=${{ steps.image-override.outputs.runner_tag || 'latest' }}
 
     - name: Wait for deployments
@@ -207,10 +211,39 @@ jobs:
     - name: Run Gateway E2E tests
       run: |
         kubectl port-forward -n ambient-code svc/ambient-api-server 13592:8000 &
-        kubectl port-forward -n ambient-code svc/keycloak-service 18592:8080 &
+        kubectl port-forward -n ambient-code svc/keycloak-service 18592:11880 &
         sleep 3
 
+        # Wait for the gateway TLS secret — the certgen job may still be running
+        for i in $(seq 1 60); do
+          if kubectl get secret openshell-server-tls -n tenant-a &>/dev/null; then
+            echo "openshell-server-tls secret ready in tenant-a"
+            break
+          fi
+          echo "Waiting for openshell-server-tls secret in tenant-a... ($i/60)"
+          sleep 5
+        done
+
+        # Wait for gateway pod to be ready
+        kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=openshell-gateway \
+          -n tenant-a --timeout=120s || echo "Warning: gateway pod not ready after 120s"
+
         PF_DIR=/tmp/ambient-code ./scripts/setup-gateway-cli.sh tenant-a
+
+        # setup-gateway-cli.sh sets up port-forwards but no longer auto-registers
+        # gateways. Register the mTLS gateway so the e2e test can use it.
+        GW_PORT=$(cat /tmp/ambient-code/kind-pf-openshell-tenant-a.log | grep -oE 'Forwarding from 127\.0\.0\.1:[0-9]+' | grep -oE '[0-9]+$' | head -1)
+        if [ -n "$GW_PORT" ]; then
+          CERT_DIR="$HOME/.config/openshell/gateways/tenant-a/mtls"
+          openshell gateway add --name tenant-a --local "https://localhost:${GW_PORT}"
+          # Re-extract certs after registration (gateway add may overwrite them)
+          kubectl get secret openshell-server-tls -n tenant-a \
+            -o jsonpath='{.data.ca\.crt}' | base64 -d > "$CERT_DIR/ca.crt"
+          kubectl get secret openshell-server-tls -n tenant-a \
+            -o jsonpath='{.data.tls\.crt}' | base64 -d > "$CERT_DIR/tls.crt"
+          kubectl get secret openshell-server-tls -n tenant-a \
+            -o jsonpath='{.data.tls\.key}' | base64 -d > "$CERT_DIR/tls.key"
+        fi
 
         TEST_TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d) \
         API_URL=http://localhost:13592 \
@@ -223,12 +256,24 @@ jobs:
 
     - name: Run RBAC enforcement E2E tests
       run: |
+        fuser -k 13592/tcp 2>/dev/null || true
+        fuser -k 18592/tcp 2>/dev/null || true
+        kubectl port-forward -n ambient-code svc/ambient-api-server 13592:8000 &
+        kubectl port-forward -n ambient-code svc/keycloak-service 18592:11880 &
+        sleep 3
+
         API_URL=http://localhost:13592/api/ambient/v1 \
         KC_URL=http://localhost:18592 \
         bash tests/e2e/rbac_e2e_test.sh
 
     - name: Run Scheduled Sessions E2E tests
       run: |
+        fuser -k 13592/tcp 2>/dev/null || true
+        fuser -k 18592/tcp 2>/dev/null || true
+        kubectl port-forward -n ambient-code svc/ambient-api-server 13592:8000 &
+        kubectl port-forward -n ambient-code svc/keycloak-service 18592:11880 &
+        sleep 3
+
         API_URL=http://localhost:13592/api/ambient/v1 \
         KC_URL=http://localhost:18592 \
         bash tests/e2e/scheduled_sessions_e2e_test.sh

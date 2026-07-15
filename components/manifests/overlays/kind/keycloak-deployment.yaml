@@ -99,7 +99,7 @@ spec:
   selector:
     app: keycloak
   ports:
-    - port: 8080
+    - port: 11880
       targetPort: 8080
       protocol: TCP
       name: http

@@ -62,6 +62,7 @@ export type DomainSession = {
   kubeNamespace: string | null
   sandboxLogsSnapshot: SandboxLogEntry[] | null
   sandboxPolicySnapshot: SandboxPolicyResponse | null
+  stopOnRunFinished: boolean | null
 }
 
 export type DomainProject = {
@@ -177,6 +178,7 @@ export type DomainSessionCreateRequest = {
   temperature?: number
   maxTokens?: number
   timeout?: number
+  stopOnRunFinished?: boolean
   annotations?: Record<string, string>
 }
 

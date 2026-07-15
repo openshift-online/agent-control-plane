@@ -64,7 +64,19 @@ export function useLiveTail(messageCount: number): LiveTailState {
   return { scrollRef, sentinelRef, isAtBottom, newEventCount, scrollToBottom }
 }
 
-export function LiveIndicator() {
+export function LiveIndicator({ isLive = true }: { isLive?: boolean }) {
+  if (!isLive) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <span
+          className="h-2 w-2 rounded-full bg-muted-foreground"
+          aria-hidden="true"
+        />
+        Inactive
+      </span>
+    )
+  }
+
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
       <span

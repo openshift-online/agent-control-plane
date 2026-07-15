@@ -36,6 +36,7 @@ type SessionPatchRequest struct {
 	EnvironmentVariables *string  `json:"environment_variables,omitempty"`
 	Labels               *string  `json:"labels,omitempty"`
 	Annotations          *string  `json:"annotations,omitempty"`
+	StopOnRunFinished    *bool    `json:"stop_on_run_finished,omitempty"`
 }
 
 // NewSessionPatchRequest instantiates a new SessionPatchRequest object
@@ -567,6 +568,38 @@ func (o *SessionPatchRequest) SetAnnotations(v string) {
 	o.Annotations = &v
 }
 
+// GetStopOnRunFinished returns the StopOnRunFinished field value if set, zero value otherwise.
+func (o *SessionPatchRequest) GetStopOnRunFinished() bool {
+	if o == nil || IsNil(o.StopOnRunFinished) {
+		var ret bool
+		return ret
+	}
+	return *o.StopOnRunFinished
+}
+
+// GetStopOnRunFinishedOk returns a tuple with the StopOnRunFinished field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SessionPatchRequest) GetStopOnRunFinishedOk() (*bool, bool) {
+	if o == nil || IsNil(o.StopOnRunFinished) {
+		return nil, false
+	}
+	return o.StopOnRunFinished, true
+}
+
+// HasStopOnRunFinished returns a boolean if a field has been set.
+func (o *SessionPatchRequest) HasStopOnRunFinished() bool {
+	if o != nil && !IsNil(o.StopOnRunFinished) {
+		return true
+	}
+
+	return false
+}
+
+// SetStopOnRunFinished gets a reference to the given bool and assigns it to the StopOnRunFinished field.
+func (o *SessionPatchRequest) SetStopOnRunFinished(v bool) {
+	o.StopOnRunFinished = &v
+}
+
 func (o SessionPatchRequest) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -624,6 +657,9 @@ func (o SessionPatchRequest) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Annotations) {
 		toSerialize["annotations"] = o.Annotations
+	}
+	if !IsNil(o.StopOnRunFinished) {
+		toSerialize["stop_on_run_finished"] = o.StopOnRunFinished
 	}
 	return toSerialize, nil
 }

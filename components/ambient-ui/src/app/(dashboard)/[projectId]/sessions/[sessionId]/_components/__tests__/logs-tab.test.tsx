@@ -32,6 +32,7 @@ function makeSession(overrides: Partial<DomainSession> = {}): DomainSession {
     kubeNamespace: null,
     sandboxLogsSnapshot: null,
     sandboxPolicySnapshot: null,
+    stopOnRunFinished: null,
     ...overrides,
   }
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -285,12 +286,8 @@ func (r *SimpleKubeReconciler) Reconcile(ctx context.Context, event informer.Res
 			go r.deprovisionAsync(session, session.Phase)
 			return nil
 		case PhaseCompleted:
-			// FIXME(#223): Enable gateway sandbox cleanup once session lifecycle is ironed out.
-			// Merge back into the PhaseFailed case above to auto-delete the sandbox on completion.
-			if !r.cfg.OpenShellUseGateway {
-				go r.deprovisionAsync(session, session.Phase)
-				return nil
-			}
+			go r.deprovisionAsync(session, session.Phase)
+			return nil
 		}
 	case informer.EventDeleted:
 		return r.cleanupSession(ctx, session)
@@ -420,6 +417,13 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		}
 	}
 
+	stopOnRunFinished := true
+	if freshSession, fetchErr := sdk.Sessions().Get(ctx, session.ID); fetchErr != nil {
+		r.logger.Warn().Err(fetchErr).Str("session_id", session.ID).Msg("failed to fetch session for stop_on_run_finished; defaulting to true")
+	} else {
+		stopOnRunFinished = freshSession.StopOnRunFinished
+	}
+
 	namespace := r.provisioner.NamespaceName(project.Name)
 	sbxName := openshell.SandboxName(session.ID)
 
@@ -476,13 +480,17 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 			r.logger.Info().Str("session_id", session.ID).Str("sandbox", sbxName).Msg("execAfterReady already running for session; skipping duplicate")
 			return nil
 		}
-		go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads)
+		go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads, stopOnRunFinished)
 		r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 		return nil
 	}
 
 	env := r.buildSandboxEnv(ctx, session, project.Name, sdk, providerNames, hasMLflowProvider)
 	r.mergeAgentEnvironment(env, agent)
+
+	if stopOnRunFinished {
+		env["STOP_ON_RUN_FINISHED"] = "true"
+	}
 
 	for k, v := range env {
 		if strings.ContainsAny(v, "\n\r") {
@@ -551,7 +559,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		r.logger.Info().Str("session_id", session.ID).Str("sandbox", sbxName).Msg("execAfterReady already running for session; skipping duplicate")
 		return nil
 	}
-	go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads)
+	go r.execAfterReady(namespace, sbxName, session.ID, entrypoint, sdk, execEnv, payloads, stopOnRunFinished)
 
 	r.updateSessionPhaseWithNamespace(ctx, session, PhaseCreating, namespace)
 	return nil
@@ -756,7 +764,7 @@ func (r *SimpleKubeReconciler) sandboxReadinessTimeout() time.Duration {
 	return 600 * time.Second
 }
 
-func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string, sdk *sdkclient.Client, execEnv map[string]string, payloads []types.Payload) {
+func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID string, entrypoint []string, sdk *sdkclient.Client, execEnv map[string]string, payloads []types.Payload, stopOnRunFinished bool) {
 	defer r.releaseExec(sessionID)
 	timeout := r.sandboxReadinessTimeout()
 	pollCtx, pollCancel := context.WithTimeout(context.Background(), timeout)
@@ -1021,6 +1029,32 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 					break
 				}
 
+				var exitErr *openshell.ExecExitError
+				if errors.As(err, &exitErr) {
+					r.logger.Error().
+						Str("sandbox", sbxName).
+						Str("session_id", sessionID).
+						Int32("exit_code", exitErr.Code).
+						Msg("runner process exited with non-zero code")
+					failSession(fmt.Sprintf("runner process exited with code %d", exitErr.Code))
+					return
+				}
+
+				if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+					phase := "unknown"
+					checkCtx, checkCancel := context.WithTimeout(context.Background(), 5*time.Second)
+					if current, fetchErr := sdk.Sessions().Get(checkCtx, sessionID); fetchErr == nil {
+						phase = current.Phase
+					}
+					checkCancel()
+					r.logger.Info().
+						Str("sandbox", sbxName).
+						Str("session_id", sessionID).
+						Str("phase", phase).
+						Msg("sandbox not found during exec retry; exiting loop")
+					return
+				}
+
 				r.logger.Warn().Err(err).
 					Str("sandbox", sbxName).
 					Str("session_id", sessionID).
@@ -1039,13 +1073,33 @@ func (r *SimpleKubeReconciler) execAfterReady(namespace, sbxName, sessionID stri
 				}
 			}
 
-			// FIXME(#223): Mark session PhaseCompleted and set completion_time here once
-			// session lifecycle is ironed out. Currently left Running so the sandbox
-			// isn't orphaned (Completed triggers deprovision).
+			// Re-read stop_on_run_finished at decision time so a PATCH that arrives
+			// during the run is honoured (the value may have changed since provisioning started).
+			if freshSession, fetchErr := sdk.Sessions().Get(context.Background(), sessionID); fetchErr != nil {
+				r.logger.Warn().Err(fetchErr).Str("session_id", sessionID).Msg("failed to fetch session for stop_on_run_finished; using initial value")
+			} else {
+				stopOnRunFinished = freshSession.StopOnRunFinished
+			}
+
 			r.logger.Info().
 				Str("sandbox", sbxName).
 				Str("session_id", sessionID).
+				Bool("stop_on_run_finished", stopOnRunFinished).
 				Msg("runner exec stream finished")
+
+			if !stopOnRunFinished {
+				return
+			}
+
+			completeCtx, completeCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer completeCancel()
+			completionTime := time.Now()
+			if _, updateErr := sdk.Sessions().UpdateStatus(completeCtx, sessionID, map[string]interface{}{
+				"phase":           PhaseCompleted,
+				"completion_time": &completionTime,
+			}); updateErr != nil {
+				r.logger.Warn().Err(updateErr).Str("session_id", sessionID).Msg("failed to mark session completed")
+			}
 			return
 		}
 	}
@@ -1789,15 +1843,21 @@ func (r *SimpleKubeReconciler) deprovisionSessionSandbox(ctx context.Context, se
 		Str("sandbox", sbxName).
 		Msg("deprovisioning session via gateway")
 
-	r.finalSandboxSnapshot(ctx, session, namespace, sbxName)
+	snapCtx, snapCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	r.finalSandboxSnapshot(snapCtx, session, namespace, sbxName)
+	snapCancel()
 
-	if err := r.gateway.DeleteSandbox(ctx, namespace, sbxName); err != nil {
+	deleteCtx, deleteCancel := context.WithTimeout(context.Background(), 90*time.Second)
+	if err := r.gateway.DeleteSandbox(deleteCtx, namespace, sbxName); err != nil {
 		if st, ok := status.FromError(err); !ok || st.Code() != codes.NotFound {
 			r.logger.Warn().Err(err).Str("sandbox", sbxName).Msg("deleting sandbox")
 		}
 	}
+	deleteCancel()
 
-	r.updateSessionPhase(ctx, session, nextPhase)
+	phaseCtx, phaseCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	r.updateSessionPhase(phaseCtx, session, nextPhase)
+	phaseCancel()
 	return nil
 }
 
@@ -2811,7 +2871,9 @@ func (r *SimpleKubeReconciler) buildEnv(ctx context.Context, session types.Sessi
 	}
 	env = r.appendMLflowRuntimeEnv(env)
 
-	if session.SourceScheduledSessionID != "" {
+	if session.StopOnRunFinished {
+		env = append(env, envVar("STOP_ON_RUN_FINISHED", "true"))
+	} else if session.SourceScheduledSessionID != "" {
 		env = append(env, envVar("STOP_ON_RUN_FINISHED", "true"))
 	}
 

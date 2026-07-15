@@ -174,6 +174,7 @@ export function mapSdkSessionToDomain(sdk: Session): DomainSession {
     kubeNamespace: emptyToNull(sdk.kube_namespace),
     sandboxLogsSnapshot: parseJsonSnapshot<SandboxLogEntry[]>(sdk.sandbox_logs_snapshot),
     sandboxPolicySnapshot: parseJsonSnapshot<SandboxPolicyResponse>(sdk.sandbox_policy_snapshot),
+    stopOnRunFinished: sdk.stop_on_run_finished ?? null,
   }
 }
 

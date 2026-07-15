@@ -296,7 +296,7 @@ if [[ "$KC_CUR_HOSTNAME" != "$KC_WANT_HOSTNAME" ]]; then
         fuser -k "${KC_PORT}/tcp" 2>/dev/null || true
       fi
       sleep 1
-      kubectl port-forward -n "$NS" svc/keycloak-service "${KC_PORT}:8080" &>/dev/null &
+      kubectl port-forward -n "$NS" svc/keycloak-service "${KC_PORT}:11880" &>/dev/null &
       for _i in $(seq 1 15); do
         _s=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "${KC_URL}/realms/${KC_REALM}" 2>/dev/null || true)
         [[ "$_s" != "000" && -n "$_s" ]] && break
@@ -312,7 +312,12 @@ fi
 # 1. Fetch Keycloak JWKS and update the API server auth ConfigMap so the
 #    API server can validate JWTs signed by this Keycloak instance.
 echo "  Fetching Keycloak JWKS..."
-KC_JWKS=$(curl -sf "${KC_URL}/realms/${KC_REALM}/protocol/openid-connect/certs" || true)
+KC_JWKS=""
+for _jwks_try in $(seq 1 30); do
+  KC_JWKS=$(curl -sf "${KC_URL}/realms/${KC_REALM}/protocol/openid-connect/certs" || true)
+  [[ -n "$KC_JWKS" && "$KC_JWKS" != "null" ]] && break
+  sleep 2
+done
 if [[ -z "$KC_JWKS" || "$KC_JWKS" == "null" ]]; then
   echo "FATAL: Cannot fetch Keycloak JWKS from ${KC_URL}/realms/${KC_REALM}/protocol/openid-connect/certs"
   exit 1

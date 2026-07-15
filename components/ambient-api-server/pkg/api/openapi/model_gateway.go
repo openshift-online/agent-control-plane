@@ -41,7 +41,8 @@ type Gateway struct {
 	// JSON-encoded labels
 	Labels *string `json:"labels,omitempty"`
 	// JSON-encoded annotations
-	Annotations *string `json:"annotations,omitempty"`
+	Annotations *string      `json:"annotations,omitempty"`
+	Oidc        *GatewayOidc `json:"oidc,omitempty"`
 }
 
 type _Gateway Gateway
@@ -426,6 +427,38 @@ func (o *Gateway) SetAnnotations(v string) {
 	o.Annotations = &v
 }
 
+// GetOidc returns the Oidc field value if set, zero value otherwise.
+func (o *Gateway) GetOidc() GatewayOidc {
+	if o == nil || IsNil(o.Oidc) {
+		var ret GatewayOidc
+		return ret
+	}
+	return *o.Oidc
+}
+
+// GetOidcOk returns a tuple with the Oidc field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Gateway) GetOidcOk() (*GatewayOidc, bool) {
+	if o == nil || IsNil(o.Oidc) {
+		return nil, false
+	}
+	return o.Oidc, true
+}
+
+// HasOidc returns a boolean if a field has been set.
+func (o *Gateway) HasOidc() bool {
+	if o != nil && !IsNil(o.Oidc) {
+		return true
+	}
+
+	return false
+}
+
+// SetOidc gets a reference to the given GatewayOidc and assigns it to the Oidc field.
+func (o *Gateway) SetOidc(v GatewayOidc) {
+	o.Oidc = &v
+}
+
 func (o Gateway) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -465,6 +498,9 @@ func (o Gateway) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Annotations) {
 		toSerialize["annotations"] = o.Annotations
+	}
+	if !IsNil(o.Oidc) {
+		toSerialize["oidc"] = o.Oidc
 	}
 	return toSerialize, nil
 }

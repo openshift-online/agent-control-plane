@@ -109,6 +109,14 @@ func (h gatewayHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			if patch.Annotations != nil {
 				found.Annotations = patch.Annotations
 			}
+			if patch.Oidc != nil {
+				raw, merr := json.Marshal(patch.Oidc)
+				if merr != nil {
+					return nil, errors.GeneralError("failed to marshal oidc: %v", merr)
+				}
+				s := string(raw)
+				found.Oidc = &s
+			}
 
 			gatewayModel, svcErr := h.gateway.Replace(ctx, found)
 			if svcErr != nil {

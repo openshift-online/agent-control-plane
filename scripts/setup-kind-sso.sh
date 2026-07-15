@@ -17,22 +17,25 @@ if ! kubectl get secret sso-credentials -n "$NAMESPACE" >/dev/null 2>&1; then
 fi
 
 # Patch SSO credentials with port-forwarded URLs
+KC_ISSUER="http://keycloak-service.ambient-code.svc.cluster.local:11880/realms/ambient-code"
 kubectl patch secret sso-credentials -n "$NAMESPACE" --type=json -p="[
   {
     \"op\": \"add\",
     \"path\": \"/data/SSO_FRONTEND_ISSUER_URL\",
-    \"value\": \"$(echo -n "http://localhost:${KIND_FWD_KEYCLOAK_PORT}/realms/ambient-code" | base64)\"
+    \"value\": \"$(echo -n "$KC_ISSUER" | base64 -w0)\"
   },
   {
     \"op\": \"add\",
     \"path\": \"/data/SSO_REDIRECT_URI\",
-    \"value\": \"$(echo -n "http://localhost:${KIND_FWD_AMBIENT_UI_PORT}/api/auth/sso/callback" | base64)\"
+    \"value\": \"$(echo -n "http://localhost:${KIND_FWD_AMBIENT_UI_PORT}/api/auth/sso/callback" | base64 -w0)\"
   }
 ]" >/dev/null
 
-# Patch KC_HOSTNAME so Keycloak generates correct URLs for port-forwarded access.
+# Patch KC_HOSTNAME so the OIDC issuer uses the cluster-internal FQDN.
+# Developers add /etc/hosts: 127.0.0.1 keycloak-service.ambient-code.svc.cluster.local
+# to reach Keycloak from the host via the same URL used in-cluster.
 # Only patch if the value changed to avoid unnecessary restarts.
-DESIRED_KC_HOSTNAME="http://localhost:${KIND_FWD_KEYCLOAK_PORT}"
+DESIRED_KC_HOSTNAME="http://keycloak-service.ambient-code.svc.cluster.local:11880"
 CURRENT_KC_HOSTNAME=$(kubectl get deployment/keycloak -n "$NAMESPACE" \
   -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="KC_HOSTNAME")].value}' 2>/dev/null || true)
 

@@ -285,6 +285,14 @@ func (g *GatewayClient) RotateProviderCredential(ctx context.Context, namespace 
 	return resp, err
 }
 
+type ExecExitError struct {
+	Code int32
+}
+
+func (e *ExecExitError) Error() string {
+	return fmt.Sprintf("exec process exited with code %d", e.Code)
+}
+
 const maxLogChunkSize = 512
 
 func (g *GatewayClient) ExecSandboxStreaming(ctx context.Context, namespace string, req *pb.ExecSandboxRequest) error {
@@ -327,7 +335,7 @@ func (g *GatewayClient) ExecSandboxStreaming(ctx context.Context, namespace stri
 		case *pb.ExecSandboxEvent_Exit:
 			g.logger.Info().Str("sandbox_id", req.SandboxId).Int32("exit_code", p.Exit.ExitCode).Msg("exec process exited")
 			if p.Exit.ExitCode != 0 {
-				return fmt.Errorf("exec process exited with code %d", p.Exit.ExitCode)
+				return &ExecExitError{Code: p.Exit.ExitCode}
 			}
 			return nil
 		}

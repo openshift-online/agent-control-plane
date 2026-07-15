@@ -136,6 +136,63 @@ func ApplyConfigOverrides(obj *unstructured.Unstructured, config GatewayConfig) 
 		}
 	}
 
+	// Inject OIDC configuration into gateway.toml (works with both default and custom configs)
+	if kind == "ConfigMap" && obj.GetName() == "openshell-gateway-config" && config.Oidc != nil && config.Oidc.Issuer != "" {
+		data, found, err := unstructured.NestedMap(obj.Object, "data")
+		if err != nil || !found {
+			return fmt.Errorf("configmap data not found")
+		}
+
+		toml, ok := data["gateway.toml"].(string)
+		if !ok {
+			return fmt.Errorf("gateway.toml not found in configmap")
+		}
+
+		// Flip allow_unauthenticated_users to false when OIDC is enabled
+		toml = strings.ReplaceAll(toml, "allow_unauthenticated_users = true", "allow_unauthenticated_users = false")
+
+		// Disable mTLS (client certificate verification) — OIDC clients authenticate
+		// via Bearer tokens, not client certificates.
+		lines := strings.Split(toml, "\n")
+		filtered := lines[:0]
+		for _, line := range lines {
+			if !strings.Contains(line, "client_ca_path") {
+				filtered = append(filtered, line)
+			}
+		}
+		toml = strings.Join(filtered, "\n")
+
+		// Append OIDC section if not already present in the config
+		if !strings.Contains(toml, "[openshell.gateway.oidc]") {
+			oidcSection := "\n[openshell.gateway.oidc]\n"
+			oidcSection += fmt.Sprintf("    issuer   = %q\n", config.Oidc.Issuer)
+			if config.Oidc.Audience != "" {
+				oidcSection += fmt.Sprintf("    audience = %q\n", config.Oidc.Audience)
+			}
+			if config.Oidc.JwksTtl > 0 {
+				oidcSection += fmt.Sprintf("    jwks_ttl = %d\n", config.Oidc.JwksTtl)
+			}
+			if config.Oidc.RolesClaim != "" {
+				oidcSection += fmt.Sprintf("    roles_claim = %q\n", config.Oidc.RolesClaim)
+			}
+			if config.Oidc.AdminRole != "" {
+				oidcSection += fmt.Sprintf("    admin_role = %q\n", config.Oidc.AdminRole)
+			}
+			if config.Oidc.UserRole != "" {
+				oidcSection += fmt.Sprintf("    user_role = %q\n", config.Oidc.UserRole)
+			}
+			if config.Oidc.ScopesClaim != "" {
+				oidcSection += fmt.Sprintf("    scopes_claim = %q\n", config.Oidc.ScopesClaim)
+			}
+			toml += oidcSection
+		}
+		data["gateway.toml"] = toml
+
+		if err := unstructured.SetNestedMap(obj.Object, data, "data"); err != nil {
+			return fmt.Errorf("set configmap data: %w", err)
+		}
+	}
+
 	// Update ConfigMap server_sans if serverDnsNames provided (and no custom config)
 	if kind == "ConfigMap" && obj.GetName() == "openshell-gateway-config" && len(config.ServerDnsNames) > 0 && config.Config == "" {
 		data, found, err := unstructured.NestedMap(obj.Object, "data")
@@ -185,17 +242,17 @@ func ApplyConfigOverrides(obj *unstructured.Unstructured, config GatewayConfig) 
 			return fmt.Errorf("gateway.toml not found in configmap")
 		}
 
-		// Append image_pull_policy to [openshell.drivers.kubernetes] section
-		lines := strings.Split(toml, "\n")
-		for i, line := range lines {
-			// Find the last line of the kubernetes drivers section
-			if strings.Contains(line, `app_armor_profile`) {
-				// Insert image_pull_policy right after
-				lines = append(lines[:i+1], append([]string{`    image_pull_policy            = "IfNotPresent"`}, lines[i+1:]...)...)
-				break
+		// Append image_pull_policy to [openshell.drivers.kubernetes] section (idempotent)
+		if !strings.Contains(toml, "image_pull_policy") {
+			lines := strings.Split(toml, "\n")
+			for i, line := range lines {
+				if strings.Contains(line, `app_armor_profile`) {
+					lines = append(lines[:i+1], append([]string{`    image_pull_policy            = "IfNotPresent"`}, lines[i+1:]...)...)
+					break
+				}
 			}
+			data["gateway.toml"] = strings.Join(lines, "\n")
 		}
-		data["gateway.toml"] = strings.Join(lines, "\n")
 
 		if err := unstructured.SetNestedMap(obj.Object, data, "data"); err != nil {
 			return fmt.Errorf("set configmap data: %w", err)
