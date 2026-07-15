@@ -214,6 +214,20 @@ jobs:
         kubectl port-forward -n ambient-code svc/keycloak-service 18592:11880 &
         sleep 3
 
+        # Wait for the gateway TLS secret — the certgen job may still be running
+        for i in $(seq 1 60); do
+          if kubectl get secret openshell-server-tls -n tenant-a &>/dev/null; then
+            echo "openshell-server-tls secret ready in tenant-a"
+            break
+          fi
+          echo "Waiting for openshell-server-tls secret in tenant-a... ($i/60)"
+          sleep 5
+        done
+
+        # Wait for gateway pod to be ready
+        kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=openshell-gateway \
+          -n tenant-a --timeout=120s || echo "Warning: gateway pod not ready after 120s"
+
         PF_DIR=/tmp/ambient-code ./scripts/setup-gateway-cli.sh tenant-a
 
         # setup-gateway-cli.sh sets up port-forwards but no longer auto-registers
