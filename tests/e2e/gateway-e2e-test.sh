@@ -147,6 +147,19 @@ fail() { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
 skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
 section() { echo ""; echo -e "${BOLD}$1${NC}"; }
 
+_delete_session() {
+  local sid="$1"
+  [ -z "$sid" ] && return 0
+  if [ "$SKIP_CLEANUP" = "true" ]; then return 0; fi
+  api DELETE "/api/ambient/v1/sessions/${sid}" >/dev/null 2>&1 && \
+    echo "  Deleted session ${sid}" || true
+  local pod="session-$(echo "${sid:0:40}" | tr '[:upper:]' '[:lower:]')"
+  for _i in $(seq 1 15); do
+    kubectl get pod "$pod" -n "$TENANT" &>/dev/null || break
+    sleep 2
+  done
+}
+
 _cleanup_sandboxes() {
   if [ "$SKIP_CLEANUP" = "true" ]; then return 0; fi
   openshell sandbox delete --all --gateway "$TENANT" >/dev/null 2>&1 && \
@@ -630,6 +643,7 @@ else
   skip "Mock LLM response verification" "session not running or not created"
 fi
 
+_delete_session "$CREATED_SESSION_ID"
 _cleanup_sandboxes
 
 section "12. Repository payload verification"
@@ -758,6 +772,7 @@ else
   fail "Agent 'network-test-locked-down' not found after apply"
 fi
 
+_delete_session "$LOCKED_SESSION_ID"
 _cleanup_sandboxes
 
 # Brief gateway readiness check — cleanup may coincide with a reconciler restart
@@ -849,6 +864,7 @@ else
   fail "Agent 'network-test-permissive' not found after apply"
 fi
 
+_delete_session "$PERM_SESSION_ID"
 _cleanup_sandboxes
 
 section "Cleanup"

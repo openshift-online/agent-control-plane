@@ -242,17 +242,17 @@ func ApplyConfigOverrides(obj *unstructured.Unstructured, config GatewayConfig) 
 			return fmt.Errorf("gateway.toml not found in configmap")
 		}
 
-		// Append image_pull_policy to [openshell.drivers.kubernetes] section
-		lines := strings.Split(toml, "\n")
-		for i, line := range lines {
-			// Find the last line of the kubernetes drivers section
-			if strings.Contains(line, `app_armor_profile`) {
-				// Insert image_pull_policy right after
-				lines = append(lines[:i+1], append([]string{`    image_pull_policy            = "IfNotPresent"`}, lines[i+1:]...)...)
-				break
+		// Append image_pull_policy to [openshell.drivers.kubernetes] section (idempotent)
+		if !strings.Contains(toml, "image_pull_policy") {
+			lines := strings.Split(toml, "\n")
+			for i, line := range lines {
+				if strings.Contains(line, `app_armor_profile`) {
+					lines = append(lines[:i+1], append([]string{`    image_pull_policy            = "IfNotPresent"`}, lines[i+1:]...)...)
+					break
+				}
 			}
+			data["gateway.toml"] = strings.Join(lines, "\n")
 		}
-		data["gateway.toml"] = strings.Join(lines, "\n")
 
 		if err := unstructured.SetNestedMap(obj.Object, data, "data"); err != nil {
 			return fmt.Errorf("set configmap data: %w", err)
