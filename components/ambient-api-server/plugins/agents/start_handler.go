@@ -111,7 +111,7 @@ func (h *startHandler) Start(w http.ResponseWriter, r *http.Request) {
 
 			sess := &sessions.Session{
 				Name:      fmt.Sprintf("%s-%d", agent.Name, time.Now().Unix()),
-				Prompt:    agent.Prompt,
+				Prompt:    requestPrompt,
 				ProjectId: &agent.ProjectId,
 				AgentId:   &agentID,
 			}
