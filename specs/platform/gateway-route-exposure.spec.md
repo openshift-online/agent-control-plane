@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-15
 **Status:** Design
-**Related:** `gateway-provisioning.spec.md` — gateway lifecycle and reconciler; `data-model.spec.md` — Gateway kind definition; `security/gateway-rbac-policy.spec.md` — gateway RBAC
+**Related:** `gateway-provisioning.spec.md` — gateway lifecycle and reconciler; `data-model.spec.md` — Gateway kind definition; `security/gateway-rbac-policy.spec.md` — gateway RBAC; `e2e-test-tooling.spec.md` — mock LLM and self-contained testing
 **Skill:** `skills/build/full-stack-pipeline/` — wave-based implementation pipeline
 
 ---
@@ -451,6 +451,8 @@ route: {}
 | `GatewayRoute` OpenAPI schema | Route configuration input type |
 | `routeAddress` field on Gateway response | Read-only Route address output |
 | SDK types for `GatewayRoute` | Go, Python, TypeScript |
+| `components/manifests/overlays/openshift-local/` | Kustomize overlay for OpenShift Local (CRC) deployment |
+| `make crc-up` / `make crc-down` | Makefile targets for OpenShift Local lifecycle |
 
 ### Existing Consumer Impact
 
@@ -464,6 +466,95 @@ route: {}
 | OpenAPI schema | Extended with `GatewayRoute` and `routeAddress` |
 | DB migration | New migration adds `route` (JSONB) and `route_address` (text) columns |
 | Go/Python/TS SDKs | Extended with `Route` and `RouteAddress` fields |
+
+---
+
+## E2E Testing on OpenShift Local
+
+Route resources are not available on Kind clusters (`route.openshift.io` API group does not exist). To e2e test the Route provisioning flow end-to-end, the platform SHALL support deployment to OpenShift Local (formerly CodeReady Containers / CRC) with the same tenant configuration used by the Kind development environment.
+
+### Requirement: OpenShift Local Deployment Target
+
+The project SHALL provide a Makefile target and kustomize overlay to deploy the full ACP stack to an OpenShift Local instance, mirroring the Kind development environment. This enables e2e testing of OpenShift-specific features (Routes, service-CA TLS, RBAC via namespace access) that cannot be tested on Kind.
+
+#### Scenario: Deploy to OpenShift Local via Make target
+
+- GIVEN an OpenShift Local instance is running and `oc` is authenticated
+- WHEN a developer runs `make crc-up`
+- THEN the target SHALL:
+  1. Build container images and push them to the OpenShift internal registry (or load them via `oc image mirror`)
+  2. Apply the `openshift-local` kustomize overlay to create the `ambient-code` namespace with all ACP components
+  3. Configure Keycloak for SSO (reusing the same realm configuration as Kind)
+  4. Create tenant namespaces and provision gateway resources with `route: {}` configuration
+  5. Wait for all deployments to reach ready state
+  6. Print the Route URLs for the API server, UI, and gateway endpoints
+
+#### Scenario: Teardown OpenShift Local deployment
+
+- GIVEN the ACP stack is deployed on OpenShift Local
+- WHEN a developer runs `make crc-down`
+- THEN all ACP resources, tenant namespaces, and CRDs SHALL be deleted
+- AND the OpenShift Local instance itself SHALL NOT be affected
+
+#### Scenario: Rebuild and redeploy a single component
+
+- GIVEN the ACP stack is deployed on OpenShift Local
+- WHEN a developer runs `make crc-reload-component COMPONENT=ambient-control-plane`
+- THEN only the specified component's image SHALL be rebuilt, pushed, and its Deployment/StatefulSet patched
+- AND no other components SHALL be restarted
+
+### Requirement: OpenShift Local Kustomize Overlay
+
+A kustomize overlay SHALL exist at `components/manifests/overlays/openshift-local/` that configures the ACP stack for OpenShift Local. This overlay SHALL reuse existing kustomize components and the base manifests, following the same pattern as the existing `kind/` overlay.
+
+#### Scenario: Overlay structure
+
+- GIVEN the overlay at `components/manifests/overlays/openshift-local/`
+- THEN it SHALL inherit from the base manifests and include:
+  - OpenShift Routes for the API server and UI (reusing the existing route manifests from other OpenShift overlays)
+  - Keycloak deployment with the same realm configuration as the Kind overlay
+  - PostgreSQL with relaxed resource requests suitable for CRC's constrained resources
+  - SSO credentials patched with OpenShift Local's `*.apps-crc.testing` domain
+  - Service-CA TLS annotations on Services (consistent with production OpenShift overlays)
+  - `imagePullPolicy: IfNotPresent` for locally-built images
+
+#### Scenario: Gateway tenants with Route configuration
+
+- GIVEN the OpenShift Local overlay provisions tenant namespaces
+- THEN the tenant gateway configurations SHALL include `route: {}` (auto-assigned host)
+- AND the certgen Job SHALL generate certificates as normal
+- AND the GatewayReconciler SHALL create Route resources for each tenant gateway
+- AND `acpctl get gateway` SHALL display the auto-assigned Route addresses
+
+#### Scenario: Overlay uses existing kustomize components
+
+- GIVEN shared kustomize components exist at `components/manifests/components/`
+- THEN the OpenShift Local overlay SHALL reuse:
+  - `postgresql-rhel` — RHEL PostgreSQL image (consistent with production)
+  - `ambient-api-server-db` — Dedicated DB deployment
+  - `postgresql-init-scripts` — DB initialization
+- AND it SHALL NOT duplicate resources already available in shared components
+
+### Requirement: Parity with Kind Development Environment
+
+The OpenShift Local deployment SHALL provide the same development experience as the Kind cluster, with the addition of OpenShift-specific features.
+
+#### Scenario: Same tenants and test configuration
+
+- GIVEN the Kind environment provisions tenants `tenant-a`, `tenant-b`, `tenant-c`, etc.
+- THEN the OpenShift Local environment SHALL provision the same tenants
+- AND each tenant SHALL have the same agents, credentials, and mock-LLM configuration
+- AND the mock-LLM server SHALL be deployed for self-contained testing (per `e2e-test-tooling.spec.md`)
+
+#### Scenario: Gateway Route e2e test
+
+- GIVEN the ACP stack is deployed on OpenShift Local
+- AND a gateway is provisioned for `tenant-a` with `route: {}`
+- WHEN the GatewayReconciler reconciles the gateway
+- THEN a Route SHALL be created in the `tenant-a` namespace
+- AND `acpctl get gateway --project tenant-a` SHALL show the Route address under `*.apps-crc.testing`
+- AND `acpctl gateway setup-cli openshell-gateway --project tenant-a` SHALL register the gateway using the Route address (no port-forward)
+- AND `openshell -g openshell-gateway provider list` SHALL succeed through the Route
 
 ---
 
