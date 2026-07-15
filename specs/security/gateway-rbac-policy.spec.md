@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-05
 **Status:** Active
-**Related:** `specs/security/rbac-enforcement.spec.md` (base RBAC model), `specs/platform/agent-sandbox-config.spec.md` (agent schema), `specs/platform/gateway-provisioning.spec.md` (API-driven gateway provisioning), `specs/platform/openshell-sandbox-provisioning.spec.md` (sandbox provisioning flow)
+**Related:** `specs/security/rbac-enforcement.spec.md` (base RBAC model), `specs/platform/agent-sandbox-config.spec.md` (agent schema), `specs/platform/gateway-provisioning.spec.md` (API-driven gateway provisioning), `specs/platform/openshell-sandbox-provisioning.spec.md` (sandbox provisioning flow), `specs/platform/gateway-route-exposure.spec.md` (Route exposure and TLS)
 
 ---
 
@@ -386,6 +386,34 @@ Viewer tier users SHALL be able to view session details, session message history
 - AND session-1 is active in proj-1
 - WHEN user A attempts to stop session-1
 - THEN the response is 403 Forbidden
+
+### Requirement: Gateway Route Access Control
+
+Only Admin tier users SHALL be permitted to configure external Route exposure on a Gateway. The `route` field on a Gateway resource controls whether the gateway is exposed outside the cluster, which has security implications. Editor and Viewer tier users SHALL NOT be able to set or modify the `route` field. The `routeAddress` field (read-only, populated by the control plane) SHALL be visible to all tiers.
+
+See `gateway-route-exposure.spec.md` for the full Route provisioning specification.
+
+#### Scenario: Admin configures route on a gateway
+
+- GIVEN user A has Admin tier access on proj-1
+- WHEN user A PATCHes a Gateway in proj-1 with `route: { host: "gw.example.com" }`
+- THEN the PATCH is accepted
+- AND the GatewayReconciler creates a Route resource
+
+#### Scenario: Editor cannot configure route on a gateway
+
+- GIVEN user A has Editor tier access on proj-1
+- WHEN user A PATCHes a Gateway in proj-1 with `route: {}`
+- THEN the response is 403 Forbidden
+
+#### Scenario: Viewer can read routeAddress
+
+- GIVEN user A has Viewer tier access on proj-1
+- AND a Gateway in proj-1 has a populated `routeAddress`
+- WHEN user A calls `GET /projects/proj-1/gateways`
+- THEN the response includes the `routeAddress` field
+
+---
 
 ### Requirement: Backward Compatibility
 
