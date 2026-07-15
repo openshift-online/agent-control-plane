@@ -173,6 +173,74 @@ func editorCredentialUnbindMigration() *gormigrate.Migration {
 	}
 }
 
+func clusterRolesMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202607150002",
+		Migrate: func(tx *gorm.DB) error {
+			clusterRoles := []struct {
+				name        string
+				displayName string
+				description string
+				permissions []string
+			}{
+				{
+					name:        "cluster:admin",
+					displayName: "Cluster Admin",
+					description: "Full CRUD on Clusters (register, update, deregister). Platform-scoped.",
+					permissions: []string{"cluster:create", "cluster:read", "cluster:update", "cluster:delete", "cluster:list"},
+				},
+				{
+					name:        "cluster:viewer",
+					displayName: "Cluster Viewer",
+					description: "Read-only on Clusters and their status. Platform-scoped.",
+					permissions: []string{"cluster:read", "cluster:list"},
+				},
+			}
+
+			for _, r := range clusterRoles {
+				permsJSON, err := json.Marshal(r.permissions)
+				if err != nil {
+					return err
+				}
+				if err := tx.Exec(
+					`INSERT INTO roles (id, name, display_name, description, permissions, built_in) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (name) DO NOTHING`,
+					api.NewID(), r.name, r.displayName, r.description, string(permsJSON), true,
+				).Error; err != nil {
+					return err
+				}
+			}
+
+			var perms string
+			if err := tx.Raw(`SELECT permissions FROM roles WHERE name = 'platform:viewer' AND deleted_at IS NULL`).Scan(&perms).Error; err != nil {
+				return err
+			}
+			if perms != "" {
+				var permList []string
+				if err := json.Unmarshal([]byte(perms), &permList); err != nil {
+					return err
+				}
+				for _, p := range permList {
+					if p == "cluster:read" {
+						return nil
+					}
+				}
+				permList = append(permList, "cluster:read", "cluster:list")
+				updated, err := json.Marshal(permList)
+				if err != nil {
+					return err
+				}
+				if err := tx.Exec(`UPDATE roles SET permissions = ?, updated_at = NOW() WHERE name = 'platform:viewer' AND deleted_at IS NULL`, string(updated)).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return nil
+		},
+	}
+}
+
 func providerGatewayPermissionsMigration() *gormigrate.Migration {
 	type rolePerms struct {
 		roleName    string

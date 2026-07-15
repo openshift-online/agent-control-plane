@@ -16,6 +16,7 @@ const (
 	ResourceCredential      Resource = "credential"
 	ResourceProvider        Resource = "provider"
 	ResourceGateway         Resource = "gateway"
+	ResourceCluster         Resource = "cluster"
 )
 
 type Action string
@@ -57,6 +58,9 @@ const (
 	RoleCredentialOwner       = "credential:owner"
 	RoleCredentialReader      = "credential:reader"
 	RoleCredentialTokenReader = "credential:token-reader"
+
+	RoleClusterAdmin  = "cluster:admin"
+	RoleClusterViewer = "cluster:viewer"
 )
 
 var (
@@ -122,4 +126,10 @@ var (
 	PermGatewayUpdate = Permission{ResourceGateway, ActionUpdate}
 	PermGatewayDelete = Permission{ResourceGateway, ActionDelete}
 	PermGatewayList   = Permission{ResourceGateway, ActionList}
+
+	PermClusterCreate = Permission{ResourceCluster, ActionCreate}
+	PermClusterRead   = Permission{ResourceCluster, ActionRead}
+	PermClusterUpdate = Permission{ResourceCluster, ActionUpdate}
+	PermClusterDelete = Permission{ResourceCluster, ActionDelete}
+	PermClusterList   = Permission{ResourceCluster, ActionList}
 )
