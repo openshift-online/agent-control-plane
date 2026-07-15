@@ -256,6 +256,8 @@ jobs:
 
     - name: Run RBAC enforcement E2E tests
       run: |
+        fuser -k 13592/tcp 2>/dev/null || true
+        fuser -k 18592/tcp 2>/dev/null || true
         kubectl port-forward -n ambient-code svc/ambient-api-server 13592:8000 &
         kubectl port-forward -n ambient-code svc/keycloak-service 18592:11880 &
         sleep 3
@@ -266,6 +268,8 @@ jobs:
 
     - name: Run Scheduled Sessions E2E tests
       run: |
+        fuser -k 13592/tcp 2>/dev/null || true
+        fuser -k 18592/tcp 2>/dev/null || true
         kubectl port-forward -n ambient-code svc/ambient-api-server 13592:8000 &
         kubectl port-forward -n ambient-code svc/keycloak-service 18592:11880 &
         sleep 3
