@@ -5348,6 +5348,258 @@ paths:
       security:
       - Bearer: []
       summary: Update a gateway
+  /api/ambient/v1/clusters:
+    get:
+      operationId: listClusters
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      - description: Specifies the search criteria
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Specifies the order by criteria
+        explode: true
+        in: query
+        name: orderBy
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Supplies a comma-separated list of fields to be returned
+        explode: true
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClusterList"
+          description: A list of clusters
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+      security:
+      - Bearer: []
+      summary: List clusters
+    post:
+      operationId: registerCluster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Cluster"
+        description: Cluster data
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cluster"
+          description: Cluster registered successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Auth token is invalid
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Unauthorized to perform operation
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: A cluster with this name already exists
+      security:
+      - Bearer: []
+      summary: Register a new cluster
+  /api/ambient/v1/clusters/{cluster_id}:
+    delete:
+      operationId: deregisterCluster
+      parameters:
+      - in: path
+        name: cluster_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Cluster deregistered successfully
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Cluster not found
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Cluster has active sessions and cannot be deregistered
+      security:
+      - Bearer: []
+      summary: Deregister a cluster
+    get:
+      operationId: getCluster
+      parameters:
+      - in: path
+        name: cluster_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cluster"
+          description: Cluster found
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Cluster not found
+      security:
+      - Bearer: []
+      summary: Get a cluster by ID
+    patch:
+      operationId: updateCluster
+      parameters:
+      - in: path
+        name: cluster_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClusterPatchRequest"
+        description: Fields to update
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cluster"
+          description: Cluster updated successfully
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Validation errors occurred
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Cluster not found
+      security:
+      - Bearer: []
+      summary: Update a cluster
+  /api/ambient/v1/clusters/{cluster_id}/status:
+    get:
+      operationId: getClusterStatus
+      parameters:
+      - in: path
+        name: cluster_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClusterStatusResponse"
+          description: Cluster status
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Cluster not found
+      security:
+      - Bearer: []
+      summary: Get cluster health status
+  /api/ambient/v1/clusters/{cluster_id}/heartbeat:
+    post:
+      operationId: heartbeatCluster
+      parameters:
+      - in: path
+        name: cluster_id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClusterStatusResponse"
+          description: Heartbeat recorded
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          description: Cluster not found
+      security:
+      - Bearer: []
+      summary: Trigger manual health check
 components:
   parameters:
     id:
@@ -7973,6 +8225,174 @@ components:
           type: string
         oidc:
           $ref: "#/components/schemas/GatewayOidc"
+      type: object
+    Cluster:
+      allOf:
+      - $ref: "#/components/schemas/ObjectReference"
+      - properties:
+          name:
+            description: Globally unique cluster name
+            type: string
+          description:
+            description: Free-text purpose description
+            type: string
+          api_server_url:
+            description: Kubernetes API server endpoint URL
+            type: string
+          credential_id:
+            description: FK to Credential(provider=kubeconfig); null for local cluster
+            type: string
+          role:
+            description: Cluster scheduling role
+            enum:
+            - gateway
+            - workload
+            - hybrid
+            type: string
+          status:
+            description: Health status (server-managed)
+            enum:
+            - Ready
+            - NotReady
+            - Unknown
+            readOnly: true
+            type: string
+          status_message:
+            description: Human-readable status detail
+            readOnly: true
+            type: string
+          labels:
+            description: JSONB placement selectors
+            type: string
+          annotations:
+            description: JSONB freeform metadata
+            type: string
+          capacity:
+            description: JSONB reported node allocatable
+            readOnly: true
+            type: string
+          last_heartbeat_at:
+            description: Last successful health check timestamp
+            format: date-time
+            readOnly: true
+            type: string
+        required:
+        - api_server_url
+        - name
+        - role
+        type: object
+      example:
+        status_message: status_message
+        role: gateway
+        kind: kind
+        created_at: 2000-01-23T04:56:07.000+00:00
+        description: description
+        annotations: annotations
+        labels: labels
+        capacity: capacity
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        name: name
+        id: id
+        href: href
+        last_heartbeat_at: 2000-01-23T04:56:07.000+00:00
+        api_server_url: api_server_url
+        credential_id: credential_id
+        status: Ready
+    ClusterList:
+      allOf:
+      - $ref: "#/components/schemas/List"
+      - properties:
+          items:
+            items:
+              $ref: "#/components/schemas/Cluster"
+            type: array
+        type: object
+      example:
+        total: 1
+        size: 6
+        kind: kind
+        page: 0
+        items:
+        - status_message: status_message
+          role: gateway
+          kind: kind
+          created_at: 2000-01-23T04:56:07.000+00:00
+          description: description
+          annotations: annotations
+          labels: labels
+          capacity: capacity
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          name: name
+          id: id
+          href: href
+          last_heartbeat_at: 2000-01-23T04:56:07.000+00:00
+          api_server_url: api_server_url
+          credential_id: credential_id
+          status: Ready
+        - status_message: status_message
+          role: gateway
+          kind: kind
+          created_at: 2000-01-23T04:56:07.000+00:00
+          description: description
+          annotations: annotations
+          labels: labels
+          capacity: capacity
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          name: name
+          id: id
+          href: href
+          last_heartbeat_at: 2000-01-23T04:56:07.000+00:00
+          api_server_url: api_server_url
+          credential_id: credential_id
+          status: Ready
+    ClusterPatchRequest:
+      example:
+        role: gateway
+        name: name
+        description: description
+        annotations: annotations
+        api_server_url: api_server_url
+        credential_id: credential_id
+        labels: labels
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        api_server_url:
+          type: string
+        credential_id:
+          type: string
+        role:
+          enum:
+          - gateway
+          - workload
+          - hybrid
+          type: string
+        labels:
+          type: string
+        annotations:
+          type: string
+      type: object
+    ClusterStatusResponse:
+      example:
+        status_message: status_message
+        id: id
+        last_heartbeat_at: 2000-01-23T04:56:07.000+00:00
+        status: status
+        capacity: capacity
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+        status_message:
+          type: string
+        capacity:
+          type: string
+        last_heartbeat_at:
+          format: date-time
+          type: string
       type: object
     Payload:
       example:

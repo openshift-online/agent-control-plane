@@ -14,6 +14,10 @@ docs/Application.md
 docs/ApplicationList.md
 docs/ApplicationPatchRequest.md
 docs/ApplicationSyncRequest.md
+docs/Cluster.md
+docs/ClusterList.md
+docs/ClusterPatchRequest.md
+docs/ClusterStatusResponse.md
 docs/Credential.md
 docs/CredentialList.md
 docs/CredentialPatchRequest.md
@@ -80,6 +84,10 @@ model_application.go
 model_application_list.go
 model_application_patch_request.go
 model_application_sync_request.go
+model_cluster.go
+model_cluster_list.go
+model_cluster_patch_request.go
+model_cluster_status_response.go
 model_credential.go
 model_credential_list.go
 model_credential_patch_request.go

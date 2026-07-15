@@ -170,6 +170,13 @@ Class | Method | HTTP request | Description
 *DefaultAPI* | [**ApiAmbientV1UsersIdGet**](docs/DefaultAPI.md#apiambientv1usersidget) | **Get** /api/ambient/v1/users/{id} | Get an user by id
 *DefaultAPI* | [**ApiAmbientV1UsersIdPatch**](docs/DefaultAPI.md#apiambientv1usersidpatch) | **Patch** /api/ambient/v1/users/{id} | Update an user
 *DefaultAPI* | [**ApiAmbientV1UsersPost**](docs/DefaultAPI.md#apiambientv1userspost) | **Post** /api/ambient/v1/users | Create a new user
+*DefaultAPI* | [**DeregisterCluster**](docs/DefaultAPI.md#deregistercluster) | **Delete** /api/ambient/v1/clusters/{cluster_id} | Deregister a cluster
+*DefaultAPI* | [**GetCluster**](docs/DefaultAPI.md#getcluster) | **Get** /api/ambient/v1/clusters/{cluster_id} | Get a cluster by ID
+*DefaultAPI* | [**GetClusterStatus**](docs/DefaultAPI.md#getclusterstatus) | **Get** /api/ambient/v1/clusters/{cluster_id}/status | Get cluster health status
+*DefaultAPI* | [**HeartbeatCluster**](docs/DefaultAPI.md#heartbeatcluster) | **Post** /api/ambient/v1/clusters/{cluster_id}/heartbeat | Trigger manual health check
+*DefaultAPI* | [**ListClusters**](docs/DefaultAPI.md#listclusters) | **Get** /api/ambient/v1/clusters | List clusters
+*DefaultAPI* | [**RegisterCluster**](docs/DefaultAPI.md#registercluster) | **Post** /api/ambient/v1/clusters | Register a new cluster
+*DefaultAPI* | [**UpdateCluster**](docs/DefaultAPI.md#updatecluster) | **Patch** /api/ambient/v1/clusters/{cluster_id} | Update a cluster
 
 
 ## Documentation For Models
@@ -182,6 +189,10 @@ Class | Method | HTTP request | Description
  - [ApplicationList](docs/ApplicationList.md)
  - [ApplicationPatchRequest](docs/ApplicationPatchRequest.md)
  - [ApplicationSyncRequest](docs/ApplicationSyncRequest.md)
+ - [Cluster](docs/Cluster.md)
+ - [ClusterList](docs/ClusterList.md)
+ - [ClusterPatchRequest](docs/ClusterPatchRequest.md)
+ - [ClusterStatusResponse](docs/ClusterStatusResponse.md)
  - [Credential](docs/Credential.md)
  - [CredentialList](docs/CredentialList.md)
  - [CredentialPatchRequest](docs/CredentialPatchRequest.md)
