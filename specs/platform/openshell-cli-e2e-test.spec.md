@@ -19,7 +19,7 @@ This spec defines an e2e test script that authenticates to an ACP-managed OpenSh
 - Demo script at `components/ambient-cli/demo-openshell.sh` following the `demo-*` pattern
 - CLI-only testing: sandbox ops, provider ops, policy ops, settings ops
 - Gateway connectivity setup via `acpctl gateway setup-cli` (validates the `acpctl` → `openshell` CLI handoff)
-- Cross-validation between `openshell` CLI state and ACP API state
+- Optional cross-validation between `openshell` CLI state and cluster state (via `--cluster-validate`)
 - Test fixtures at `tests/e2e/fixtures/openshell-cli-test/`
 
 ### Out of Scope
@@ -62,7 +62,7 @@ The test SHALL organize assertions into numbered sections by command category:
 4. Provider operations (create, get, list, delete)
 5. Policy operations (set, get, list, delete)
 6. Settings operations (get, set, delete)
-7. Cross-validation (CLI-created resources visible via ACP API)
+7. Cross-validation (optional, requires `--cluster-validate`)
 8. Cleanup
 
 #### Scenario: Test runs on a fresh Kind cluster
@@ -90,8 +90,14 @@ The test SHALL organize assertions into numbered sections by command category:
 
 The test SHALL authenticate to an ACP-managed OpenShell gateway using `acpctl gateway setup-cli`. This command reads the gateway's connection details and OIDC configuration from the ACP API, then delegates to the `openshell` CLI to register the gateway. Using `acpctl gateway setup-cli` (rather than manual mTLS cert extraction) validates the full "OpenShell as a Service" connectivity path that a power user would follow.
 
+> **Implementation status:** The `acpctl gateway setup-cli` command exists at [`components/ambient-cli/cmd/acpctl/gateway/setup.go`](../../components/ambient-cli/cmd/acpctl/gateway/setup.go). Its verified signature is:
+> ```
+> acpctl gateway setup-cli [name] --gateway-url <url> [--project <namespace>] [--print]
+> ```
+> The `name` argument is optional (defaults to the project name). `--project` selects the namespace/project to look up the gateway in. `--print` outputs the `openshell gateway add` command instead of running it.
+
 The gateway registration SHALL:
-1. Call `acpctl gateway setup-cli <gateway-name> --gateway-url <url>` where `<url>` is the gateway's externally-reachable endpoint
+1. Call `acpctl gateway setup-cli --gateway-url <url> --project tenant-a` where `<url>` is the gateway's externally-reachable endpoint
 2. For OIDC-enabled gateways: `acpctl gateway setup-cli` constructs and prints an `openshell gateway add` command with `--oidc-issuer`, `--oidc-client-id`, and `--oidc-audience` flags sourced from the Gateway resource's OIDC config. For local/Kind gateways, `--gateway-insecure` is added when the URL targets localhost
 3. For non-OIDC (local) gateways: `acpctl gateway setup-cli` runs `openshell gateway add --name <name> --local <url>` directly
 4. Verify connectivity via `openshell provider list --gateway <tenant>` or `openshell sandbox list --gateway <tenant>`
@@ -100,14 +106,14 @@ The gateway registration SHALL:
 
 - GIVEN an ACP-managed OpenShell gateway is running in the `tenant-a` namespace
 - AND the gateway is registered in the ACP API (via `acpctl apply -k`)
-- WHEN the test runs `acpctl gateway setup-cli tenant-a --gateway-url <url>`
+- WHEN the test runs `acpctl gateway setup-cli --gateway-url <url> --project tenant-a`
 - THEN the command SHALL register the gateway with the `openshell` CLI
 - AND `openshell sandbox list --gateway tenant-a` SHALL return without error (empty list or existing sandboxes)
 
 #### Scenario: Gateway registration fails — gateway not found in API
 
 - GIVEN no gateway named `tenant-a` exists in the ACP API
-- WHEN the test runs `acpctl gateway setup-cli tenant-a --gateway-url <url>`
+- WHEN the test runs `acpctl gateway setup-cli --gateway-url <url> --project tenant-a`
 - THEN the command SHALL fail with an error indicating the gateway was not found
 - AND the test SHALL skip gateway-dependent sections with a clear message
 
@@ -275,20 +281,28 @@ The test SHALL exercise the gateway settings lifecycle using the `openshell` CLI
 - THEN the command SHALL succeed
 - AND subsequent `openshell settings get --global --key test_setting` SHALL indicate the setting is not set
 
-### Requirement: Cross-Validation with ACP API
+### Requirement: Cross-Validation with Cluster State (Optional)
 
-The test SHALL verify that resources created via the `openshell` CLI are consistent with the ACP API's view of the system. This validates that ACP-managed gateways correctly bridge CLI-created state and API-visible state.
+The test MAY verify that resources created via the `openshell` CLI are consistent with Kubernetes cluster state. This section is gated behind a `--cluster-validate` flag because it requires cluster access (`kubectl`) which is outside the "power user CLI-only" persona this test represents. When the flag is not passed, these assertions SHALL be skipped.
+
+#### Scenario: Cross-validation skipped by default
+
+- GIVEN the test is invoked without `--cluster-validate`
+- WHEN the test reaches the cross-validation section
+- THEN it SHALL skip all cluster-state assertions with `skip("--cluster-validate not set")`
 
 #### Scenario: CLI-created sandbox visible as Kubernetes resource
 
-- GIVEN a sandbox was created via `openshell sandbox create`
+- GIVEN `--cluster-validate` is passed
+- AND a sandbox was created via `openshell sandbox create`
 - WHEN the test queries `kubectl get sandboxes -n tenant-a`
 - THEN the sandbox SHALL appear as a Sandbox CRD resource
 - AND its phase SHALL match the `openshell sandbox get` output
 
 #### Scenario: CLI-created sandbox pod visible in namespace
 
-- GIVEN a sandbox is in READY phase (created via `openshell sandbox create`)
+- GIVEN `--cluster-validate` is passed
+- AND a sandbox is in READY phase (created via `openshell sandbox create`)
 - WHEN the test queries `kubectl get pods -n tenant-a`
 - THEN a pod corresponding to the sandbox SHALL exist and be in Running phase
 
@@ -386,7 +400,7 @@ The test exercises the following `openshell` CLI command groups. Exact flag name
 
 | Command | Purpose |
 |---|---|
-| `acpctl gateway setup-cli <name> --gateway-url <url>` | Register gateway (delegates to `openshell gateway add`) |
+| `acpctl gateway setup-cli [name] --gateway-url <url> [--project <ns>] [--print]` | Register gateway (delegates to `openshell gateway add`) |
 | `openshell gateway remove <name>` | Remove gateway registration |
 | `openshell sandbox create --gateway <gw> --image <img> -- <cmd>` | Create a sandbox |
 | `openshell sandbox list --gateway <gw>` | List sandboxes |
