@@ -263,6 +263,9 @@ erDiagram
         string image "nullable — gateway container image; defaults to OPENSHELL_GATEWAY_IMAGE"
         jsonb  server_dns_names "DNS names for TLS certificate generation"
         string config "nullable — OpenShell gateway TOML configuration"
+        jsonb  oidc "nullable — OIDC authentication config (issuer, audience, etc.)"
+        jsonb  route "nullable — route exposure config (host); see gateway-route-exposure.spec.md"
+        string route_address "nullable — read-only; external address populated by control plane"
         jsonb  labels
         jsonb  annotations
         time   created_at

@@ -21,6 +21,7 @@ When listing all gateways (`acpctl get gateways`), the output SHALL display a ta
 | NAME | 24 | `gateway.name` |
 | IMAGE | 50 | `gateway.image` |
 | DNS NAMES | 50 | Comma-separated `gateway.serverDnsNames` |
+| ROUTE | 60 | `gateway.routeAddress` (empty when no route configured) |
 | AGE | 10 | Relative time since `created_at` |
 
 When retrieving a single gateway by name or ID (`acpctl get gateway <name>`), the output SHALL display the table row followed by a connection info block.
@@ -57,26 +58,30 @@ The command SHALL support JSON output via the standard `--output json` flag.
 
 When a single gateway is retrieved, the CLI SHALL print a connection info block after the table containing:
 
+- **Route**: The external route address (only if `routeAddress` is non-empty)
 - **Cluster DNS**: The in-cluster service address (`openshell-gateway.<namespace>.svc.cluster.local:8080`)
 - **Server SANs**: The gateway's configured DNS names (only if `serverDnsNames` is non-empty)
-- **Setup hint**: The `acpctl gateway setup-cli <name> --gateway-url <url>` command to configure local CLI access
+- **Setup hint**: When a route address is available, show `acpctl gateway setup-cli <name>`. When no route address is available, show `acpctl gateway setup-cli <name> --kubectl`.
 
 The namespace SHALL be derived from the gateway's `projectID`, lowercased.
 
-#### Scenario: Connection info with DNS names
+#### Scenario: Connection info with route address
 
-- GIVEN gateway "alpha" has `serverDnsNames: ["gw.example.com"]` and belongs to project "PLATFORM"
+- GIVEN gateway "alpha" has `routeAddress: "https://openshell-gateway-platform.acpgw.apps.example.com"`, `serverDnsNames: ["gw.example.com"]`, and belongs to project "PLATFORM"
 - WHEN the user runs `acpctl get gateway alpha`
 - THEN the connection info shows:
+  - Route: `https://openshell-gateway-platform.acpgw.apps.example.com`
   - Cluster DNS: `openshell-gateway.platform.svc.cluster.local:8080`
   - Server SANs: `gw.example.com`
-  - Setup hint: `acpctl gateway setup-cli alpha --gateway-url <url>`
+  - Setup hint: `acpctl gateway setup-cli alpha`
 
-#### Scenario: Connection info without DNS names
+#### Scenario: Connection info without route address
 
-- GIVEN gateway "beta" has an empty `serverDnsNames` list
+- GIVEN gateway "beta" has no `routeAddress` and an empty `serverDnsNames` list
 - WHEN the user runs `acpctl get gateway beta`
-- THEN the Server SANs line is omitted from the connection info
+- THEN the Route line is omitted from the connection info
+- AND the Server SANs line is omitted
+- AND the setup hint shows `acpctl gateway setup-cli beta --kubectl`
 
 ### Requirement: Delete Gateway
 
