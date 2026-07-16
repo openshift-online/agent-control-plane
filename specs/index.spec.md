@@ -37,6 +37,7 @@ Machine-readable index for autonomous reconciliation (`/reconcile` skill).
 | `platform/session-activity-tracking.spec.md` | platform | Session (last_activity_at) | BE, API | data-model |
 | `platform/agent-inheritance.spec.md` | platform | Agent (kustomize overlays) | CP | agent-sandbox-config |
 | `platform/runner-constitution.md` | platform | Runner (governance) | Runner | runner |
+| `platform/openshell-cli-e2e-test.spec.md` | platform | E2E test (openshell CLI), Demo script | Tests, CLI | openshell-sandbox-provisioning, gateway-provisioning |
 | `security/identity-boundaries.spec.md` | security | Identity types (6) | CP, BE, Runner | - |
 | `security/sso-authentication.spec.md` | security | OIDC, JWT, BFF session | BE, FE, CLI | identity-boundaries |
 | `security/rbac-enforcement.spec.md` | security | Role, RoleBinding, Permission | BE, CP, CLI | data-model, identity-boundaries |

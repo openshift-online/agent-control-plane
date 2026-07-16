@@ -50,19 +50,19 @@ skills/
 
 ## Reconciliation State
 
-**Last analyzed**: 2026-07-18 (cluster health + placement)
-**Spec corpus**: 29 specs across 4 domains
-**Codebase commit**: adce8a5c (feat/openshift-e2e-installer-clean branch)
+**Last analyzed**: 2026-07-18 (openshell-cli-e2e-test gap analysis)
+**Spec corpus**: 30 specs across 4 domains
+**Codebase commit**: 40b550a7 (squizzi/amsterdam branch)
 
 ### Coverage Summary
 
 | Domain | Specs | Requirements | Present | Partial | Missing | Coverage |
 |--------|-------|-------------|---------|---------|---------|----------|
-| Platform | 12 | 124 | 119 | 1 | 4 | 96.0% |
+| Platform | 13 | 131 | 126 | 1 | 4 | 96.2% |
 | Security | 6 | 55 | 47 | 3 | 5 | 85.5% |
 | UI | 7 | 70 | 62 | 6 | 2 | 88.6% |
 | CLI | 1 | 13 | 13 | 0 | 0 | 100% |
-| **TOTAL** | **29** | **262** | **241** | **10** | **11** | **92.0%** |
+| **TOTAL** | **30** | **269** | **248** | **10** | **11** | **92.2%** |
 
 ### Spec Dependency Order
 
@@ -76,7 +76,8 @@ Layer 3:          gateway-provisioning, credential-encryption, openshell-sandbox
 Layer 4:          openshell-sandbox-provisioning, agent-inheritance
 Layer 5:          scheduled-session-execution, session-activity-tracking, mcp-server
 Layer 6 (leaves): architecture, annotations, views, live-preview, project-sharing,
-                  scheduled-sessions, work-tracking-dashboard, credentials-tui
+                  scheduled-sessions, work-tracking-dashboard, credentials-tui,
+                  openshell-cli-e2e-test
 ```
 
 ---
@@ -146,6 +147,8 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | P28 | data-model | SDK status/heartbeat methods (Go, Python, TypeScript) | SDK | **done** | critical | Generator extended: `status` and `heartbeat` added to `knownActions`, `ResponseSchema` support for action return types. All 3 SDKs generated with `ClusterStatusResponse` type and `Status()`/`Heartbeat()` methods. |
 | P29 | control-plane | ClusterHealthSyncer periodic health checker | CP | **done** | critical | `cluster_health_syncer.go` polls cluster heartbeat endpoint on configurable interval (default 30s). Wired into `main.go` with error channel pattern. Config: `CLUSTER_HEALTH_INTERVAL`. |
 | P30 | control-plane | PlacementStrategy interface + RoundRobinPlacement | CP | **done** | critical | `internal/placement/strategy.go` with `PlacementStrategy` interface, `PlacementRequest`/`PlacementDecision` types, `RoundRobinPlacement` default. Filters by role, status, labels, heartbeat threshold. Config: `PLACEMENT_HEARTBEAT_THRESHOLD`. |
+| P28 | openshell-cli-e2e-test | E2E test script (sections 1-8) | Tests | **done** | major | `tests/e2e/openshell-cli-e2e.sh` created with 8 numbered sections. Follows `gateway-e2e-test.sh` patterns (pass/fail/skip helpers, trap cleanup, port-forward). Exercises sandbox create/list/get/exec/delete, provider CRUD, policy set/idempotent/get/list/enforcement/delete, settings global+per-sandbox, optional --cluster-validate cross-validation. |
+| P29 | openshell-cli-e2e-test | Demo script (tmux-based) | CLI | **done** | minor | `components/ambient-cli/demo-openshell.sh` created following `demo-kind.sh` pattern. tmux self-bootstrap, step/announce/color helpers, PAUSE env var, 6 numbered sections (gateway setup, sandbox create, provider create, policy enforcement, settings, cleanup). |
 
 ### UI Gaps
 
@@ -191,8 +194,10 @@ Gaps grouped by execution wave. Each wave gates the next.
 | ~~12~~ | ~~CP~~ | ~~4~~ | ~~P12, P14, P16, P17~~ | ✅ Completed 2026-07-08 |
 | ~~13~~ | ~~Examples + Manifests~~ | ~~4~~ | ~~P18, P19, P20, P21~~ | ✅ Completed 2026-07-08 |
 | ~~14~~ | ~~BE (RBAC)~~ | ~~2~~ | ~~S13, S14~~ | ✅ Completed 2026-07-08 |
-| ~~15~~ | ~~SDK~~ | ~~1~~ | ~~P28~~ | ✅ Completed 2026-07-18 |
-| ~~16~~ | ~~CP~~ | ~~2~~ | ~~P29, P30~~ | ✅ Completed 2026-07-18 |
+| ~~15~~ | ~~Tests + CLI~~ | ~~2~~ | ~~P28, P29~~ | ✅ Completed 2026-07-16 |
+| ~~16~~ | ~~SDK~~ | ~~1~~ | ~~P28~~ | ✅ Completed 2026-07-18 |
+| ~~17~~ | ~~CP~~ | ~~2~~ | ~~P29, P30~~ | ✅ Completed 2026-07-18 |
+
 
 **Partials** (S9, S10, S11, P1, P9) are low-severity and can be addressed opportunistically.
 
@@ -247,4 +252,6 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-08 | (pending) | Wave 12 executed: P12, P14, P16, P17 | 89.6% | GatewayReconciler created (polling pattern, 30s ticker). ConfigMap-based provisioning eliminated. Manifests and validation consumed by new reconciler. `go build ./...` clean. |
 | 2026-07-08 | (pending) | Wave 13 executed: P18, P19, P20, P21 | 91.1% | Gateway overlay examples added. Failure handling with annotation-based status tracking. platform-config.yaml removed from kind and hcmais-dev overlays. ProjectReconciler ordering verified as already enforced. |
 | 2026-07-08 | (pending) | Wave 14 executed: S13, S14 | 91.9% | Provider/Gateway RBAC fix: added ResourceProvider/ResourceGateway to permissions.go, isListEndpoint allowlist, role permissions migration (202607080001). Provider handler hardened: SQL injection fix (TSLEqual), ApplyListFilter, input validation (validIDPattern), CheckEditorTier on writes. Tests added. |
+| 2026-07-16 | 40b550a7 | Wave 15 executed: P28, P29 | 92.2% | openshell-cli-e2e-test spec fully implemented. E2E test script (8 sections, 37 scenarios) and tmux demo script created. Coverage up from 91.9% to 92.2%. |
 | 2026-07-18 | (pending) | Waves 15-16 executed: P28, P29, P30 | 92.0% | SDK generator extended for action response schemas (`status`/`heartbeat` knownActions, `ResponseSchema` types). ClusterHealthSyncer reconciler (30s polling, heartbeat probing). PlacementStrategy interface + RoundRobinPlacement (role filtering, label matching, heartbeat threshold). |
+

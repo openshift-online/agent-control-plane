@@ -1,5 +1,5 @@
 version: 1
-filesystem:
+filesystem_policy:
   include_workdir: true
   read_only:
     - /usr
@@ -8,6 +8,8 @@ filesystem:
     - /proc
     - /dev/urandom
     - /etc
+    - /app
+    - /var/log
   read_write:
     - /sandbox
     - /tmp
