@@ -32,6 +32,8 @@ spec:
         - name: openshell-gateway
           securityContext:
             allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
             capabilities:
               drop:
               - ALL

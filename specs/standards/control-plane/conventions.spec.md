@@ -26,11 +26,16 @@ All Job pod specs must include a restrictive SecurityContext:
 SecurityContext: &corev1.SecurityContext{
     AllowPrivilegeEscalation: boolPtr(false),
     ReadOnlyRootFilesystem:   boolPtr(false),
+    SeccompProfile: &corev1.SeccompProfile{
+        Type: corev1.SeccompProfileTypeRuntimeDefault,
+    },
     Capabilities: &corev1.Capabilities{
         Drop: []corev1.Capability{"ALL"},
     },
 },
 ```
+
+The `SeccompProfile` is required for OpenShift's `restricted:latest` PodSecurity standard and is a best practice on all Kubernetes clusters.
 
 ### Resource Limits and Requests
 

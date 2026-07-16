@@ -57,6 +57,10 @@ rules:
 - apiGroups: ["route.openshift.io"]
   resources: ["routes", "routes/custom-host"]
   verbs: ["get", "list", "create", "update", "patch", "delete"]
+# cert-manager (TLS certificate lifecycle for gateways)
+- apiGroups: ["cert-manager.io"]
+  resources: ["issuers", "certificates"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
 # Sandboxes (OpenShell agent CRD)
 - apiGroups: ["agents.x-k8s.io"]
   resources: ["sandboxes", "sandboxes/status"]

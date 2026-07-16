@@ -33,6 +33,11 @@ var routeGVR = schema.GroupVersionResource{
 	Resource: "routes",
 }
 
+const (
+	trustedCAConfigMapName = "gateway-trusted-ca"
+	trustedCAKey           = "ca-bundle.crt"
+)
+
 type GatewayReconciler struct {
 	factory             *SDKClientFactory
 	dynamicClient       dynamic.Interface
@@ -41,7 +46,9 @@ type GatewayReconciler struct {
 	logger              zerolog.Logger
 	manifests           map[string][]*unstructured.Unstructured
 	defaultGatewayImage string
+	cpNamespace         string
 	isOpenShift         bool
+	hasCertManager      bool
 }
 
 func NewGatewayReconciler(
@@ -55,6 +62,10 @@ func NewGatewayReconciler(
 	if defaultImage == "" {
 		defaultImage = "ghcr.io/nvidia/openshell/gateway:0.0.83"
 	}
+	cpNs := os.Getenv("NAMESPACE")
+	if cpNs == "" {
+		cpNs = "ambient-code"
+	}
 	return &GatewayReconciler{
 		factory:             factory,
 		dynamicClient:       dynamicClient,
@@ -62,6 +73,7 @@ func NewGatewayReconciler(
 		provisioner:         provisioner,
 		logger:              logger.With().Str("component", "gateway-reconciler").Logger(),
 		defaultGatewayImage: defaultImage,
+		cpNamespace:         cpNs,
 	}
 }
 
@@ -72,9 +84,11 @@ func (r *GatewayReconciler) Run(ctx context.Context) error {
 	}
 	r.manifests = manifests
 	r.isOpenShift = r.detectOpenShift()
+	r.hasCertManager = r.detectCertManager()
 	r.logger.Info().
 		Int("manifest_files", len(manifests)).
 		Bool("openshift", r.isOpenShift).
+		Bool("cert_manager", r.hasCertManager).
 		Dur("interval", gatewaySyncInterval).
 		Msg("gateway reconciler started")
 
@@ -242,8 +256,31 @@ func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient 
 		Gateway: gwConfig,
 	}
 
-	if err := gateway.ReconcileGateways(ctx, r.dynamicClient, r.clientset, []gateway.NamespaceConfig{nsConfig}, r.manifests); err != nil {
+	opts := gateway.ReconcileOpts{
+		IsOpenShift:    r.isOpenShift,
+		HasCertManager: r.hasCertManager,
+	}
+
+	if caData, err := r.reconcileTrustedCA(ctx, namespace); err != nil {
+		r.logger.Warn().Err(err).Str("namespace", namespace).Msg("failed to propagate trusted CA, gateway may not trust private CAs")
+	} else {
+		opts.TrustedCAData = caData
+	}
+
+	if err := gateway.ReconcileGateways(ctx, r.dynamicClient, r.clientset, []gateway.NamespaceConfig{nsConfig}, r.manifests, opts); err != nil {
 		return fmt.Errorf("reconcile gateway %s: %w", gw.Name, err)
+	}
+
+	if r.isOpenShift {
+		if err := r.reconcileOpenShiftSCC(ctx, namespace); err != nil {
+			r.logger.Warn().Err(err).Str("namespace", namespace).Msg("failed to reconcile OpenShift SCC binding")
+		}
+	}
+
+	if r.hasCertManager {
+		if err := r.reconcileCertManagerResources(ctx, gw, namespace); err != nil {
+			r.logger.Warn().Err(err).Str("namespace", namespace).Msg("cert-manager resource reconciliation failed, certgen job handles fallback")
+		}
 	}
 
 	if err := r.reconcileRoute(ctx, projectClient, gw, namespace); err != nil {
@@ -331,7 +368,7 @@ func (r *GatewayReconciler) reconcileRoute(ctx context.Context, projectClient *s
 
 	caCert, err := r.readCACert(ctx, namespace)
 	if err != nil {
-		r.logger.Debug().Err(err).Str("namespace", namespace).Msg("CA cert not yet available, will retry next cycle")
+		r.logger.Debug().Err(err).Str("namespace", namespace).Msg("server TLS secret not yet available, skipping route")
 		return nil
 	}
 
@@ -362,7 +399,11 @@ func (r *GatewayReconciler) reconcileRoute(ctx context.Context, projectClient *s
 		}
 	}
 
-	return r.reconcileRouteAddress(ctx, projectClient, gw, namespace, routeName)
+	if err := r.reconcileRouteAddress(ctx, projectClient, gw, namespace, routeName); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *GatewayReconciler) buildRouteObject(gw *types.Gateway, namespace, routeName, caCert, stsUID string) (*unstructured.Unstructured, error) {
@@ -384,7 +425,8 @@ func (r *GatewayReconciler) buildRouteObject(gw *types.Gateway, namespace, route
 					"app.kubernetes.io/managed-by": "agent-control-plane",
 				},
 				"annotations": map[string]interface{}{
-					"haproxy.router.openshift.io/timeout": "3600s",
+					"haproxy.router.openshift.io/timeout":     "3600s",
+					"haproxy.router.openshift.io/enable-http2": "true",
 				},
 			},
 			"spec": map[string]interface{}{
@@ -509,6 +551,285 @@ func (r *GatewayReconciler) reconcileRouteAddress(ctx context.Context, projectCl
 		Str("route_address", routeAddress).
 		Msg("updated gateway routeAddress")
 	return nil
+}
+
+func (r *GatewayReconciler) reconcileTrustedCA(ctx context.Context, tenantNamespace string) (string, error) {
+	configMapGVR := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}
+
+	source, err := r.dynamicClient.Resource(configMapGVR).Namespace(r.cpNamespace).Get(ctx, trustedCAConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("get %s from %s: %w", trustedCAConfigMapName, r.cpNamespace, err)
+	}
+
+	data, found, err := unstructured.NestedStringMap(source.Object, "data")
+	if err != nil || !found {
+		return "", nil
+	}
+
+	caData, ok := data[trustedCAKey]
+	if !ok || caData == "" {
+		return "", nil
+	}
+
+	// Copy ConfigMap to tenant namespace (create-or-update)
+	target := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      trustedCAConfigMapName,
+				"namespace": tenantNamespace,
+				"labels": map[string]interface{}{
+					"app.kubernetes.io/managed-by": "agent-control-plane",
+				},
+			},
+			"data": map[string]interface{}{
+				trustedCAKey: caData,
+			},
+		},
+	}
+
+	existing, err := r.dynamicClient.Resource(configMapGVR).Namespace(tenantNamespace).Get(ctx, trustedCAConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return "", fmt.Errorf("get %s from %s: %w", trustedCAConfigMapName, tenantNamespace, err)
+		}
+		if _, createErr := r.dynamicClient.Resource(configMapGVR).Namespace(tenantNamespace).Create(ctx, target, metav1.CreateOptions{}); createErr != nil {
+			return "", fmt.Errorf("create %s in %s: %w", trustedCAConfigMapName, tenantNamespace, createErr)
+		}
+		r.logger.Info().Str("namespace", tenantNamespace).Msg("copied gateway-trusted-ca to tenant namespace")
+	} else {
+		target.SetResourceVersion(existing.GetResourceVersion())
+		if _, updateErr := r.dynamicClient.Resource(configMapGVR).Namespace(tenantNamespace).Update(ctx, target, metav1.UpdateOptions{}); updateErr != nil {
+			return "", fmt.Errorf("update %s in %s: %w", trustedCAConfigMapName, tenantNamespace, updateErr)
+		}
+	}
+
+	return caData, nil
+}
+
+func (r *GatewayReconciler) detectCertManager() bool {
+	_, resources, err := r.clientset.Discovery().ServerGroupsAndResources()
+	if err != nil {
+		r.logger.Warn().Err(err).Msg("failed to discover API groups for cert-manager detection")
+		return false
+	}
+	for _, list := range resources {
+		if strings.HasPrefix(list.GroupVersion, "cert-manager.io/") {
+			return true
+		}
+	}
+	return false
+}
+
+var (
+	issuerGVR = schema.GroupVersionResource{
+		Group:    "cert-manager.io",
+		Version:  "v1",
+		Resource: "issuers",
+	}
+	certificateGVR = schema.GroupVersionResource{
+		Group:    "cert-manager.io",
+		Version:  "v1",
+		Resource: "certificates",
+	}
+	roleBindingGVR = schema.GroupVersionResource{
+		Group:    "rbac.authorization.k8s.io",
+		Version:  "v1",
+		Resource: "rolebindings",
+	}
+)
+
+func (r *GatewayReconciler) reconcileOpenShiftSCC(ctx context.Context, namespace string) error {
+	bindingName := "openshell-sandbox-privileged-scc"
+	binding := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "rbac.authorization.k8s.io/v1",
+			"kind":       "RoleBinding",
+			"metadata": map[string]interface{}{
+				"name":      bindingName,
+				"namespace": namespace,
+				"labels": map[string]interface{}{
+					"app.kubernetes.io/name":       "openshell",
+					"app.kubernetes.io/component":  "gateway",
+					"app.kubernetes.io/managed-by": "agent-control-plane",
+				},
+			},
+			"roleRef": map[string]interface{}{
+				"apiGroup": "rbac.authorization.k8s.io",
+				"kind":     "ClusterRole",
+				"name":     "system:openshift:scc:privileged",
+			},
+			"subjects": []interface{}{
+				map[string]interface{}{
+					"kind":      "ServiceAccount",
+					"name":      "openshell-gateway-sandbox",
+					"namespace": namespace,
+				},
+			},
+		},
+	}
+
+	existing, err := r.dynamicClient.Resource(roleBindingGVR).Namespace(namespace).Get(ctx, bindingName, metav1.GetOptions{})
+	if err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return fmt.Errorf("get SCC RoleBinding: %w", err)
+		}
+		if _, createErr := r.dynamicClient.Resource(roleBindingGVR).Namespace(namespace).Create(ctx, binding, metav1.CreateOptions{}); createErr != nil {
+			return fmt.Errorf("create SCC RoleBinding: %w", createErr)
+		}
+		r.logger.Info().Str("namespace", namespace).Msg("created privileged SCC binding for openshell-gateway-sandbox")
+		return nil
+	}
+
+	binding.SetResourceVersion(existing.GetResourceVersion())
+	if _, err := r.dynamicClient.Resource(roleBindingGVR).Namespace(namespace).Update(ctx, binding, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("update SCC RoleBinding: %w", err)
+	}
+	return nil
+}
+
+func (r *GatewayReconciler) reconcileCertManagerResources(ctx context.Context, gw *types.Gateway, namespace string) error {
+	dnsNames := []interface{}{"openshell-gateway." + namespace + ".svc.cluster.local"}
+	for _, dns := range gw.ServerDnsNames {
+		resolved := strings.ReplaceAll(dns, "NAMESPACE_PLACEHOLDER", namespace)
+		if resolved != dnsNames[0].(string) {
+			dnsNames = append(dnsNames, resolved)
+		}
+	}
+
+	resources := []struct {
+		gvr  schema.GroupVersionResource
+		obj  *unstructured.Unstructured
+		desc string
+	}{
+		{
+			gvr: issuerGVR,
+			obj: buildCertManagerIssuer("openshell-selfsigned", namespace, map[string]interface{}{
+				"selfSigned": map[string]interface{}{},
+			}),
+			desc: "self-signed Issuer",
+		},
+		{
+			gvr: certificateGVR,
+			obj: buildCertManagerCertificate("openshell-ca", namespace, map[string]interface{}{
+				"isCA":       true,
+				"commonName": "openshell-ca",
+				"secretName": "openshell-ca-tls",
+				"privateKey": map[string]interface{}{
+					"algorithm": "ECDSA",
+					"size":      int64(256),
+				},
+				"issuerRef": map[string]interface{}{
+					"name": "openshell-selfsigned",
+					"kind": "Issuer",
+				},
+			}),
+			desc: "CA Certificate",
+		},
+		{
+			gvr: issuerGVR,
+			obj: buildCertManagerIssuer("openshell-ca-issuer", namespace, map[string]interface{}{
+				"ca": map[string]interface{}{
+					"secretName": "openshell-ca-tls",
+				},
+			}),
+			desc: "CA Issuer",
+		},
+		{
+			gvr: certificateGVR,
+			obj: buildCertManagerCertificate("openshell-server", namespace, map[string]interface{}{
+				"secretName": "openshell-server-tls",
+				"commonName": "openshell-gateway",
+				"dnsNames":   dnsNames,
+				"privateKey": map[string]interface{}{
+					"rotationPolicy": "Always",
+				},
+				"issuerRef": map[string]interface{}{
+					"name": "openshell-ca-issuer",
+					"kind": "Issuer",
+				},
+			}),
+			desc: "server Certificate",
+		},
+		{
+			gvr: certificateGVR,
+			obj: buildCertManagerCertificate("openshell-client", namespace, map[string]interface{}{
+				"secretName": "openshell-client-tls",
+				"commonName": "openshell-client",
+				"privateKey": map[string]interface{}{
+					"rotationPolicy": "Always",
+				},
+				"issuerRef": map[string]interface{}{
+					"name": "openshell-ca-issuer",
+					"kind": "Issuer",
+				},
+			}),
+			desc: "client Certificate",
+		},
+	}
+
+	for _, res := range resources {
+		existing, err := r.dynamicClient.Resource(res.gvr).Namespace(namespace).Get(ctx, res.obj.GetName(), metav1.GetOptions{})
+		if err != nil {
+			if !k8serrors.IsNotFound(err) {
+				return fmt.Errorf("get cert-manager %s: %w", res.desc, err)
+			}
+			if _, createErr := r.dynamicClient.Resource(res.gvr).Namespace(namespace).Create(ctx, res.obj, metav1.CreateOptions{}); createErr != nil {
+				return fmt.Errorf("create cert-manager %s: %w", res.desc, createErr)
+			}
+			r.logger.Info().Str("namespace", namespace).Str("resource", res.desc).Msg("created cert-manager resource")
+			continue
+		}
+
+		res.obj.SetResourceVersion(existing.GetResourceVersion())
+		if _, err := r.dynamicClient.Resource(res.gvr).Namespace(namespace).Update(ctx, res.obj, metav1.UpdateOptions{}); err != nil {
+			return fmt.Errorf("update cert-manager %s: %w", res.desc, err)
+		}
+	}
+
+	return nil
+}
+
+func buildCertManagerIssuer(name, namespace string, spec map[string]interface{}) *unstructured.Unstructured {
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "cert-manager.io/v1",
+			"kind":       "Issuer",
+			"metadata": map[string]interface{}{
+				"name":      name,
+				"namespace": namespace,
+				"labels": map[string]interface{}{
+					"app.kubernetes.io/name":       "openshell",
+					"app.kubernetes.io/component":  "gateway",
+					"app.kubernetes.io/managed-by": "agent-control-plane",
+				},
+			},
+			"spec": spec,
+		},
+	}
+}
+
+func buildCertManagerCertificate(name, namespace string, spec map[string]interface{}) *unstructured.Unstructured {
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "cert-manager.io/v1",
+			"kind":       "Certificate",
+			"metadata": map[string]interface{}{
+				"name":      name,
+				"namespace": namespace,
+				"labels": map[string]interface{}{
+					"app.kubernetes.io/name":       "openshell",
+					"app.kubernetes.io/component":  "gateway",
+					"app.kubernetes.io/managed-by": "agent-control-plane",
+				},
+			},
+			"spec": spec,
+		},
+	}
 }
 
 func (r *GatewayReconciler) deleteRouteIfExists(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway, namespace, routeName string) error {

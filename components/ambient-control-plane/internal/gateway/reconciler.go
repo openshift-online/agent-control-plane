@@ -23,6 +23,7 @@ func ReconcileGateways(
 	clientset *kubernetes.Clientset,
 	namespaceConfigs []NamespaceConfig,
 	manifests map[string][]*unstructured.Unstructured,
+	opts ReconcileOpts,
 ) error {
 	defaultImage := os.Getenv("OPENSHELL_GATEWAY_IMAGE")
 	if defaultImage == "" {
@@ -48,7 +49,7 @@ func ReconcileGateways(
 		}
 
 		// 3. Deploy/update gateway manifests (reconcile pattern)
-		if err := deployGateway(ctx, dynamicClient, nsConfig, manifests, defaultImage); err != nil {
+		if err := deployGateway(ctx, dynamicClient, nsConfig, manifests, defaultImage, opts); err != nil {
 			log.Error().
 				Str("namespace", nsConfig.Name).
 				Err(err).
@@ -78,6 +79,7 @@ func deployGateway(
 	nsConfig NamespaceConfig,
 	manifests map[string][]*unstructured.Unstructured,
 	defaultImage string,
+	opts ReconcileOpts,
 ) error {
 	// Check what changed for THIS namespace
 	dnsNamesChanged := false
@@ -144,9 +146,15 @@ func deployGateway(
 				return fmt.Errorf("apply config overrides for %s: %w", filename, err)
 			}
 
-			// OwnerReferences can't cross namespaces, so we skip setting them for gateway resources
-			// Gateway cleanup will be handled by namespace deletion or manual removal from ConfigMap
-			// Note: Could use labels for tracking, but OwnerReferences won't work here
+			// On OpenShift, clear fsGroup and runAsUser so the SCC assigns UIDs/GIDs
+			if opts.IsOpenShift && obj.GetKind() == "StatefulSet" {
+				applyOpenShiftOverrides(obj)
+			}
+
+			// Mount trusted CA bundle into gateway pod for OIDC discovery with private CAs
+			if opts.TrustedCAData != "" && obj.GetKind() == "StatefulSet" {
+				applyTrustedCAOverrides(obj)
+			}
 
 			// Reconcile resource (update-or-create)
 			if err := reconcileResource(ctx, dynamicClient, obj, needsRestart); err != nil {
@@ -457,6 +465,8 @@ func kindToResource(kind string) string {
 		"NetworkPolicy":      "networkpolicies",
 		"Secret":             "secrets",
 		"Route":              "routes",
+		"Issuer":             "issuers",
+		"Certificate":        "certificates",
 	}
 
 	if resource, ok := mapping[kind]; ok {
@@ -501,5 +511,98 @@ func mergeClusterRoleBindingSubjects(existing, desired *unstructured.Unstructure
 		}
 	}
 
-	_ = unstructured.SetNestedSlice(desired.Object, desiredSubjects, "subjects")
+	if err := unstructured.SetNestedSlice(desired.Object, desiredSubjects, "subjects"); err != nil {
+		log.Warn().Err(err).Msg("failed to merge ClusterRoleBinding subjects")
+	}
+}
+
+// applyTrustedCAOverrides adds a volume mount and SSL_CERT_FILE env var to
+// the gateway StatefulSet so the gateway trusts additional CA certificates
+// (e.g., a private ingress CA for OIDC discovery).
+func applyTrustedCAOverrides(obj *unstructured.Unstructured) {
+	// Add volume for the gateway-trusted-ca ConfigMap
+	volumes, _, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "volumes")
+	volumes = append(volumes, map[string]interface{}{
+		"name": "trusted-ca",
+		"configMap": map[string]interface{}{
+			"name": "gateway-trusted-ca",
+			"items": []interface{}{
+				map[string]interface{}{
+					"key":  "ca-bundle.crt",
+					"path": "ca-bundle.crt",
+				},
+			},
+		},
+	})
+	if err := unstructured.SetNestedSlice(obj.Object, volumes, "spec", "template", "spec", "volumes"); err != nil {
+		log.Warn().Err(err).Msg("failed to add trusted-ca volume to StatefulSet")
+		return
+	}
+
+	// Add volume mount and env var to the first container
+	containers, found, err := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "containers")
+	if err != nil || !found || len(containers) == 0 {
+		log.Warn().Msg("no containers found in StatefulSet for trusted CA injection")
+		return
+	}
+
+	container, ok := containers[0].(map[string]interface{})
+	if !ok {
+		return
+	}
+
+	// Add volume mount
+	mounts, _, _ := unstructured.NestedSlice(container, "volumeMounts")
+	mounts = append(mounts, map[string]interface{}{
+		"name":      "trusted-ca",
+		"mountPath": "/etc/pki/tls/certs/ca-bundle.crt",
+		"subPath":   "ca-bundle.crt",
+		"readOnly":  true,
+	})
+	if err := unstructured.SetNestedSlice(container, mounts, "volumeMounts"); err != nil {
+		log.Warn().Err(err).Msg("failed to add trusted-ca volume mount")
+		return
+	}
+
+	// Add SSL_CERT_FILE env var
+	envVars, _, _ := unstructured.NestedSlice(container, "env")
+	envVars = append(envVars, map[string]interface{}{
+		"name":  "SSL_CERT_FILE",
+		"value": "/etc/pki/tls/certs/ca-bundle.crt",
+	})
+	if err := unstructured.SetNestedSlice(container, envVars, "env"); err != nil {
+		log.Warn().Err(err).Msg("failed to add SSL_CERT_FILE env var")
+		return
+	}
+
+	containers[0] = container
+	if err := unstructured.SetNestedSlice(obj.Object, containers, "spec", "template", "spec", "containers"); err != nil {
+		log.Warn().Err(err).Msg("failed to apply trusted CA overrides to StatefulSet")
+	}
+}
+
+// applyOpenShiftOverrides clears fsGroup and runAsUser from a StatefulSet so
+// OpenShift's SCC can assign UIDs/GIDs from the namespace range.
+func applyOpenShiftOverrides(obj *unstructured.Unstructured) {
+	unstructured.RemoveNestedField(obj.Object, "spec", "template", "spec", "securityContext", "fsGroup")
+
+	containers, found, err := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "containers")
+	if err != nil {
+		log.Warn().Err(err).Msg("failed to read StatefulSet containers for OpenShift overrides")
+		return
+	}
+	if !found {
+		return
+	}
+	for i, c := range containers {
+		container, ok := c.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		unstructured.RemoveNestedField(container, "securityContext", "runAsUser")
+		containers[i] = container
+	}
+	if err := unstructured.SetNestedSlice(obj.Object, containers, "spec", "template", "spec", "containers"); err != nil {
+		log.Warn().Err(err).Msg("failed to apply OpenShift security context overrides to StatefulSet")
+	}
 }

@@ -60,6 +60,21 @@ echo "  Waiting for agent-sandbox controller..."
 kubectl wait --for=condition=Available deployment/agent-sandbox-controller \
   -n agent-sandbox-system --timeout=120s >/dev/null 2>&1
 
+# 1b. Install cert-manager for automated TLS certificate lifecycle
+CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.17.1}"
+if kubectl get namespace cert-manager >/dev/null 2>&1; then
+  echo "  cert-manager already installed — skipping"
+else
+  echo "  Installing cert-manager ${CERT_MANAGER_VERSION}..."
+  kubectl apply -f "https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml"
+  echo "  Waiting for cert-manager..."
+  kubectl wait --for=condition=Available deployment/cert-manager \
+    -n cert-manager --timeout=120s >/dev/null 2>&1
+  kubectl wait --for=condition=Available deployment/cert-manager-webhook \
+    -n cert-manager --timeout=120s >/dev/null 2>&1
+  echo "  cert-manager ${CERT_MANAGER_VERSION} installed"
+fi
+
 # 2. Create tenant namespaces (gateway resources deployed by control plane reconciler)
 for TENANT in "${TENANTS[@]}"; do
   echo "  Provisioning tenant '$TENANT'..."

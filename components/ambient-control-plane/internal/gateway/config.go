@@ -26,3 +26,9 @@ type GatewayConfig struct {
 	Oidc           *OidcConfig  `yaml:"oidc,omitempty"`
 	Route          *RouteConfig `yaml:"route,omitempty"`
 }
+
+type ReconcileOpts struct {
+	IsOpenShift    bool
+	HasCertManager bool
+	TrustedCAData  string // PEM CA bundle from gateway-trusted-ca ConfigMap; empty = no injection
+}

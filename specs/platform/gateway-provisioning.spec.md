@@ -211,6 +211,118 @@ The GatewayReconciler SHALL load gateway resource manifests from the container f
 
 ---
 
+### Requirement: TLS Certificate Management via cert-manager
+
+The GatewayReconciler SHALL support two certificate generation strategies: the default `pkiInitJob` (a one-shot Job using the gateway image's `generate-certs` command) and `certManager` (delegating to the [cert-manager](https://cert-manager.io/) operator). When cert-manager is available on the cluster, it SHALL be the preferred strategy. This follows the [NVIDIA OpenShell Managing Certificates guide](https://docs.nvidia.com/openshell/kubernetes/managing-certificates).
+
+**Why cert-manager over pkiInitJob:** The pkiInitJob generates certificates once as a Kubernetes Job. If certificates expire, a manual re-run is required. cert-manager automates certificate lifecycle — issuance, renewal before expiry, and secret rotation — without operator intervention. cert-manager also integrates with external CAs (ACME, Vault, etc.) for production deployments.
+
+**Cluster prerequisite:** cert-manager (v1.20+ recommended) must be installed cluster-wide by an administrator before gateways can use it. This is analogous to the agent-sandbox controller — a cluster-level prerequisite, not something ACP installs per-gateway. In test environments (Kind, CRC), cert-manager SHALL be installed during `make kind-up` and `make crc-up` at the same time as the agent-sandbox controller.
+
+#### Scenario: cert-manager installed during test environment setup
+
+- GIVEN a developer runs `make kind-up` or `make crc-up`
+- WHEN the setup script installs cluster prerequisites
+- THEN it SHALL install cert-manager (via `kubectl apply -f` from the cert-manager release manifests, with CRDs enabled)
+- AND it SHALL wait for the cert-manager controller deployment to reach ready state (analogous to waiting for the agent-sandbox controller)
+- AND cert-manager SHALL be installed in the `cert-manager` namespace
+- AND this installation SHALL occur alongside the agent-sandbox controller installation (both are cluster-scoped prerequisites)
+
+#### Scenario: Gateway configured to use cert-manager
+
+- GIVEN cert-manager is installed on the cluster (Certificate, Issuer CRDs are available)
+- AND the GatewayReconciler detects cert-manager availability (via API discovery for `cert-manager.io` API group)
+- WHEN the reconciler provisions a gateway
+- THEN it SHALL create cert-manager resources for TLS certificate lifecycle:
+  - A self-signed `Issuer` (`openshell-selfsigned`) in the project namespace to bootstrap the CA
+  - A `Certificate` for the CA (`openshell-ca`, ECDSA P256, creates `openshell-ca-tls` Secret)
+  - A CA-backed `Issuer` (`openshell-ca-issuer`) that uses the CA certificate
+  - A server `Certificate` (`openshell-server`, creates `openshell-server-tls` Secret with `ca.crt`, `tls.crt`, `tls.key`, with DNS SANs from `serverDnsNames`)
+  - A client `Certificate` (`openshell-client`, creates `openshell-client-tls` Secret)
+- AND server and client Certificates SHALL set `privateKey.rotationPolicy: Always` so cert-manager can regenerate keys when taking over secrets previously created by the certgen job
+- AND cert-manager SHALL handle automatic renewal before certificate expiry
+
+**Coexistence with certgen job:** cert-manager handles TLS certificate lifecycle (issuance, renewal, rotation). The certgen job handles JWT key generation (`signing.pem`, `public.pem`, `kid` in the `openshell-gateway-jwt-keys` Secret). Both run: cert-manager creates TLS secrets, then certgen checks if they exist (skipping TLS) and only creates JWT keys. The certgen job remains in the deploy order for all gateways regardless of cert-manager availability.
+
+#### Scenario: Fallback to pkiInitJob when cert-manager is not available
+
+- GIVEN cert-manager is NOT installed on the cluster
+- WHEN the GatewayReconciler provisions a gateway
+- THEN the certgen job SHALL handle both TLS certificate generation AND JWT key generation (existing behavior)
+- AND this SHALL be backward compatible with all existing deployments
+
+#### Scenario: cert-manager detection
+
+- GIVEN the GatewayReconciler initializes
+- WHEN it checks for cert-manager availability
+- THEN it SHALL use API discovery to check for the `cert-manager.io` API group
+- AND detection SHALL occur once at startup (alongside OpenShift detection), not per-reconciliation
+- AND the result SHALL be stored as a `hasCertManager bool` field on the reconciler
+
+#### Scenario: cert-manager resources built inline
+
+- GIVEN the GatewayReconciler uses cert-manager
+- WHEN it applies certificate resources
+- THEN the cert-manager Issuer and Certificate resources SHALL be constructed as inline unstructured objects in the reconciler code (matching the Route creation pattern), not loaded from YAML manifest templates
+- AND they SHALL include appropriate SANs derived from the gateway's `serverDnsNames`
+- AND the certgen job manifests SHALL remain at `manifests/gateway/certgen-job.yaml` and continue to run (for JWT key generation)
+
+#### Scenario: RBAC for cert-manager resources
+
+- GIVEN the control plane needs to create and manage cert-manager resources
+- THEN the ClusterRole SHALL include:
+  ```yaml
+  - apiGroups: ["cert-manager.io"]
+    resources: ["issuers", "certificates"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  ```
+
+---
+
+### Requirement: Trusted CA Bundle Injection
+
+Gateways with OIDC enabled need to reach the identity provider's OIDC discovery endpoint over HTTPS. In environments where the IdP is exposed through an ingress controller with a non-public CA certificate (e.g., OpenShift CRC, private PKI), the gateway pod's default trust store will not include the required CA and OIDC initialization will fail.
+
+The control plane SHALL support an optional `gateway-trusted-ca` ConfigMap in the ACP namespace. When present, it is copied to each tenant namespace and mounted into the gateway StatefulSet so that the gateway process trusts the additional CA certificates.
+
+#### Scenario: Trusted CA ConfigMap present in ACP namespace
+
+- GIVEN a ConfigMap named `gateway-trusted-ca` exists in the ACP namespace (e.g., `ambient-code`)
+- AND the ConfigMap has a `ca-bundle.crt` key containing one or more PEM-encoded CA certificates
+- WHEN the GatewayReconciler reconciles a gateway in a tenant namespace
+- THEN it SHALL copy the `gateway-trusted-ca` ConfigMap to the tenant namespace (create-or-update pattern)
+- AND it SHALL add a volume to the gateway StatefulSet mounting the `ca-bundle.crt` key at `/etc/pki/tls/certs/ca-bundle.crt` (read-only, using `subPath`)
+- AND it SHALL add an `SSL_CERT_FILE` environment variable set to `/etc/pki/tls/certs/ca-bundle.crt` on the gateway container
+- AND the mounted CA bundle SHALL be used by the gateway's TLS client for OIDC discovery and JWKS fetching
+
+#### Scenario: Trusted CA ConfigMap absent
+
+- GIVEN no ConfigMap named `gateway-trusted-ca` exists in the ACP namespace
+- WHEN the GatewayReconciler reconciles a gateway
+- THEN it SHALL NOT add any CA volume or `SSL_CERT_FILE` env var to the gateway StatefulSet
+- AND the gateway SHALL use its built-in trust store (default behavior)
+- AND this SHALL be the default for environments with publicly-trusted IdP certificates (e.g., production with a public CA)
+
+#### Scenario: Trusted CA ConfigMap updated
+
+- GIVEN a `gateway-trusted-ca` ConfigMap exists and has been updated (new certificates added or removed)
+- WHEN the GatewayReconciler runs its next reconciliation cycle
+- THEN it SHALL update the copy in the tenant namespace
+- AND the gateway pod SHALL pick up the new CA bundle on its next restart
+
+#### Scenario: CRC test environment setup
+
+- GIVEN a CRC (OpenShift Local) cluster where Keycloak is exposed via an OpenShift Route with a self-signed ingress CA
+- WHEN a developer runs the CRC setup automation
+- THEN the setup script SHALL extract the CRC ingress CA from the `router-ca` Secret in `openshift-ingress-operator` namespace
+- AND it SHALL combine the ingress CA with the system CA bundle (from an OpenShift-injected ConfigMap with `config.openshift.io/inject-trusted-cabundle` annotation)
+- AND it SHALL create the `gateway-trusted-ca` ConfigMap in the ACP namespace with the combined bundle
+- AND subsequent gateway reconciliation SHALL automatically inject the CA into gateway pods
+
+**Design rationale:** The OIDC issuer URL must be identical inside and outside the cluster (OpenShell requirement — see [Gateway Auth: OIDC](https://docs.nvidia.com/openshell/reference/gateway-auth#oidc)). On CRC, the external Keycloak Route uses HTTPS with the CRC ingress controller's self-signed CA. The gateway must reach this same URL, so it needs the ingress CA in its trust store. Using an in-cluster HTTP URL is not viable because the issuer returned in OIDC discovery would not match. This approach generalizes to any environment where the IdP uses a private CA.
+
+---
+
 ### Requirement: Gateway Configuration Validation
 
 The GatewayReconciler SHALL validate Gateway resource fields before applying K8s manifests. Validation logic is reused from `internal/gateway/validation.go`.
@@ -394,7 +506,7 @@ All gateway resources SHALL carry the following labels:
 - `ambient-code.io/managed=true`
 
 The gateway StatefulSet SHALL specify:
-- **SecurityContext:** `runAsNonRoot: true`, `allowPrivilegeEscalation: false`, capabilities `drop: [ALL]`
+- **SecurityContext:** `runAsNonRoot: true`, `allowPrivilegeEscalation: false`, capabilities `drop: [ALL]`, `seccompProfile.type: RuntimeDefault`
 - **Resource requests:** `cpu: 100m`, `memory: 256Mi`
 - **Resource limits:** `cpu: 500m`, `memory: 512Mi`
 
@@ -412,6 +524,56 @@ The gateway StatefulSet SHALL specify:
 - WHEN the GatewayReconciler reconciles again
 - THEN it SHALL apply the latest configuration using SSA or equivalent
 - AND it SHALL NOT create duplicate resources
+
+---
+
+### Requirement: OpenShift-Specific Gateway Provisioning
+
+When the control plane detects that it is running on an OpenShift cluster (the `route.openshift.io` API group is available — see `gateway-route-exposure.spec.md` § OpenShift Cluster Detection), the GatewayReconciler SHALL adjust the gateway deployment to conform to OpenShift's SecurityContextConstraints (SCC) and PodSecurity admission requirements. These adjustments follow the [NVIDIA OpenShell OpenShift deployment guide](https://docs.nvidia.com/openshell/kubernetes/openshift).
+
+**Key difference from vanilla Kubernetes:** OpenShift enforces the `restricted` PodSecurity standard by default. The OpenShell Helm chart's hardcoded `fsGroup` and `runAsUser` values conflict with OpenShift's SCC admission controller, which assigns UIDs and GIDs from the namespace's allocated ranges. Additionally, sandbox pods require the `privileged` SCC to function correctly.
+
+**TLS is NOT disabled.** The NVIDIA docs show `--set server.disableTls=true` for evaluation scenarios. ACP does NOT use this setting because it provisions re-encrypt TLS Routes (see `gateway-route-exposure.spec.md`), which require the gateway to serve TLS. The gateway's self-signed certificate (generated by the certgen Job) is used for the internal TLS segment between the OpenShift router and the gateway pod.
+
+#### Scenario: SCC binding for sandbox service account
+
+- GIVEN the GatewayReconciler is deploying a gateway to an OpenShift cluster
+- AND the target namespace exists
+- WHEN the reconciler applies gateway manifests
+- THEN it SHALL ensure that the `privileged` SCC is bound to the `openshell-sandbox` ServiceAccount in the target namespace
+- AND this binding SHALL be applied BEFORE the StatefulSet is created (so sandbox pods can schedule)
+- AND the binding SHALL be equivalent to: `oc adm policy add-scc-to-user privileged -z openshell-sandbox -n <namespace>`
+- AND the reconciler SHALL use update-or-create semantics for the SCC binding (idempotent)
+
+#### Scenario: Pod security context adjustments for OpenShift
+
+- GIVEN the GatewayReconciler is deploying a gateway to an OpenShift cluster
+- WHEN the reconciler applies gateway manifests
+- THEN it SHALL clear the `podSecurityContext.fsGroup` field (set to null/omit) so that OpenShift's SCC admission controller assigns the fsGroup from the namespace's allocated UID range
+- AND it SHALL clear the `securityContext.runAsUser` field (set to null/omit) so that OpenShift's SCC admission controller assigns the UID from the namespace's allocated range
+- AND all gateway containers SHALL set `securityContext.seccompProfile.type` to `RuntimeDefault` to satisfy the `restricted:latest` PodSecurity standard
+
+#### Scenario: seccompProfile on all gateway containers
+
+- GIVEN the GatewayReconciler deploys a gateway (on any cluster, not just OpenShift)
+- WHEN the reconciler constructs the StatefulSet pod spec
+- THEN ALL containers SHALL include `securityContext.seccompProfile.type: RuntimeDefault`
+- AND this satisfies both OpenShift's `restricted:latest` PodSecurity standard and Kubernetes PodSecurity Standards (PSS) best practices
+
+#### Scenario: Gateway deployment on vanilla Kubernetes (unchanged)
+
+- GIVEN the GatewayReconciler is deploying a gateway to a non-OpenShift cluster (e.g., Kind, EKS, GKE)
+- WHEN the reconciler applies gateway manifests
+- THEN it SHALL NOT modify `podSecurityContext.fsGroup` or `securityContext.runAsUser` (the chart defaults are correct for non-OpenShift)
+- AND it SHALL NOT create SCC bindings (SCC is an OpenShift-only concept)
+- AND the `seccompProfile.type: RuntimeDefault` SHALL still be set (it is valid on all Kubernetes clusters)
+
+#### Scenario: Platform detection reuse
+
+- GIVEN the GatewayReconciler already detects OpenShift for Route provisioning (see `gateway-route-exposure.spec.md`)
+- WHEN the reconciler initializes
+- THEN it SHALL reuse the same `isOpenShift` detection result for both Route provisioning and SCC/security adjustments
+- AND detection SHALL occur once at startup, not per-reconciliation
 
 ---
 
@@ -578,9 +740,97 @@ Gateway manifests SHALL be:
 
 ---
 
+## Upstream Helm Chart Provenance
+
+ACP does NOT install the OpenShell gateway via Helm at runtime. The gateway manifests at `components/ambient-control-plane/manifests/gateway/` were generated once using `helm template` from the upstream chart, then maintained as static files. Similarly, cert-manager resources and OpenShift adjustments are applied programmatically by the GatewayReconciler, not via Helm.
+
+This section documents which upstream Helm chart values each ACP behavior is equivalent to, so that future configuration changes can be traced back to the upstream chart source.
+
+### OpenShell Gateway Helm Chart
+
+- **Chart:** `oci://ghcr.io/nvidia/openshell/helm-chart`
+- **Source:** <https://github.com/NVIDIA/OpenShell/tree/main/deploy/helm/openshell>
+- **Docs:** <https://docs.nvidia.com/openshell/kubernetes/openshift>, <https://docs.nvidia.com/openshell/kubernetes/managing-certificates>
+
+The baseline `helm template` command that produced the static manifests:
+
+```bash
+helm template openshell-gateway oci://ghcr.io/nvidia/openshell/helm-chart \
+  --namespace NAMESPACE_PLACEHOLDER \
+  --set "pkiInitJob.serverDnsNames={openshell-gateway.NAMESPACE_PLACEHOLDER.svc.cluster.local}"
+```
+
+The following table maps each Helm chart value to the ACP behavior that implements it. When updating gateway configurations, consult the upstream chart's `values.yaml` and the NVIDIA docs linked above, then update the corresponding ACP implementation.
+
+| Helm `--set` value | ACP equivalent | Implementation location |
+|---|---|---|
+| `pkiInitJob.serverDnsNames={...}` | `serverDnsNames` field on the Gateway API resource; substituted into `certgen-job.yaml` args and cert-manager Certificate SANs at reconcile time | `internal/gateway/reconciler.go` (certgen args), `internal/reconciler/gateway_reconciler.go` (cert-manager SANs) |
+| `certManager.enabled=true` | Auto-detected: GatewayReconciler checks for `cert-manager.io` API group at startup via `detectCertManager()`. When present, creates Issuer/Certificate resources inline | `internal/reconciler/gateway_reconciler.go` — `detectCertManager()`, `reconcileCertManagerResources()` |
+| `pkiInitJob.enabled` (default: true) | Always enabled. The certgen job runs on every gateway regardless of cert-manager — it handles JWT key generation (`signing.pem`, `public.pem`, `kid`) even when cert-manager manages TLS. Certgen skips TLS secrets that already exist | `manifests/gateway/certgen-job.yaml` — always in deploy order |
+| `podSecurityContext.fsGroup=null` | On OpenShift only: `applyOpenShiftOverrides()` clears `fsGroup` from the StatefulSet pod securityContext before apply, so OpenShift's SCC admission assigns it from the namespace range | `internal/gateway/reconciler.go` — `applyOpenShiftOverrides()` |
+| `securityContext.runAsUser=null` | On OpenShift only: `applyOpenShiftOverrides()` clears `runAsUser` from container securityContext | `internal/gateway/reconciler.go` — `applyOpenShiftOverrides()` |
+| `server.disableTls=true` | **NOT used.** ACP provisions re-encrypt TLS Routes (see `gateway-route-exposure.spec.md`), which require the gateway to serve TLS. TLS remains enabled on all clusters | N/A — intentionally omitted |
+
+#### Values NOT mapped (no ACP equivalent yet)
+
+These upstream Helm values are not currently used by ACP but may be relevant for future features:
+
+| Helm value | Purpose | Notes |
+|---|---|---|
+| `workload.kind=deployment` | Use Deployment instead of StatefulSet | ACP always uses StatefulSet |
+| `server.oidc.*` | OIDC configuration block | ACP injects OIDC via `gateway.toml` config, not Helm values (see `gateway-oidc.spec.md`) |
+| `replicaCount` | Gateway replica count | ACP uses 1 replica (StatefulSet default) |
+
+### cert-manager Installation
+
+- **Chart:** `oci://quay.io/jetstack/charts/cert-manager` (Helm install) or release YAML (kubectl apply)
+- **Docs:** <https://docs.nvidia.com/openshell/kubernetes/managing-certificates>
+
+ACP test environments install cert-manager via `kubectl apply` (not Helm) for simplicity:
+
+```bash
+CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.17.1}"
+kubectl apply -f "https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml"
+```
+
+This is equivalent to:
+
+```bash
+helm upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager \
+  --version v1.20.3 \
+  --namespace cert-manager \
+  --create-namespace \
+  --set crds.enabled=true \
+  --wait
+```
+
+The `kubectl apply` approach is preferred in test environments because it is simpler (no Helm binary required) and the release YAML bundles CRDs. Production environments MAY use the Helm chart for more control over upgrades and values.
+
+The NVIDIA docs recommend cert-manager v1.20+. ACP test environments currently pin `v1.17.1` (the version available when this feature was implemented). The version is configurable via the `CERT_MANAGER_VERSION` environment variable.
+
+### OpenShift-Specific Adjustments
+
+- **Docs:** <https://docs.nvidia.com/openshell/kubernetes/openshift>
+
+The upstream NVIDIA docs prescribe the following for OpenShift, which ACP implements programmatically:
+
+| NVIDIA doc instruction | ACP equivalent |
+|---|---|
+| `oc adm policy add-scc-to-user privileged -z openshell-sandbox -n <ns>` | `reconcileOpenShiftSCC()` creates a RoleBinding granting `system:openshift:scc:privileged` ClusterRole to the `openshell-gateway-sandbox` ServiceAccount |
+| `--set podSecurityContext.fsGroup=null` | `applyOpenShiftOverrides()` clears `fsGroup` via `unstructured.RemoveNestedField()` |
+| `--set securityContext.runAsUser=null` | `applyOpenShiftOverrides()` clears `runAsUser` via `unstructured.RemoveNestedField()` |
+| `--set server.disableTls=true` | **NOT used** — ACP uses re-encrypt TLS Routes instead |
+
+The NVIDIA docs note that the OpenShift install path is experimental and recommends `server.disableTls=true` for evaluation. ACP diverges from this recommendation by keeping TLS enabled, because the re-encrypt Route requires the gateway pod to terminate TLS on the internal hop.
+
+---
+
 ## References
 
-- [OpenShell Gateway Helm Chart](https://github.com/NVIDIA/OpenShell/tree/main/deploy/helm/openshell)
+- [OpenShell Gateway Helm Chart](https://github.com/NVIDIA/OpenShell/tree/main/deploy/helm/openshell) — upstream chart source; consult `values.yaml` when adding new gateway configurations
+- [NVIDIA OpenShell on OpenShift](https://docs.nvidia.com/openshell/kubernetes/openshift) — OpenShift-specific deployment (SCC, security context, TLS)
+- [NVIDIA OpenShell Managing Certificates](https://docs.nvidia.com/openshell/kubernetes/managing-certificates) — cert-manager integration for TLS certificate lifecycle
+- [cert-manager Helm Chart](https://artifacthub.io/packages/helm/cert-manager/cert-manager) — cert-manager installation via Helm (alternative to kubectl apply)
 - [openshell-sandbox-provisioning.spec.md](./openshell-sandbox-provisioning.spec.md) — Gateway usage for sandboxing
 - [control-plane.spec.md](./control-plane.spec.md) — Control plane architecture
 - [data-model.spec.md](./data-model.spec.md) — Gateway kind definition
