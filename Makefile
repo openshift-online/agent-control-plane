@@ -121,6 +121,7 @@ OPENSHELL_USE_GATEWAY ?= true
 OPENSHELL_TENANTS ?= tenant-a tenant-b tenant-c vteam-product-swarm codebase-maintainers
 SKIP_TENANT_SETUP ?=
 AGENT_SANDBOX_VERSION ?= v0.5.1
+CERT_MANAGER_VERSION  ?= v1.17.1
 
 # Colors for output (using tput for better compatibility, with fallback to printf-compatible codes)
 # Use shell assignment to evaluate tput at runtime if available
@@ -1148,7 +1149,19 @@ _kind-print-access:
 	@echo "  Get test token: kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d"
 	@echo ""
 	@echo "  Configure CLI:      $(COLOR_BOLD)make kind-acpctl-login$(COLOR_RESET)"
-	@echo "  Setup openshell:    $(COLOR_BOLD)acpctl gateway setup-cli <name> --gateway-url https://localhost:<port>$(COLOR_RESET)"
+	@GW_FOUND=0; \
+	for PORT_FILE in $(KIND_PF_DIR)/kind-pf-openshell-*.port; do \
+		[ -f "$$PORT_FILE" ] || continue; \
+		NS=$$(basename "$$PORT_FILE" .port | sed 's/^kind-pf-openshell-//'); \
+		PORT=$$(cat "$$PORT_FILE"); \
+		if [ -n "$$PORT" ]; then \
+			echo "  Setup openshell:    $(COLOR_BOLD)acpctl gateway setup-cli --project $$NS --kubectl$(COLOR_RESET)"; \
+			GW_FOUND=1; \
+		fi; \
+	done; \
+	if [ "$$GW_FOUND" -eq 0 ]; then \
+		echo "  Setup openshell:    $(COLOR_BOLD)acpctl gateway setup-cli --project <namespace> --kubectl$(COLOR_RESET)"; \
+	fi
 	@echo "  Stop port-forwards: $(COLOR_BOLD)make kind-port-forward-stop$(COLOR_RESET)"
 	@echo "  Run tests:          $(COLOR_BOLD)make test-e2e$(COLOR_RESET)"
 
@@ -1847,22 +1860,125 @@ crc-up: build-cli ## Deploy the platform to CRC (OpenShift Local). Requires 'crc
 		echo "$(COLOR_RED)✗$(COLOR_RESET) Not logged in to CRC. Run: eval \$$(crc oc-env) && oc login -u kubeadmin https://api.crc.testing:6443"; \
 		exit 1; \
 	fi
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Setting up Gateway API prerequisites..."
+	@bash scripts/setup-gateway-api.sh
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Installing agent-sandbox controller $(AGENT_SANDBOX_VERSION)..."
+	@oc apply -f "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/$(AGENT_SANDBOX_VERSION)/manifest.yaml"
+	@echo "  Waiting for agent-sandbox controller..."
+	@oc wait --for=condition=Available deployment/agent-sandbox-controller \
+		-n agent-sandbox-system --timeout=120s 2>/dev/null || \
+		echo "  $(COLOR_YELLOW)⚠$(COLOR_RESET) agent-sandbox controller not yet ready"
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Installing cert-manager $(CERT_MANAGER_VERSION)..."
+	@if oc get namespace cert-manager >/dev/null 2>&1; then \
+		echo "  cert-manager already installed — skipping"; \
+	else \
+		oc apply -f "https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml"; \
+		echo "  Waiting for cert-manager..."; \
+		oc wait --for=condition=Available deployment/cert-manager \
+			-n cert-manager --timeout=120s 2>/dev/null || \
+			echo "  $(COLOR_YELLOW)⚠$(COLOR_RESET) cert-manager not yet ready"; \
+		oc wait --for=condition=Available deployment/cert-manager-webhook \
+			-n cert-manager --timeout=120s 2>/dev/null || \
+			echo "  $(COLOR_YELLOW)⚠$(COLOR_RESET) cert-manager-webhook not yet ready"; \
+	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Creating namespace $(CRC_NAMESPACE)..."
 	@oc new-project $(CRC_NAMESPACE) 2>/dev/null || oc project $(CRC_NAMESPACE)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Applying kustomize overlay..."
 	@oc apply --validate=false -k $(CRC_OVERLAY)/
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Creating gateway-trusted-ca from OpenShift ingress CA..."
+	@oc get secret router-ca -n openshift-ingress-operator -o jsonpath='{.data.tls\.crt}' | \
+		base64 -d | \
+		oc create configmap gateway-trusted-ca --from-file=ca-bundle.crt=/dev/stdin \
+			-n $(CRC_NAMESPACE) --dry-run=client -o yaml | oc apply -f -
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods to be ready..."
 	@for deploy in ambient-api-server-db postgresql ambient-api-server ambient-control-plane keycloak; do \
 		echo "  Waiting for $$deploy..."; \
 		oc rollout status deployment/$$deploy -n $(CRC_NAMESPACE) --timeout=300s 2>/dev/null || \
 			echo "  $(COLOR_YELLOW)⚠$(COLOR_RESET) $$deploy not yet ready (may not exist)"; \
 	done
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building and deploying mock LLM server..."
+	@$(CONTAINER_ENGINE) login --tls-verify=false \
+		-u $$(oc whoami) -p $$(oc whoami -t) $(CRC_REGISTRY)
+	@echo "  Building mock-llm image..."
+	@$(CONTAINER_ENGINE) build $(PLATFORM_FLAG) -t localhost/mock-llm:latest tests/mock-llm
+	@_TAG="crc-$$(date +%s)"; \
+	_REMOTE="$(CRC_REGISTRY)/$(CRC_NAMESPACE)/mock-llm:$$_TAG"; \
+	_INTERNAL="$(CRC_INTERNAL_REGISTRY)/$(CRC_NAMESPACE)/mock-llm:$$_TAG"; \
+	echo "  Tagging $$_REMOTE"; \
+	$(CONTAINER_ENGINE) tag localhost/mock-llm:latest $$_REMOTE && \
+	echo "  Pushing $$_REMOTE"; \
+	$(CONTAINER_ENGINE) push --tls-verify=false $$_REMOTE && \
+	echo "  Applying mock-llm manifests"; \
+	oc apply -k tests/mock-llm/manifests/ && \
+	echo "  Updating deployment image → $$_INTERNAL"; \
+	oc set image deployment/mock-llm -n $(CRC_NAMESPACE) mock-llm=$$_INTERNAL && \
+	echo "  Waiting for rollout"; \
+	oc rollout status deployment/mock-llm -n $(CRC_NAMESPACE) --timeout=60s && \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) Mock LLM server deployed"
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Provisioning tenant namespaces ($(OPENSHELL_TENANTS))..."
+	@for ns in $(OPENSHELL_TENANTS); do \
+		oc new-project $$ns 2>/dev/null || oc project $$ns >/dev/null 2>&1 || true; \
+		oc create secret generic mock-llm-creds --namespace=$$ns \
+			--from-literal=ANTHROPIC_AUTH_TOKEN=mock-llm-token \
+			--dry-run=client -o yaml | oc apply -f - >/dev/null 2>&1; \
+		echo "  $$ns: namespace and mock-llm-creds ready"; \
+	done
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Creating ACP projects and applying fleet definitions..."
+	@ACPCTL=components/ambient-cli/acpctl; \
+	PF_PORT=18766; \
+	oc port-forward -n $(CRC_NAMESPACE) svc/ambient-api-server "$${PF_PORT}:8000" >/dev/null 2>&1 & \
+	PF_PID=$$!; \
+	trap "kill $$PF_PID 2>/dev/null || true" EXIT; \
+	sleep 2; \
+	TOKEN=$$(oc get secret test-user-token -n $(CRC_NAMESPACE) -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null); \
+	if [ -z "$$TOKEN" ]; then \
+		echo "  $(COLOR_YELLOW)⚠$(COLOR_RESET) test-user-token not found; skipping project/fleet setup"; \
+	else \
+		$$ACPCTL login --url "http://localhost:$${PF_PORT}" --token "$$TOKEN" >/dev/null 2>&1; \
+		for ns in $(OPENSHELL_TENANTS); do \
+			SEARCH_QUERY=$$(printf "name = '%s'" "$$ns"); \
+			EXISTING=$$(curl -sf \
+				-H "Authorization: Bearer $$TOKEN" \
+				--data-urlencode "search=$${SEARCH_QUERY}" \
+				-G "http://localhost:$${PF_PORT}/api/ambient/v1/projects" 2>/dev/null || echo "{}"); \
+			MATCH=$$(echo "$$EXISTING" \
+				| jq -r '[(.items // [])[] | select(.name == "'"$$ns"'")] | length' 2>/dev/null || echo "0"); \
+			if [ "$${MATCH}" -gt 0 ]; then \
+				echo "  $$ns: ACP project exists"; \
+			else \
+				curl -sf -X POST \
+					-H "Authorization: Bearer $$TOKEN" \
+					-H "Content-Type: application/json" \
+					-d "{\"name\": \"$$ns\"}" \
+					"http://localhost:$${PF_PORT}/api/ambient/v1/projects" >/dev/null && \
+				echo "  $$ns: ACP project created"; \
+			fi; \
+			if echo " $(SKIP_TENANT_SETUP) " | grep -q " $$ns "; then \
+				echo "  $$ns: fleet skipped (SKIP_TENANT_SETUP)"; \
+				continue; \
+			fi; \
+			if [ -d "examples/overlays/$$ns" ]; then \
+				$$ACPCTL apply -k "examples/overlays/$$ns/" --project "$$ns" && \
+				echo "  $$ns: fleet applied"; \
+			else \
+				echo "  $$ns: no overlay directory — skipping fleet"; \
+			fi; \
+		done; \
+		kill $$PF_PID 2>/dev/null || true; \
+	fi
 	@echo ""
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CRC deployment complete"
 	@echo ""
 	@echo "$(COLOR_BOLD)Routes:$(COLOR_RESET)"
 	@oc get routes -n $(CRC_NAMESPACE) -o custom-columns='NAME:.metadata.name,HOST:.spec.host' --no-headers 2>/dev/null | \
 		while read name host; do echo "  $$name: https://$$host"; done
+	@echo ""
+	@echo "$(COLOR_BOLD)Test access:$(COLOR_RESET)"
+	@TOKEN=$$(oc get secret test-user-token -n $(CRC_NAMESPACE) -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null); \
+	API_URL=$$(oc get route ambient-api-server -n $(CRC_NAMESPACE) -o jsonpath='https://{.spec.host}' 2>/dev/null); \
+	echo "  API URL: $$API_URL"; \
+	echo "  Token:   $$TOKEN"; \
+	echo "  Login:   acpctl login --url $$API_URL --token $$TOKEN"
 	@echo ""
 	@echo "$(COLOR_BOLD)Default credentials:$(COLOR_RESET)"
 	@echo "  Keycloak admin: admin / admin"
@@ -1881,6 +1997,8 @@ CRC_INTERNAL_REGISTRY ?= image-registry.openshift-image-registry.svc:5000
 # Push a local image to the CRC internal registry and update the deployment.
 # $(1) = local image name, $(2) = deployment name, $(3) = container name, $(4) = display name
 define crc-push-and-reload
+	@$(CONTAINER_ENGINE) login --tls-verify=false \
+		-u $$(oc whoami) -p $$(oc whoami -t) $(CRC_REGISTRY)
 	@_TAG="crc-$$(date +%s)"; \
 	_REMOTE="$(CRC_REGISTRY)/$(CRC_NAMESPACE)/$$(echo $(1) | cut -d: -f1):$$_TAG"; \
 	_INTERNAL="$(CRC_INTERNAL_REGISTRY)/$(CRC_NAMESPACE)/$$(echo $(1) | cut -d: -f1):$$_TAG"; \

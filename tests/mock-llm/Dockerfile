@@ -1,7 +1,5 @@
 FROM python:3.12-slim
 
-RUN useradd --create-home --uid 1000 mockllm
-
 WORKDIR /app
 
 COPY requirements.txt .
@@ -9,7 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY server.py .
 
-USER 1000
+RUN chmod -R g=u /app
 
 EXPOSE 8000
 
