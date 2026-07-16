@@ -31,7 +31,7 @@ rules:
   verbs: ["get", "watch", "list", "create", "update", "patch"]
 # Deployments, StatefulSets (gateway provisioning)
 - apiGroups: ["apps"]
-  resources: ["deployments", "statefulsets"]
+  resources: ["deployments", "statefulsets", "statefulsets/finalizers"]
   verbs: ["create", "get", "update", "patch"]
 # NetworkPolicies (gateway isolation)
 - apiGroups: ["networking.k8s.io"]
@@ -55,7 +55,7 @@ rules:
   verbs: ["get", "list", "watch"]
 # OpenShift Routes (gateway route exposure)
 - apiGroups: ["route.openshift.io"]
-  resources: ["routes"]
+  resources: ["routes", "routes/custom-host"]
   verbs: ["get", "list", "create", "update", "patch", "delete"]
 # Sandboxes (OpenShell agent CRD)
 - apiGroups: ["agents.x-k8s.io"]

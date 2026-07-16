@@ -1,7 +1,9 @@
 package gateways
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"regexp"
 
@@ -65,6 +67,14 @@ func (h gatewayHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h gatewayHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	var patch openapi.GatewayPatchRequest
 
+	// Pre-read body to detect explicit null for JSONB fields (route, oidc).
+	// Go's JSON decoder treats absent and null identically for pointer types.
+	var nullableFields map[string]json.RawMessage
+	if bodyBytes, readErr := io.ReadAll(r.Body); readErr == nil {
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		_ = json.Unmarshal(bodyBytes, &nullableFields)
+	}
+
 	cfg := &handlers.HandlerConfig{
 		Body:       &patch,
 		Validators: []handlers.Validate{},
@@ -116,6 +126,8 @@ func (h gatewayHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				}
 				s := string(raw)
 				found.Oidc = &s
+			} else if rawVal, exists := nullableFields["oidc"]; exists && string(rawVal) == "null" {
+				found.Oidc = nil
 			}
 			if patch.Route != nil {
 				raw, merr := json.Marshal(patch.Route)
@@ -124,6 +136,8 @@ func (h gatewayHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				}
 				s := string(raw)
 				found.Route = &s
+			} else if rawVal, exists := nullableFields["route"]; exists && string(rawVal) == "null" {
+				found.Route = nil
 			}
 			if patch.RouteAddress != nil {
 				found.RouteAddress = patch.RouteAddress

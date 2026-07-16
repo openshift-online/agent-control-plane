@@ -21,7 +21,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 NAMESPACE="${NAMESPACE:-ambient-code}"
-TENANT="tenant-route-e2e"
+TIMESTAMP="$(date +%s)"
+TENANT="route-e2e-${TIMESTAMP}"
+GW_NAME="route-gw-${TIMESTAMP}"
 SKIP_CLEANUP=false
 
 while [[ "${1:-}" == --* ]]; do
@@ -52,6 +54,8 @@ if [ -z "$ACPCTL" ]; then
   exit 1
 fi
 
+ACPCTL="$ACPCTL --insecure-skip-tls-verify"
+
 PASS=0
 FAIL=0
 TOTAL=0
@@ -65,8 +69,8 @@ cleanup() {
     return
   fi
   echo "Cleaning up..."
-  $ACPCTL delete gateway route-test-gw --project "$TENANT" 2>/dev/null || true
-  $ACPCTL delete project "$TENANT" 2>/dev/null || true
+  $ACPCTL delete gateway $GW_NAME 2>/dev/null || true
+  $ACPCTL delete project "$TENANT" -y 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -76,21 +80,27 @@ echo ""
 
 # Setup: create project and gateway with route
 echo "--- Setup ---"
-$ACPCTL config set url "$API_URL"
+$ACPCTL config set api_url "$API_URL"
 
-# Login via password grant if Keycloak is available
+# Get token from Keycloak via password grant (curl bypasses TLS issues with self-signed certs)
 KC_ROUTE_HOST=$(oc get route keycloak -n "$NAMESPACE" -o jsonpath='{.spec.host}' 2>/dev/null || true)
-if [ -n "$KC_ROUTE_HOST" ]; then
-  $ACPCTL login --password-grant \
-    --username developer --password developer \
-    --issuer-url "https://${KC_ROUTE_HOST}/realms/ambient-code" \
-    --client-id openshell-cli \
-    --url "$API_URL" 2>/dev/null || echo "Warning: login failed, continuing with existing credentials"
+if [ -n "$KC_ROUTE_HOST" ] && [ -z "${AMBIENT_TOKEN:-}" ]; then
+  AMBIENT_TOKEN=$(curl -sk -X POST "https://${KC_ROUTE_HOST}/realms/ambient-code/protocol/openid-connect/token" \
+    -d "grant_type=password" \
+    -d "client_id=openshell-cli" \
+    -d "username=developer" \
+    -d "password=developer" | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || true)
+  if [ -n "$AMBIENT_TOKEN" ]; then
+    export AMBIENT_TOKEN
+    echo "Authenticated via Keycloak password grant"
+  else
+    echo "Warning: failed to get token from Keycloak"
+  fi
 fi
 
-$ACPCTL apply -f - <<'YAML'
+$ACPCTL apply -f - <<YAML
 kind: Project
-name: tenant-route-e2e
+name: $TENANT
 YAML
 
 TENANT_NS=$($ACPCTL get project "$TENANT" -o json 2>/dev/null | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "$TENANT")
@@ -99,10 +109,10 @@ TENANT_NS=$($ACPCTL get project "$TENANT" -o json 2>/dev/null | grep -o '"id":"[
 echo ""
 echo "--- Test 1: Route creation ---"
 
-$ACPCTL apply -f - <<'YAML'
+$ACPCTL apply -f - <<YAML
 kind: Gateway
-name: route-test-gw
-project: tenant-route-e2e
+name: $GW_NAME
+project: $TENANT
 server_dns_names:
   - openshell-gateway.NAMESPACE_PLACEHOLDER.svc.cluster.local
 route: {}
@@ -146,7 +156,7 @@ echo "--- Test 2: Route address populated ---"
 
 ROUTE_ADDR=""
 for i in $(seq 1 20); do
-  ROUTE_ADDR=$($ACPCTL get gateway route-test-gw --project "$TENANT" -o json 2>/dev/null | grep -o '"route_address":"[^"]*"' | cut -d'"' -f4 || true)
+  ROUTE_ADDR=$($ACPCTL get gateway $GW_NAME --project "$TENANT" -o json 2>/dev/null | grep -o '"route_address": *"[^"]*"' | cut -d'"' -f4 || true)
   if [ -n "$ROUTE_ADDR" ]; then
     break
   fi
@@ -167,7 +177,7 @@ else
 fi
 
 # Verify ROUTE column in table output
-ROUTE_COL=$($ACPCTL get gateways --project "$TENANT" 2>/dev/null | grep "route-test-gw" | grep -o 'https://[^ ]*' || true)
+ROUTE_COL=$($ACPCTL get gateways --project "$TENANT" 2>/dev/null | grep "$GW_NAME" | grep -o 'https://[^ ]*' || true)
 if [ -n "$ROUTE_COL" ]; then
   pass "ROUTE column shows address in table output"
 else
@@ -178,7 +188,7 @@ fi
 echo ""
 echo "--- Test 3: setup-cli via route ---"
 
-SETUP_OUTPUT=$($ACPCTL gateway setup-cli route-test-gw --project "$TENANT" --print 2>/dev/null || true)
+SETUP_OUTPUT=$($ACPCTL gateway setup-cli $GW_NAME --project "$TENANT" --print 2>/dev/null || true)
 if echo "$SETUP_OUTPUT" | grep -q "$ROUTE_ADDR"; then
   pass "setup-cli --print includes route address"
 else
@@ -190,10 +200,10 @@ echo ""
 echo "--- Test 4: Route removal ---"
 
 # Patch gateway to remove route
-$ACPCTL apply -f - <<'YAML'
+$ACPCTL apply -f - <<YAML
 kind: Gateway
-name: route-test-gw
-project: tenant-route-e2e
+name: $GW_NAME
+project: $TENANT
 server_dns_names:
   - openshell-gateway.NAMESPACE_PLACEHOLDER.svc.cluster.local
 YAML
@@ -214,7 +224,7 @@ else
 fi
 
 # Verify routeAddress cleared
-CLEARED_ADDR=$($ACPCTL get gateway route-test-gw --project "$TENANT" -o json 2>/dev/null | grep -o '"route_address":"[^"]*"' | cut -d'"' -f4 || true)
+CLEARED_ADDR=$($ACPCTL get gateway $GW_NAME --project "$TENANT" -o json 2>/dev/null | grep -o '"route_address": *"[^"]*"' | cut -d'"' -f4 || true)
 if [ -z "$CLEARED_ADDR" ]; then
   pass "routeAddress cleared after route removal"
 else

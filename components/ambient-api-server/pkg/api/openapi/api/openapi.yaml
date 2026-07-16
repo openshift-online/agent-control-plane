@@ -8117,7 +8117,7 @@ components:
             $ref: "#/components/schemas/GatewayOidc"
           route:
             $ref: "#/components/schemas/GatewayRoute"
-          routeAddress:
+          route_address:
             description: Externally reachable address assigned by the OpenShift Route
               (set by control plane)
             readOnly: true
@@ -8143,11 +8143,11 @@ components:
           jwks_ttl: 5
           roles_claim: roles_claim
           issuer: issuer
+        route_address: route_address
         labels: labels
         route:
           host: host
         updated_at: 2000-01-23T04:56:07.000+00:00
-        routeAddress: routeAddress
         project_id: project_id
         name: name
         id: id
@@ -8183,11 +8183,11 @@ components:
             jwks_ttl: 5
             roles_claim: roles_claim
             issuer: issuer
+          route_address: route_address
           labels: labels
           route:
             host: host
           updated_at: 2000-01-23T04:56:07.000+00:00
-          routeAddress: routeAddress
           project_id: project_id
           name: name
           id: id
@@ -8208,11 +8208,11 @@ components:
             jwks_ttl: 5
             roles_claim: roles_claim
             issuer: issuer
+          route_address: route_address
           labels: labels
           route:
             host: host
           updated_at: 2000-01-23T04:56:07.000+00:00
-          routeAddress: routeAddress
           project_id: project_id
           name: name
           id: id

@@ -253,7 +253,7 @@ components:
               $ref: '#/components/schemas/GatewayOidc'
             route:
               $ref: '#/components/schemas/GatewayRoute'
-            routeAddress:
+            route_address:
               type: string
               readOnly: true
               description: Externally reachable address assigned by the OpenShift Route (set by control plane)

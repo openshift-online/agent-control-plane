@@ -6,7 +6,7 @@
 .PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-reload-ambient-control-plane kind-reload-ambient-api-server kind-reload-runner-openshell kind-load-runner kind-status kind-login kind-sso-toggle kind-setup-vertex
 .PHONY: preflight-cluster preflight dev-env dev
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift test-gateway-e2e test-vteam-catalog-lab
-.PHONY: crc-up crc-down crc-reload-component
+.PHONY: crc-up crc-down crc-reload-component crc-reload-images
 .PHONY: unleash-port-forward unleash-status
 .PHONY: kind-port-forward kind-port-forward-stop _kind-start-port-forward _kind-print-access kind-acpctl-login kind-apply-examples
 .PHONY: setup-minio minio-console minio-logs minio-status
@@ -1875,34 +1875,123 @@ crc-down: ## Remove ACP resources from CRC (leaves CRC running)
 	@oc delete project $(CRC_NAMESPACE) --ignore-not-found 2>/dev/null || true
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) ACP removed from CRC"
 
+CRC_REGISTRY ?= default-route-openshift-image-registry.apps-crc.testing
+CRC_INTERNAL_REGISTRY ?= image-registry.openshift-image-registry.svc:5000
+
+# Push a local image to the CRC internal registry and update the deployment.
+# $(1) = local image name, $(2) = deployment name, $(3) = container name, $(4) = display name
+define crc-push-and-reload
+	@_TAG="crc-$$(date +%s)"; \
+	_REMOTE="$(CRC_REGISTRY)/$(CRC_NAMESPACE)/$$(echo $(1) | cut -d: -f1):$$_TAG"; \
+	_INTERNAL="$(CRC_INTERNAL_REGISTRY)/$(CRC_NAMESPACE)/$$(echo $(1) | cut -d: -f1):$$_TAG"; \
+	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Pushing $(4) → $$_REMOTE"; \
+	$(CONTAINER_ENGINE) tag $(1) $$_REMOTE && \
+	$(CONTAINER_ENGINE) push --tls-verify=false $$_REMOTE $(QUIET_REDIRECT) && \
+	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Updating deployment/$(2) → $$_INTERNAL"; \
+	oc set image deployment/$(2) -n $(CRC_NAMESPACE) $(3)=$$_INTERNAL $(QUIET_REDIRECT) && \
+	oc rollout status deployment/$(2) -n $(CRC_NAMESPACE) --timeout=120s && \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) $(4) reloaded"
+endef
+
 CRC_COMPONENT ?=
-crc-reload-component: ## Rebuild and redeploy a single component to CRC (CRC_COMPONENT=ambient-api-server|ambient-control-plane|ambient-ui)
+crc-reload-component: ## Rebuild and push a single component to CRC (CRC_COMPONENT=ambient-api-server|ambient-control-plane|ambient-ui)
 	@if [ -z "$(CRC_COMPONENT)" ]; then \
 		echo "$(COLOR_RED)✗$(COLOR_RESET) Usage: make crc-reload-component CRC_COMPONENT=<name>"; \
 		echo "  Valid: ambient-api-server, ambient-control-plane, ambient-ui"; \
 		exit 1; \
 	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding $(CRC_COMPONENT)..."
-	@TAG="crc-$$(date +%s)"; \
-	case "$(CRC_COMPONENT)" in \
+	@case "$(CRC_COMPONENT)" in \
 		ambient-api-server) \
 			$(MAKE) --no-print-directory build-api-server; \
-			oc set image deployment/ambient-api-server -n $(CRC_NAMESPACE) api-server=$(AMBIENT_API_SERVER_IMAGE):$$TAG; \
 			;; \
 		ambient-control-plane) \
 			$(MAKE) --no-print-directory build-control-plane; \
-			oc set image deployment/ambient-control-plane -n $(CRC_NAMESPACE) ambient-control-plane=$(AMBIENT_CONTROL_PLANE_IMAGE):$$TAG; \
 			;; \
 		ambient-ui) \
 			$(MAKE) --no-print-directory build-ambient-ui; \
-			oc set image deployment/ambient-ui -n $(CRC_NAMESPACE) ambient-ui=$(AMBIENT_UI_IMAGE):$$TAG; \
 			;; \
 		*) \
 			echo "$(COLOR_RED)✗$(COLOR_RESET) Unknown component: $(CRC_COMPONENT)"; \
 			exit 1; \
 			;; \
-	esac; \
-	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting $(CRC_COMPONENT)..."; \
-	oc rollout restart deployment/$(CRC_COMPONENT) -n $(CRC_NAMESPACE); \
-	oc rollout status deployment/$(CRC_COMPONENT) -n $(CRC_NAMESPACE) --timeout=120s; \
-	echo "$(COLOR_GREEN)✓$(COLOR_RESET) $(CRC_COMPONENT) reloaded"
+	esac
+	@case "$(CRC_COMPONENT)" in \
+		ambient-api-server) \
+			$(call crc-push-and-reload,$(API_SERVER_IMAGE),ambient-api-server,api-server,API server); \
+			;; \
+		ambient-control-plane) \
+			$(call crc-push-and-reload,$(CONTROL_PLANE_IMAGE),ambient-control-plane,ambient-control-plane,Control plane); \
+			;; \
+		ambient-ui) \
+			$(call crc-push-and-reload,$(AMBIENT_UI_IMAGE),ambient-ui,ambient-ui,Ambient UI); \
+			;; \
+	esac
+
+crc-reload-images: ## Rebuild and push all component images to CRC (like kind-rebuild for OpenShift Local)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding all components for CRC..."
+	@_CHANGED=$$(git diff --name-only HEAD -- 2>/dev/null; git diff --name-only --cached -- 2>/dev/null; git ls-files --others --exclude-standard -- 2>/dev/null); \
+	_DO_UI=false; _DO_CP=false; _DO_API=false; \
+	if [ -z "$$_CHANGED" ]; then \
+		echo "$(COLOR_YELLOW)▶$(COLOR_RESET) No changed files detected — rebuilding all components"; \
+		_DO_UI=true; _DO_CP=true; _DO_API=true; \
+	else \
+		if echo "$$_CHANGED" | grep -q '^components/ambient-sdk/'; then \
+			echo "$(COLOR_YELLOW)▶$(COLOR_RESET) ambient-sdk changed — rebuilding all consumers"; \
+			_DO_UI=true; _DO_CP=true; _DO_API=true; \
+		fi; \
+		if echo "$$_CHANGED" | grep -q '^components/ambient-ui/'; then _DO_UI=true; fi; \
+		if echo "$$_CHANGED" | grep -q '^components/ambient-control-plane/'; then _DO_CP=true; fi; \
+		if echo "$$_CHANGED" | grep -q '^components/ambient-api-server/'; then _DO_API=true; _DO_CP=true; fi; \
+		if ! $$_DO_UI && ! $$_DO_CP && ! $$_DO_API; then \
+			echo "$(COLOR_YELLOW)▶$(COLOR_RESET) No component paths changed — rebuilding all components"; \
+			_DO_UI=true; _DO_CP=true; _DO_API=true; \
+		fi; \
+	fi; \
+	if $$_DO_API; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building API server..."; \
+		$(MAKE) --no-print-directory build-api-server; \
+	fi; \
+	if $$_DO_CP; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building control plane..."; \
+		$(MAKE) --no-print-directory build-control-plane; \
+	fi; \
+	if $$_DO_UI; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building UI..."; \
+		$(MAKE) --no-print-directory build-ambient-ui; \
+	fi
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Pushing images to CRC registry..."
+	@_CHANGED=$$(git diff --name-only HEAD -- 2>/dev/null; git diff --name-only --cached -- 2>/dev/null; git ls-files --others --exclude-standard -- 2>/dev/null); \
+	_DO_UI=false; _DO_CP=false; _DO_API=false; \
+	if [ -z "$$_CHANGED" ]; then _DO_UI=true; _DO_CP=true; _DO_API=true; \
+	else \
+		if echo "$$_CHANGED" | grep -q '^components/ambient-sdk/'; then _DO_UI=true; _DO_CP=true; _DO_API=true; fi; \
+		if echo "$$_CHANGED" | grep -q '^components/ambient-ui/'; then _DO_UI=true; fi; \
+		if echo "$$_CHANGED" | grep -q '^components/ambient-control-plane/'; then _DO_CP=true; fi; \
+		if echo "$$_CHANGED" | grep -q '^components/ambient-api-server/'; then _DO_API=true; _DO_CP=true; fi; \
+		if ! $$_DO_UI && ! $$_DO_CP && ! $$_DO_API; then _DO_UI=true; _DO_CP=true; _DO_API=true; fi; \
+	fi; \
+	_FAIL=0; \
+	if $$_DO_API; then \
+		$(MAKE) --no-print-directory _crc-push-api-server || _FAIL=1; \
+	fi; \
+	if $$_DO_CP; then \
+		$(MAKE) --no-print-directory _crc-push-control-plane || _FAIL=1; \
+	fi; \
+	if $$_DO_UI; then \
+		$(MAKE) --no-print-directory _crc-push-ui || _FAIL=1; \
+	fi; \
+	if [ $$_FAIL -ne 0 ]; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) One or more pushes failed"; \
+		exit 1; \
+	fi
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) All components rebuilt and pushed to CRC"
+
+_crc-push-api-server:
+	$(call crc-push-and-reload,$(API_SERVER_IMAGE),ambient-api-server,api-server,API server)
+
+_crc-push-control-plane:
+	$(call crc-push-and-reload,$(CONTROL_PLANE_IMAGE),ambient-control-plane,ambient-control-plane,Control plane)
+
+_crc-push-ui:
+	$(call crc-push-and-reload,$(AMBIENT_UI_IMAGE),ambient-ui,ambient-ui,Ambient UI)

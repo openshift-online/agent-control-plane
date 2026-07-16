@@ -149,7 +149,18 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	case "applications":
 		return getApplications(ctx, client, printer, name)
 	case "gateways":
-		return getGateways(ctx, client, printer, name)
+		gwClient := client
+		if projectAgentArgs.projectID != "" {
+			factory, fErr := connection.NewClientFactory()
+			if fErr != nil {
+				return fErr
+			}
+			gwClient, fErr = factory.ForProject(projectAgentArgs.projectID)
+			if fErr != nil {
+				return fErr
+			}
+		}
+		return getGateways(ctx, gwClient, printer, name)
 	default:
 		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-agents, project-settings, users, agents, providers, policies, roles, role-bindings, credentials, gateways", cmdArgs[0])
 	}

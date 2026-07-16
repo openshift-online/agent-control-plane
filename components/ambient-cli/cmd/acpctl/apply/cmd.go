@@ -175,7 +175,14 @@ func run(cmd *cobra.Command, _ []string) error {
 		case "rolebinding":
 			result, err = applyRoleBinding(ctx, client, doc)
 		case "gateway":
-			result, err = applyGateway(ctx, client, doc)
+			gwClient := client
+			if doc.Project != "" && doc.Project != projectName {
+				gwClient, err = factory.ForProject(doc.Project)
+				if err != nil {
+					return fmt.Errorf("create client for project %s: %w", doc.Project, err)
+				}
+			}
+			result, err = applyGateway(ctx, gwClient, doc)
 		default:
 			fmt.Fprintf(cmd.ErrOrStderr(), "warning: unknown kind %q — skipping\n", doc.Kind)
 			continue
@@ -894,6 +901,9 @@ func applyGateway(ctx context.Context, client *sdkclient.Client, doc kustomize.R
 	if oidc := oidcFromResource(doc); oidc != nil {
 		builder = builder.Oidc(oidc)
 	}
+	if route := routeFromResource(doc); route != nil {
+		builder = builder.Route(route)
+	}
 	gw, buildErr := builder.Build()
 	if buildErr != nil {
 		return applyResult{}, buildErr
@@ -929,6 +939,13 @@ func buildGatewayPatch(existing sdktypes.Gateway, doc kustomize.Resource) map[st
 	}
 	if oidc := oidcFromResource(doc); oidc != nil {
 		patch = patch.Oidc(oidc)
+		changed = true
+	}
+	if route := routeFromResource(doc); route != nil {
+		patch = patch.Route(route)
+		changed = true
+	} else if existing.Route != nil && len(doc.Route) == 0 {
+		patch = patch.Route(nil)
 		changed = true
 	}
 	if !changed {
@@ -967,6 +984,17 @@ func oidcFromResource(doc kustomize.Resource) *sdktypes.GatewayOidc {
 		return nil
 	}
 	return oidc
+}
+
+func routeFromResource(doc kustomize.Resource) *sdktypes.GatewayRoute {
+	if doc.Route == nil {
+		return nil
+	}
+	route := &sdktypes.GatewayRoute{}
+	if v, ok := doc.Route["host"].(string); ok {
+		route.Host = v
+	}
+	return route
 }
 
 func stringSliceEqual(a, b []string) bool {

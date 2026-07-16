@@ -36,6 +36,8 @@ type Resource struct {
 	Image          string            `yaml:"image"`
 	Config         string            `yaml:"config"`
 	Oidc           map[string]any    `yaml:"oidc,omitempty"`
+	Route          map[string]any    `yaml:"route,omitempty"`
+	Project        string            `yaml:"project"`
 	SandboxPolicy  string            `yaml:"sandbox_policy"`
 	Spec           map[string]any    `yaml:"spec"`
 }

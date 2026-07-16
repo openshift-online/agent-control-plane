@@ -45,7 +45,7 @@ type Gateway struct {
 	Oidc        *GatewayOidc  `json:"oidc,omitempty"`
 	Route       *GatewayRoute `json:"route,omitempty"`
 	// Externally reachable address assigned by the OpenShift Route (set by control plane)
-	RouteAddress *string `json:"routeAddress,omitempty"`
+	RouteAddress *string `json:"route_address,omitempty"`
 }
 
 type _Gateway Gateway
@@ -573,7 +573,7 @@ func (o Gateway) ToMap() (map[string]interface{}, error) {
 		toSerialize["route"] = o.Route
 	}
 	if !IsNil(o.RouteAddress) {
-		toSerialize["routeAddress"] = o.RouteAddress
+		toSerialize["route_address"] = o.RouteAddress
 	}
 	return toSerialize, nil
 }

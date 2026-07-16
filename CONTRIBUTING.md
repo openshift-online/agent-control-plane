@@ -493,6 +493,99 @@ kind delete cluster --name ambient-code
 make kind-up
 ```
 
+## OpenShift Local (CRC) Development
+
+For testing OpenShift-specific features like Routes, you can use [CRC (CodeReady Containers / OpenShift Local)](https://developers.redhat.com/products/openshift-local/overview).
+
+### Prerequisites
+
+```bash
+# Install CRC (Fedora/RHEL)
+sudo dnf install crc
+
+# macOS
+brew install --cask red-hat-openshift-local
+
+# Start CRC (first run downloads the VM image)
+crc setup
+crc start
+
+# Configure shell and login
+eval $(crc oc-env)
+oc login -u kubeadmin https://api.crc.testing:6443
+```
+
+### Deploy to CRC
+
+```bash
+make crc-up              # Build, deploy, and configure ACP on CRC
+make crc-reload-images   # Rebuild and push changed images (like kind-rebuild)
+make crc-reload-component CRC_COMPONENT=ambient-api-server  # Reload single component
+make crc-down            # Remove ACP from CRC (leaves CRC running)
+```
+
+### Trusting the OpenShift Local CA Certificate
+
+CRC uses self-signed TLS certificates. To avoid `--insecure-skip-tls-verify` flags and certificate errors, add the CRC CA to your system trust store:
+
+**Linux (Fedora/RHEL):**
+
+```bash
+oc get secret router-ca -n openshift-ingress-operator \
+  -o jsonpath='{.data.tls\.crt}' | base64 --decode > openshift-local-ca.crt
+sudo cp openshift-local-ca.crt /etc/pki/ca-trust/source/anchors/openshift-local-ca.crt
+sudo update-ca-trust
+```
+
+**Linux (Debian/Ubuntu):**
+
+```bash
+oc get secret router-ca -n openshift-ingress-operator \
+  -o jsonpath='{.data.tls\.crt}' | base64 --decode > openshift-local-ca.crt
+sudo cp openshift-local-ca.crt /usr/local/share/ca-certificates/openshift-local-ca.crt
+sudo update-ca-certificates
+```
+
+**macOS:**
+
+```bash
+oc get secret router-ca -n openshift-ingress-operator \
+  -o jsonpath='{.data.tls\.crt}' | base64 --decode > openshift-local-ca.crt
+sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain ./openshift-local-ca.crt
+```
+
+After adding the CA, HTTPS connections to `*.apps-crc.testing` Routes will work without TLS verification flags.
+
+### Running E2E Tests on CRC
+
+```bash
+# Route exposure tests (requires ACP deployed on CRC)
+./tests/e2e/route-e2e-test.sh
+
+# With skip-cleanup for debugging
+./tests/e2e/route-e2e-test.sh --skip-cleanup
+```
+
+### CRC Troubleshooting
+
+**Resource starvation (pods in CrashLoopBackOff):**
+
+```bash
+# Increase CRC memory (default 9216 MiB may not be enough)
+crc stop
+crc config set memory 14336
+crc start
+```
+
+**Image pull errors (ImagePullBackOff):**
+
+Images must be pushed to the CRC internal registry. Use `make crc-reload-images` instead of just building locally.
+
+**SCC (Security Context Constraint) errors:**
+
+OpenShift's `restricted` SCC blocks containers that run as a fixed UID. Use Red Hat base images (e.g., `registry.redhat.io/rhel10/postgresql-16:10.1`) that support arbitrary UIDs.
+
 ### Application Issues
 
 **Pods not starting:**
