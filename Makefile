@@ -1983,6 +1983,18 @@ crc-up: build-cli ## Deploy the platform to CRC (OpenShift Local). Requires 'crc
 	@echo "$(COLOR_BOLD)Default credentials:$(COLOR_RESET)"
 	@echo "  Keycloak admin: admin / admin"
 	@echo "  Developer:      developer / developer"
+	@echo ""
+	@echo "$(COLOR_BOLD)Trust CRC CA certs:$(COLOR_RESET)"
+	@echo "  # Export the CA bundle"
+	@echo "  oc get secret acpgw-ca -n openshift-ingress -o jsonpath='{.data.ca\\.crt}' | base64 -d > crc-ca-bundle.crt"
+	@echo "  oc get secret router-ca -n openshift-ingress-operator -o jsonpath='{.data.tls\\.crt}' | base64 -d >> crc-ca-bundle.crt"
+	@echo ""
+	@echo "  # Fedora / RHEL / CentOS"
+	@echo "  sudo cp crc-ca-bundle.crt /etc/pki/ca-trust/source/anchors/crc-ca-bundle.crt"
+	@echo "  sudo update-ca-trust"
+	@echo ""
+	@echo "  # macOS"
+	@echo "  sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain crc-ca-bundle.crt"
 
 crc-down: ## Remove ACP resources from CRC (leaves CRC running)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Removing ACP from CRC..."
