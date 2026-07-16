@@ -2,20 +2,23 @@
 
 **Date:** 2026-07-15
 **Status:** Design
-**Related:** `gateway-provisioning.spec.md` — gateway lifecycle and reconciler; `data-model.spec.md` — Gateway kind definition; `security/gateway-rbac-policy.spec.md` — gateway RBAC; `e2e-test-tooling.spec.md` — mock LLM and self-contained testing
+**Related:** `gateway-provisioning.spec.md` — gateway lifecycle and reconciler; `data-model.spec.md` — Gateway kind definition; `security/gateway-rbac-policy.spec.md` — gateway RBAC; `gateway-oidc.spec.md` — OIDC authentication (mTLS disabled when OIDC enabled); `e2e-test-tooling.spec.md` — mock LLM and self-contained testing; `cli/gateway-cli.spec.md` — CLI gateway commands
 **Skill:** `skills/build/full-stack-pipeline/` — wave-based implementation pipeline
 
 ---
 
 ## Purpose
 
-The control plane SHALL provision OpenShift Route resources for gateway deployments when the Gateway configuration requests external exposure. This enables users to reach the gateway over the cluster's external ingress without requiring `kubectl port-forward` or direct cluster network access. The Route uses re-encrypt TLS termination so that external clients connect through the cluster's trusted ingress certificate while the internal hop (router to gateway pod) remains encrypted using the gateway's self-signed certificate. This eliminates certificate trust issues for external clients.
+The control plane SHALL automatically detect whether it is running on an OpenShift cluster (where the `route.openshift.io` API group is available) or a standard Kubernetes cluster. On OpenShift, the control plane SHALL provision Route resources for gateway deployments to expose them externally. On non-OpenShift clusters, Route creation SHALL be a graceful no-op — the gateway remains accessible only via cluster-internal DNS, and `acpctl get gateway` will never display a route address.
+
+This enables users on OpenShift to reach the gateway over the cluster's external ingress without requiring `kubectl port-forward` or direct cluster network access. The Route uses re-encrypt TLS termination so that external clients connect through the cluster's trusted ingress certificate while the internal hop (router to gateway pod) remains encrypted using the gateway's self-signed certificate. This eliminates certificate trust issues for external clients.
 
 This extends the existing gateway provisioning model with:
-- **Optional Route creation** — Gateways MAY declare a `route` configuration to request an OpenShift Route
+- **Automatic cluster detection** — The control plane detects OpenShift by checking for the `route.openshift.io` API group at startup. Route provisioning is enabled only when the API is present.
+- **Optional Route creation** — Gateways MAY declare a `route` configuration to request an OpenShift Route. On non-OpenShift clusters, the `route` field is accepted but ignored.
 - **Re-encrypt TLS** — The Route terminates external TLS at the ingress controller and re-encrypts to the gateway pod, providing end-to-end encryption without requiring clients to trust a custom CA
 - **Auto-populated route address** — The control plane reads the Route's assigned hostname and exposes it through the API so the CLI and SDKs can display and use it
-- **CLI integration** — `acpctl get gateway` displays the route address and `acpctl gateway setup-cli` uses it instead of port-forwarding when available
+- **CLI integration** — `acpctl get gateway` displays the route address and `acpctl gateway setup-cli` prints the `openshell` command to connect via the route
 
 ---
 
@@ -45,7 +48,7 @@ The Route uses `termination: reencrypt` because:
 2. **No SAN chicken-and-egg problem.** With passthrough, the gateway's server certificate would need a SAN matching the Route's external hostname. If the host is auto-assigned, the hostname is unknown until the Route is created — creating a circular dependency (cert needs hostname, Route needs cert). Re-encrypt avoids this entirely because the gateway cert only needs to match the internal service DNS name, which is known at cert generation time.
 3. **End-to-end encryption preserved.** The full path is encrypted across two TLS segments: client → router (ingress cert) and router → pod (gateway self-signed cert). This satisfies end-to-end encryption requirements.
 4. **gRPC compatibility.** OpenShift's HAProxy ingress controller supports HTTP/2 and gRPC over re-encrypt routes. HTTP/2 backend negotiation is handled automatically via ALPN when the cluster's IngressController has HTTP/2 enabled (`ingress.operator.openshift.io/default-enable-http2=true`). No per-Route annotation is required for HTTP/2 backend connections.
-5. **Compatible with OIDC.** The Gateway's OIDC configuration disables client certificate (mTLS) verification. Re-encrypt does not support mTLS, which is acceptable since OIDC replaces mTLS for authentication. Passthrough is the only mode supporting mTLS, but mTLS is not needed here.
+5. **Compatible with OIDC.** When OIDC is enabled (per `gateway-oidc.spec.md`), the control plane removes the `client_ca_path` line from `gateway.toml`, which disables client certificate (mTLS) verification while preserving server-side TLS. Re-encrypt does not support mTLS, which is acceptable since OIDC replaces mTLS for authentication. Passthrough is the only mode supporting mTLS, but mTLS is not needed when OIDC is configured.
 
 The `destinationCACertificate` field on the Route is populated from the `ca.crt` entry in the `openshell-server-tls` Kubernetes Secret, which is generated by the certgen Job. This allows the router to verify the gateway pod's TLS certificate on the internal hop.
 
@@ -55,9 +58,41 @@ The `destinationCACertificate` field on the Route is populated from the `ca.crt`
 
 ## Requirements
 
+### Requirement: OpenShift Cluster Detection
+
+The control plane SHALL detect at startup whether it is running on an OpenShift cluster by checking for the availability of the `route.openshift.io` API group. This detection determines whether Route resources can be provisioned for gateways.
+
+#### Scenario: Running on OpenShift
+
+- GIVEN the control plane starts up
+- AND the Kubernetes API server reports that the `route.openshift.io` API group is available (via API discovery)
+- THEN the control plane SHALL enable Route provisioning for gateways
+- AND the GatewayReconciler SHALL create Route resources for gateways that have `route` configuration
+
+#### Scenario: Running on standard Kubernetes (e.g., Kind)
+
+- GIVEN the control plane starts up
+- AND the Kubernetes API server does NOT report the `route.openshift.io` API group
+- THEN the control plane SHALL disable Route provisioning
+- AND the GatewayReconciler SHALL skip Route creation for all gateways, regardless of their `route` configuration
+- AND no warning or error SHALL be logged for each skipped gateway — this is normal operation, not a degraded state
+- AND the Gateway's `routeAddress` field SHALL remain empty
+- AND `acpctl get gateway` SHALL never display a route address
+
+#### Scenario: Gateway with route field on non-OpenShift cluster
+
+- GIVEN the control plane is running on a non-OpenShift cluster
+- AND a Gateway resource includes a `route` field
+- WHEN the GatewayReconciler reconciles this Gateway
+- THEN it SHALL accept the `route` field without validation errors (the field is valid but inert)
+- AND it SHALL NOT attempt to create a Route resource
+- AND it SHALL NOT populate the `routeAddress` field
+
+---
+
 ### Requirement: Gateway Route Configuration
 
-The Gateway resource SHALL support an optional `route` field that declares external exposure via an OpenShift Route. When `route` is present, the GatewayReconciler SHALL create and reconcile a Route resource in the project namespace. Only Admin tier users SHALL be permitted to set or modify the `route` field, since it exposes the gateway externally (see `gateway-rbac-policy.spec.md`).
+The Gateway resource SHALL support an optional `route` field that declares external exposure via an OpenShift Route. When `route` is present and the cluster supports Routes (see "OpenShift Cluster Detection" above), the GatewayReconciler SHALL create and reconcile a Route resource in the project namespace. Only Admin tier users SHALL be permitted to set or modify the `route` field, since it exposes the gateway externally (see `gateway-rbac-policy.spec.md`).
 
 The Gateway resource SHALL also support an optional `internalServiceHostname` field specifying the internal service hostname used for TLS certificate generation. If `internalServiceHostname` is not set, it SHALL default to `openshell-gateway.<project>.svc.cluster.local`, where `<project>` is the Gateway's project name.
 
@@ -259,36 +294,54 @@ The Gateway API response SHALL include the Route's external address so that CLI 
 
 ### Requirement: CLI Route Address Display
 
-The `acpctl get gateway` command SHALL display the Route address when available, and `acpctl gateway setup-cli` SHALL use the Route address for gateway registration instead of port-forwarding.
+The `acpctl get gateway` command SHALL display the Route address when available. The `acpctl gateway setup-cli` command SHALL be an API-only operation — it queries the ACP API server for the gateway's `routeAddress` and prints the `openshell` command to connect. It does NOT interact with the Kubernetes or OpenShift cluster directly (no `kubectl`, no cert extraction, no port-forwarding).
 
 #### Scenario: Gateway table includes route address
 
 - GIVEN a Gateway with a populated `routeAddress`
 - WHEN a user runs `acpctl get gateways`
-- THEN the table output SHALL include a `ROUTE` column showing the route address
+- THEN the table output SHALL include a `ROUTE` column alongside the existing columns (NAME, IMAGE, DNS NAMES, AGE)
+- AND the `ROUTE` column SHALL display the route address for gateways with a Route
 - AND the column SHALL be empty for gateways without a Route
 
 #### Scenario: Single gateway connection info includes route address
 
 - GIVEN a Gateway with a populated `routeAddress`
 - WHEN a user runs `acpctl get gateway <name>`
-- THEN the connection info SHALL display the Route address as the primary external endpoint
-- AND it SHALL still display the cluster DNS address for internal use
+- THEN the connection info section SHALL display the Route address as the primary external endpoint alongside the existing fields (Cluster DNS, Server SANs)
+- AND the output SHALL display:
+  ```
+  Connection Info:
+    Route:        <routeAddress>
+    Cluster DNS:  openshell-gateway.<namespace>.svc.cluster.local:8080
+    Server SANs:  <comma-separated ServerDnsNames>
 
-#### Scenario: setup-cli uses route address instead of port-forward
+  Setup openshell CLI:
+    acpctl gateway setup-cli <name>
+  ```
+- AND the "Setup openshell CLI" hint SHALL only be shown when a Route address is available
+
+#### Scenario: setup-cli prints openshell command for gateway with route
 
 - GIVEN a Gateway with a populated `routeAddress`
 - WHEN a user runs `acpctl gateway setup-cli <name>`
-- THEN the CLI SHALL register the gateway with the Route address (e.g., `https://openshell-gateway-tenant-a.apps.cluster.example.com:443`)
-- AND it SHALL NOT start a `kubectl port-forward`
-- AND it SHALL still extract the CA certificate from the `openshell-server-tls` Secret for clients that need it (e.g., verifying the internal cert in non-Route scenarios)
-- AND the CLI SHALL verify connectivity to the Route address before completing setup
+- THEN the CLI SHALL query the ACP API server (not the Kubernetes API) to retrieve the gateway resource
+- AND it SHALL read the `routeAddress` field from the API response
+- AND it SHALL print the `openshell` command to connect to the gateway via the Route address, e.g.:
+  ```
+  openshell gateway add --name <project>-<gateway-name> https://<routeAddress>
+  ```
+- AND when the gateway has OIDC configured, the printed command SHALL include the OIDC issuer flag:
+  ```
+  openshell gateway add --name <project>-<gateway-name> --oidc-issuer <issuer> https://<routeAddress>
+  ```
 
-#### Scenario: setup-cli falls back to port-forward when no route
+#### Scenario: setup-cli errors when no route address is available
 
-- GIVEN a Gateway without a `routeAddress`
+- GIVEN a Gateway without a populated `routeAddress` (no Route configured or Route not yet assigned a hostname)
 - WHEN a user runs `acpctl gateway setup-cli <name>`
-- THEN the CLI SHALL fall back to the existing `kubectl port-forward` behavior
+- THEN the CLI SHALL exit with an error indicating that the gateway has no external Route address
+- AND the error message SHALL suggest configuring a Route on the gateway to expose it externally
 
 ---
 
@@ -366,11 +419,7 @@ The GatewayReconciler SHALL validate `route` configuration before creating Route
 
 #### Scenario: Route on non-OpenShift cluster
 
-- GIVEN the cluster does not have the `route.openshift.io` API group available
-- AND a Gateway is configured with a `route` field
-- WHEN the GatewayReconciler attempts to create the Route
-- THEN it SHALL log a warning that Routes are not available on this cluster
-- AND it SHALL skip Route creation without failing the overall gateway reconciliation
+- Route behavior on non-OpenShift clusters is handled by the "OpenShift Cluster Detection" requirement above. The `route` field is accepted but Route creation is a no-op.
 
 ---
 
@@ -402,7 +451,7 @@ The control plane ServiceAccount SHALL have permissions to manage Route resource
 | `image` | No | `OPENSHELL_GATEWAY_IMAGE` env var | Gateway container image reference |
 | `internalServiceHostname` | No | `openshell-gateway.<project>.svc.cluster.local` | Internal service hostname for TLS certificate generation. Derived from the project name if not explicitly set |
 | `config` | No | — | OpenShell gateway TOML configuration |
-| `oidc` | No | — | OIDC authentication configuration |
+| `oidc` | No | — | OIDC authentication configuration (see `gateway-oidc.spec.md`). When enabled, mTLS client verification is disabled |
 | `route` | No | — | Route configuration for external exposure |
 | `route.host` | No | `""` (auto-assigned) | Hostname for the OpenShift Route |
 | `routeAddress` | — | — | Read-only. External address populated by the control plane after Route creation |
@@ -458,8 +507,9 @@ route: {}
 | `gateway/reconciler.go` | Extended to create/update/delete Route resources and populate `routeAddress` |
 | `gateway/manifests.go` | Loads `route.yaml` manifest; `route.yaml` is optional (not in `requiredFiles`) |
 | `gateway/validation.go` | Extended to validate `route.host` format |
-| `acpctl get gateway` | Adds `ROUTE` column and Route address in connection info |
-| `acpctl gateway setup-cli` | Uses Route address when available; falls back to port-forward |
+| `acpctl get gateways` | Adds `ROUTE` column to existing table (NAME, IMAGE, DNS NAMES, AGE) |
+| `acpctl get gateway <name>` | Adds Route address to Connection Info section (alongside Cluster DNS, Server SANs) |
+| `acpctl gateway setup-cli` | API-only: queries `routeAddress` from API server, prints `openshell gateway add` command. Errors if no Route address. No kubectl/cert interaction |
 | OpenAPI schema | Extended with `GatewayRoute` and `routeAddress` |
 | DB migration | New migration adds `route` (JSONB) and `route_address` (text) columns |
 | Go/Python/TS SDKs | Extended with `Route` and `RouteAddress` fields |
@@ -559,9 +609,9 @@ The OpenShift Local deployment SHALL provide the same development experience as 
 - AND a gateway is provisioned for `tenant-a` with `route: {}`
 - WHEN the GatewayReconciler reconciles the gateway
 - THEN a Route SHALL be created in the `tenant-a` namespace
-- AND `acpctl get gateway --project tenant-a` SHALL show the Route address under `*.apps-crc.testing`
-- AND `acpctl gateway setup-cli openshell-gateway --project tenant-a` SHALL register the gateway using the Route address (no port-forward)
-- AND `openshell -g openshell-gateway provider list` SHALL succeed through the Route
+- AND `acpctl get gateway openshell-gateway --project tenant-a` SHALL show the Route address under `*.apps-crc.testing` in the Connection Info section
+- AND `acpctl gateway setup-cli openshell-gateway --project tenant-a` SHALL print the `openshell gateway add` command with the Route address
+- AND `openshell -g tenant-a-openshell-gateway provider list` SHALL succeed through the Route
 
 ---
 
@@ -570,4 +620,5 @@ The OpenShift Local deployment SHALL provide the same development experience as 
 - [OpenShift Route TLS Termination](https://www.redhat.com/en/blog/encryption-secure-routes-openshift) — comparison of edge, re-encrypt, and passthrough termination modes
 - [OpenShift Routes Documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/ingress_and_load_balancing/routes) — Route configuration reference
 - [gateway-provisioning.spec.md](./gateway-provisioning.spec.md) — Gateway lifecycle and reconciler
+- [gateway-oidc.spec.md](./gateway-oidc.spec.md) — OIDC authentication for gateways
 - [data-model.spec.md](./data-model.spec.md) — Gateway kind definition
