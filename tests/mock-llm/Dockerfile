@@ -7,7 +7,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY server.py .
 
-RUN chmod -R g=u /app
+RUN useradd --create-home mockllm && chmod -R g=u /app
+
+USER mockllm
 
 EXPOSE 8000
 
