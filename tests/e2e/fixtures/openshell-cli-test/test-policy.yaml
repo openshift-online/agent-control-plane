@@ -1,0 +1,27 @@
+version: 1
+filesystem:
+  include_workdir: true
+  read_only:
+    - /usr
+    - /lib
+    - /opt
+    - /proc
+    - /dev/urandom
+    - /etc
+  read_write:
+    - /sandbox
+    - /tmp
+    - /dev/null
+landlock:
+  compatibility: best_effort
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+network_policies:
+  test_endpoint:
+    name: test-endpoint
+    endpoints:
+      - host: update.code.visualstudio.com
+        port: 443
+    binaries:
+      - path: /usr/bin/curl
