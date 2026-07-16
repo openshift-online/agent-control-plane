@@ -19,3 +19,7 @@ Structured metadata on sessions, agents, and projects. Covers annotation schemas
 ### [Live Preview and Real-Time Updates](live-preview.spec.md)
 
 Visual feedback for running sessions including live preview, screenshot capture, real-time update streaming, and WebSocket integration.
+
+### [Learn](learn.spec.md)
+
+In-app catalog of learning resources rendered from markdown files in `examples/docs/`. Static build-time content, global scope.

@@ -52,6 +52,7 @@ Machine-readable index for autonomous reconciliation (`/reconcile` skill).
 | `ui/project-sharing.spec.md` | ui | Project sharing, ownership transfer | FE, BE | rbac-enforcement |
 | `ui/scheduled-sessions.spec.md` | ui | Schedule CRUD UI | FE | scheduled-session-execution |
 | `ui/work-tracking-dashboard.spec.md` | ui | Dashboard, work annotations | FE | annotations, views |
+| `ui/learn.spec.md` | ui | Learn catalog, static content | FE | architecture |
 | `standards/control-plane/conventions.spec.md` | standards | - | CP | - |
 | `standards/platform/cross-cutting.spec.md` | standards | - | ALL | - |
 | `standards/security/security.spec.md` | standards | - | ALL | - |
