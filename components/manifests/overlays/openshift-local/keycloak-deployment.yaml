@@ -1,0 +1,122 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      securityContext:
+        runAsNonRoot: false
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.6.3
+          args:
+            - start-dev
+            - --import-realm
+          env:
+            - name: KC_HOSTNAME
+              value: "https://keycloak-ambient-code.apps-crc.testing"
+            - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
+              value: "true"
+            - name: KC_PROXY_HEADERS
+              value: "xforwarded"
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KEYCLOAK_ADMIN
+              value: admin
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              value: admin
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          volumeMounts:
+            - name: realm-config
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+            - name: acp-theme
+              mountPath: /opt/keycloak/themes/acp/login/theme.properties
+              subPath: theme.properties
+              readOnly: true
+            - name: acp-theme
+              mountPath: /opt/keycloak/themes/acp/login/resources/css/login.css
+              subPath: login.css
+              readOnly: true
+            - name: acp-theme
+              mountPath: /opt/keycloak/themes/acp/login/resources/img/acp-logo.svg
+              subPath: acp-logo.svg
+              readOnly: true
+            - name: acp-theme
+              mountPath: /opt/keycloak/themes/acp/login/messages/messages_en.properties
+              subPath: messages_en.properties
+              readOnly: true
+          resources:
+            requests:
+              cpu: 200m
+              memory: 768Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          readinessProbe:
+            httpGet:
+              path: /realms/ambient-code
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /realms/ambient-code
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 5
+      volumes:
+        - name: realm-config
+          configMap:
+            name: keycloak-realm-config
+        - name: acp-theme
+          configMap:
+            name: keycloak-acp-theme
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak-service
+  labels:
+    app: keycloak
+spec:
+  type: ClusterIP
+  selector:
+    app: keycloak
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+spec:
+  to:
+    kind: Service
+    name: keycloak-service
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

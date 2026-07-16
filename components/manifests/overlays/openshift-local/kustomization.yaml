@@ -1,0 +1,78 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ambient-code
+
+resources:
+- ../../base
+- secrets.yaml
+- test-user.yaml
+- postgresql-credentials.yaml
+- minio-credentials.yaml
+- mlflow-db-credentials.yaml
+- postgresql-init-scripts.yaml
+- ldap-config.yaml
+- ldap-credentials.yaml
+- keycloak-deployment.yaml
+- sso-credentials.yaml
+- api-server-route.yaml
+- ui-route.yaml
+
+patches:
+- path: ambient-api-server-dev-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server
+    version: v1
+- path: api-server-db-security-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-api-server-db
+    version: v1
+- path: control-plane-env-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-control-plane
+- path: namespace-patch.yaml
+  target:
+    kind: Namespace
+    name: ambient-code
+- path: minio-pvc-patch.yaml
+  target:
+    kind: PersistentVolumeClaim
+    name: minio-data
+- path: postgresql-pvc-patch.yaml
+  target:
+    kind: PersistentVolumeClaim
+    name: postgresql-data
+- path: postgresql-init-scripts-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: postgresql
+- path: api-server-security-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-api-server
+
+configMapGenerator:
+- name: keycloak-realm-config
+  files:
+  - ambient-code-realm.json=keycloak-realm.json
+  options:
+    disableNameSuffixHash: true
+- name: keycloak-acp-theme
+  files:
+  - theme.properties=keycloak-theme/theme.properties
+  - login.css=keycloak-theme/login.css
+  - acp-logo.svg=keycloak-theme/acp-logo.svg
+  - messages_en.properties=keycloak-theme/messages_en.properties
+  options:
+    disableNameSuffixHash: true

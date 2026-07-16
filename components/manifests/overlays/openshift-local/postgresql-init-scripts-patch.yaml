@@ -1,0 +1,13 @@
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: init-scripts
+    mountPath: /docker-entrypoint-initdb.d
+    readOnly: true
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: init-scripts
+    configMap:
+      name: postgresql-init-scripts
+      defaultMode: 0755

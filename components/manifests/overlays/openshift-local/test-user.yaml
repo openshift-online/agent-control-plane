@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: test-user-token
+  labels:
+    app: test-user
+type: Opaque
+stringData:
+  token: "crc-test-token"

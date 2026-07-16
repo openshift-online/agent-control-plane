@@ -6,6 +6,7 @@
 .PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-reload-ambient-control-plane kind-reload-ambient-api-server kind-reload-runner-openshell kind-load-runner kind-status kind-login kind-sso-toggle kind-setup-vertex
 .PHONY: preflight-cluster preflight dev-env dev
 .PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift test-gateway-e2e test-vteam-catalog-lab
+.PHONY: crc-up crc-down crc-reload-component
 .PHONY: unleash-port-forward unleash-status
 .PHONY: kind-port-forward kind-port-forward-stop _kind-start-port-forward _kind-print-access kind-acpctl-login kind-apply-examples
 .PHONY: setup-minio minio-console minio-logs minio-status
@@ -1834,3 +1835,74 @@ local-stop-port-forward: ## Stop background port forwarding
 		rm -f /tmp/ambient-code/port-forward-*.pid /tmp/ambient-code/port-forward-*.log; \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port forwarding stopped"; \
 	fi
+
+# ─── CRC (OpenShift Local) targets ───────────────────────────────────────────
+
+CRC_NAMESPACE ?= ambient-code
+CRC_OVERLAY   ?= components/manifests/overlays/openshift-local
+
+crc-up: build-cli ## Deploy the platform to CRC (OpenShift Local). Requires 'crc start' and 'oc login' beforehand
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying to CRC (OpenShift Local)..."
+	@if ! oc whoami >/dev/null 2>&1; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Not logged in to CRC. Run: eval \$$(crc oc-env) && oc login -u kubeadmin https://api.crc.testing:6443"; \
+		exit 1; \
+	fi
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Creating namespace $(CRC_NAMESPACE)..."
+	@oc new-project $(CRC_NAMESPACE) 2>/dev/null || oc project $(CRC_NAMESPACE)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Applying kustomize overlay..."
+	@oc apply --validate=false -k $(CRC_OVERLAY)/
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods to be ready..."
+	@for deploy in ambient-api-server-db postgresql ambient-api-server ambient-control-plane keycloak; do \
+		echo "  Waiting for $$deploy..."; \
+		oc rollout status deployment/$$deploy -n $(CRC_NAMESPACE) --timeout=300s 2>/dev/null || \
+			echo "  $(COLOR_YELLOW)⚠$(COLOR_RESET) $$deploy not yet ready (may not exist)"; \
+	done
+	@echo ""
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) CRC deployment complete"
+	@echo ""
+	@echo "$(COLOR_BOLD)Routes:$(COLOR_RESET)"
+	@oc get routes -n $(CRC_NAMESPACE) -o custom-columns='NAME:.metadata.name,HOST:.spec.host' --no-headers 2>/dev/null | \
+		while read name host; do echo "  $$name: https://$$host"; done
+	@echo ""
+	@echo "$(COLOR_BOLD)Default credentials:$(COLOR_RESET)"
+	@echo "  Keycloak admin: admin / admin"
+	@echo "  Developer:      developer / developer"
+
+crc-down: ## Remove ACP resources from CRC (leaves CRC running)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Removing ACP from CRC..."
+	@oc delete -k $(CRC_OVERLAY)/ --ignore-not-found 2>/dev/null || true
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Cleaning up namespace $(CRC_NAMESPACE)..."
+	@oc delete project $(CRC_NAMESPACE) --ignore-not-found 2>/dev/null || true
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) ACP removed from CRC"
+
+CRC_COMPONENT ?=
+crc-reload-component: ## Rebuild and redeploy a single component to CRC (CRC_COMPONENT=ambient-api-server|ambient-control-plane|ambient-ui)
+	@if [ -z "$(CRC_COMPONENT)" ]; then \
+		echo "$(COLOR_RED)✗$(COLOR_RESET) Usage: make crc-reload-component CRC_COMPONENT=<name>"; \
+		echo "  Valid: ambient-api-server, ambient-control-plane, ambient-ui"; \
+		exit 1; \
+	fi
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Rebuilding $(CRC_COMPONENT)..."
+	@TAG="crc-$$(date +%s)"; \
+	case "$(CRC_COMPONENT)" in \
+		ambient-api-server) \
+			$(MAKE) --no-print-directory build-api-server; \
+			oc set image deployment/ambient-api-server -n $(CRC_NAMESPACE) api-server=$(AMBIENT_API_SERVER_IMAGE):$$TAG; \
+			;; \
+		ambient-control-plane) \
+			$(MAKE) --no-print-directory build-control-plane; \
+			oc set image deployment/ambient-control-plane -n $(CRC_NAMESPACE) ambient-control-plane=$(AMBIENT_CONTROL_PLANE_IMAGE):$$TAG; \
+			;; \
+		ambient-ui) \
+			$(MAKE) --no-print-directory build-ambient-ui; \
+			oc set image deployment/ambient-ui -n $(CRC_NAMESPACE) ambient-ui=$(AMBIENT_UI_IMAGE):$$TAG; \
+			;; \
+		*) \
+			echo "$(COLOR_RED)✗$(COLOR_RESET) Unknown component: $(CRC_COMPONENT)"; \
+			exit 1; \
+			;; \
+	esac; \
+	echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting $(CRC_COMPONENT)..."; \
+	oc rollout restart deployment/$(CRC_COMPONENT) -n $(CRC_NAMESPACE); \
+	oc rollout status deployment/$(CRC_COMPONENT) -n $(CRC_NAMESPACE) --timeout=120s; \
+	echo "$(COLOR_GREEN)✓$(COLOR_RESET) $(CRC_COMPONENT) reloaded"

@@ -1,0 +1,6 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ambient-code
+  labels:
+    ambient-code.io/managed: "true"

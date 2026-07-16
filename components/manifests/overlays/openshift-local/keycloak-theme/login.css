@@ -1,0 +1,277 @@
+/* ACP Keycloak Login Theme — matches ambient-ui dark palette */
+
+/* Red Hat Text from Google Fonts — requires network access; falls back to system-ui offline */
+@import url('https://fonts.googleapis.com/css2?family=Red+Hat+Text:wght@400;500;600;700&display=swap');
+
+/* Page background — true gray with subtle dot texture */
+.pf-v5-c-login,
+html.pf-v5-theme-dark .pf-v5-c-login {
+  background-color: #151515 !important;
+  background-image: radial-gradient(circle, #1f1f1f 1px, transparent 1px) !important;
+  background-size: 24px 24px !important;
+  height: 100vh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Kill the PatternFly grid at ALL breakpoints — force centered single-column */
+.pf-v5-c-login__container {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 100vh !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 1rem !important;
+  box-sizing: border-box !important;
+  grid-template-columns: none !important;
+  grid-template-areas: none !important;
+}
+
+/* Header — hide raw text from kc-header-wrapper (Keycloak 26.0 / PF5 DOM) */
+#kc-header-wrapper {
+  font-size: 0 !important;
+  line-height: 0 !important;
+  color: transparent !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.pf-v5-c-login__header {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center !important;
+  width: auto !important;
+  margin-bottom: 1.5rem !important;
+  padding: 0 !important;
+  grid-area: unset !important;
+  order: -1 !important;
+}
+
+.pf-v5-c-login__header::before {
+  content: "";
+  display: block;
+  width: 88px;
+  height: 88px;
+  background-image: url("../img/acp-logo.svg");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  margin-bottom: 0.5rem;
+}
+
+/* Title must match messages_en.properties:loginTitleHtml */
+.pf-v5-c-login__header::after {
+  content: "Agent Control Plane";
+  display: block;
+  color: #f2f2f2;
+  font-size: 1.75rem;
+  font-weight: 600;
+  font-family: 'Red Hat Text', system-ui, -apple-system, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+/* Login card — centered with explicit margin auto */
+.pf-v5-c-login__main {
+  width: 100% !important;
+  max-width: 400px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  align-self: center !important;
+  background-color: #1f1f1f !important;
+  border: 1px solid #383838 !important;
+  border-radius: 0.625rem !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4) !important;
+  grid-area: unset !important;
+}
+
+.pf-v5-c-login__main-body {
+  background-color: transparent;
+}
+
+.pf-v5-c-login__main-header {
+  background-color: transparent;
+}
+
+/* "Sign in to your account" heading */
+.pf-v5-c-login__main-header h1,
+h1.pf-v5-c-title,
+h1.pf-v5-c-title.pf-m-3xl,
+#kc-page-title {
+  color: #f2f2f2 !important;
+  font-family: 'Red Hat Text', system-ui, -apple-system, sans-serif !important;
+}
+
+/* All form text uses Red Hat Text */
+.pf-v5-c-form,
+.pf-v5-c-form-control,
+.pf-v5-c-form-control input,
+.pf-v5-c-button {
+  font-family: 'Red Hat Text', system-ui, -apple-system, sans-serif !important;
+}
+
+/* Form inputs — CSS custom properties cascade naturally on same selector */
+.pf-v5-c-form-control {
+  --pf-v5-c-form-control--BorderTopColor: #383838;
+  --pf-v5-c-form-control--BorderRightColor: #383838;
+  --pf-v5-c-form-control--BorderBottomColor: #383838;
+  --pf-v5-c-form-control--BorderLeftColor: #383838;
+  --pf-v5-c-form-control--hover--BorderBottomColor: #f56e6e;
+  --pf-v5-c-form-control--focus--BorderBottomColor: #f56e6e;
+  --pf-v5-c-form-control--m-expanded--BorderBottomColor: #f56e6e;
+  --pf-v5-c-form-control--BackgroundColor: #292929;
+  --pf-v5-c-form-control--Color: #f2f2f2;
+  --pf-v5-c-form-control--OutlineOffset: 0;
+  --pf-v5-c-form-control--after--BorderBottomColor: #383838;
+  --pf-v5-c-form-control--hover__after--BorderBottomColor: #f56e6e;
+  --pf-v5-c-form-control--focus__after--BorderBottomColor: #f56e6e;
+  background-color: #292929 !important;
+  border-color: #383838 !important;
+  color: #f2f2f2 !important;
+}
+
+.pf-v5-c-form-control input {
+  background-color: transparent !important;
+  color: #f2f2f2 !important;
+}
+
+.pf-v5-c-form-control::after {
+  border-bottom-color: #383838 !important;
+  transition: border-bottom-color 0.2s ease;
+}
+
+.pf-v5-c-form-control:hover::after,
+.pf-v5-c-form-control:focus-within::after {
+  border-bottom-color: #f56e6e !important;
+}
+
+.pf-v5-c-form-control:focus-within,
+.pf-v5-c-form-control:focus {
+  border-color: #f56e6e !important;
+  outline: none !important;
+}
+
+/* Labels */
+.pf-v5-c-form__label-text {
+  color: #a3a3a3 !important;
+  font-family: 'Red Hat Text', system-ui, -apple-system, sans-serif !important;
+}
+
+/* Primary button — ACP dark primary (orange-red) */
+.pf-v5-c-button.pf-m-primary {
+  --pf-v5-c-button--m-primary--BackgroundColor: #f56e6e;
+  --pf-v5-c-button--m-primary--hover--BackgroundColor: #e05555;
+  --pf-v5-c-button--m-primary--focus--BackgroundColor: #e05555;
+  --pf-v5-c-button--m-primary--active--BackgroundColor: #e05555;
+  background-color: #f56e6e !important;
+  border-color: #f56e6e !important;
+  color: #151515 !important;
+  font-family: 'Red Hat Text', system-ui, -apple-system, sans-serif !important;
+}
+
+.pf-v5-c-button.pf-m-primary:hover,
+.pf-v5-c-button.pf-m-primary:focus,
+.pf-v5-c-button.pf-m-primary:active {
+  background-color: #e05555 !important;
+  border-color: #e05555 !important;
+}
+
+/* Password visibility toggle — orange-red on hover */
+.pf-v5-c-button.pf-m-control {
+  --pf-v5-c-button--m-control--BackgroundColor: #292929;
+  --pf-v5-c-button--m-control--hover--BackgroundColor: #292929;
+  --pf-v5-c-button--m-control--focus--BackgroundColor: #292929;
+  --pf-v5-c-button--m-control--active--BackgroundColor: #292929;
+  --pf-v5-c-button--m-control--BorderColor: #383838;
+  --pf-v5-c-button--m-control--after--BorderBottomColor: #383838;
+  --pf-v5-c-button--m-control--hover--after--BorderBottomColor: #f56e6e;
+  --pf-v5-c-button--m-control--focus--after--BorderBottomColor: #f56e6e;
+  --pf-v5-c-button--m-control--active--after--BorderBottomColor: #f56e6e;
+  background-color: #292929 !important;
+  border-color: #383838 !important;
+  color: #a3a3a3 !important;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.pf-v5-c-button.pf-m-control::after {
+  border-bottom-color: #383838 !important;
+  transition: border-bottom-color 0.2s ease;
+}
+
+.pf-v5-c-button.pf-m-control:hover::after,
+.pf-v5-c-button.pf-m-control:focus::after,
+.pf-v5-c-button.pf-m-control:active::after {
+  border-bottom-color: #f56e6e !important;
+}
+
+.pf-v5-c-button.pf-m-control:hover,
+.pf-v5-c-button.pf-m-control:focus,
+.pf-v5-c-button.pf-m-control:active {
+  color: #f56e6e !important;
+  border-color: #f56e6e !important;
+  background-color: #292929 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* Eye icon inside password toggle — override Font Awesome color */
+.pf-v5-c-button.pf-m-control i.fa-eye,
+.pf-v5-c-button.pf-m-control i.fa-eye-slash,
+.pf-v5-c-button.pf-m-control i.fas,
+.pf-v5-c-button.pf-m-control i,
+.pf-v5-c-button[data-password-toggle] i {
+  color: #a3a3a3 !important;
+  transition: color 0.2s ease;
+}
+
+.pf-v5-c-button.pf-m-control:hover i.fa-eye,
+.pf-v5-c-button.pf-m-control:hover i.fa-eye-slash,
+.pf-v5-c-button.pf-m-control:hover i.fas,
+.pf-v5-c-button.pf-m-control:hover i,
+.pf-v5-c-button.pf-m-control:focus i,
+.pf-v5-c-button[data-password-toggle]:hover i {
+  color: #f56e6e !important;
+}
+
+/* Links — orange-red to match brand */
+.pf-v5-c-login__main-footer-links a,
+.pf-v5-c-button.pf-m-link {
+  color: #f56e6e !important;
+}
+
+.pf-v5-c-button.pf-m-link:hover {
+  color: #e05555 !important;
+}
+
+/* Footer */
+.pf-v5-c-login__main-footer {
+  background-color: transparent;
+}
+
+/* Alert styling */
+.pf-v5-c-alert {
+  background-color: #292929 !important;
+  border-color: #383838 !important;
+}
+
+.pf-v5-c-alert__title {
+  color: #f2f2f2 !important;
+}
+
+/* Checkbox */
+.pf-v5-c-check__label {
+  color: #a3a3a3 !important;
+}
+
+/* Page footer */
+.pf-v5-c-login__footer {
+  text-align: center;
+  color: #a3a3a3;
+  margin-top: 0.75rem;
+  grid-area: unset !important;
+}
