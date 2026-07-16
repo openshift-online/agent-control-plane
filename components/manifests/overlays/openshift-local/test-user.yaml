@@ -6,4 +6,4 @@ metadata:
     app: test-user
 type: Opaque
 stringData:
-  token: "crc-test-token"
+  token: "acp-local-test-token"
