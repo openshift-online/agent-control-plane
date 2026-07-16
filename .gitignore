@@ -163,3 +163,8 @@ apm.lock.yaml
 
 # Local creds
 vertex.json
+
+# CRC-generated CA certs (cluster-specific, see README)
+crc-ca-bundle.crt
+openshift-local-ca.crt
+acpgw-ca.crt

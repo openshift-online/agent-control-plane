@@ -58,10 +58,10 @@ make kind-up
 make kind-login                  # port-forward services, configure acpctl, print access info
 ```
 
-Once the cluster is running, configure the openshell CLI for a gateway:
+Once the cluster is running, you can configure your local openshell CLI to add a gateway:
 
 ```bash
-acpctl gateway setup-cli --project <namespace> --gateway-url https://localhost:<port>
+acpctl gateway setup-cli --project <namespace> --gateway-url https://localhost:<port> --kubectl
 ```
 
 The gateway URL and port are printed by `make kind-login`. If you've already run `setup-cli` before, it will re-authenticate using your existing acpctl credentials instead of re-registering.
@@ -82,14 +82,69 @@ The control plane delegates sandbox creation to an OpenShell gateway by default.
 
 Override defaults with:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OPENSHELL_TENANT_NAMESPACE` | `tenant` | Namespace for the gateway and sandboxes |
-| `AGENT_SANDBOX_VERSION` | `v0.5.1` | Agent Sandbox CRD release (must match gateway API version) |
+| Variable                     | Default  | Description                                                |
+| ---------------------------- | -------- | ---------------------------------------------------------- |
+| `OPENSHELL_TENANT_NAMESPACE` | `tenant` | Namespace for the gateway and sandboxes                    |
+| `AGENT_SANDBOX_VERSION`      | `v0.5.1` | Agent Sandbox CRD release (must match gateway API version) |
 
 After the sandbox reaches Ready, the control plane executes commands inside it via the `ExecSandbox` gRPC RPC — the runner starts through exec, not the container entrypoint.
 
 See [OpenShell Sandbox Provisioning Spec](specs/platform/openshell-sandbox-provisioning.spec.md) for full details on gateway mode, CRD version compatibility, and configuration.
+
+### Setup for OpenShift Local (CRC)
+
+Deploy ACP to an OpenShift Local cluster:
+
+```bash
+crc start
+eval $(crc oc-env)
+oc login -u kubeadmin https://api.crc.testing:6443
+make crc-up
+```
+
+`make crc-up` installs all prerequisites including Agent Sandbox Controller, cert-manager. It also configures Gateway API networking Gateway with HTTPS/TLS so that GRPCRoutes can be set up. BackendTLSPolicy (used for re-encryption to the gateway pod) requires OpenShift 4.22+.
+
+**Trust store setup (CRC-only prerequisite):**
+
+After `make crc-up`, download the CRC CA certificates and install them into your system trust store. This is only needed on CRC — production clusters use a real CA whose certs are already trusted.
+
+```bash
+# Download CRC CA certificates
+oc get secret acpgw-ca -n openshift-ingress -o jsonpath='{.data.ca\.crt}' | base64 -d > crc-ca-bundle.crt
+oc get secret router-ca -n openshift-ingress-operator -o jsonpath='{.data.tls\.crt}' | base64 -d >> crc-ca-bundle.crt
+
+# Install into system trust store
+
+# Fedora / RHEL / CentOS
+sudo cp crc-ca-bundle.crt /etc/pki/ca-trust/source/anchors/crc-ca-bundle.crt
+sudo update-ca-trust
+
+# Ubuntu / Debian
+sudo cp crc-ca-bundle.crt /usr/local/share/ca-certificates/crc-ca-bundle.crt
+sudo update-ca-certificates
+
+# macOS
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain crc-ca-bundle.crt
+```
+
+The bundle contains two CAs:
+
+- **Gateway CA** (`acpgw-ca`) — for `*.acpgw.apps-crc.testing` (openshell gateway connections via Gateway API)
+- **CRC router CA** (`router-ca`) — for `*.apps-crc.testing` (Keycloak, API server, UI)
+
+**Gateway traffic flow on CRC:**
+
+```
+Client ──TLS/H2──▶ HAProxy (passthrough Route) ──▶ Gateway API (Envoy)
+                    │                                 │ terminates TLS
+                    │ raw TCP, no inspection          │ ALPN → HTTP/2
+                    │ simulates Cloud LoadBalancer    │ GRPCRoute w/
+                                                      │ BackendTLSPolicy
+                                                      ▼
+                                             openshell-gateway pod (TLS)
+```
+
+The passthrough Route is a CRC-only bridge — it exists because CRC has no cloud LoadBalancer provisioner. In a real deployment, an L4 cloud LoadBalancer replaces it; everything from Envoy onward is identical.
 
 ## vTeam Lab
 
@@ -116,17 +171,17 @@ ACP has three high-level pieces:
 
 ### Components
 
-| Component | Technology | Description |
-|-----------|------------|-------------|
-| **API Server** (`ambient-api-server`) | Go + rh-trex-ai | REST + gRPC API, PostgreSQL-backed. Source of truth for all platform state. |
-| **Control Plane** (`ambient-control-plane`) | Go | Watches API server via gRPC streams, reconciles sessions into K8s Jobs, manages gateway provisioning |
-| **UI** (`ambient-ui`) | NextJS + Shadcn | BFF-pattern web application with OIDC authentication for session management and agent authoring |
-| **Runner** (`ambient-runner`) | Python + FastAPI | Executes AI agents inside pods; bridges AG-UI protocol to gRPC message store |
-| **MCP Server** (`ambient-mcp`) | Go | MCP tool definitions for platform resources, deployed as credential sidecar or public API endpoint |
-| **CLI** (`ambient-cli`) | Go | `acpctl` command-line tool with declarative `apply -f/-k` for fleet management |
-| **SDK** (`ambient-sdk`) | Go, Python, TypeScript | Generated from the OpenAPI spec |
-| **Credential Sidecars** | Per-provider containers | Isolated credential containers for GitHub, GitLab, Jira, Google, Kubernetes |
-| **Manifests** | Kustomize | Deployment manifests with base and overlay structure |
+| Component                                   | Technology              | Description                                                                                          |
+| ------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| **API Server** (`ambient-api-server`)       | Go + rh-trex-ai         | REST + gRPC API, PostgreSQL-backed. Source of truth for all platform state.                          |
+| **Control Plane** (`ambient-control-plane`) | Go                      | Watches API server via gRPC streams, reconciles sessions into K8s Jobs, manages gateway provisioning |
+| **UI** (`ambient-ui`)                       | NextJS + Shadcn         | BFF-pattern web application with OIDC authentication for session management and agent authoring      |
+| **Runner** (`ambient-runner`)               | Python + FastAPI        | Executes AI agents inside pods; bridges AG-UI protocol to gRPC message store                         |
+| **MCP Server** (`ambient-mcp`)              | Go                      | MCP tool definitions for platform resources, deployed as credential sidecar or public API endpoint   |
+| **CLI** (`ambient-cli`)                     | Go                      | `acpctl` command-line tool with declarative `apply -f/-k` for fleet management                       |
+| **SDK** (`ambient-sdk`)                     | Go, Python, TypeScript  | Generated from the OpenAPI spec                                                                      |
+| **Credential Sidecars**                     | Per-provider containers | Isolated credential containers for GitHub, GitLab, Jira, Google, Kubernetes                          |
+| **Manifests**                               | Kustomize               | Deployment manifests with base and overlay structure                                                 |
 
 ### Data Model
 
@@ -149,11 +204,11 @@ See [Data Model Spec](specs/platform/data-model.spec.md) for the full entity rel
 
 The runner uses a bridge abstraction (`PlatformBridge` ABC) to support multiple AI backends:
 
-| Bridge | Status | Description |
-|--------|--------|-------------|
-| `ClaudeBridge` | Production | Claude Code CLI via Claude Agent SDK subprocess |
-| `GeminiCLIBridge` | Implemented | Gemini CLI bridge |
-| `LangGraphBridge` | Stub | LangGraph bridge |
+| Bridge            | Status      | Description                                     |
+| ----------------- | ----------- | ----------------------------------------------- |
+| `ClaudeBridge`    | Production  | Claude Code CLI via Claude Agent SDK subprocess |
+| `GeminiCLIBridge` | Implemented | Gemini CLI bridge                               |
+| `LangGraphBridge` | Stub        | LangGraph bridge                                |
 
 ### Security
 

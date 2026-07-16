@@ -524,38 +524,43 @@ make crc-reload-component CRC_COMPONENT=ambient-api-server  # Reload single comp
 make crc-down            # Remove ACP from CRC (leaves CRC running)
 ```
 
-### Trusting the OpenShift Local CA Certificate
+### Trusting the CRC CA Certificates
 
-CRC uses self-signed TLS certificates. To avoid `--insecure-skip-tls-verify` flags and certificate errors, add the CRC CA to your system trust store:
+CRC uses self-signed CAs for TLS. After `make crc-up`, download both CA certificates and install them into your system trust store. This is only needed on CRC — production clusters use a real CA whose certs are already trusted.
+
+Two CAs are required:
+
+- **Gateway CA** (`acpgw-ca`) — for `*.acpgw.apps-crc.testing` (openshell gateway connections via Gateway API)
+- **CRC router CA** (`router-ca`) — for `*.apps-crc.testing` (Keycloak, API server, UI)
+
+```bash
+# Download both CAs into a single bundle
+oc get secret acpgw-ca -n openshift-ingress -o jsonpath='{.data.ca\.crt}' | base64 -d > crc-ca-bundle.crt
+oc get secret router-ca -n openshift-ingress-operator -o jsonpath='{.data.tls\.crt}' | base64 -d >> crc-ca-bundle.crt
+```
 
 **Linux (Fedora/RHEL):**
 
 ```bash
-oc get secret router-ca -n openshift-ingress-operator \
-  -o jsonpath='{.data.tls\.crt}' | base64 --decode > openshift-local-ca.crt
-sudo cp openshift-local-ca.crt /etc/pki/ca-trust/source/anchors/openshift-local-ca.crt
+sudo cp crc-ca-bundle.crt /etc/pki/ca-trust/source/anchors/crc-ca-bundle.crt
 sudo update-ca-trust
 ```
 
 **Linux (Debian/Ubuntu):**
 
 ```bash
-oc get secret router-ca -n openshift-ingress-operator \
-  -o jsonpath='{.data.tls\.crt}' | base64 --decode > openshift-local-ca.crt
-sudo cp openshift-local-ca.crt /usr/local/share/ca-certificates/openshift-local-ca.crt
+sudo cp crc-ca-bundle.crt /usr/local/share/ca-certificates/crc-ca-bundle.crt
 sudo update-ca-certificates
 ```
 
 **macOS:**
 
 ```bash
-oc get secret router-ca -n openshift-ingress-operator \
-  -o jsonpath='{.data.tls\.crt}' | base64 --decode > openshift-local-ca.crt
 sudo security add-trusted-cert -d -r trustRoot \
-  -k /Library/Keychains/System.keychain ./openshift-local-ca.crt
+  -k /Library/Keychains/System.keychain crc-ca-bundle.crt
 ```
 
-After adding the CA, HTTPS connections to `*.apps-crc.testing` Routes will work without TLS verification flags.
+After installing the bundle, HTTPS connections to `*.apps-crc.testing` and `*.acpgw.apps-crc.testing` will work without TLS verification flags.
 
 ### Running E2E Tests on CRC
 

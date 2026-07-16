@@ -158,6 +158,7 @@ func TestApplyConfigOverrides_OIDCDisablesMTLS(t *testing.T) {
 			t.Error("expected client_ca_path to be retained when OIDC is not configured")
 		}
 	})
+
 }
 
 func TestApplyManifestToNamespace(t *testing.T) {

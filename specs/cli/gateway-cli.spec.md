@@ -107,36 +107,51 @@ The `acpctl gateway setup-cli [name]` command SHALL configure local openshell CL
 
 | Flag | Required | Default | Description |
 |------|----------|---------|-------------|
-| `--gateway-url` | Yes | — | Gateway URL (e.g. `https://gateway.example.com:8080`) |
+| `--gateway-url` | No | Gateway's route address | Gateway URL (e.g. `https://gateway.example.com:8080`). If omitted, uses the gateway's `routeAddress` from the API server. |
+| `--kubectl` | No | `false` | Fall back to `kubectl port-forward` and cert extraction when no route address is available |
 | `--project` | No | Configured project | Project/namespace to look up the gateway in |
 | `--print` | No | `false` | Print openshell commands instead of running them |
 
 The API-side gateway name defaults to `openshell-gateway` if the positional `[name]` argument is omitted. The local openshell registration is named `<project>-<gateway-name>`.
 
+#### URL Resolution
+
+When `--gateway-url` is omitted, the command resolves the gateway URL as follows:
+
+1. If the gateway has a `routeAddress` (populated by the control plane when a GRPCRoute is created), use it
+2. If `--kubectl` is specified, fall back to `kubectl port-forward` (see kubectl mode below)
+3. Otherwise, fail with an error instructing the user to use `--kubectl` or `--gateway-url`
+
 #### Modes of Operation
 
-The command operates in one of three modes based on the current state:
+The command has two modes based on whether cluster access is assumed:
 
-**Non-interactive new registration** (OIDC gateway + acpctl credentials available):
+**Route-address mode** (default — no cluster access required):
 
-1. Fetch the gateway resource from the API server
-2. Write `metadata.json` to `~/.config/openshell/gateways/<local-name>/` with gateway endpoint, auth mode, and OIDC configuration
-3. Write `oidc_token.json` with the user's acpctl access token and refresh token
-4. Attempt to fetch mTLS certificates from the `openshell-client-tls` K8s secret in the gateway's namespace via `kubectl`, writing `ca.crt`, `tls.crt`, and `tls.key` to `~/.config/openshell/gateways/<local-name>/mtls/`
-5. If mTLS fetch fails, warn the user to ensure kubectl access or manually provision certs (non-fatal)
-6. Verify connectivity via `openshell status -g <local-name>` — if the gateway is unreachable, clean up the written config and fail with an error
+The gateway URL is resolved from the API server's `routeAddress` field or provided via `--gateway-url`. The command does NOT interact with the Kubernetes cluster — TLS verification relies on the system trust store. On CRC, this means the user must install the CRC CA certificates before running this command (see README).
 
-**Non-interactive re-authentication** (gateway already registered + acpctl credentials available):
+- Non-interactive new registration (OIDC gateway + acpctl credentials):
+  1. Fetch the gateway resource from the API server
+  2. Write `metadata.json` to `~/.config/openshell/gateways/<local-name>/` with gateway endpoint, auth mode, and OIDC configuration
+  3. Write `oidc_token.json` with the user's acpctl access token and refresh token
+  4. Verify connectivity via `openshell status -g <local-name>` — if unreachable, clean up and fail
 
-1. Refresh the `oidc_token.json` with current acpctl credentials
-2. Attempt to refresh mTLS certificates (non-fatal on failure)
-3. Verify connectivity via `openshell status -g <local-name>`
+- Non-interactive re-authentication (gateway already registered + acpctl credentials):
+  1. Refresh `oidc_token.json` with current acpctl credentials
+  2. Verify connectivity via `openshell status -g <local-name>`
 
-**Interactive fallback** (no acpctl credentials OR non-OIDC gateway):
+- Interactive fallback (no acpctl credentials OR non-OIDC gateway):
+  1. Delegate to `openshell gateway add` or `openshell gateway login`
+  2. Verify connectivity via `openshell status -g <local-name>`
 
-1. For new registrations: delegate to `openshell gateway add` with appropriate flags
-2. For re-authentication: delegate to `openshell gateway login`
-3. Verify connectivity via `openshell status -g <local-name>`
+**Kubectl mode** (`--kubectl` — requires cluster access):
+
+Used when no route address is available (e.g., Kind clusters). The command starts a `kubectl port-forward` to the gateway service and fetches mTLS certificates from the cluster.
+
+1. Start `kubectl port-forward` to `svc/openshell-gateway` in the gateway's namespace
+2. Fetch mTLS certificates from the `openshell-client-tls` K8s secret, writing `ca.crt`, `tls.crt`, and `tls.key` to `~/.config/openshell/gateways/<local-name>/mtls/`
+3. If mTLS fetch fails, warn the user (non-fatal)
+4. Proceed with registration/re-authentication as in route-address mode, using `https://localhost:<port>` with `--gateway-insecure`
 
 #### Connectivity Validation
 

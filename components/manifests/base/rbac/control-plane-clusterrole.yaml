@@ -25,10 +25,10 @@ rules:
 - apiGroups: ["batch"]
   resources: ["jobs"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-# ConfigMaps (watch platform-config and create gateway configs)
+# ConfigMaps (watch platform-config, create/delete gateway configs including CA bundles)
 - apiGroups: [""]
   resources: ["configmaps"]
-  verbs: ["get", "watch", "list", "create", "update", "patch"]
+  verbs: ["get", "watch", "list", "create", "update", "patch", "delete"]
 # Deployments, StatefulSets (gateway provisioning)
 - apiGroups: ["apps"]
   resources: ["deployments", "statefulsets", "statefulsets/finalizers"]
@@ -53,10 +53,17 @@ rules:
 - apiGroups: [""]
   resources: ["events"]
   verbs: ["get", "list", "watch"]
-# OpenShift Routes (gateway route exposure)
-- apiGroups: ["route.openshift.io"]
-  resources: ["routes", "routes/custom-host"]
+# Gateway API (GRPCRoute + BackendTLSPolicy for gateway route exposure)
+- apiGroups: ["gateway.networking.k8s.io"]
+  resources: ["grpcroutes", "backendtlspolicies"]
   verbs: ["get", "list", "create", "update", "patch", "delete"]
+- apiGroups: ["gateway.networking.k8s.io"]
+  resources: ["gateways"]
+  verbs: ["get", "list"]
+# Cluster ingress config (auto-detect base domain for Gateway API hostnames)
+- apiGroups: ["config.openshift.io"]
+  resources: ["ingresses"]
+  verbs: ["get"]
 # cert-manager (TLS certificate lifecycle for gateways)
 - apiGroups: ["cert-manager.io"]
   resources: ["issuers", "certificates"]

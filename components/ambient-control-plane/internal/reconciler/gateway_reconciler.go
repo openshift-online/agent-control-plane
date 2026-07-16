@@ -27,10 +27,28 @@ const (
 	gatewayManifestsDir = "/manifests/gateway"
 )
 
-var routeGVR = schema.GroupVersionResource{
-	Group:    "route.openshift.io",
+var grpcRouteGVR = schema.GroupVersionResource{
+	Group:    "gateway.networking.k8s.io",
 	Version:  "v1",
-	Resource: "routes",
+	Resource: "grpcroutes",
+}
+
+var backendTLSPolicyGVR = schema.GroupVersionResource{
+	Group:    "gateway.networking.k8s.io",
+	Version:  "v1",
+	Resource: "backendtlspolicies",
+}
+
+var configMapGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "configmaps",
+}
+
+var gatewayGVR = schema.GroupVersionResource{
+	Group:    "gateway.networking.k8s.io",
+	Version:  "v1",
+	Resource: "gateways",
 }
 
 const (
@@ -39,16 +57,20 @@ const (
 )
 
 type GatewayReconciler struct {
-	factory             *SDKClientFactory
-	dynamicClient       dynamic.Interface
-	clientset           *kubernetes.Clientset
-	provisioner         kubeclient.NamespaceProvisioner
-	logger              zerolog.Logger
-	manifests           map[string][]*unstructured.Unstructured
-	defaultGatewayImage string
-	cpNamespace         string
-	isOpenShift         bool
-	hasCertManager      bool
+	factory                    *SDKClientFactory
+	dynamicClient              dynamic.Interface
+	clientset                  *kubernetes.Clientset
+	provisioner                kubeclient.NamespaceProvisioner
+	logger                     zerolog.Logger
+	manifests                  map[string][]*unstructured.Unstructured
+	defaultGatewayImage        string
+	cpNamespace                string
+	isOpenShift                bool
+	hasCertManager             bool
+	hasGatewayAPI              bool
+	gatewayAPIGatewayName      string
+	gatewayAPIGatewayNamespace string
+	baseDomain                 string
 }
 
 func NewGatewayReconciler(
@@ -66,14 +88,24 @@ func NewGatewayReconciler(
 	if cpNs == "" {
 		cpNs = "ambient-code"
 	}
+	gwAPIName := os.Getenv("GATEWAY_API_GATEWAY_NAME")
+	if gwAPIName == "" {
+		gwAPIName = "acpgw"
+	}
+	gwAPINamespace := os.Getenv("GATEWAY_API_GATEWAY_NAMESPACE")
+	if gwAPINamespace == "" {
+		gwAPINamespace = "openshift-ingress"
+	}
 	return &GatewayReconciler{
-		factory:             factory,
-		dynamicClient:       dynamicClient,
-		clientset:           clientset,
-		provisioner:         provisioner,
-		logger:              logger.With().Str("component", "gateway-reconciler").Logger(),
-		defaultGatewayImage: defaultImage,
-		cpNamespace:         cpNs,
+		factory:                    factory,
+		dynamicClient:              dynamicClient,
+		clientset:                  clientset,
+		provisioner:                provisioner,
+		logger:                     logger.With().Str("component", "gateway-reconciler").Logger(),
+		defaultGatewayImage:        defaultImage,
+		cpNamespace:                cpNs,
+		gatewayAPIGatewayName:      gwAPIName,
+		gatewayAPIGatewayNamespace: gwAPINamespace,
 	}
 }
 
@@ -85,10 +117,14 @@ func (r *GatewayReconciler) Run(ctx context.Context) error {
 	r.manifests = manifests
 	r.isOpenShift = r.detectOpenShift()
 	r.hasCertManager = r.detectCertManager()
+	r.baseDomain = r.detectBaseDomain(ctx)
+	r.hasGatewayAPI = r.detectGatewayAPI(ctx)
 	r.logger.Info().
 		Int("manifest_files", len(manifests)).
 		Bool("openshift", r.isOpenShift).
 		Bool("cert_manager", r.hasCertManager).
+		Bool("gateway_api", r.hasGatewayAPI).
+		Str("base_domain", r.baseDomain).
 		Dur("interval", gatewaySyncInterval).
 		Msg("gateway reconciler started")
 
@@ -283,10 +319,10 @@ func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient 
 		}
 	}
 
-	if err := r.reconcileRoute(ctx, projectClient, gw, namespace); err != nil {
+	if err := r.reconcileGRPCRoute(ctx, projectClient, gw, namespace); err != nil {
 		r.logger.Warn().Err(err).
 			Str("gateway_name", gw.Name).
-			Msg("route reconciliation failed, gateway resources are synced")
+			Msg("GRPCRoute reconciliation failed, gateway resources are synced")
 	}
 
 	r.logger.Info().
@@ -355,67 +391,63 @@ func (r *GatewayReconciler) detectOpenShift() bool {
 	return false
 }
 
-func (r *GatewayReconciler) reconcileRoute(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway, namespace string) error {
-	if !r.isOpenShift {
+func (r *GatewayReconciler) reconcileGRPCRoute(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway, namespace string) error {
+	if !r.hasGatewayAPI {
 		return nil
 	}
 
 	routeName := "openshell-gateway"
 
 	if gw.Route == nil {
-		return r.deleteRouteIfExists(ctx, projectClient, gw, namespace, routeName)
+		return r.deleteGRPCRouteIfExists(ctx, projectClient, gw, namespace, routeName)
 	}
 
-	caCert, err := r.readCACert(ctx, namespace)
-	if err != nil {
-		r.logger.Debug().Err(err).Str("namespace", namespace).Msg("server TLS secret not yet available, skipping route")
+	hostname := gw.Route.Host
+	if hostname == "" && r.baseDomain != "" {
+		hostname = fmt.Sprintf("%s-%s.acpgw.%s", gw.Name, namespace, r.baseDomain)
+	}
+	if hostname == "" {
+		r.logger.Debug().Str("gateway_name", gw.Name).Msg("no hostname available for GRPCRoute, skipping")
 		return nil
 	}
 
 	stsUID, err := r.getStatefulSetUID(ctx, namespace, routeName)
 	if err != nil {
-		r.logger.Debug().Err(err).Str("namespace", namespace).Msg("StatefulSet not yet available for OwnerReference")
+		r.logger.Info().Err(err).Str("namespace", namespace).Msg("StatefulSet not yet available, creating GRPCRoute without OwnerReference (will be set on next reconcile)")
 		stsUID = ""
 	}
 
-	routeObj, err := r.buildRouteObject(gw, namespace, routeName, caCert, stsUID)
+	grpcRoute, err := r.buildGRPCRouteObject(namespace, routeName, hostname, stsUID)
 	if err != nil {
-		return fmt.Errorf("build route object: %w", err)
+		return fmt.Errorf("build GRPCRoute: %w", err)
+	}
+	if err := r.applyUnstructured(ctx, grpcRouteGVR, namespace, routeName, grpcRoute); err != nil {
+		return fmt.Errorf("apply GRPCRoute: %w", err)
 	}
 
-	existing, err := r.dynamicClient.Resource(routeGVR).Namespace(namespace).Get(ctx, routeName, metav1.GetOptions{})
+	caCert, err := r.readCACert(ctx, namespace)
 	if err != nil {
-		if !k8serrors.IsNotFound(err) {
-			return fmt.Errorf("get route: %w", err)
-		}
-		if _, createErr := r.dynamicClient.Resource(routeGVR).Namespace(namespace).Create(ctx, routeObj, metav1.CreateOptions{}); createErr != nil {
-			return fmt.Errorf("create route: %w", createErr)
-		}
-		r.logger.Info().Str("namespace", namespace).Msg("created OpenShift Route for gateway")
+		r.logger.Debug().Err(err).Str("namespace", namespace).Msg("server TLS secret not yet available, skipping BackendTLSPolicy")
 	} else {
-		routeObj.SetResourceVersion(existing.GetResourceVersion())
-		if _, updateErr := r.dynamicClient.Resource(routeGVR).Namespace(namespace).Update(ctx, routeObj, metav1.UpdateOptions{}); updateErr != nil {
-			return fmt.Errorf("update route: %w", updateErr)
+		caConfigMap := r.buildCAConfigMap(namespace, routeName, stsUID, caCert)
+		if err := r.applyUnstructured(ctx, configMapGVR, namespace, "openshell-backend-ca", caConfigMap); err != nil {
+			return fmt.Errorf("apply CA ConfigMap: %w", err)
+		}
+
+		tlsPolicy := r.buildBackendTLSPolicy(namespace, routeName, stsUID)
+		if err := r.applyUnstructured(ctx, backendTLSPolicyGVR, namespace, routeName, tlsPolicy); err != nil {
+			r.logger.Warn().Err(err).Msg("failed to apply BackendTLSPolicy (CRD may not be available)")
 		}
 	}
 
-	if err := r.reconcileRouteAddress(ctx, projectClient, gw, namespace, routeName); err != nil {
-		return err
-	}
-
-	return nil
+	return r.reconcileGRPCRouteAddress(ctx, projectClient, gw, hostname)
 }
 
-func (r *GatewayReconciler) buildRouteObject(gw *types.Gateway, namespace, routeName, caCert, stsUID string) (*unstructured.Unstructured, error) {
-	host := ""
-	if gw.Route != nil {
-		host = gw.Route.Host
-	}
-
+func (r *GatewayReconciler) buildGRPCRouteObject(namespace, routeName, hostname, stsUID string) (*unstructured.Unstructured, error) {
 	route := &unstructured.Unstructured{
 		Object: map[string]interface{}{
-			"apiVersion": "route.openshift.io/v1",
-			"kind":       "Route",
+			"apiVersion": "gateway.networking.k8s.io/v1",
+			"kind":       "GRPCRoute",
 			"metadata": map[string]interface{}{
 				"name":      routeName,
 				"namespace": namespace,
@@ -424,33 +456,27 @@ func (r *GatewayReconciler) buildRouteObject(gw *types.Gateway, namespace, route
 					"app.kubernetes.io/component":  "gateway",
 					"app.kubernetes.io/managed-by": "agent-control-plane",
 				},
-				"annotations": map[string]interface{}{
-					"haproxy.router.openshift.io/timeout":     "3600s",
-					"haproxy.router.openshift.io/enable-http2": "true",
-				},
 			},
 			"spec": map[string]interface{}{
-				"to": map[string]interface{}{
-					"kind":   "Service",
-					"name":   routeName,
-					"weight": int64(100),
+				"parentRefs": []interface{}{
+					map[string]interface{}{
+						"name":      r.gatewayAPIGatewayName,
+						"namespace": r.gatewayAPIGatewayNamespace,
+					},
 				},
-				"port": map[string]interface{}{
-					"targetPort": "grpc",
-				},
-				"tls": map[string]interface{}{
-					"termination":                  "reencrypt",
-					"insecureEdgeTerminationPolicy": "None",
-					"destinationCACertificate":      caCert,
+				"hostnames": []interface{}{hostname},
+				"rules": []interface{}{
+					map[string]interface{}{
+						"backendRefs": []interface{}{
+							map[string]interface{}{
+								"name": routeName,
+								"port": int64(8080),
+							},
+						},
+					},
 				},
 			},
 		},
-	}
-
-	if host != "" {
-		if err := unstructured.SetNestedField(route.Object, host, "spec", "host"); err != nil {
-			return nil, fmt.Errorf("set route host: %w", err)
-		}
 	}
 
 	if stsUID != "" {
@@ -465,11 +491,114 @@ func (r *GatewayReconciler) buildRouteObject(gw *types.Gateway, namespace, route
 			},
 		}
 		if err := unstructured.SetNestedSlice(route.Object, ownerRefs, "metadata", "ownerReferences"); err != nil {
-			return nil, fmt.Errorf("set route ownerReferences: %w", err)
+			return nil, fmt.Errorf("set GRPCRoute ownerReferences: %w", err)
 		}
 	}
 
 	return route, nil
+}
+
+func (r *GatewayReconciler) buildBackendTLSPolicy(namespace, routeName, stsUID string) *unstructured.Unstructured {
+	metadata := map[string]interface{}{
+		"name":      routeName,
+		"namespace": namespace,
+		"labels": map[string]interface{}{
+			"app.kubernetes.io/name":       "openshell",
+			"app.kubernetes.io/component":  "gateway",
+			"app.kubernetes.io/managed-by": "agent-control-plane",
+		},
+	}
+	if stsUID != "" {
+		metadata["ownerReferences"] = []interface{}{
+			map[string]interface{}{
+				"apiVersion":         "apps/v1",
+				"kind":               "StatefulSet",
+				"name":               routeName,
+				"uid":                stsUID,
+				"controller":         true,
+				"blockOwnerDeletion": true,
+			},
+		}
+	}
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "gateway.networking.k8s.io/v1",
+			"kind":       "BackendTLSPolicy",
+			"metadata":   metadata,
+			"spec": map[string]interface{}{
+				"targetRefs": []interface{}{
+					map[string]interface{}{
+						"group": "",
+						"kind":  "Service",
+						"name":  routeName,
+					},
+				},
+				"validation": map[string]interface{}{
+					"caCertificateRefs": []interface{}{
+						map[string]interface{}{
+							"group": "",
+							"kind":  "ConfigMap",
+							"name":  "openshell-backend-ca",
+						},
+					},
+					"hostname": fmt.Sprintf("%s.%s.svc.cluster.local", routeName, namespace),
+				},
+			},
+		},
+	}
+}
+
+func (r *GatewayReconciler) buildCAConfigMap(namespace, routeName, stsUID, caCert string) *unstructured.Unstructured {
+	metadata := map[string]interface{}{
+		"name":      "openshell-backend-ca",
+		"namespace": namespace,
+		"labels": map[string]interface{}{
+			"app.kubernetes.io/name":       "openshell",
+			"app.kubernetes.io/component":  "gateway",
+			"app.kubernetes.io/managed-by": "agent-control-plane",
+		},
+	}
+	if stsUID != "" {
+		metadata["ownerReferences"] = []interface{}{
+			map[string]interface{}{
+				"apiVersion":         "apps/v1",
+				"kind":               "StatefulSet",
+				"name":               routeName,
+				"uid":                stsUID,
+				"controller":         true,
+				"blockOwnerDeletion": true,
+			},
+		}
+	}
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata":   metadata,
+			"data": map[string]interface{}{
+				"ca.crt": caCert,
+			},
+		},
+	}
+}
+
+func (r *GatewayReconciler) applyUnstructured(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string, obj *unstructured.Unstructured) error {
+	existing, err := r.dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return fmt.Errorf("get %s/%s: %w", gvr.Resource, name, err)
+		}
+		if _, createErr := r.dynamicClient.Resource(gvr).Namespace(namespace).Create(ctx, obj, metav1.CreateOptions{}); createErr != nil {
+			return fmt.Errorf("create %s/%s: %w", gvr.Resource, name, createErr)
+		}
+		r.logger.Info().Str("namespace", namespace).Str("resource", gvr.Resource).Str("name", name).Msg("created resource")
+		return nil
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	if _, err := r.dynamicClient.Resource(gvr).Namespace(namespace).Update(ctx, obj, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("update %s/%s: %w", gvr.Resource, name, err)
+	}
+	return nil
 }
 
 func (r *GatewayReconciler) readCACert(ctx context.Context, namespace string) (string, error) {
@@ -509,34 +638,10 @@ func (r *GatewayReconciler) getStatefulSetUID(ctx context.Context, namespace, na
 	return string(sts.GetUID()), nil
 }
 
-func (r *GatewayReconciler) reconcileRouteAddress(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway, namespace, routeName string) error {
-	route, err := r.dynamicClient.Resource(routeGVR).Namespace(namespace).Get(ctx, routeName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("get route for address reconciliation: %w", err)
-	}
+func (r *GatewayReconciler) reconcileGRPCRouteAddress(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway, hostname string) error {
+	protocol := r.getGatewayListenerProtocol(ctx)
+	routeAddress := protocol + "://" + hostname
 
-	ingress, found, err := unstructured.NestedSlice(route.Object, "status", "ingress")
-	if err != nil {
-		return fmt.Errorf("read route status ingress: %w", err)
-	}
-	if !found || len(ingress) == 0 {
-		return nil
-	}
-
-	firstIngress, ok := ingress[0].(map[string]interface{})
-	if !ok {
-		return nil
-	}
-
-	host, _, err := unstructured.NestedString(firstIngress, "host")
-	if err != nil {
-		return fmt.Errorf("read route ingress host: %w", err)
-	}
-	if host == "" {
-		return nil
-	}
-
-	routeAddress := "https://" + host
 	if gw.RouteAddress == routeAddress {
 		return nil
 	}
@@ -551,6 +656,104 @@ func (r *GatewayReconciler) reconcileRouteAddress(ctx context.Context, projectCl
 		Str("route_address", routeAddress).
 		Msg("updated gateway routeAddress")
 	return nil
+}
+
+func (r *GatewayReconciler) getGatewayListenerProtocol(ctx context.Context) string {
+	gw, err := r.dynamicClient.Resource(gatewayGVR).Namespace(r.gatewayAPIGatewayNamespace).Get(
+		ctx, r.gatewayAPIGatewayName, metav1.GetOptions{})
+	if err != nil {
+		r.logger.Warn().Err(err).Msg("failed to read networking Gateway for protocol detection, defaulting to http")
+		return "http"
+	}
+
+	listeners, _, err := unstructured.NestedSlice(gw.Object, "spec", "listeners")
+	if err != nil {
+		r.logger.Warn().Err(err).Msg("failed to read Gateway listeners, defaulting to http")
+		return "http"
+	}
+	for _, l := range listeners {
+		listener, ok := l.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		proto, _, _ := unstructured.NestedString(listener, "protocol")
+		if strings.EqualFold(proto, "HTTPS") || strings.EqualFold(proto, "TLS") {
+			return "https"
+		}
+	}
+	return "http"
+}
+
+func (r *GatewayReconciler) detectGatewayAPI(ctx context.Context) bool {
+	_, resources, err := r.clientset.Discovery().ServerGroupsAndResources()
+	if err != nil {
+		r.logger.Warn().Err(err).Msg("failed to discover API groups for Gateway API detection")
+		return false
+	}
+	hasGRPCRoute := false
+	for _, list := range resources {
+		if list.GroupVersion == "gateway.networking.k8s.io/v1" {
+			for _, res := range list.APIResources {
+				if res.Name == "grpcroutes" {
+					hasGRPCRoute = true
+					break
+				}
+			}
+		}
+	}
+	if !hasGRPCRoute {
+		return false
+	}
+
+	gw, err := r.dynamicClient.Resource(gatewayGVR).Namespace(r.gatewayAPIGatewayNamespace).Get(
+		ctx, r.gatewayAPIGatewayName, metav1.GetOptions{})
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			r.logger.Info().
+				Str("name", r.gatewayAPIGatewayName).
+				Str("namespace", r.gatewayAPIGatewayNamespace).
+				Msg("networking Gateway not found, GRPCRoute provisioning disabled")
+		} else {
+			r.logger.Warn().Err(err).Msg("failed to check networking Gateway")
+		}
+		return false
+	}
+
+	conditions, _, _ := unstructured.NestedSlice(gw.Object, "status", "conditions")
+	for _, c := range conditions {
+		cond, ok := c.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		condType, _, _ := unstructured.NestedString(cond, "type")
+		condStatus, _, _ := unstructured.NestedString(cond, "status")
+		if condType == "Accepted" && condStatus == "True" {
+			return true
+		}
+	}
+
+	r.logger.Info().Msg("networking Gateway exists but is not yet Accepted")
+	return false
+}
+
+func (r *GatewayReconciler) detectBaseDomain(ctx context.Context) string {
+	if domain := os.Getenv("GATEWAY_API_BASE_DOMAIN"); domain != "" {
+		return domain
+	}
+
+	ingressConfigGVR := schema.GroupVersionResource{
+		Group:    "config.openshift.io",
+		Version:  "v1",
+		Resource: "ingresses",
+	}
+	cfg, err := r.dynamicClient.Resource(ingressConfigGVR).Get(
+		ctx, "cluster", metav1.GetOptions{})
+	if err != nil {
+		r.logger.Warn().Err(err).Msg("could not read ingresses.config.openshift.io/cluster for base domain")
+		return ""
+	}
+	domain, _, _ := unstructured.NestedString(cfg.Object, "spec", "domain")
+	return domain
 }
 
 func (r *GatewayReconciler) reconcileTrustedCA(ctx context.Context, tenantNamespace string) (string, error) {
@@ -832,27 +1035,40 @@ func buildCertManagerCertificate(name, namespace string, spec map[string]interfa
 	}
 }
 
-func (r *GatewayReconciler) deleteRouteIfExists(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway, namespace, routeName string) error {
-	_, err := r.dynamicClient.Resource(routeGVR).Namespace(namespace).Get(ctx, routeName, metav1.GetOptions{})
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return nil
-		}
-		return fmt.Errorf("get route for deletion: %w", err)
+func (r *GatewayReconciler) deleteGRPCRouteIfExists(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway, namespace, routeName string) error {
+	if err := r.deleteIfExists(ctx, grpcRouteGVR, namespace, routeName); err != nil {
+		return fmt.Errorf("delete GRPCRoute: %w", err)
 	}
 
-	if err := r.dynamicClient.Resource(routeGVR).Namespace(namespace).Delete(ctx, routeName, metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
-		return fmt.Errorf("delete route: %w", err)
+	if err := r.deleteIfExists(ctx, backendTLSPolicyGVR, namespace, routeName); err != nil {
+		r.logger.Warn().Err(err).Msg("failed to delete BackendTLSPolicy")
 	}
 
-	r.logger.Info().Str("namespace", namespace).Msg("deleted OpenShift Route for gateway")
+	if err := r.deleteIfExists(ctx, configMapGVR, namespace, "openshell-backend-ca"); err != nil {
+		r.logger.Warn().Err(err).Msg("failed to delete CA ConfigMap")
+	}
 
 	if gw.RouteAddress != "" {
 		patch := types.NewGatewayPatchBuilder().RouteAddress("").Build()
 		if _, patchErr := projectClient.Gateways().Update(ctx, gw.ID, patch); patchErr != nil {
 			return fmt.Errorf("clear routeAddress for gateway %s: %w", gw.ID, patchErr)
 		}
+		r.logger.Info().Str("namespace", namespace).Msg("cleared routeAddress and deleted GRPCRoute resources")
 	}
 
+	return nil
+}
+
+func (r *GatewayReconciler) deleteIfExists(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) error {
+	_, err := r.dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("get %s/%s for deletion: %w", gvr.Resource, name, err)
+	}
+	if err := r.dynamicClient.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
+		return fmt.Errorf("delete %s/%s: %w", gvr.Resource, name, err)
+	}
 	return nil
 }

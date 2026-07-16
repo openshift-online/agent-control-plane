@@ -2087,6 +2087,10 @@ crc-reload-component: ## Rebuild and push a single component to CRC (CRC_COMPONE
 	@case "$(CRC_COMPONENT)" in \
 		ambient-api-server) \
 			$(call crc-push-and-reload,$(API_SERVER_IMAGE),ambient-api-server,api-server,API server); \
+			_IMG=$$(oc get deployment ambient-api-server -n $(CRC_NAMESPACE) -o jsonpath='{.spec.template.spec.containers[0].image}') && \
+			oc set image deployment/ambient-api-server -n $(CRC_NAMESPACE) migration=$$_IMG && \
+			oc rollout status deployment/ambient-api-server -n $(CRC_NAMESPACE) --timeout=120s && \
+			echo "$(COLOR_GREEN)✓$(COLOR_RESET) Migration init container updated to $$_IMG"; \
 			;; \
 		ambient-control-plane) \
 			$(call crc-push-and-reload,$(CONTROL_PLANE_IMAGE),ambient-control-plane,ambient-control-plane,Control plane); \
@@ -2157,6 +2161,10 @@ crc-reload-images: ## Rebuild and push all component images to CRC (like kind-re
 
 _crc-push-api-server:
 	$(call crc-push-and-reload,$(API_SERVER_IMAGE),ambient-api-server,api-server,API server)
+	@_IMG=$$(oc get deployment ambient-api-server -n $(CRC_NAMESPACE) -o jsonpath='{.spec.template.spec.containers[0].image}') && \
+		oc set image deployment/ambient-api-server -n $(CRC_NAMESPACE) migration=$$_IMG && \
+		oc rollout status deployment/ambient-api-server -n $(CRC_NAMESPACE) --timeout=120s && \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Migration init container updated to $$_IMG"
 
 _crc-push-control-plane:
 	$(call crc-push-and-reload,$(CONTROL_PLANE_IMAGE),ambient-control-plane,ambient-control-plane,Control plane)
