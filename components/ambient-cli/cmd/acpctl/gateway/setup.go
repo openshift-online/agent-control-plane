@@ -133,7 +133,7 @@ func runSetup(cmd *cobra.Command, args []string) error {
 		return setupOpenshellKubectl(printer.Writer(), gw, cfg, localName, project, setupArgs.printOnly)
 	}
 
-	return setupOpenshellGateway(printer.Writer(), gw, cfg, localName, gwURL, project, setupArgs.printOnly)
+	return setupOpenshellGateway(printer.Writer(), gw, cfg, localName, gwURL, project, setupArgs.printOnly, false)
 }
 
 func findGateway(ctx context.Context, client *sdkclient.Client, nameOrID string) (*sdktypes.Gateway, error) {
@@ -322,7 +322,14 @@ func fetchClientTLS(localName, namespace string) error {
 	return nil
 }
 
-func writeGatewayConfig(localName, gwURL string, oidc *sdktypes.GatewayOidc) error {
+func gatewayAuthMode(gw *sdktypes.Gateway) string {
+	if gw.Oidc != nil && gw.Oidc.Issuer != "" {
+		return "oidc"
+	}
+	return "mtls"
+}
+
+func writeGatewayConfig(localName, gwURL, authMode string, oidc *sdktypes.GatewayOidc) error {
 	base := openshellConfigDir()
 	if base == "" {
 		return fmt.Errorf("cannot determine home directory")
@@ -338,9 +345,9 @@ func writeGatewayConfig(localName, gwURL string, oidc *sdktypes.GatewayOidc) err
 		GatewayEndpoint: gwURL,
 		IsRemote:        true,
 		GatewayPort:     0,
-		AuthMode:        "oidc",
+		AuthMode:        authMode,
 	}
-	if oidc != nil {
+	if authMode == "oidc" && oidc != nil {
 		meta.OIDCIssuer = oidc.Issuer
 		meta.OIDCClientID = oidc.Audience
 		meta.OIDCAudience = oidc.Audience
@@ -390,14 +397,14 @@ func hasACPCredentials(cfg *config.Config) bool {
 	return cfg.GetToken() != ""
 }
 
-func setupOpenshellGateway(w io.Writer, gw *sdktypes.Gateway, cfg *config.Config, localName, gwURL, namespace string, printOnly bool) error {
+func setupOpenshellGateway(w io.Writer, gw *sdktypes.Gateway, cfg *config.Config, localName, gwURL, namespace string, printOnly, fetchClusterCerts bool) error {
 	if _, err := exec.LookPath("openshell"); err != nil {
 		return fmt.Errorf("openshell not found in PATH: required for gateway setup")
 	}
 
 	gwURL = strings.TrimRight(gwURL, "/")
 	alreadyRegistered := gatewayRegistered(localName)
-	hasOIDC := gw.Oidc != nil && gw.Oidc.Issuer != ""
+	authMode := gatewayAuthMode(gw)
 	hasCreds := hasACPCredentials(cfg)
 
 	if printOnly {
@@ -414,13 +421,24 @@ func setupOpenshellGateway(w io.Writer, gw *sdktypes.Gateway, cfg *config.Config
 	}
 
 	if alreadyRegistered {
-		fmt.Fprintf(w, "Gateway %s is already registered, re-authenticating...\n", localName)
-		if hasCreds {
+		fmt.Fprintf(w, "Gateway %s is already registered, refreshing credentials...\n", localName)
+		if authMode == "mtls" {
+			if fetchClusterCerts {
+				if err := fetchClientTLS(localName, namespace); err != nil {
+					return fmt.Errorf("refresh mTLS certs: %w", err)
+				}
+				fmt.Fprintf(w, "mTLS certificates refreshed\n")
+			} else {
+				fmt.Fprintf(w, "mTLS gateway already registered\n")
+			}
+		} else if hasCreds {
 			if err := writeOIDCToken(localName, cfg, gw.Oidc); err != nil {
 				return fmt.Errorf("OIDC token injection: %w", err)
 			}
-			if err := fetchClientTLS(localName, namespace); err != nil {
-				fmt.Fprintf(w, "Warning: could not refresh mTLS certs: %v\n", err)
+			if fetchClusterCerts {
+				if err := fetchClientTLS(localName, namespace); err != nil {
+					fmt.Fprintf(w, "Warning: could not refresh mTLS certs: %v\n", err)
+				}
 			}
 			fmt.Fprintf(w, "OIDC credentials refreshed from acpctl\n")
 		} else {
@@ -434,21 +452,32 @@ func setupOpenshellGateway(w io.Writer, gw *sdktypes.Gateway, cfg *config.Config
 			}
 		}
 	} else {
-		if hasOIDC && hasCreds {
-			fmt.Fprintf(w, "Registering new gateway %s -> %s...\n", localName, gwURL)
-			if err := writeGatewayConfig(localName, gwURL, gw.Oidc); err != nil {
+		fmt.Fprintf(w, "Registering new gateway %s -> %s (%s)...\n", localName, gwURL, authMode)
+		if authMode == "mtls" {
+			if err := writeGatewayConfig(localName, gwURL, "mtls", nil); err != nil {
+				return fmt.Errorf("write gateway config: %w", err)
+			}
+			if fetchClusterCerts {
+				if err := fetchClientTLS(localName, namespace); err != nil {
+					return fmt.Errorf("fetch mTLS certs: %w", err)
+				}
+			}
+			fmt.Fprintf(w, "mTLS credentials configured\n")
+		} else if hasCreds {
+			if err := writeGatewayConfig(localName, gwURL, "oidc", gw.Oidc); err != nil {
 				return fmt.Errorf("write gateway config: %w", err)
 			}
 			if err := writeOIDCToken(localName, cfg, gw.Oidc); err != nil {
 				return fmt.Errorf("OIDC token injection: %w", err)
 			}
-			if err := fetchClientTLS(localName, namespace); err != nil {
-				fmt.Fprintf(w, "Warning: could not fetch mTLS certs: %v\n", err)
-				fmt.Fprintf(w, "Ensure kubectl has access to namespace %q or manually provision certs\n", namespace)
+			if fetchClusterCerts {
+				if err := fetchClientTLS(localName, namespace); err != nil {
+					fmt.Fprintf(w, "Warning: could not fetch mTLS certs: %v\n", err)
+					fmt.Fprintf(w, "Ensure kubectl has access to namespace %q or manually provision certs\n", namespace)
+				}
 			}
 			fmt.Fprintf(w, "OIDC credentials configured from acpctl\n")
 		} else {
-			fmt.Fprintf(w, "Registering new gateway %s -> %s...\n", localName, gwURL)
 			addArgs := buildAddArgs(localName, gwURL, gw.Oidc)
 			addCmd := exec.Command("openshell", addArgs...)
 			addCmd.Stdin = os.Stdin
@@ -529,7 +558,7 @@ func setupOpenshellKubectl(w io.Writer, gw *sdktypes.Gateway, cfg *config.Config
 	gwURL := "https://localhost:" + localPort
 	fmt.Fprintf(w, "Port-forward active at %s\n", gwURL)
 
-	return setupOpenshellGateway(w, gw, cfg, localName, gwURL, namespace, false)
+	return setupOpenshellGateway(w, gw, cfg, localName, gwURL, namespace, false, true)
 }
 
 func verifyGateway(localName string) error {
