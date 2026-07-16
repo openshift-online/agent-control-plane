@@ -93,6 +93,13 @@ See [OpenShell Sandbox Provisioning Spec](specs/platform/openshell-sandbox-provi
 
 ### Setup for OpenShift Local (CRC)
 
+Recommended CRC configuration (run before `crc start`):
+
+```bash
+crc config set memory 16384    # 16 GB memory
+crc config set disk-size 64    # 64 GB storage
+```
+
 Deploy ACP to an OpenShift Local cluster:
 
 ```bash
