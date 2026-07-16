@@ -1854,7 +1854,7 @@ local-stop-port-forward: ## Stop background port forwarding
 CRC_NAMESPACE ?= ambient-code
 CRC_OVERLAY   ?= components/manifests/overlays/openshift-local
 
-crc-up: build-cli ## Deploy the platform to CRC (OpenShift Local). Requires 'crc start' and 'oc login' beforehand
+crc-up: build-cli ## Deploy the platform to CRC (OpenShift Local). LOCAL_IMAGES=true builds from source. Requires 'crc start' and 'oc login' beforehand
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying to CRC (OpenShift Local)..."
 	@if ! oc whoami >/dev/null 2>&1; then \
 		echo "$(COLOR_RED)✗$(COLOR_RESET) Not logged in to CRC. Run: eval \$$(crc oc-env) && oc login -u kubeadmin https://api.crc.testing:6443"; \
@@ -1890,12 +1890,50 @@ crc-up: build-cli ## Deploy the platform to CRC (OpenShift Local). Requires 'crc
 		base64 -d | \
 		oc create configmap gateway-trusted-ca --from-file=ca-bundle.crt=/dev/stdin \
 			-n $(CRC_NAMESPACE) --dry-run=client -o yaml | oc apply -f -
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods to be ready..."
-	@for deploy in ambient-api-server-db postgresql ambient-api-server ambient-control-plane keycloak; do \
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for infrastructure pods..."
+	@for deploy in ambient-api-server-db postgresql keycloak; do \
 		echo "  Waiting for $$deploy..."; \
 		oc rollout status deployment/$$deploy -n $(CRC_NAMESPACE) --timeout=300s 2>/dev/null || \
 			echo "  $(COLOR_YELLOW)⚠$(COLOR_RESET) $$deploy not yet ready (may not exist)"; \
 	done
+	@if [ "$(LOCAL_IMAGES)" = "true" ]; then \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building component images from source..."; \
+		$(MAKE) --no-print-directory build-api-server build-control-plane build-ambient-ui; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Pushing local images to CRC registry..."; \
+		$(CONTAINER_ENGINE) login --tls-verify=false \
+			-u $$(oc whoami) -p $$(oc whoami -t) $(CRC_REGISTRY); \
+		for img_spec in \
+			"$(API_SERVER_IMAGE)|ambient-api-server|api-server|API server" \
+			"$(CONTROL_PLANE_IMAGE)|ambient-control-plane|ambient-control-plane|Control plane" \
+			"$(AMBIENT_UI_IMAGE)|ambient-ui|ambient-ui|Ambient UI"; \
+		do \
+			_IMG=$$(echo "$$img_spec" | cut -d'|' -f1); \
+			_DEPLOY=$$(echo "$$img_spec" | cut -d'|' -f2); \
+			_CONTAINER=$$(echo "$$img_spec" | cut -d'|' -f3); \
+			_LABEL=$$(echo "$$img_spec" | cut -d'|' -f4); \
+			_TAG="crc-$$(date +%s)"; \
+			_REMOTE="$(CRC_REGISTRY)/$(CRC_NAMESPACE)/$$(echo $$_IMG | cut -d: -f1):$$_TAG"; \
+			_INTERNAL="$(CRC_INTERNAL_REGISTRY)/$(CRC_NAMESPACE)/$$(echo $$_IMG | cut -d: -f1):$$_TAG"; \
+			echo "  Pushing $$_LABEL → $$_REMOTE"; \
+			$(CONTAINER_ENGINE) tag $$_IMG $$_REMOTE && \
+			$(CONTAINER_ENGINE) push --tls-verify=false $$_REMOTE $(QUIET_REDIRECT) && \
+			oc set image deployment/$$_DEPLOY -n $(CRC_NAMESPACE) $$_CONTAINER=$$_INTERNAL $(QUIET_REDIRECT) || \
+			echo "  $(COLOR_YELLOW)⚠$(COLOR_RESET) Failed to push $$_LABEL"; \
+		done; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for deployments to roll out..."; \
+		for deploy in ambient-api-server ambient-control-plane ambient-ui; do \
+			echo "  Waiting for $$deploy..."; \
+			oc rollout status deployment/$$deploy -n $(CRC_NAMESPACE) --timeout=120s 2>/dev/null || \
+				echo "  $(COLOR_YELLOW)⚠$(COLOR_RESET) $$deploy not yet ready"; \
+		done; \
+	else \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for application pods..."; \
+		for deploy in ambient-api-server ambient-control-plane; do \
+			echo "  Waiting for $$deploy..."; \
+			oc rollout status deployment/$$deploy -n $(CRC_NAMESPACE) --timeout=300s 2>/dev/null || \
+				echo "  $(COLOR_YELLOW)⚠$(COLOR_RESET) $$deploy not yet ready (may not exist)"; \
+		done; \
+	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building and deploying mock LLM server..."
 	@$(CONTAINER_ENGINE) login --tls-verify=false \
 		-u $$(oc whoami) -p $$(oc whoami -t) $(CRC_REGISTRY)
