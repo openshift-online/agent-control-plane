@@ -294,7 +294,7 @@ The Gateway API response SHALL include the Route's external address so that CLI 
 
 ### Requirement: CLI Route Address Display
 
-The `acpctl get gateway` command SHALL display the Route address when available. The `acpctl gateway setup-cli` command SHALL be an API-only operation — it queries the ACP API server for the gateway's `routeAddress` and prints the `openshell` command to connect. It does NOT interact with the Kubernetes or OpenShift cluster directly (no `kubectl`, no cert extraction, no port-forwarding).
+The `acpctl get gateway` command SHALL display the Route address when available. The `acpctl gateway setup-cli` command SHALL be an API-only operation — it queries the ACP API server for the gateway's `routeAddress` and runs the `openshell gateway add` command to register the gateway locally. It does NOT interact with the Kubernetes or OpenShift cluster directly (no `kubectl`, no cert extraction, no port-forwarding). A `--print` flag outputs the command instead of executing it.
 
 #### Scenario: Gateway table includes route address
 
@@ -321,20 +321,28 @@ The `acpctl get gateway` command SHALL display the Route address when available.
   ```
 - AND the "Setup openshell CLI" hint SHALL only be shown when a Route address is available
 
-#### Scenario: setup-cli prints openshell command for gateway with route
+#### Scenario: setup-cli registers gateway via route address
 
 - GIVEN a Gateway with a populated `routeAddress`
 - WHEN a user runs `acpctl gateway setup-cli <name>`
 - THEN the CLI SHALL query the ACP API server (not the Kubernetes API) to retrieve the gateway resource
 - AND it SHALL read the `routeAddress` field from the API response
-- AND it SHALL print the `openshell` command to connect to the gateway via the Route address, e.g.:
+- AND it SHALL execute `openshell gateway add` to register the gateway locally, e.g.:
   ```
   openshell gateway add --name <project>-<gateway-name> https://<routeAddress>
   ```
-- AND when the gateway has OIDC configured, the printed command SHALL include the OIDC issuer flag:
+- AND when the gateway has OIDC configured, the command SHALL include the OIDC issuer flag:
   ```
   openshell gateway add --name <project>-<gateway-name> --oidc-issuer <issuer> https://<routeAddress>
   ```
+- AND it SHALL verify connectivity via `openshell status -g <project>-<gateway-name>` after registration
+
+#### Scenario: setup-cli with --print flag
+
+- GIVEN a Gateway with a populated `routeAddress`
+- WHEN a user runs `acpctl gateway setup-cli <name> --print`
+- THEN the CLI SHALL print the `openshell gateway add` command to stdout instead of executing it
+- AND the user can copy and run the command manually
 
 #### Scenario: setup-cli errors when no route address is available
 
@@ -509,7 +517,7 @@ route: {}
 | `gateway/validation.go` | Extended to validate `route.host` format |
 | `acpctl get gateways` | Adds `ROUTE` column to existing table (NAME, IMAGE, DNS NAMES, AGE) |
 | `acpctl get gateway <name>` | Adds Route address to Connection Info section (alongside Cluster DNS, Server SANs) |
-| `acpctl gateway setup-cli` | API-only: queries `routeAddress` from API server, prints `openshell gateway add` command. Errors if no Route address. No kubectl/cert interaction |
+| `acpctl gateway setup-cli` | API-only: queries `routeAddress` from API server, runs `openshell gateway add`. `--print` outputs the command instead. Errors if no Route address. No kubectl/cert interaction |
 | OpenAPI schema | Extended with `GatewayRoute` and `routeAddress` |
 | DB migration | New migration adds `route` (JSONB) and `route_address` (text) columns |
 | Go/Python/TS SDKs | Extended with `Route` and `RouteAddress` fields |
