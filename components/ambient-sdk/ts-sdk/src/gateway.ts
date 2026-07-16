@@ -5,6 +5,10 @@
 
 import type { ObjectReference, ListMeta } from './base';
 
+export type GatewayRoute = {
+  host?: string;
+};
+
 export type Gateway = ObjectReference & {
   annotations: string;
   config: string;
@@ -12,6 +16,8 @@ export type Gateway = ObjectReference & {
   labels: string;
   name: string;
   oidc: Record<string, unknown>;
+  route?: GatewayRoute;
+  routeAddress?: string;
   project_id: string;
   server_dns_names: string[];
 };
@@ -27,6 +33,7 @@ export type GatewayCreateRequest = {
   labels?: string;
   name: string;
   oidc?: Record<string, unknown>;
+  route?: GatewayRoute;
   project_id: string;
   server_dns_names: string[];
 };
@@ -38,6 +45,8 @@ export type GatewayPatchRequest = {
   labels?: string;
   name?: string;
   oidc?: Record<string, unknown>;
+  route?: GatewayRoute;
+  route_address?: string;
   server_dns_names?: string[];
 };
 
@@ -72,6 +81,11 @@ export class GatewayBuilder {
 
   oidc(value: Record<string, unknown>): this {
     this.data['oidc'] = value;
+    return this;
+  }
+
+  route(value: GatewayRoute): this {
+    this.data['route'] = value;
     return this;
   }
 
@@ -127,6 +141,16 @@ export class GatewayPatchBuilder {
 
   oidc(value: Record<string, unknown>): this {
     this.data['oidc'] = value;
+    return this;
+  }
+
+  route(value: GatewayRoute): this {
+    this.data['route'] = value;
+    return this;
+  }
+
+  routeAddress(value: string): this {
+    this.data['route_address'] = value;
     return this;
   }
 

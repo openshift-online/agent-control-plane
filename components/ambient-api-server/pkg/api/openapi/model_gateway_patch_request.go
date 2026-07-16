@@ -20,13 +20,16 @@ var _ MappedNullable = &GatewayPatchRequest{}
 
 // GatewayPatchRequest struct for GatewayPatchRequest
 type GatewayPatchRequest struct {
-	Name           *string      `json:"name,omitempty"`
-	Image          *string      `json:"image,omitempty"`
-	ServerDnsNames []string     `json:"server_dns_names,omitempty"`
-	Config         *string      `json:"config,omitempty"`
-	Labels         *string      `json:"labels,omitempty"`
-	Annotations    *string      `json:"annotations,omitempty"`
-	Oidc           *GatewayOidc `json:"oidc,omitempty"`
+	Name           *string       `json:"name,omitempty"`
+	Image          *string       `json:"image,omitempty"`
+	ServerDnsNames []string      `json:"server_dns_names,omitempty"`
+	Config         *string       `json:"config,omitempty"`
+	Labels         *string       `json:"labels,omitempty"`
+	Annotations    *string       `json:"annotations,omitempty"`
+	Oidc           *GatewayOidc  `json:"oidc,omitempty"`
+	Route          *GatewayRoute `json:"route,omitempty"`
+	// Externally reachable address assigned by the OpenShift Route (set by control plane)
+	RouteAddress *string `json:"route_address,omitempty"`
 }
 
 // NewGatewayPatchRequest instantiates a new GatewayPatchRequest object
@@ -270,6 +273,70 @@ func (o *GatewayPatchRequest) SetOidc(v GatewayOidc) {
 	o.Oidc = &v
 }
 
+// GetRoute returns the Route field value if set, zero value otherwise.
+func (o *GatewayPatchRequest) GetRoute() GatewayRoute {
+	if o == nil || IsNil(o.Route) {
+		var ret GatewayRoute
+		return ret
+	}
+	return *o.Route
+}
+
+// GetRouteOk returns a tuple with the Route field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *GatewayPatchRequest) GetRouteOk() (*GatewayRoute, bool) {
+	if o == nil || IsNil(o.Route) {
+		return nil, false
+	}
+	return o.Route, true
+}
+
+// HasRoute returns a boolean if a field has been set.
+func (o *GatewayPatchRequest) HasRoute() bool {
+	if o != nil && !IsNil(o.Route) {
+		return true
+	}
+
+	return false
+}
+
+// SetRoute gets a reference to the given GatewayRoute and assigns it to the Route field.
+func (o *GatewayPatchRequest) SetRoute(v GatewayRoute) {
+	o.Route = &v
+}
+
+// GetRouteAddress returns the RouteAddress field value if set, zero value otherwise.
+func (o *GatewayPatchRequest) GetRouteAddress() string {
+	if o == nil || IsNil(o.RouteAddress) {
+		var ret string
+		return ret
+	}
+	return *o.RouteAddress
+}
+
+// GetRouteAddressOk returns a tuple with the RouteAddress field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *GatewayPatchRequest) GetRouteAddressOk() (*string, bool) {
+	if o == nil || IsNil(o.RouteAddress) {
+		return nil, false
+	}
+	return o.RouteAddress, true
+}
+
+// HasRouteAddress returns a boolean if a field has been set.
+func (o *GatewayPatchRequest) HasRouteAddress() bool {
+	if o != nil && !IsNil(o.RouteAddress) {
+		return true
+	}
+
+	return false
+}
+
+// SetRouteAddress gets a reference to the given string and assigns it to the RouteAddress field.
+func (o *GatewayPatchRequest) SetRouteAddress(v string) {
+	o.RouteAddress = &v
+}
+
 func (o GatewayPatchRequest) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -300,6 +367,12 @@ func (o GatewayPatchRequest) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Oidc) {
 		toSerialize["oidc"] = o.Oidc
+	}
+	if !IsNil(o.Route) {
+		toSerialize["route"] = o.Route
+	}
+	if !IsNil(o.RouteAddress) {
+		toSerialize["route_address"] = o.RouteAddress
 	}
 	return toSerialize, nil
 }

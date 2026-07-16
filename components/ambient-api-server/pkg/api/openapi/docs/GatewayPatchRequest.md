@@ -11,6 +11,8 @@ Name | Type | Description | Notes
 **Labels** | Pointer to **string** |  | [optional] 
 **Annotations** | Pointer to **string** |  | [optional] 
 **Oidc** | Pointer to [**GatewayOidc**](GatewayOidc.md) |  | [optional] 
+**Route** | Pointer to [**GatewayRoute**](GatewayRoute.md) |  | [optional] 
+**RouteAddress** | Pointer to **string** | Externally reachable address assigned by the OpenShift Route (set by control plane) | [optional] 
 
 ## Methods
 
@@ -205,6 +207,56 @@ SetOidc sets Oidc field to given value.
 `func (o *GatewayPatchRequest) HasOidc() bool`
 
 HasOidc returns a boolean if a field has been set.
+
+### GetRoute
+
+`func (o *GatewayPatchRequest) GetRoute() GatewayRoute`
+
+GetRoute returns the Route field if non-nil, zero value otherwise.
+
+### GetRouteOk
+
+`func (o *GatewayPatchRequest) GetRouteOk() (*GatewayRoute, bool)`
+
+GetRouteOk returns a tuple with the Route field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetRoute
+
+`func (o *GatewayPatchRequest) SetRoute(v GatewayRoute)`
+
+SetRoute sets Route field to given value.
+
+### HasRoute
+
+`func (o *GatewayPatchRequest) HasRoute() bool`
+
+HasRoute returns a boolean if a field has been set.
+
+### GetRouteAddress
+
+`func (o *GatewayPatchRequest) GetRouteAddress() string`
+
+GetRouteAddress returns the RouteAddress field if non-nil, zero value otherwise.
+
+### GetRouteAddressOk
+
+`func (o *GatewayPatchRequest) GetRouteAddressOk() (*string, bool)`
+
+GetRouteAddressOk returns a tuple with the RouteAddress field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetRouteAddress
+
+`func (o *GatewayPatchRequest) SetRouteAddress(v string)`
+
+SetRouteAddress sets RouteAddress field to given value.
+
+### HasRouteAddress
+
+`func (o *GatewayPatchRequest) HasRouteAddress() bool`
+
+HasRouteAddress returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

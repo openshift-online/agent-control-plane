@@ -1,0 +1,22 @@
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: openshell-gateway
+  namespace: NAMESPACE_PLACEHOLDER
+  labels:
+    app.kubernetes.io/name: openshell
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: agent-control-plane
+  annotations:
+    haproxy.router.openshift.io/timeout: "3600s"
+spec:
+  to:
+    kind: Service
+    name: openshell-gateway
+    weight: 100
+  port:
+    targetPort: grpc
+  tls:
+    termination: reencrypt
+    insecureEdgeTerminationPolicy: None

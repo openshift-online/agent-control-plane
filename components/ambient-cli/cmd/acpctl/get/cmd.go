@@ -971,6 +971,7 @@ func printGatewayTable(printer *output.Printer, gateways []sdktypes.Gateway) err
 		{Name: "NAME", Width: 24},
 		{Name: "IMAGE", Width: 50},
 		{Name: "DNS NAMES", Width: 50},
+		{Name: "ROUTE", Width: 50},
 		{Name: "AGE", Width: 10},
 	}
 	table := output.NewTable(printer.Writer(), columns)
@@ -981,7 +982,7 @@ func printGatewayTable(printer *output.Printer, gateways []sdktypes.Gateway) err
 			age = output.FormatAge(time.Since(*gw.CreatedAt))
 		}
 		dnsNames := strings.Join(gw.ServerDnsNames, ",")
-		table.WriteRow(gw.Name, gw.Image, dnsNames, age)
+		table.WriteRow(gw.Name, gw.Image, dnsNames, gw.RouteAddress, age)
 	}
 	return nil
 }
@@ -993,8 +994,15 @@ func printGatewayConnectionInfo(w io.Writer, gw *sdktypes.Gateway) {
 	if len(gw.ServerDnsNames) > 0 {
 		fmt.Fprintf(w, "  Server SANs:  %s\n", strings.Join(gw.ServerDnsNames, ", "))
 	}
+	if gw.RouteAddress != "" {
+		fmt.Fprintf(w, "  Route:        %s\n", gw.RouteAddress)
+	}
 	fmt.Fprintf(w, "\nSetup openshell CLI:\n")
-	fmt.Fprintf(w, "  acpctl gateway setup-cli %s --gateway-url <url>\n", gw.Name)
+	if gw.RouteAddress != "" {
+		fmt.Fprintf(w, "  acpctl gateway setup-cli %s\n", gw.Name)
+	} else {
+		fmt.Fprintf(w, "  acpctl gateway setup-cli %s --kubectl\n", gw.Name)
+	}
 }
 
 func sessionChanged(old, current sdktypes.Session) bool {

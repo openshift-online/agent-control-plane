@@ -202,6 +202,7 @@ Class | Method | HTTP request | Description
  - [GatewayList](docs/GatewayList.md)
  - [GatewayOidc](docs/GatewayOidc.md)
  - [GatewayPatchRequest](docs/GatewayPatchRequest.md)
+ - [GatewayRoute](docs/GatewayRoute.md)
  - [GpuRequirements](docs/GpuRequirements.md)
  - [InboxMessage](docs/InboxMessage.md)
  - [InboxMessageList](docs/InboxMessageList.md)

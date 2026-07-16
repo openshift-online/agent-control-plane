@@ -63,6 +63,36 @@ func migration() *gormigrate.Migration {
 	}
 }
 
+func migrationAddRoute() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202607160001",
+		Migrate: func(tx *gorm.DB) error {
+			stmts := []string{
+				`ALTER TABLE gateways ADD COLUMN IF NOT EXISTS route JSONB`,
+				`ALTER TABLE gateways ADD COLUMN IF NOT EXISTS route_address TEXT`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		Rollback: func(tx *gorm.DB) error {
+			stmts := []string{
+				`ALTER TABLE gateways DROP COLUMN IF EXISTS route_address`,
+				`ALTER TABLE gateways DROP COLUMN IF EXISTS route`,
+			}
+			for _, s := range stmts {
+				if err := tx.Exec(s).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+}
+
 func migrationAddOidc() *gormigrate.Migration {
 	return &gormigrate.Migration{
 		ID: "202607140001",

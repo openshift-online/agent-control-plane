@@ -25,6 +25,8 @@ class Gateway:
     labels: str = ""
     name: str = ""
     oidc: dict = ""
+    route: Optional[dict] = None
+    route_address: str = ""
     project_id: str = ""
     server_dns_names: list[str] = ""
 
@@ -42,6 +44,8 @@ class Gateway:
             labels=data.get("labels", ""),
             name=data.get("name", ""),
             oidc=data.get("oidc", ""),
+            route=data.get("route"),
+            route_address=data.get("route_address", ""),
             project_id=data.get("project_id", ""),
             server_dns_names=data.get("server_dns_names", ""),
         )
@@ -99,6 +103,10 @@ class GatewayBuilder:
         self._data["oidc"] = value
         return self
 
+    def route(self, value: dict) -> GatewayBuilder:
+        self._data["route"] = value
+        return self
+
     def project_id(self, value: str) -> GatewayBuilder:
         self._data["project_id"] = value
         return self
@@ -142,6 +150,14 @@ class GatewayPatch:
 
     def oidc(self, value: dict) -> GatewayPatch:
         self._data["oidc"] = value
+        return self
+
+    def route(self, value: dict) -> GatewayPatch:
+        self._data["route"] = value
+        return self
+
+    def route_address(self, value: str) -> GatewayPatch:
+        self._data["route_address"] = value
         return self
 
     def server_dns_names(self, value: list[str]) -> GatewayPatch:

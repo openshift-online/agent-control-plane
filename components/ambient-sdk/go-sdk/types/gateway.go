@@ -18,9 +18,11 @@ type Gateway struct {
 	Image          string       `json:"image,omitempty"`
 	Labels         string       `json:"labels,omitempty"`
 	Name           string       `json:"name"`
-	Oidc           *GatewayOidc `json:"oidc,omitempty"`
-	ProjectID      string       `json:"project_id"`
-	ServerDnsNames []string     `json:"server_dns_names"`
+	Oidc           *GatewayOidc  `json:"oidc,omitempty"`
+	Route          *GatewayRoute `json:"route,omitempty"`
+	RouteAddress   string        `json:"route_address,omitempty"`
+	ProjectID      string        `json:"project_id"`
+	ServerDnsNames []string      `json:"server_dns_names"`
 }
 
 type GatewayList struct {
@@ -69,6 +71,11 @@ func (b *GatewayBuilder) Name(v string) *GatewayBuilder {
 
 func (b *GatewayBuilder) Oidc(v *GatewayOidc) *GatewayBuilder {
 	b.resource.Oidc = v
+	return b
+}
+
+func (b *GatewayBuilder) Route(v *GatewayRoute) *GatewayBuilder {
+	b.resource.Route = v
 	return b
 }
 
@@ -130,6 +137,16 @@ func (b *GatewayPatchBuilder) Name(v string) *GatewayPatchBuilder {
 
 func (b *GatewayPatchBuilder) Oidc(v *GatewayOidc) *GatewayPatchBuilder {
 	b.patch["oidc"] = v
+	return b
+}
+
+func (b *GatewayPatchBuilder) Route(v *GatewayRoute) *GatewayPatchBuilder {
+	b.patch["route"] = v
+	return b
+}
+
+func (b *GatewayPatchBuilder) RouteAddress(v string) *GatewayPatchBuilder {
+	b.patch["route_address"] = v
 	return b
 }
 

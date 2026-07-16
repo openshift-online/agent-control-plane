@@ -24,12 +24,18 @@ var setupArgs struct {
 	gatewayURL string
 	project    string
 	printOnly  bool
+	kubectl    bool
 }
 
 var setupCmd = &cobra.Command{
 	Use:   "setup-cli [name]",
 	Short: "Configure openshell CLI access for a gateway",
 	Long: `Configure local openshell CLI access for a named gateway.
+
+By default, uses the gateway's route address (populated when the gateway has
+an OpenShift Route) as the gateway URL. If no route address is available,
+use --kubectl to fall back to port-forward and cert extraction via kubectl,
+or provide --gateway-url to specify a URL directly.
 
 Reads the gateway's authentication configuration from the API server
 and registers it with the openshell CLI. For OIDC-enabled gateways,
@@ -48,18 +54,19 @@ is already taken.
 Use --print to show the openshell commands instead of running them.
 
 Requires openshell to be installed.`,
-	Example: `  acpctl gateway setup-cli --gateway-url https://localhost:54684 --project tenant-a
+	Example: `  acpctl gateway setup-cli --project tenant-a
   acpctl gateway setup-cli my-gateway --gateway-url https://gateway.example.com:8080
-  acpctl gateway setup-cli --gateway-url https://localhost:54684 --project tenant-a --print`,
+  acpctl gateway setup-cli --kubectl --project tenant-a
+  acpctl gateway setup-cli --project tenant-a --print`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runSetup,
 }
 
 func init() {
-	setupCmd.Flags().StringVar(&setupArgs.gatewayURL, "gateway-url", "", "Gateway URL (e.g. https://gateway.example.com:8080)")
+	setupCmd.Flags().StringVar(&setupArgs.gatewayURL, "gateway-url", "", "Gateway URL (e.g. https://gateway.example.com:8080). If omitted, uses the gateway's route address")
 	setupCmd.Flags().StringVar(&setupArgs.project, "project", "", "Project/namespace to look up the gateway in (defaults to configured project)")
 	setupCmd.Flags().BoolVar(&setupArgs.printOnly, "print", false, "Print the openshell commands instead of running them")
-	_ = setupCmd.MarkFlagRequired("gateway-url")
+	setupCmd.Flags().BoolVar(&setupArgs.kubectl, "kubectl", false, "Fall back to kubectl port-forward and cert extraction when no route address is available")
 }
 
 func runSetup(cmd *cobra.Command, args []string) error {
@@ -103,6 +110,17 @@ func runSetup(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	gwURL := setupArgs.gatewayURL
+	if gwURL == "" {
+		if gw.RouteAddress != "" {
+			gwURL = gw.RouteAddress
+		} else if setupArgs.kubectl {
+			gwURL = ""
+		} else {
+			return fmt.Errorf("gateway %q has no route address; use --kubectl for port-forward mode or --gateway-url to specify a URL", apiGWName)
+		}
+	}
+
 	localName := resolveLocalName(project, apiGWName)
 
 	format, err := output.ParseFormat("")
@@ -111,7 +129,11 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	}
 	printer := output.NewPrinter(format, cmd.OutOrStdout())
 
-	return setupOpenshellGateway(printer.Writer(), gw, cfg, localName, setupArgs.gatewayURL, project, setupArgs.printOnly)
+	if setupArgs.kubectl && gwURL == "" {
+		return setupOpenshellKubectl(printer.Writer(), gw, cfg, localName, project, setupArgs.printOnly)
+	}
+
+	return setupOpenshellGateway(printer.Writer(), gw, cfg, localName, gwURL, project, setupArgs.printOnly)
 }
 
 func findGateway(ctx context.Context, client *sdkclient.Client, nameOrID string) (*sdktypes.Gateway, error) {
@@ -451,6 +473,63 @@ func setupOpenshellGateway(w io.Writer, gw *sdktypes.Gateway, cfg *config.Config
 	fmt.Fprintf(w, "  openshell sandbox list --gateway %s\n", localName)
 
 	return nil
+}
+
+func setupOpenshellKubectl(w io.Writer, gw *sdktypes.Gateway, cfg *config.Config, localName, namespace string, printOnly bool) error {
+	if _, err := exec.LookPath("openshell"); err != nil {
+		return fmt.Errorf("openshell not found in PATH: required for gateway setup")
+	}
+	if _, err := exec.LookPath("kubectl"); err != nil {
+		return fmt.Errorf("kubectl not found in PATH: required for --kubectl mode")
+	}
+
+	if printOnly {
+		fmt.Fprintf(w, "# Set up port-forward to gateway\n")
+		fmt.Fprintf(w, "  kubectl port-forward -n %s svc/openshell-gateway 8080:8080 &\n", namespace)
+		fmt.Fprintf(w, "\n# Register gateway\n")
+		addArgs := buildAddArgs(localName, "https://localhost:8080", gw.Oidc)
+		fmt.Fprintf(w, "  openshell %s\n", strings.Join(addArgs, " "))
+		fmt.Fprintf(w, "\n# Verify connectivity\n")
+		fmt.Fprintf(w, "  openshell -g %s provider list\n", localName)
+		return nil
+	}
+
+	fmt.Fprintf(w, "Starting kubectl port-forward to %s/openshell-gateway...\n", namespace)
+	pfCmd := exec.Command("kubectl", "port-forward", "-n", namespace, "svc/openshell-gateway", "0:8080")
+	pfOut, err := pfCmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("port-forward stdout pipe: %w", err)
+	}
+	pfCmd.Stderr = pfCmd.Stdout
+	if err := pfCmd.Start(); err != nil {
+		return fmt.Errorf("start port-forward: %w", err)
+	}
+	defer func() {
+		if pfCmd.Process != nil {
+			_ = pfCmd.Process.Kill()
+		}
+	}()
+
+	scanner := bufio.NewScanner(pfOut)
+	var localPort string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if idx := strings.Index(line, "Forwarding from 127.0.0.1:"); idx >= 0 {
+			rest := line[idx+len("Forwarding from 127.0.0.1:"):]
+			if endIdx := strings.Index(rest, " "); endIdx > 0 {
+				localPort = rest[:endIdx]
+			}
+			break
+		}
+	}
+	if localPort == "" {
+		return fmt.Errorf("could not determine local port from kubectl port-forward")
+	}
+
+	gwURL := "https://localhost:" + localPort
+	fmt.Fprintf(w, "Port-forward active at %s\n", gwURL)
+
+	return setupOpenshellGateway(w, gw, cfg, localName, gwURL, namespace, false)
 }
 
 func verifyGateway(localName string) error {

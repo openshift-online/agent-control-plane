@@ -76,6 +76,13 @@ func ValidateGatewayConfig(config GatewayConfig) error {
 		return fmt.Errorf("config contains null bytes")
 	}
 
+	// Validate route host if provided
+	if config.Route != nil && config.Route.Host != "" {
+		if err := ValidateDNSName(config.Route.Host); err != nil {
+			return fmt.Errorf("invalid route host: %w", err)
+		}
+	}
+
 	// Validate OIDC config if provided
 	if config.Oidc != nil && config.Oidc.Issuer != "" {
 		if !strings.HasPrefix(config.Oidc.Issuer, "http://") && !strings.HasPrefix(config.Oidc.Issuer, "https://") {

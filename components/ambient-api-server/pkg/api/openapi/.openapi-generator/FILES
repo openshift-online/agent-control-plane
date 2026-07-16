@@ -28,6 +28,7 @@ docs/Gateway.md
 docs/GatewayList.md
 docs/GatewayOidc.md
 docs/GatewayPatchRequest.md
+docs/GatewayRoute.md
 docs/GpuRequirements.md
 docs/InboxMessage.md
 docs/InboxMessageList.md
@@ -97,6 +98,7 @@ model_gateway.go
 model_gateway_list.go
 model_gateway_oidc.go
 model_gateway_patch_request.go
+model_gateway_route.go
 model_gpu_requirements.go
 model_inbox_message.go
 model_inbox_message_list.go

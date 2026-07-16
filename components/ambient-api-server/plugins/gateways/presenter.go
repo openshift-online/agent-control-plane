@@ -34,6 +34,13 @@ func ConvertGateway(gw openapi.Gateway) *Gateway {
 		}
 	}
 
+	if gw.Route != nil {
+		if raw, err := json.Marshal(gw.Route); err == nil {
+			s := string(raw)
+			c.Route = &s
+		}
+	}
+
 	if gw.CreatedAt != nil {
 		c.CreatedAt = *gw.CreatedAt
 		c.UpdatedAt = *gw.UpdatedAt
@@ -68,6 +75,17 @@ func PresentGateway(gw *Gateway) openapi.Gateway {
 		if err := json.Unmarshal([]byte(*gw.Oidc), &oidc); err == nil {
 			result.Oidc = &oidc
 		}
+	}
+
+	if gw.Route != nil {
+		var route openapi.GatewayRoute
+		if err := json.Unmarshal([]byte(*gw.Route), &route); err == nil {
+			result.Route = &route
+		}
+	}
+
+	if gw.RouteAddress != nil {
+		result.RouteAddress = gw.RouteAddress
 	}
 
 	return result

@@ -9,6 +9,7 @@ oidc:
   roles_claim: realm_access.roles
   admin_role: openshell-admin
   user_role: openshell-user
+route: {}
 labels:
   purpose: openshell
   env: dev

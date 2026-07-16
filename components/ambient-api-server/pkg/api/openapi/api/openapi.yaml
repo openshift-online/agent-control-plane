@@ -8115,6 +8115,13 @@ components:
             type: string
           oidc:
             $ref: "#/components/schemas/GatewayOidc"
+          route:
+            $ref: "#/components/schemas/GatewayRoute"
+          routeAddress:
+            description: Externally reachable address assigned by the OpenShift Route
+              (set by control plane)
+            readOnly: true
+            type: string
         required:
         - name
         - project_id
@@ -8137,7 +8144,10 @@ components:
           roles_claim: roles_claim
           issuer: issuer
         labels: labels
+        route:
+          host: host
         updated_at: 2000-01-23T04:56:07.000+00:00
+        routeAddress: routeAddress
         project_id: project_id
         name: name
         id: id
@@ -8174,7 +8184,10 @@ components:
             roles_claim: roles_claim
             issuer: issuer
           labels: labels
+          route:
+            host: host
           updated_at: 2000-01-23T04:56:07.000+00:00
+          routeAddress: routeAddress
           project_id: project_id
           name: name
           id: id
@@ -8196,7 +8209,10 @@ components:
             roles_claim: roles_claim
             issuer: issuer
           labels: labels
+          route:
+            host: host
           updated_at: 2000-01-23T04:56:07.000+00:00
+          routeAddress: routeAddress
           project_id: project_id
           name: name
           id: id
@@ -8205,6 +8221,8 @@ components:
     GatewayPatchRequest:
       example:
         image: image
+        route:
+          host: host
         server_dns_names:
         - server_dns_names
         - server_dns_names
@@ -8219,6 +8237,7 @@ components:
           jwks_ttl: 5
           roles_claim: roles_claim
           issuer: issuer
+        route_address: route_address
         labels: labels
       properties:
         name:
@@ -8237,6 +8256,12 @@ components:
           type: string
         oidc:
           $ref: "#/components/schemas/GatewayOidc"
+        route:
+          $ref: "#/components/schemas/GatewayRoute"
+        route_address:
+          description: Externally reachable address assigned by the OpenShift Route
+            (set by control plane)
+          type: string
       type: object
     Cluster:
       allOf:
@@ -8529,6 +8554,16 @@ components:
           type: string
         scopes_claim:
           description: Dot-delimited path to scopes array in JWT claims
+          type: string
+      type: object
+    GatewayRoute:
+      description: Route configuration for external gateway exposure on OpenShift
+      example:
+        host: host
+      properties:
+        host:
+          description: "Hostname for the OpenShift Route. If empty, OpenShift assigns\
+            \ a hostname based on the cluster's default routing suffix."
           type: string
       type: object
   securitySchemes:

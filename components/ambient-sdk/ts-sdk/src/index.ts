@@ -23,7 +23,7 @@ export type { Credential, CredentialList, CredentialCreateRequest, CredentialPat
 export { CredentialBuilder, CredentialPatchBuilder } from './credential';
 export { CredentialAPI } from './credential_api';
 
-export type { Gateway, GatewayList, GatewayCreateRequest, GatewayPatchRequest } from './gateway';
+export type { Gateway, GatewayRoute, GatewayList, GatewayCreateRequest, GatewayPatchRequest } from './gateway';
 export { GatewayBuilder, GatewayPatchBuilder } from './gateway';
 export { GatewayAPI } from './gateway_api';
 

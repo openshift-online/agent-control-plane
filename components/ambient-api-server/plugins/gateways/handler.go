@@ -117,6 +117,17 @@ func (h gatewayHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				s := string(raw)
 				found.Oidc = &s
 			}
+			if patch.Route != nil {
+				raw, merr := json.Marshal(patch.Route)
+				if merr != nil {
+					return nil, errors.GeneralError("failed to marshal route: %v", merr)
+				}
+				s := string(raw)
+				found.Route = &s
+			}
+			if patch.RouteAddress != nil {
+				found.RouteAddress = patch.RouteAddress
+			}
 
 			gatewayModel, svcErr := h.gateway.Replace(ctx, found)
 			if svcErr != nil {

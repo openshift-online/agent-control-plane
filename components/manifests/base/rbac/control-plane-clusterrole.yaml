@@ -53,6 +53,10 @@ rules:
 - apiGroups: [""]
   resources: ["events"]
   verbs: ["get", "list", "watch"]
+# OpenShift Routes (gateway route exposure)
+- apiGroups: ["route.openshift.io"]
+  resources: ["routes"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
 # Sandboxes (OpenShell agent CRD)
 - apiGroups: ["agents.x-k8s.io"]
   resources: ["sandboxes", "sandboxes/status"]

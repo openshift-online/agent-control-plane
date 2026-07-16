@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,7 +14,10 @@ import (
 	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/rs/zerolog"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 )
@@ -23,6 +27,12 @@ const (
 	gatewayManifestsDir = "/manifests/gateway"
 )
 
+var routeGVR = schema.GroupVersionResource{
+	Group:    "route.openshift.io",
+	Version:  "v1",
+	Resource: "routes",
+}
+
 type GatewayReconciler struct {
 	factory             *SDKClientFactory
 	dynamicClient       dynamic.Interface
@@ -31,6 +41,7 @@ type GatewayReconciler struct {
 	logger              zerolog.Logger
 	manifests           map[string][]*unstructured.Unstructured
 	defaultGatewayImage string
+	isOpenShift         bool
 }
 
 func NewGatewayReconciler(
@@ -60,8 +71,10 @@ func (r *GatewayReconciler) Run(ctx context.Context) error {
 		return fmt.Errorf("load gateway manifests: %w", err)
 	}
 	r.manifests = manifests
+	r.isOpenShift = r.detectOpenShift()
 	r.logger.Info().
 		Int("manifest_files", len(manifests)).
+		Bool("openshift", r.isOpenShift).
 		Dur("interval", gatewaySyncInterval).
 		Msg("gateway reconciler started")
 
@@ -210,6 +223,12 @@ func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient 
 		}
 	}
 
+	if gw.Route != nil {
+		gwConfig.Route = &gateway.RouteConfig{
+			Host: gw.Route.Host,
+		}
+	}
+
 	if err := gateway.ValidateGatewayConfig(gwConfig); err != nil {
 		r.logger.Warn().Err(err).
 			Str("gateway_name", gw.Name).
@@ -225,6 +244,12 @@ func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient 
 
 	if err := gateway.ReconcileGateways(ctx, r.dynamicClient, r.clientset, []gateway.NamespaceConfig{nsConfig}, r.manifests); err != nil {
 		return fmt.Errorf("reconcile gateway %s: %w", gw.Name, err)
+	}
+
+	if err := r.reconcileRoute(ctx, projectClient, gw, namespace); err != nil {
+		r.logger.Warn().Err(err).
+			Str("gateway_name", gw.Name).
+			Msg("route reconciliation failed, gateway resources are synced")
 	}
 
 	r.logger.Info().
@@ -277,4 +302,236 @@ func sanitizeAnnotationValue(s string) string {
 		s = s[:maxAnnotationValueLen]
 	}
 	return s
+}
+
+func (r *GatewayReconciler) detectOpenShift() bool {
+	_, resources, err := r.clientset.Discovery().ServerGroupsAndResources()
+	if err != nil {
+		r.logger.Warn().Err(err).Msg("failed to discover API groups, assuming non-OpenShift")
+		return false
+	}
+	for _, list := range resources {
+		if strings.HasPrefix(list.GroupVersion, "route.openshift.io/") {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *GatewayReconciler) reconcileRoute(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway, namespace string) error {
+	if !r.isOpenShift {
+		return nil
+	}
+
+	routeName := "openshell-gateway"
+
+	if gw.Route == nil {
+		return r.deleteRouteIfExists(ctx, projectClient, gw, namespace, routeName)
+	}
+
+	caCert, err := r.readCACert(ctx, namespace)
+	if err != nil {
+		r.logger.Debug().Err(err).Str("namespace", namespace).Msg("CA cert not yet available, will retry next cycle")
+		return nil
+	}
+
+	stsUID, err := r.getStatefulSetUID(ctx, namespace, routeName)
+	if err != nil {
+		r.logger.Debug().Err(err).Str("namespace", namespace).Msg("StatefulSet not yet available for OwnerReference")
+		stsUID = ""
+	}
+
+	routeObj, err := r.buildRouteObject(gw, namespace, routeName, caCert, stsUID)
+	if err != nil {
+		return fmt.Errorf("build route object: %w", err)
+	}
+
+	existing, err := r.dynamicClient.Resource(routeGVR).Namespace(namespace).Get(ctx, routeName, metav1.GetOptions{})
+	if err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return fmt.Errorf("get route: %w", err)
+		}
+		if _, createErr := r.dynamicClient.Resource(routeGVR).Namespace(namespace).Create(ctx, routeObj, metav1.CreateOptions{}); createErr != nil {
+			return fmt.Errorf("create route: %w", createErr)
+		}
+		r.logger.Info().Str("namespace", namespace).Msg("created OpenShift Route for gateway")
+	} else {
+		routeObj.SetResourceVersion(existing.GetResourceVersion())
+		if _, updateErr := r.dynamicClient.Resource(routeGVR).Namespace(namespace).Update(ctx, routeObj, metav1.UpdateOptions{}); updateErr != nil {
+			return fmt.Errorf("update route: %w", updateErr)
+		}
+	}
+
+	return r.reconcileRouteAddress(ctx, projectClient, gw, namespace, routeName)
+}
+
+func (r *GatewayReconciler) buildRouteObject(gw *types.Gateway, namespace, routeName, caCert, stsUID string) (*unstructured.Unstructured, error) {
+	host := ""
+	if gw.Route != nil {
+		host = gw.Route.Host
+	}
+
+	route := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "route.openshift.io/v1",
+			"kind":       "Route",
+			"metadata": map[string]interface{}{
+				"name":      routeName,
+				"namespace": namespace,
+				"labels": map[string]interface{}{
+					"app.kubernetes.io/name":       "openshell",
+					"app.kubernetes.io/component":  "gateway",
+					"app.kubernetes.io/managed-by": "agent-control-plane",
+				},
+				"annotations": map[string]interface{}{
+					"haproxy.router.openshift.io/timeout": "3600s",
+				},
+			},
+			"spec": map[string]interface{}{
+				"to": map[string]interface{}{
+					"kind":   "Service",
+					"name":   routeName,
+					"weight": int64(100),
+				},
+				"port": map[string]interface{}{
+					"targetPort": "grpc",
+				},
+				"tls": map[string]interface{}{
+					"termination":                  "reencrypt",
+					"insecureEdgeTerminationPolicy": "None",
+					"destinationCACertificate":      caCert,
+				},
+			},
+		},
+	}
+
+	if host != "" {
+		if err := unstructured.SetNestedField(route.Object, host, "spec", "host"); err != nil {
+			return nil, fmt.Errorf("set route host: %w", err)
+		}
+	}
+
+	if stsUID != "" {
+		ownerRefs := []interface{}{
+			map[string]interface{}{
+				"apiVersion":         "apps/v1",
+				"kind":               "StatefulSet",
+				"name":               routeName,
+				"uid":                stsUID,
+				"controller":         true,
+				"blockOwnerDeletion": true,
+			},
+		}
+		if err := unstructured.SetNestedSlice(route.Object, ownerRefs, "metadata", "ownerReferences"); err != nil {
+			return nil, fmt.Errorf("set route ownerReferences: %w", err)
+		}
+	}
+
+	return route, nil
+}
+
+func (r *GatewayReconciler) readCACert(ctx context.Context, namespace string) (string, error) {
+	secretGVR := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "secrets"}
+	secret, err := r.dynamicClient.Resource(secretGVR).Namespace(namespace).Get(ctx, "openshell-server-tls", metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("get openshell-server-tls: %w", err)
+	}
+
+	data, found, err := unstructured.NestedMap(secret.Object, "data")
+	if err != nil {
+		return "", fmt.Errorf("read openshell-server-tls data: %w", err)
+	}
+	if !found {
+		return "", fmt.Errorf("openshell-server-tls has no data field")
+	}
+
+	caCertB64, ok := data["ca.crt"].(string)
+	if !ok || caCertB64 == "" {
+		return "", fmt.Errorf("openshell-server-tls missing ca.crt")
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(caCertB64)
+	if err != nil {
+		return "", fmt.Errorf("decode ca.crt: %w", err)
+	}
+
+	return string(decoded), nil
+}
+
+func (r *GatewayReconciler) getStatefulSetUID(ctx context.Context, namespace, name string) (string, error) {
+	stsGVR := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "statefulsets"}
+	sts, err := r.dynamicClient.Resource(stsGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("get statefulset %s: %w", name, err)
+	}
+	return string(sts.GetUID()), nil
+}
+
+func (r *GatewayReconciler) reconcileRouteAddress(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway, namespace, routeName string) error {
+	route, err := r.dynamicClient.Resource(routeGVR).Namespace(namespace).Get(ctx, routeName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("get route for address reconciliation: %w", err)
+	}
+
+	ingress, found, err := unstructured.NestedSlice(route.Object, "status", "ingress")
+	if err != nil {
+		return fmt.Errorf("read route status ingress: %w", err)
+	}
+	if !found || len(ingress) == 0 {
+		return nil
+	}
+
+	firstIngress, ok := ingress[0].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	host, _, err := unstructured.NestedString(firstIngress, "host")
+	if err != nil {
+		return fmt.Errorf("read route ingress host: %w", err)
+	}
+	if host == "" {
+		return nil
+	}
+
+	routeAddress := "https://" + host
+	if gw.RouteAddress == routeAddress {
+		return nil
+	}
+
+	patch := types.NewGatewayPatchBuilder().RouteAddress(routeAddress).Build()
+	if _, err := projectClient.Gateways().Update(ctx, gw.ID, patch); err != nil {
+		return fmt.Errorf("update routeAddress for gateway %s: %w", gw.ID, err)
+	}
+
+	r.logger.Info().
+		Str("gateway_name", gw.Name).
+		Str("route_address", routeAddress).
+		Msg("updated gateway routeAddress")
+	return nil
+}
+
+func (r *GatewayReconciler) deleteRouteIfExists(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway, namespace, routeName string) error {
+	_, err := r.dynamicClient.Resource(routeGVR).Namespace(namespace).Get(ctx, routeName, metav1.GetOptions{})
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("get route for deletion: %w", err)
+	}
+
+	if err := r.dynamicClient.Resource(routeGVR).Namespace(namespace).Delete(ctx, routeName, metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
+		return fmt.Errorf("delete route: %w", err)
+	}
+
+	r.logger.Info().Str("namespace", namespace).Msg("deleted OpenShift Route for gateway")
+
+	if gw.RouteAddress != "" {
+		patch := types.NewGatewayPatchBuilder().RouteAddress("").Build()
+		if _, patchErr := projectClient.Gateways().Update(ctx, gw.ID, patch); patchErr != nil {
+			return fmt.Errorf("clear routeAddress for gateway %s: %w", gw.ID, patchErr)
+		}
+	}
+
+	return nil
 }

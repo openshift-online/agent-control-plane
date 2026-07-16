@@ -456,6 +456,7 @@ func kindToResource(kind string) string {
 		"ClusterRoleBinding": "clusterrolebindings",
 		"NetworkPolicy":      "networkpolicies",
 		"Secret":             "secrets",
+		"Route":              "routes",
 	}
 
 	if resource, ok := mapping[kind]; ok {

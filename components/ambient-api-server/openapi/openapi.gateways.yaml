@@ -251,6 +251,21 @@ components:
               description: JSON-encoded annotations
             oidc:
               $ref: '#/components/schemas/GatewayOidc'
+            route:
+              $ref: '#/components/schemas/GatewayRoute'
+            routeAddress:
+              type: string
+              readOnly: true
+              description: Externally reachable address assigned by the OpenShift Route (set by control plane)
+    # NEW SCHEMA START
+    GatewayRoute:
+    # NEW SCHEMA END
+      type: object
+      description: Route configuration for external gateway exposure on OpenShift
+      properties:
+        host:
+          type: string
+          description: Hostname for the OpenShift Route. If empty, OpenShift assigns a hostname based on the cluster's default routing suffix.
     # NEW SCHEMA START
     GatewayOidc:
     # NEW SCHEMA END
@@ -312,6 +327,11 @@ components:
           type: string
         oidc:
           $ref: '#/components/schemas/GatewayOidc'
+        route:
+          $ref: '#/components/schemas/GatewayRoute'
+        route_address:
+          type: string
+          description: Externally reachable address assigned by the OpenShift Route (set by control plane)
   parameters:
       id:
         name: id
