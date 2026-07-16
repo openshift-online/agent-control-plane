@@ -294,7 +294,13 @@ The Gateway API response SHALL include the Route's external address so that CLI 
 
 ### Requirement: CLI Route Address Display
 
-The `acpctl get gateway` command SHALL display the Route address when available. The `acpctl gateway setup-cli` command SHALL be an API-only operation — it queries the ACP API server for the gateway's `routeAddress` and runs the `openshell gateway add` command to register the gateway locally. It does NOT interact with the Kubernetes or OpenShift cluster directly (no `kubectl`, no cert extraction, no port-forwarding). A `--print` flag outputs the command instead of executing it.
+The `acpctl get gateway` command SHALL display the Route address when available.
+
+The `acpctl gateway setup-cli` command operates in two modes:
+
+1. **Default (API-only):** Queries the ACP API server for the gateway's `routeAddress` and runs the `openshell gateway add` command to register the gateway locally. It does NOT interact with the Kubernetes or OpenShift cluster directly (no `kubectl`, no cert extraction, no port-forwarding). If no `routeAddress` is available, it errors. Use `--print` to output the command instead of executing it.
+
+2. **`--kubectl` mode:** When `--kubectl` is passed and no `routeAddress` is available, the CLI falls back to direct cluster access — it locates the gateway via `kubectl`, manages a port-forward, extracts TLS/mTLS certificates, and sets up the openshell CLI using the local forwarded address. This mode requires `kubectl` access to the cluster.
 
 #### Scenario: Gateway table includes route address
 
@@ -344,12 +350,48 @@ The `acpctl get gateway` command SHALL display the Route address when available.
 - THEN the CLI SHALL print the `openshell gateway add` command to stdout instead of executing it
 - AND the user can copy and run the command manually
 
-#### Scenario: setup-cli errors when no route address is available
+#### Scenario: setup-cli errors when no route and no --kubectl
 
 - GIVEN a Gateway without a populated `routeAddress` (no Route configured or Route not yet assigned a hostname)
-- WHEN a user runs `acpctl gateway setup-cli <name>`
+- WHEN a user runs `acpctl gateway setup-cli <name>` without `--kubectl`
 - THEN the CLI SHALL exit with an error indicating that the gateway has no external Route address
-- AND the error message SHALL suggest configuring a Route on the gateway to expose it externally
+- AND the error message SHALL suggest configuring a Route on the gateway to expose it externally, or using `--kubectl` if the user has cluster access
+
+#### Scenario: setup-cli with --kubectl locates gateway and sets up port-forward
+
+- GIVEN a Gateway without a populated `routeAddress`
+- AND the user has `kubectl` access to the cluster
+- WHEN the user runs `acpctl gateway setup-cli <name> --kubectl`
+- THEN the CLI SHALL query the ACP API server to retrieve the gateway resource (project, name)
+- AND it SHALL use `kubectl` to locate the gateway Service in the project namespace
+- AND it SHALL check for an existing port-forward to the gateway Service
+- AND if no active port-forward exists, it SHALL start a `kubectl port-forward` to the gateway Service on a local port
+- AND it SHALL use `kubectl` to extract TLS/mTLS certificates from the gateway's namespace (e.g., `openshell-client-tls` Secret: `ca.crt`, `tls.crt`, `tls.key`)
+- AND it SHALL write the certificates to `~/.config/openshell/gateways/<project>-<gateway-name>/mtls/`
+- AND it SHALL execute `openshell gateway add` with the local forwarded address (e.g., `https://localhost:<port>`)
+- AND it SHALL verify connectivity via `openshell status -g <project>-<gateway-name>` after registration
+
+#### Scenario: setup-cli with --kubectl and --print
+
+- GIVEN a Gateway without a populated `routeAddress`
+- AND the user has `kubectl` access to the cluster
+- WHEN the user runs `acpctl gateway setup-cli <name> --kubectl --print`
+- THEN the CLI SHALL still locate the gateway, manage the port-forward, and extract certificates
+- AND it SHALL print the `openshell gateway add` command to stdout instead of executing it
+
+#### Scenario: setup-cli with --kubectl prefers route address when available
+
+- GIVEN a Gateway with a populated `routeAddress`
+- WHEN the user runs `acpctl gateway setup-cli <name> --kubectl`
+- THEN the CLI SHALL use the `routeAddress` (the Route path) and SHALL NOT start a port-forward or extract certificates
+- AND `--kubectl` SHALL be effectively ignored when a Route address is available
+
+#### Scenario: setup-cli with --kubectl fails when kubectl is unavailable
+
+- GIVEN a Gateway without a populated `routeAddress`
+- AND `kubectl` is not in the user's PATH or the user lacks cluster access
+- WHEN the user runs `acpctl gateway setup-cli <name> --kubectl`
+- THEN the CLI SHALL exit with an error indicating that `kubectl` is required but not available or not authorized
 
 ---
 
@@ -517,7 +559,7 @@ route: {}
 | `gateway/validation.go` | Extended to validate `route.host` format |
 | `acpctl get gateways` | Adds `ROUTE` column to existing table (NAME, IMAGE, DNS NAMES, AGE) |
 | `acpctl get gateway <name>` | Adds Route address to Connection Info section (alongside Cluster DNS, Server SANs) |
-| `acpctl gateway setup-cli` | API-only: queries `routeAddress` from API server, runs `openshell gateway add`. `--print` outputs the command instead. Errors if no Route address. No kubectl/cert interaction |
+| `acpctl gateway setup-cli` | Default: API-only, uses `routeAddress` to run `openshell gateway add`. `--kubectl`: falls back to port-forward and cert extraction when no Route. `--print`: outputs command instead of executing |
 | OpenAPI schema | Extended with `GatewayRoute` and `routeAddress` |
 | DB migration | New migration adds `route` (JSONB) and `route_address` (text) columns |
 | Go/Python/TS SDKs | Extended with `Route` and `RouteAddress` fields |
