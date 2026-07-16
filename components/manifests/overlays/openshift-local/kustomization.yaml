@@ -8,9 +8,7 @@ resources:
 - secrets.yaml
 - test-user.yaml
 - postgresql-credentials.yaml
-- minio-credentials.yaml
 - mlflow-db-credentials.yaml
-- postgresql-init-scripts.yaml
 - ldap-config.yaml
 - ldap-credentials.yaml
 - keycloak-deployment.yaml
@@ -41,26 +39,18 @@ patches:
   target:
     kind: Namespace
     name: ambient-code
-- path: minio-pvc-patch.yaml
-  target:
-    kind: PersistentVolumeClaim
-    name: minio-data
-- path: postgresql-pvc-patch.yaml
-  target:
-    kind: PersistentVolumeClaim
-    name: postgresql-data
-- path: postgresql-init-scripts-patch.yaml
-  target:
-    group: apps
-    version: v1
-    kind: Deployment
-    name: postgresql
 - path: api-server-security-patch.yaml
   target:
     group: apps
     version: v1
     kind: Deployment
     name: ambient-api-server
+
+replicas:
+- name: minio
+  count: 0
+- name: postgresql
+  count: 0
 
 configMapGenerator:
 - name: keycloak-realm-config
