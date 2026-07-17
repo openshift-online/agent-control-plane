@@ -277,10 +277,9 @@ type oidcTokenFile struct {
 	ClientID     string `json:"client_id"`
 }
 
-// fetchClientTLS retrieves the openshell-client-tls secret from the
-// gateway's namespace and writes ca.crt, tls.crt, and tls.key to the
-// local openshell config. This lets openshell verify the gateway's TLS
-// cert and perform mTLS client auth without --gateway-insecure.
+// fetchClientTLS extracts mTLS certificates from the gateway's namespace:
+//   - ca.crt from openshell-ca-tls (root CA that signed the server cert)
+//   - tls.crt/tls.key from openshell-client-tls (client identity)
 func fetchClientTLS(localName, namespace string) error {
 	if _, err := exec.LookPath("kubectl"); err != nil {
 		return fmt.Errorf("kubectl not found in PATH")
@@ -296,24 +295,24 @@ func fetchClientTLS(localName, namespace string) error {
 		return fmt.Errorf("create mtls dir: %w", err)
 	}
 
-	secretName := "openshell-server-tls"
 	files := []struct {
-		field string
-		name  string
-		perm  os.FileMode
+		secret string
+		field  string
+		name   string
+		perm   os.FileMode
 	}{
-		{"ca\\.crt", "ca.crt", 0644},
-		{"tls\\.crt", "tls.crt", 0644},
-		{"tls\\.key", "tls.key", 0600},
+		{"openshell-ca-tls", "ca\\.crt", "ca.crt", 0644},
+		{"openshell-client-tls", "tls\\.crt", "tls.crt", 0644},
+		{"openshell-client-tls", "tls\\.key", "tls.key", 0600},
 	}
 
 	for _, f := range files {
-		out, err := exec.Command("kubectl", "get", "secret", secretName,
+		out, err := exec.Command("kubectl", "get", "secret", f.secret,
 			"-n", namespace,
 			"-o", fmt.Sprintf("jsonpath={.data.%s}", f.field),
 		).Output()
 		if err != nil {
-			return fmt.Errorf("fetch %s from %s/%s: %w", f.name, namespace, secretName, err)
+			return fmt.Errorf("fetch %s from %s/%s: %w", f.name, namespace, f.secret, err)
 		}
 
 		decoded, err := base64.StdEncoding.DecodeString(string(out))

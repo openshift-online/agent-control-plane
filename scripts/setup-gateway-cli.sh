@@ -49,8 +49,9 @@ for NS in "${NAMESPACES[@]}"; do
     continue
   fi
 
-  if ! kubectl get secret openshell-server-tls -n "$NS" &>/dev/null; then
-    echo "  Error: openshell-server-tls secret not found in '$NS'; skipping"
+  if ! kubectl get secret openshell-ca-tls -n "$NS" &>/dev/null || \
+     ! kubectl get secret openshell-client-tls -n "$NS" &>/dev/null; then
+    echo "  Error: openshell-ca-tls or openshell-client-tls secret not found in '$NS'; skipping"
     echo ""
     continue
   fi
@@ -123,8 +124,8 @@ for NS in "${NAMESPACES[@]}"; do
     # flow, which is not suitable for automated setup. `acpctl gateway setup-cli`
     # can inject OIDC tokens non-interactively when acpctl is already logged in.
     mkdir -p "$CERT_DIR"
-    echo "  Extracting CA cert from openshell-server-tls..."
-    kubectl get secret openshell-server-tls -n "$NS" \
+    echo "  Extracting CA cert from openshell-ca-tls..."
+    kubectl get secret openshell-ca-tls -n "$NS" \
       -o jsonpath='{.data.ca\.crt}' | base64 -d > "$CERT_DIR/ca.crt"
 
     echo "  OIDC gateway $GW_NAME -> https://localhost:$PORT"
@@ -138,12 +139,12 @@ for NS in "${NAMESPACES[@]}"; do
     # mTLS-authenticated gateway — extract certs so they are on disk for the
     # openshell CLI. Print the acpctl command the user should run to register.
     mkdir -p "$CERT_DIR"
-    echo "  Extracting mTLS certs from openshell-server-tls..."
-    kubectl get secret openshell-server-tls -n "$NS" \
+    echo "  Extracting mTLS certs (ca from openshell-ca-tls, client from openshell-client-tls)..."
+    kubectl get secret openshell-ca-tls -n "$NS" \
       -o jsonpath='{.data.ca\.crt}' | base64 -d > "$CERT_DIR/ca.crt"
-    kubectl get secret openshell-server-tls -n "$NS" \
+    kubectl get secret openshell-client-tls -n "$NS" \
       -o jsonpath='{.data.tls\.crt}' | base64 -d > "$CERT_DIR/tls.crt"
-    kubectl get secret openshell-server-tls -n "$NS" \
+    kubectl get secret openshell-client-tls -n "$NS" \
       -o jsonpath='{.data.tls\.key}' | base64 -d > "$CERT_DIR/tls.key"
 
     echo "  mTLS gateway $GW_NAME -> https://localhost:$PORT"

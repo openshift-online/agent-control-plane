@@ -116,21 +116,21 @@ _ensure_gateway_port_forward() {
 
   local cert_dir="$HOME/.config/openshell/gateways/${TENANT}/mtls"
   mkdir -p "$cert_dir"
-  kubectl get secret openshell-server-tls -n "${TENANT}" \
+  kubectl get secret openshell-ca-tls -n "${TENANT}" \
     -o jsonpath='{.data.ca\.crt}' | base64 -d > "$cert_dir/ca.crt"
-  kubectl get secret openshell-server-tls -n "${TENANT}" \
+  kubectl get secret openshell-client-tls -n "${TENANT}" \
     -o jsonpath='{.data.tls\.crt}' | base64 -d > "$cert_dir/tls.crt"
-  kubectl get secret openshell-server-tls -n "${TENANT}" \
+  kubectl get secret openshell-client-tls -n "${TENANT}" \
     -o jsonpath='{.data.tls\.key}' | base64 -d > "$cert_dir/tls.key"
 
-  openshell gateway add --name "${TENANT}" --local "https://localhost:${gw_port}" 2>/dev/null || true
+  openshell gateway add --name "${TENANT}" --local --gateway-insecure "https://localhost:${gw_port}" 2>/dev/null || true
 
   # Re-extract certs after registration (gateway add may overwrite them)
-  kubectl get secret openshell-server-tls -n "${TENANT}" \
+  kubectl get secret openshell-ca-tls -n "${TENANT}" \
     -o jsonpath='{.data.ca\.crt}' | base64 -d > "$cert_dir/ca.crt"
-  kubectl get secret openshell-server-tls -n "${TENANT}" \
+  kubectl get secret openshell-client-tls -n "${TENANT}" \
     -o jsonpath='{.data.tls\.crt}' | base64 -d > "$cert_dir/tls.crt"
-  kubectl get secret openshell-server-tls -n "${TENANT}" \
+  kubectl get secret openshell-client-tls -n "${TENANT}" \
     -o jsonpath='{.data.tls\.key}' | base64 -d > "$cert_dir/tls.key"
 
   openshell sandbox list --gateway "${TENANT}" &>/dev/null 2>&1

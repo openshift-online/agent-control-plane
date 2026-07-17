@@ -1155,12 +1155,12 @@ _kind-print-access:
 		NS=$$(basename "$$PORT_FILE" .port | sed 's/^kind-pf-openshell-//'); \
 		PORT=$$(cat "$$PORT_FILE"); \
 		if [ -n "$$PORT" ]; then \
-			echo "  Setup openshell:    $(COLOR_BOLD)acpctl gateway setup-cli --project $$NS --kubectl$(COLOR_RESET)"; \
+			echo "  Setup openshell:    $(COLOR_BOLD)acpctl gateway setup-cli --kubectl --project $$NS --name $$NS$(COLOR_RESET)"; \
 			GW_FOUND=1; \
 		fi; \
 	done; \
 	if [ "$$GW_FOUND" -eq 0 ]; then \
-		echo "  Setup openshell:    $(COLOR_BOLD)acpctl gateway setup-cli --project <namespace> --kubectl$(COLOR_RESET)"; \
+		echo "  Setup openshell:    $(COLOR_BOLD)acpctl gateway setup-cli --kubectl --project <namespace> --name <namespace>$(COLOR_RESET)"; \
 	fi
 	@echo "  Stop port-forwards: $(COLOR_BOLD)make kind-port-forward-stop$(COLOR_RESET)"
 	@echo "  Run tests:          $(COLOR_BOLD)make test-e2e$(COLOR_RESET)"

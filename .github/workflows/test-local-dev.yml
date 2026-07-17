@@ -214,13 +214,14 @@ jobs:
         kubectl port-forward -n ambient-code svc/keycloak-service 18592:11880 &
         sleep 3
 
-        # Wait for the gateway TLS secret — the certgen job may still be running
+        # Wait for the gateway TLS secrets — the certgen job may still be running
         for i in $(seq 1 60); do
-          if kubectl get secret openshell-server-tls -n tenant-a &>/dev/null; then
-            echo "openshell-server-tls secret ready in tenant-a"
+          if kubectl get secret openshell-ca-tls -n tenant-a &>/dev/null && \
+             kubectl get secret openshell-client-tls -n tenant-a &>/dev/null; then
+            echo "Gateway TLS secrets ready in tenant-a"
             break
           fi
-          echo "Waiting for openshell-server-tls secret in tenant-a... ($i/60)"
+          echo "Waiting for gateway TLS secrets in tenant-a... ($i/60)"
           sleep 5
         done
 
