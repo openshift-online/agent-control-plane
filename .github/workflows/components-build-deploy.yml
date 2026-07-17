@@ -270,6 +270,14 @@ jobs:
             ${{ matrix.component.image }}:${{ github.sha }}-arm64
 
 
+  test-local-dev:
+    needs: [build-matrix, build-amd64]
+    if: github.event_name == 'pull_request' && !failure() && !cancelled()
+    uses: ./.github/workflows/test-local-dev.yml
+    with:
+      image-tag: pr-${{ github.event.pull_request.number }}
+      built-images: ${{ needs.build-matrix.outputs.built-images }}
+
   build-ci-gate:
     name: Build CI Gate
     runs-on: ubuntu-latest
