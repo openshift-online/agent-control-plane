@@ -10,7 +10,7 @@
 .PHONY: unleash-port-forward unleash-status
 .PHONY: kind-port-forward kind-port-forward-stop _kind-start-port-forward _kind-print-access kind-acpctl-login kind-apply-examples
 .PHONY: setup-minio minio-console minio-logs minio-status
-.PHONY: validate-makefile lint-makefile check-shell makefile-health benchmark benchmark-ci
+.PHONY: validate-makefile lint-makefile check-shell makefile-health benchmark benchmark-ci apm-install
 .PHONY: _create-operator-config _auto-port-forward _show-access-info _kind-load-images _kind-preload-runner
 .PHONY: build-credential-sidecars build-credential-github build-credential-jira build-credential-k8s build-credential-google
 
@@ -297,6 +297,9 @@ test-cli: ## Test acpctl CLI
 
 setup-hooks: ## Install pre-commit hooks (linters + branch protection)
 	@./scripts/install-git-hooks.sh
+
+apm-install: ## Install APM skills (loads GITLAB_APM_PAT from .env.local)
+	@./scripts/apm-install.sh
 
 remove-hooks: ## Remove pre-commit hooks
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Removing git hooks..."

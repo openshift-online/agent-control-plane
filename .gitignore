@@ -158,7 +158,6 @@ components/credential-sidecars/entrypoint/entrypoint
 
 # APM (Agent Package Manager)
 apm_modules/
-apm.lock.yaml
 .local/
 
 # Local creds

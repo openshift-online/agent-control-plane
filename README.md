@@ -110,6 +110,29 @@ See [examples/README.md](examples/README.md) to deploy starter agents and vTeam 
 
 See [CONTRIBUTING.md](CONTRIBUTING.md#local-development-setup) for full local development setup.
 
+### Agent skills (APM)
+
+Upstream agent skills (Fleet SDLC, AI Security Harness, and related dependencies) are managed with [APM](https://microsoft.github.io/apm/). After cloning the repo:
+
+1. Copy the example env file and add your GitLab PAT (Red Hat internal; `read_repository` scope):
+
+   ```bash
+   cp .env.local.example .env.local
+   # Edit .env.local — uncomment and set:
+   #   GITLAB_HOST=gitlab.cee.redhat.com
+   #   GITLAB_APM_PAT=glpat_your_token
+   ```
+
+2. Install skills:
+
+   ```bash
+   make apm-install
+   ```
+
+   Equivalent: `apm run install` (defined in `apm.yml`).
+
+Skills are deployed to `.claude/skills/` (gitignored). Local project skills live under `skills/` and are checked into git. Re-run `make apm-install` after pulling manifest or lockfile changes.
+
 ### OpenShell Gateway (Kind)
 
 The control plane delegates sandbox creation to an OpenShell gateway by default. `make kind-up` automatically installs all prerequisites: the tenant namespace, and the [agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) CRD (v0.5.1). ACP will automatically install configuration similar to the [OpenShell gateway Helm chart](https://github.com/NVIDIA/OpenShell/tree/main/deploy/helm/openshell) when it is configured to manage a namespace.
