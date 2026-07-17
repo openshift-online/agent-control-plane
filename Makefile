@@ -1471,7 +1471,15 @@ kind-status: check-kind ## Show all kind clusters and their port assignments
 	@echo "  Name:     $(KIND_CLUSTER_NAME)"
 	@if [ -n "$(KIND_HOST)" ]; then echo "  Host:     $(KIND_HOST) (remote)"; else echo "  Host:     localhost"; fi
 	@echo "  NodePort: $(KIND_HTTP_PORT) (HTTP) / $(KIND_HTTPS_PORT) (HTTPS)"
-	@echo "  Forward:  $(KIND_FWD_FRONTEND_PORT) (frontend) / $(KIND_FWD_BACKEND_PORT) (backend) / $(KIND_FWD_KEYCLOAK_PORT) (keycloak) / $(KIND_FWD_GATEWAY_BASE_PORT)+ (gateways)"
+	@echo "  Forward:  $(KIND_FWD_FRONTEND_PORT) (frontend) / $(KIND_FWD_BACKEND_PORT) (backend) / $(KIND_FWD_KEYCLOAK_PORT) (keycloak)"
+	@GW_LINE=""; OFFSET=0; \
+	for NS in $(OPENSHELL_TENANTS); do \
+		PORT=$$(($(KIND_FWD_GATEWAY_BASE_PORT) + $$OFFSET)); \
+		if [ -n "$$GW_LINE" ]; then GW_LINE="$$GW_LINE / "; fi; \
+		GW_LINE="$$GW_LINE$$PORT ($$NS)"; \
+		OFFSET=$$(($$OFFSET + 1)); \
+	done; \
+	if [ -n "$$GW_LINE" ]; then echo "  Gateways: $$GW_LINE"; fi
 	@echo ""
 	@CLUSTERS=$$($(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null); \
 	if [ -z "$$CLUSTERS" ]; then \
