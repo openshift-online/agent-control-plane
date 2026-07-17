@@ -30,7 +30,7 @@ NAMESPACE="${NAMESPACE:-ambient-code}"
 TENANT="tenant-a"
 SKIP_CLEANUP=false
 TEST_FILTER=""
-export OPENSHELL_GATEWAY_INSECURE=true
+unset OPENSHELL_GATEWAY_INSECURE
 
 # Parse flags
 while [[ "${1:-}" == --* ]]; do
@@ -83,11 +83,12 @@ _ensure_port_forward
 
 _ensure_gateway_port_forward() {
   if ! command -v openshell &>/dev/null; then
+    echo "    openshell CLI not found" >&2
     return 1
   fi
 
   # Check if existing gateway registration is reachable
-  if openshell sandbox list --gateway "${TENANT}" &>/dev/null 2>&1; then
+  if openshell sandbox list --gateway "${TENANT}" &>/dev/null; then
     return 0
   fi
 
@@ -109,6 +110,7 @@ _ensure_gateway_port_forward() {
   rm -f "$gw_log"
 
   if [ -z "$gw_port" ]; then
+    echo "    Gateway port-forward failed — could not determine local port" >&2
     return 1
   fi
 
@@ -124,9 +126,9 @@ _ensure_gateway_port_forward() {
   kubectl get secret openshell-client-tls -n "${TENANT}" \
     -o jsonpath='{.data.tls\.key}' | base64 -d > "$cert_dir/tls.key"
 
-  openshell gateway add --name "${TENANT}" --local --gateway-insecure "https://localhost:${gw_port}" 2>/dev/null || true
+  openshell gateway add --name "${TENANT}" --local "https://localhost:${gw_port}" 2>/dev/null || true
 
-  # Re-extract certs after registration (gateway add may overwrite them)
+  # Re-extract certs after registration (gateway add clobbers the mtls directory)
   kubectl get secret openshell-ca-tls -n "${TENANT}" \
     -o jsonpath='{.data.ca\.crt}' | base64 -d > "$cert_dir/ca.crt"
   kubectl get secret openshell-client-tls -n "${TENANT}" \
@@ -134,7 +136,7 @@ _ensure_gateway_port_forward() {
   kubectl get secret openshell-client-tls -n "${TENANT}" \
     -o jsonpath='{.data.tls\.key}' | base64 -d > "$cert_dir/tls.key"
 
-  openshell sandbox list --gateway "${TENANT}" &>/dev/null 2>&1
+  openshell sandbox list --gateway "${TENANT}" &>/dev/null
 }
 
 RED='\033[0;31m'

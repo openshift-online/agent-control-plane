@@ -893,10 +893,20 @@ func (r *GatewayReconciler) reconcileOpenShiftSCC(ctx context.Context, namespace
 }
 
 func (r *GatewayReconciler) reconcileCertManagerResources(ctx context.Context, gw *types.Gateway, namespace string) error {
-	dnsNames := []interface{}{"openshell-gateway." + namespace + ".svc.cluster.local"}
+	dnsNames := []interface{}{
+		"openshell-gateway." + namespace + ".svc.cluster.local",
+		"localhost",
+	}
 	for _, dns := range gw.ServerDnsNames {
 		resolved := strings.ReplaceAll(dns, "NAMESPACE_PLACEHOLDER", namespace)
-		if resolved != dnsNames[0].(string) {
+		isDuplicate := false
+		for _, existing := range dnsNames {
+			if existing.(string) == resolved {
+				isDuplicate = true
+				break
+			}
+		}
+		if !isDuplicate {
 			dnsNames = append(dnsNames, resolved)
 		}
 	}

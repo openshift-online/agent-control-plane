@@ -285,9 +285,12 @@ func ApplyConfigOverrides(obj *unstructured.Unstructured, config GatewayConfig) 
 				}
 			}
 
-			// Add --server-san for each DNS name
+			// Add --server-san for each DNS name, plus localhost for port-forward access
+			newArgs = append(newArgs, "--server-san=localhost")
 			for _, dns := range config.ServerDnsNames {
-				newArgs = append(newArgs, fmt.Sprintf("--server-san=%s", dns))
+				if dns != "localhost" {
+					newArgs = append(newArgs, fmt.Sprintf("--server-san=%s", dns))
+				}
 			}
 
 			if err := unstructured.SetNestedStringSlice(containerMap, newArgs, "args"); err != nil {
