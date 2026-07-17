@@ -486,8 +486,7 @@ func (r *GatewayReconciler) buildGRPCRouteObject(namespace, routeName, hostname,
 				"kind":               "StatefulSet",
 				"name":               routeName,
 				"uid":                stsUID,
-				"controller":         true,
-				"blockOwnerDeletion": true,
+				"controller": true,
 			},
 		}
 		if err := unstructured.SetNestedSlice(route.Object, ownerRefs, "metadata", "ownerReferences"); err != nil {
@@ -515,8 +514,7 @@ func (r *GatewayReconciler) buildBackendTLSPolicy(namespace, routeName, stsUID s
 				"kind":               "StatefulSet",
 				"name":               routeName,
 				"uid":                stsUID,
-				"controller":         true,
-				"blockOwnerDeletion": true,
+				"controller": true,
 			},
 		}
 	}
@@ -565,8 +563,7 @@ func (r *GatewayReconciler) buildCAConfigMap(namespace, routeName, stsUID, caCer
 				"kind":               "StatefulSet",
 				"name":               routeName,
 				"uid":                stsUID,
-				"controller":         true,
-				"blockOwnerDeletion": true,
+				"controller": true,
 			},
 		}
 	}

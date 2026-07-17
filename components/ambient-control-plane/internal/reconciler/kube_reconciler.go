@@ -2297,11 +2297,11 @@ func (r *SimpleKubeReconciler) ensureSessionRole(ctx context.Context, namespace 
 	if sa, saErr := r.nsKube().GetServiceAccount(ctx, namespace, saName); saErr == nil {
 		ownerRefs = []interface{}{
 			map[string]interface{}{
-				"apiVersion":         "v1",
-				"kind":               "ServiceAccount",
-				"name":               saName,
-				"uid":                string(sa.GetUID()),
-				"blockOwnerDeletion": true,
+				"apiVersion": "v1",
+				"kind":       "ServiceAccount",
+				"name":       saName,
+				"uid":        string(sa.GetUID()),
+				"controller": true,
 			},
 		}
 	}
@@ -2407,11 +2407,11 @@ func (r *SimpleKubeReconciler) ensureSessionNetworkPolicy(ctx context.Context, n
 	if sa, saErr := r.nsKube().GetServiceAccount(ctx, namespace, saName); saErr == nil {
 		ownerRefs = []interface{}{
 			map[string]interface{}{
-				"apiVersion":         "v1",
-				"kind":               "ServiceAccount",
-				"name":               saName,
-				"uid":                string(sa.GetUID()),
-				"blockOwnerDeletion": true,
+				"apiVersion": "v1",
+				"kind":       "ServiceAccount",
+				"name":       saName,
+				"uid":        string(sa.GetUID()),
+				"controller": true,
 			},
 		}
 	}

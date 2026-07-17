@@ -6,4 +6,18 @@ spec:
   template:
     spec:
       securityContext:
-        runAsNonRoot: false
+        runAsNonRoot: true
+      containers:
+      - name: ambient-api-server
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
