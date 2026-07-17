@@ -33,3 +33,7 @@ spec:
               value: "true"
             - name: OPENSHELL_ENABLED
               value: "true"
+            - name: GATEWAY_IMAGE
+              value: "ghcr.io/nvidia/openshell/gateway:0.0.83"
+            - name: OIDC_ISSUER_URL
+              value: "https://keycloak-ambient-code.apps-crc.testing/realms/ambient-code"

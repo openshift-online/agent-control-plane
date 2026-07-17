@@ -173,6 +173,10 @@ objects:
                 value: "false"
               - name: JWK_CERT_URL
                 value: ${KEYCLOAK_REALM_URL}/protocol/openid-connect/certs
+              - name: OIDC_ISSUER_URL
+                value: ${KEYCLOAK_REALM_URL}
+              - name: GATEWAY_IMAGE
+                value: ${GATEWAY_IMAGE}
             command:
               - /usr/local/bin/ambient-api-server
               - serve
@@ -640,6 +644,9 @@ parameters:
   - name: DB_SSLMODE
     description: PostgreSQL SSL mode (disable for in-cluster, require for RDS)
     value: disable
+  - name: GATEWAY_IMAGE
+    description: Default OpenShell gateway container image
+    required: true
   - name: KEYCLOAK_REALM_URL
     description: Keycloak realm URL (e.g. https://keycloak.example.com/realms/ambient-code)
     required: true

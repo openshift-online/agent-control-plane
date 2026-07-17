@@ -3,6 +3,7 @@ package create
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -27,6 +28,7 @@ Valid resource types:
   agent           Create an agent
   role            Create a role
   role-binding    Create a role binding
+  gateway         Create an OpenShell gateway
 `,
 	Args: cobra.MinimumNArgs(1),
 	RunE: run,
@@ -56,6 +58,19 @@ var createArgs struct {
 	bindSessionID string
 	bindCredID    string
 	scopeID       string
+
+	gwImage          string
+	gwServerDns      string
+	gwConfig         string
+	gwLabels         string
+	gwAnnotations    string
+	gwOidcIssuer     string
+	gwOidcAudience   string
+	gwOidcJwksTtl    int
+	gwOidcRolesClaim string
+	gwOidcAdminRole  string
+	gwOidcUserRole   string
+	gwOidcScopesClaim string
 }
 
 func init() {
@@ -82,6 +97,19 @@ func init() {
 	Cmd.Flags().StringVar(&createArgs.bindSessionID, "session-id-fk", "", "Session FK for role-binding")
 	Cmd.Flags().StringVar(&createArgs.bindCredID, "credential-id-fk", "", "Credential FK for role-binding")
 	Cmd.Flags().StringVar(&createArgs.scopeID, "scope-id", "", "Scope target ID for role-binding (shorthand for --{scope}-id-fk)")
+
+	Cmd.Flags().StringVar(&createArgs.gwImage, "image", "", "Gateway container image reference")
+	Cmd.Flags().StringVar(&createArgs.gwServerDns, "server-dns-names", "", "Comma-separated DNS names for TLS cert generation")
+	Cmd.Flags().StringVar(&createArgs.gwConfig, "config", "", "OpenShell gateway TOML configuration")
+	Cmd.Flags().StringVar(&createArgs.gwLabels, "labels", "", "Key=value pairs (comma-separated)")
+	Cmd.Flags().StringVar(&createArgs.gwAnnotations, "annotations", "", "Key=value pairs (comma-separated)")
+	Cmd.Flags().StringVar(&createArgs.gwOidcIssuer, "oidc-issuer", "", "OIDC issuer URL (default: set by platform)")
+	Cmd.Flags().StringVar(&createArgs.gwOidcAudience, "oidc-audience", "", "Expected aud claim in JWT")
+	Cmd.Flags().IntVar(&createArgs.gwOidcJwksTtl, "oidc-jwks-ttl", 0, "JWKS key cache retention in seconds")
+	Cmd.Flags().StringVar(&createArgs.gwOidcRolesClaim, "oidc-roles-claim", "", "Dot-delimited path to roles array in JWT")
+	Cmd.Flags().StringVar(&createArgs.gwOidcAdminRole, "oidc-admin-role", "", "Role name conferring admin access")
+	Cmd.Flags().StringVar(&createArgs.gwOidcUserRole, "oidc-user-role", "", "Role name conferring user access")
+	Cmd.Flags().StringVar(&createArgs.gwOidcScopesClaim, "oidc-scopes-claim", "", "Dot-delimited path to scopes array in JWT")
 }
 
 func run(cmd *cobra.Command, cmdArgs []string) error {
@@ -113,8 +141,10 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return createRole(cmd, ctx, client)
 	case "role-binding", "rolebinding", "rb":
 		return createRoleBinding(cmd, ctx, client)
+	case "gateway", "gateways", "gw":
+		return createGateway(cmd, ctx, client)
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-agent, agent, role, role-binding", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-agent, agent, role, role-binding, gateway", cmdArgs[0])
 	}
 }
 
@@ -360,4 +390,113 @@ func createRoleBinding(cmd *cobra.Command, ctx context.Context, client *sdkclien
 	}
 
 	return printCreated(cmd, "role-binding", created.ID, created)
+}
+
+func createGateway(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	projectID := cfg.GetProject()
+	if cmd.Flags().Changed("project") {
+		projectID = createArgs.projectID
+	}
+	if projectID == "" {
+		return fmt.Errorf("no project set; use --project or run 'acpctl project <name>' first")
+	}
+
+	gw := &sdktypes.Gateway{
+		ProjectID: projectID,
+	}
+
+	if cmd.Flags().Changed("name") {
+		gw.Name = createArgs.name
+	}
+	if cmd.Flags().Changed("image") {
+		gw.Image = createArgs.gwImage
+	}
+	if cmd.Flags().Changed("server-dns-names") {
+		gw.ServerDnsNames = strings.Split(createArgs.gwServerDns, ",")
+	}
+	if cmd.Flags().Changed("config") {
+		gw.Config = createArgs.gwConfig
+	}
+	if cmd.Flags().Changed("labels") {
+		parsed, parseErr := parseKeyValuePairs(createArgs.gwLabels)
+		if parseErr != nil {
+			return fmt.Errorf("invalid --labels: %w", parseErr)
+		}
+		raw, _ := json.Marshal(parsed)
+		gw.Labels = string(raw)
+	}
+	if cmd.Flags().Changed("annotations") {
+		parsed, parseErr := parseKeyValuePairs(createArgs.gwAnnotations)
+		if parseErr != nil {
+			return fmt.Errorf("invalid --annotations: %w", parseErr)
+		}
+		raw, _ := json.Marshal(parsed)
+		gw.Annotations = string(raw)
+	}
+
+	var oidc *sdktypes.GatewayOidc
+	oidcFlags := []string{"oidc-issuer", "oidc-audience", "oidc-jwks-ttl", "oidc-roles-claim", "oidc-admin-role", "oidc-user-role", "oidc-scopes-claim"}
+	for _, f := range oidcFlags {
+		if cmd.Flags().Changed(f) {
+			oidc = &sdktypes.GatewayOidc{}
+			break
+		}
+	}
+	if oidc != nil {
+		if cmd.Flags().Changed("oidc-issuer") {
+			oidc.Issuer = createArgs.gwOidcIssuer
+		}
+		if cmd.Flags().Changed("oidc-audience") {
+			oidc.Audience = createArgs.gwOidcAudience
+		}
+		if cmd.Flags().Changed("oidc-jwks-ttl") {
+			oidc.JwksTtl = createArgs.gwOidcJwksTtl
+		}
+		if cmd.Flags().Changed("oidc-roles-claim") {
+			oidc.RolesClaim = createArgs.gwOidcRolesClaim
+		}
+		if cmd.Flags().Changed("oidc-admin-role") {
+			oidc.AdminRole = createArgs.gwOidcAdminRole
+		}
+		if cmd.Flags().Changed("oidc-user-role") {
+			oidc.UserRole = createArgs.gwOidcUserRole
+		}
+		if cmd.Flags().Changed("oidc-scopes-claim") {
+			oidc.ScopesClaim = createArgs.gwOidcScopesClaim
+		}
+		gw.Oidc = oidc
+	}
+
+	created, err := client.Gateways().Create(ctx, gw)
+	if err != nil {
+		var apiErr *sdktypes.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
+			return fmt.Errorf("project %q not found — create the project first or run 'acpctl project <name>'", projectID)
+		}
+		return fmt.Errorf("create gateway: %w", err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "gateway/%s created in project %s\n", created.Name, projectID)
+	return nil
+}
+
+func parseKeyValuePairs(input string) (map[string]string, error) {
+	result := make(map[string]string)
+	for _, pair := range strings.Split(input, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("expected key=value, got %q", pair)
+		}
+		result[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+	}
+	return result, nil
 }
