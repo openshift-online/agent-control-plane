@@ -95,7 +95,7 @@ All Gateway data model attributes are available as flags. When a flag is omitted
 | `--config` | No | `""` | OpenShell gateway TOML configuration |
 | `--labels` | No | Server defaults | Key=value pairs (comma-separated or repeated flag) |
 | `--annotations` | No | `""` | Key=value pairs (comma-separated or repeated flag) |
-| `--oidc-issuer` | No | Server default (`OIDC_ISSUER_URL` env var) | OIDC issuer URL |
+| `--oidc-issuer` | No | Set by platform | OIDC issuer URL |
 | `--oidc-audience` | No | `openshell-cli` | Expected `aud` claim in JWT |
 | `--oidc-jwks-ttl` | No | `3600` | JWKS key cache retention in seconds |
 | `--oidc-roles-claim` | No | `realm_access.roles` | Dot-delimited path to roles array in JWT |
