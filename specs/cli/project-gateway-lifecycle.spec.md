@@ -102,6 +102,7 @@ All Gateway data model attributes are available as flags. When a flag is omitted
 | `--oidc-admin-role` | No | `openshell-admin` | Role name conferring admin access |
 | `--oidc-user-role` | No | `openshell-user` | Role name conferring user access |
 | `--oidc-scopes-claim` | No | `""` | Dot-delimited path to scopes array in JWT |
+| `--route-host` | No | `""` (auto-derived) | Hostname for GRPCRoute exposure; route is enabled by default |
 
 **No flags are required.** If the user has entered a project via `acpctl project <name>`, then `acpctl create gateway` with zero flags SHALL work — project from context, name auto-generated, all other fields from server-side defaults.
 
@@ -119,6 +120,7 @@ When the API server receives a gateway create request with absent fields, it SHA
 | `oidc.roles_claim` | `realm_access.roles` | Fixed default |
 | `oidc.admin_role` | `openshell-admin` | Fixed default |
 | `oidc.user_role` | `openshell-user` | Fixed default |
+| `route` | `{}` (enabled, hostname auto-derived) | Fixed default — route creation enabled; hostname derived by control plane |
 | `labels` | `{"purpose": "openshell", "env": "dev", "auth": "oidc"}` | Fixed defaults |
 
 The OIDC issuer is read from the API server's `OIDC_ISSUER_URL` environment variable, which is a required deployment configuration (similar to `SSO_REALM_URL` on the UI). The CLI user does not need to provide `--oidc-issuer` unless overriding the server default.
@@ -138,6 +140,7 @@ oidc:
   roles_claim: realm_access.roles
   admin_role: openshell-admin
   user_role: openshell-user
+route: {}
 labels:
   purpose: openshell
   env: dev

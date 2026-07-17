@@ -72,6 +72,7 @@ var createArgs struct {
 	gwOidcAdminRole   string
 	gwOidcUserRole    string
 	gwOidcScopesClaim string
+	gwRouteHost       string
 
 	apiServerURL string
 	role         string
@@ -115,6 +116,7 @@ func init() {
 	Cmd.Flags().StringVar(&createArgs.gwOidcAdminRole, "oidc-admin-role", "", "Role name conferring admin access")
 	Cmd.Flags().StringVar(&createArgs.gwOidcUserRole, "oidc-user-role", "", "Role name conferring user access")
 	Cmd.Flags().StringVar(&createArgs.gwOidcScopesClaim, "oidc-scopes-claim", "", "Dot-delimited path to scopes array in JWT")
+	Cmd.Flags().StringVar(&createArgs.gwRouteHost, "route-host", "", "Hostname for GRPCRoute exposure (empty = auto-derived)")
 	Cmd.Flags().StringVar(&createArgs.apiServerURL, "api-server-url", "", "Cluster API server URL")
 	Cmd.Flags().StringVar(&createArgs.role, "role", "", "Cluster role (gateway, workload, hybrid)")
 	Cmd.Flags().StringVar(&createArgs.credentialID, "credential-id", "", "Credential ID for cluster")
@@ -480,6 +482,12 @@ func createGateway(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 			oidc.ScopesClaim = createArgs.gwOidcScopesClaim
 		}
 		gw.Oidc = oidc
+	}
+
+	if cmd.Flags().Changed("route-host") {
+		gw.Route = &sdktypes.GatewayRoute{
+			Host: createArgs.gwRouteHost,
+		}
 	}
 
 	created, err := client.Gateways().Create(ctx, gw)

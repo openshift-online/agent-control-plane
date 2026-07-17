@@ -63,6 +63,13 @@ func PresentGateway(gw *Gateway) openapi.Gateway {
 		Config:    gw.Config,
 	}
 
+	if gw.Labels != nil {
+		result.Labels = gw.Labels
+	}
+	if gw.Annotations != nil {
+		result.Annotations = gw.Annotations
+	}
+
 	if gw.ServerDnsNames != nil {
 		var dnsNames []string
 		if err := json.Unmarshal([]byte(*gw.ServerDnsNames), &dnsNames); err == nil {

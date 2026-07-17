@@ -62,6 +62,12 @@ func applyGatewayDefaults(gw *Gateway, projectID string) {
 		s := string(raw)
 		gw.Oidc = &s
 	}
+	if gw.Route == nil {
+		routeDefault := map[string]interface{}{}
+		raw, _ := json.Marshal(routeDefault)
+		s := string(raw)
+		gw.Route = &s
+	}
 	if gw.Labels == nil {
 		labelsDefault := map[string]string{
 			"purpose": "openshell",
