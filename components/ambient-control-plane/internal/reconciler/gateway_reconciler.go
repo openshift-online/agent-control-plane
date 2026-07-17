@@ -482,10 +482,10 @@ func (r *GatewayReconciler) buildGRPCRouteObject(namespace, routeName, hostname,
 	if stsUID != "" {
 		ownerRefs := []interface{}{
 			map[string]interface{}{
-				"apiVersion":         "apps/v1",
-				"kind":               "StatefulSet",
-				"name":               routeName,
-				"uid":                stsUID,
+				"apiVersion": "apps/v1",
+				"kind":       "StatefulSet",
+				"name":       routeName,
+				"uid":        stsUID,
 				"controller": true,
 			},
 		}
@@ -510,10 +510,10 @@ func (r *GatewayReconciler) buildBackendTLSPolicy(namespace, routeName, stsUID s
 	if stsUID != "" {
 		metadata["ownerReferences"] = []interface{}{
 			map[string]interface{}{
-				"apiVersion":         "apps/v1",
-				"kind":               "StatefulSet",
-				"name":               routeName,
-				"uid":                stsUID,
+				"apiVersion": "apps/v1",
+				"kind":       "StatefulSet",
+				"name":       routeName,
+				"uid":        stsUID,
 				"controller": true,
 			},
 		}
@@ -559,10 +559,10 @@ func (r *GatewayReconciler) buildCAConfigMap(namespace, routeName, stsUID, caCer
 	if stsUID != "" {
 		metadata["ownerReferences"] = []interface{}{
 			map[string]interface{}{
-				"apiVersion":         "apps/v1",
-				"kind":               "StatefulSet",
-				"name":               routeName,
-				"uid":                stsUID,
+				"apiVersion": "apps/v1",
+				"kind":       "StatefulSet",
+				"name":       routeName,
+				"uid":        stsUID,
 				"controller": true,
 			},
 		}
