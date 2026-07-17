@@ -17,10 +17,11 @@
         "http://localhost/*",
         "http://127.0.0.1/*",
         "http://frontend-service:3000/*",
-        "http://frontend-service.ambient-code.svc.cluster.local:3000/*"
+        "http://frontend-service.ambient-code.svc.cluster.local:3000/*",
+        "https://ambient-ui-ambient-code.apps-crc.testing/*"
       ],
       "attributes": {
-        "post.logout.redirect.uris": "http://localhost/*##http://frontend-service:3000/*"
+        "post.logout.redirect.uris": "http://localhost/*##http://frontend-service:3000/*##https://ambient-ui-ambient-code.apps-crc.testing/*"
       },
       "webOrigins": [
         "+"

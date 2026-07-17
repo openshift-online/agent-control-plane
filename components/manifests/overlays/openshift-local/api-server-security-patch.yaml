@@ -8,7 +8,7 @@ spec:
       securityContext:
         runAsNonRoot: true
       containers:
-      - name: ambient-api-server
+      - name: api-server
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:

@@ -93,6 +93,12 @@ See [OpenShell Sandbox Provisioning Spec](specs/platform/openshell-sandbox-provi
 
 ### Setup for OpenShift Local (CRC)
 
+If this is a fresh CRC install, run initial setup first:
+
+```bash
+crc setup                      # Downloads VM image, configures hypervisor (first-time only)
+```
+
 Recommended CRC configuration (run before `crc start`):
 
 ```bash
