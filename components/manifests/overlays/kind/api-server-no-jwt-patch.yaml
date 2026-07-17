@@ -10,6 +10,8 @@
   - name: auth-config
     configMap:
       name: ambient-api-server-auth
+  - name: tmp
+    emptyDir: {}
 - op: replace
   path: /spec/template/spec/containers/0/volumeMounts
   value:
