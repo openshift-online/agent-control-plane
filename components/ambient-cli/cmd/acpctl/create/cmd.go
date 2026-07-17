@@ -243,15 +243,25 @@ func createProject(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 func createAgent(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
 	warnUnusedFlags(cmd, "repo-url", "model", "max-tokens", "temperature", "timeout", "display-name", "description", "owner-user-id", "permissions", "user-id", "role-id", "scope", "project-fk", "agent-id-fk", "session-id-fk", "credential-id-fk")
 
-	if createArgs.projectID == "" {
-		return fmt.Errorf("--project is required")
-	}
 	if createArgs.name == "" {
 		return fmt.Errorf("--name is required")
 	}
 
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	projectID := cfg.GetProject()
+	if cmd.Flags().Changed("project") {
+		projectID = createArgs.projectID
+	}
+	if projectID == "" {
+		return fmt.Errorf("no project set; use --project or run 'acpctl project <name>' first")
+	}
+
 	builder := sdktypes.NewAgentBuilder().
-		ProjectID(createArgs.projectID).
+		ProjectID(projectID).
 		Name(createArgs.name)
 
 	if createArgs.prompt != "" {
@@ -263,7 +273,7 @@ func createAgent(cmd *cobra.Command, ctx context.Context, client *sdkclient.Clie
 		return fmt.Errorf("build agent: %w", err)
 	}
 
-	created, err := client.Agents().CreateInProject(ctx, createArgs.projectID, pa)
+	created, err := client.Agents().CreateInProject(ctx, projectID, pa)
 	if err != nil {
 		return fmt.Errorf("create agent: %w", err)
 	}
