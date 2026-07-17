@@ -980,9 +980,8 @@ func findGateway(ctx context.Context, client *sdkclient.Client, nameOrID string)
 func printGatewayTable(printer *output.Printer, gateways []sdktypes.Gateway) error {
 	columns := []output.Column{
 		{Name: "NAME", Width: 24},
-		{Name: "IMAGE", Width: 50},
-		{Name: "DNS NAMES", Width: 50},
-		{Name: "ROUTE", Width: 50},
+		{Name: "VERSION", Width: 20},
+		{Name: "ADDRESS", Width: 64},
 		{Name: "AGE", Width: 10},
 	}
 	table := output.NewTable(printer.Writer(), columns)
@@ -992,10 +991,26 @@ func printGatewayTable(printer *output.Printer, gateways []sdktypes.Gateway) err
 		if gw.CreatedAt != nil {
 			age = output.FormatAge(time.Since(*gw.CreatedAt))
 		}
-		dnsNames := strings.Join(gw.ServerDnsNames, ",")
-		table.WriteRow(gw.Name, gw.Image, dnsNames, gw.RouteAddress, age)
+		table.WriteRow(gw.Name, imageTag(gw.Image), gatewayAddress(gw), age)
 	}
 	return nil
+}
+
+func imageTag(image string) string {
+	if i := strings.LastIndex(image, ":"); i >= 0 {
+		return image[i+1:]
+	}
+	return image
+}
+
+func gatewayAddress(gw sdktypes.Gateway) string {
+	if gw.Route != nil {
+		if gw.RouteAddress != "" {
+			return gw.RouteAddress
+		}
+		return "Not ready..."
+	}
+	return strings.Join(gw.ServerDnsNames, ",")
 }
 
 func printGatewayConnectionInfo(w io.Writer, gw *sdktypes.Gateway) {

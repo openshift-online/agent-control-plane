@@ -41,6 +41,11 @@ spec:
             - --db-sslmode=disable
             - --alsologtostderr
             - -v=8
+          volumeMounts:
+            - name: db-secrets
+              mountPath: /secrets/db
+            - name: tmp
+              mountPath: /tmp
       containers:
         - name: api-server
           imagePullPolicy: IfNotPresent
@@ -114,4 +119,6 @@ spec:
             periodSeconds: 10
       volumes:
         - name: tls-certs
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}

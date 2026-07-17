@@ -19,9 +19,8 @@ When listing all gateways (`acpctl get gateways`), the output SHALL display a ta
 | Column | Width | Content |
 |--------|-------|---------|
 | NAME | 24 | `gateway.name` |
-| IMAGE | 50 | `gateway.image` |
-| DNS NAMES | 50 | Comma-separated `gateway.serverDnsNames` |
-| ROUTE | 60 | `gateway.routeAddress` (empty when no route configured) |
+| VERSION | 20 | Image tag extracted from `gateway.image` (everything after the last `:`) |
+| ADDRESS | 64 | `gateway.routeAddress` when a route is configured and ready; `"Not ready..."` when a route is configured but `routeAddress` is empty; comma-separated `gateway.serverDnsNames` when no route is configured |
 | AGE | 10 | Relative time since `created_at` |
 
 When retrieving a single gateway by name or ID (`acpctl get gateway <name>`), the output SHALL display the table row followed by a connection info block.
@@ -32,7 +31,7 @@ The command SHALL support JSON output via the standard `--output json` flag.
 
 - GIVEN gateways "alpha" and "beta" exist
 - WHEN the user runs `acpctl get gateways`
-- THEN a table renders with NAME, IMAGE, DNS NAMES, and AGE columns
+- THEN a table renders with NAME, VERSION, ADDRESS, and AGE columns
 - AND both gateways appear as rows
 
 #### Scenario: Get a single gateway by name

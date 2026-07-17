@@ -130,6 +130,8 @@ objects:
             volumeMounts:
               - name: db-secrets
                 mountPath: /secrets/db
+              - name: tmp
+                mountPath: /tmp
             resources:
               requests:
                 cpu: 50m
@@ -138,6 +140,7 @@ objects:
                 cpu: 500m
                 memory: 512Mi
             securityContext:
+              readOnlyRootFilesystem: true
               allowPrivilegeEscalation: false
               capabilities:
                 drop:
@@ -218,6 +221,8 @@ objects:
                 mountPath: /secrets/service
               - name: auth-config
                 mountPath: /configs/authentication
+              - name: tmp
+                mountPath: /tmp
             resources:
               requests:
                 cpu: 200m
@@ -243,6 +248,7 @@ objects:
               initialDelaySeconds: 20
               periodSeconds: 10
             securityContext:
+              readOnlyRootFilesystem: true
               allowPrivilegeEscalation: false
               capabilities:
                 drop:
@@ -257,6 +263,8 @@ objects:
           - name: auth-config
             configMap:
               name: ambient-api-server-auth
+          - name: tmp
+            emptyDir: {}
 
 - apiVersion: v1
   kind: Service

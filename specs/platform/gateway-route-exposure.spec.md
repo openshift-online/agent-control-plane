@@ -413,9 +413,10 @@ The `acpctl gateway setup-cli` command operates in two modes:
 
 - GIVEN a Gateway with a populated `routeAddress`
 - WHEN a user runs `acpctl get gateways`
-- THEN the table output SHALL include a `ROUTE` column alongside the existing columns (NAME, IMAGE, DNS NAMES, AGE)
-- AND the `ROUTE` column SHALL display the route address for gateways with a route
-- AND the column SHALL be empty for gateways without a route
+- THEN the table output SHALL include an `ADDRESS` column alongside the existing columns (NAME, VERSION, AGE)
+- AND the `ADDRESS` column SHALL display the route address for gateways with a route
+- AND the `ADDRESS` column SHALL display `"Not ready..."` for gateways with a route but no address yet
+- AND the `ADDRESS` column SHALL display comma-separated DNS names for gateways without a route
 
 #### Scenario: Single gateway connection info includes route address
 
