@@ -27,12 +27,6 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 
 ARG GIT_COMMIT=unknown
 
-RUN \
-    microdnf install -y \
-    util-linux \
-    && \
-    microdnf clean all
-
 COPY --from=builder /workspace/ambient-api-server /usr/local/bin/
 
 EXPOSE 8000
