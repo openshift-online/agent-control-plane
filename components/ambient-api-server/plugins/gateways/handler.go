@@ -113,6 +113,9 @@ func (h gatewayHandler) Create(w http.ResponseWriter, r *http.Request) {
 			gatewayModel := ConvertGateway(gw)
 			gatewayModel.ProjectId = projectID
 			applyGatewayDefaults(gatewayModel, projectID)
+			if gatewayModel.Name == "" {
+				return nil, errors.Validation("gateway name is required")
+			}
 			gatewayModel, svcErr := h.gateway.Create(ctx, gatewayModel)
 			if svcErr != nil {
 				return nil, svcErr
@@ -175,10 +178,20 @@ func (h gatewayHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				found.Config = patch.Config
 			}
 			if patch.Labels != nil {
-				found.Labels = patch.Labels
+				raw, merr := json.Marshal(patch.Labels)
+				if merr != nil {
+					return nil, errors.GeneralError("failed to marshal labels: %v", merr)
+				}
+				s := string(raw)
+				found.Labels = &s
 			}
 			if patch.Annotations != nil {
-				found.Annotations = patch.Annotations
+				raw, merr := json.Marshal(patch.Annotations)
+				if merr != nil {
+					return nil, errors.GeneralError("failed to marshal annotations: %v", merr)
+				}
+				s := string(raw)
+				found.Annotations = &s
 			}
 			if patch.Oidc != nil {
 				raw, merr := json.Marshal(patch.Oidc)

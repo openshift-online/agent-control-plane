@@ -3,7 +3,6 @@ package reconciler
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -336,9 +335,9 @@ func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient 
 }
 
 func (r *GatewayReconciler) updateGatewayAnnotation(ctx context.Context, client *sdkclient.Client, gw *types.Gateway, key, value string) {
-	annotations := make(map[string]string)
-	if gw.Annotations != "" {
-		_ = json.Unmarshal([]byte(gw.Annotations), &annotations)
+	annotations := gw.Annotations
+	if annotations == nil {
+		annotations = make(map[string]string)
 	}
 
 	if annotations[key] == value {
@@ -347,13 +346,8 @@ func (r *GatewayReconciler) updateGatewayAnnotation(ctx context.Context, client 
 
 	annotations[key] = value
 	annotations["ambient.ai/last-reconciled-at"] = time.Now().UTC().Format(time.RFC3339)
-	annJSON, err := json.Marshal(annotations)
-	if err != nil {
-		r.logger.Warn().Err(err).Str("gateway_id", gw.ID).Msg("failed to marshal gateway annotations")
-		return
-	}
 
-	patch := map[string]interface{}{"annotations": string(annJSON)}
+	patch := map[string]interface{}{"annotations": annotations}
 	if _, err := client.Gateways().Update(ctx, gw.ID, patch); err != nil {
 		r.logger.Warn().Err(err).Str("gateway_id", gw.ID).Msg("failed to update gateway reconcile status")
 	}
