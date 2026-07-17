@@ -11,7 +11,7 @@ The Learn view provides an in-app learning hub with two sections: **Concepts** (
 | Concepts | `docs/src/content/docs/concepts/*.md` | Platform fundamentals (agents, sessions, projects, credentials, workflows, scheduled sessions, context & artifacts) |
 | Examples | `examples/docs/*.md` | Runnable demos and use-case walkthroughs |
 
-> **Note:** The `examples/docs/` directory does not currently exist in the repository. It is created as part of this feature. The `docs/src/content/docs/concepts/` directory already exists with 7 concept files.
+> **Note:** The `examples/docs/` directory is located at the repository root (`<repo>/examples/docs/`). It does not currently exist and is created as part of this feature with at least one initial example file to validate the build pipeline. The `docs/src/content/docs/concepts/` directory already exists with 7 concept files.
 
 ## Requirements
 
@@ -39,12 +39,6 @@ Each card SHALL display:
 - WHEN the Learn view renders
 - THEN the "Concepts" section renders 7 cards
 - AND the "Examples" section displays "No examples available"
-
-#### Scenario: Loading state
-
-- GIVEN the user navigates to the Learn view
-- WHEN the page is loading
-- THEN skeleton card placeholders are displayed until the catalog renders
 
 ### Requirement: Concept Detail Rendering
 
@@ -91,7 +85,7 @@ All learning content SHALL be statically imported at build time. Adding a new co
 
 The build process SHALL discover all `.md` files in each source directory (non-recursive — subdirectories are ignored) and include their content in the UI bundle.
 
-> **Build pipeline dependency:** Both source directories live outside the UI component tree (`components/ambient-ui/`). The build pipeline MUST make this content available to the Next.js build process. The mechanism (pre-build copy step, Dockerfile COPY, or content relocation) is an implementation detail.
+> **Build pipeline dependency:** Both source directories live outside the UI component tree (`components/ambient-ui/`). The build pipeline MUST make this content available to the Next.js build process. The preferred mechanism is a **Makefile pre-build copy step** that copies markdown files into a temporary directory inside the build context (`components/ambient-ui/.learn-content/`) before the Docker build, then cleans up after. This approach keeps source files in their canonical locations, works within Docker's single build-context constraint, and requires no changes to the Astro docs site. The content loader resolves paths at runtime: Docker path (`/learn-content/`) first, local development fallback (`../../`) second.
 
 #### Scenario: Adding a new concept
 

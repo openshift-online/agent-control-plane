@@ -22,4 +22,4 @@ Visual feedback for running sessions including live preview, screenshot capture,
 
 ### [Learn](learn.spec.md)
 
-In-app catalog of learning resources rendered from markdown files in `examples/docs/`. Static build-time content, global scope.
+In-app catalog of learning resources compiled from `docs/src/content/docs/concepts/` (Concepts) and `examples/docs/` (Examples). Static build-time content, global scope.
