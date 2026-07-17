@@ -29,7 +29,7 @@ SKIP_CLEANUP=false
 CLUSTER_VALIDATE=false
 GATEWAY_NAME=""
 SANDBOX_NAME=""
-SANDBOX_IMAGE="${OPENSHELL_RUNNER_IMAGE:-localhost/acp_runner_openshell:latest}"
+SANDBOX_IMAGE="${OPENSHELL_RUNNER_IMAGE:-localhost/acp_runner_openshell:kind-preloaded}"
 SANDBOX_FROM_IMAGE="${SANDBOX_IMAGE}"
 
 # Parse flags

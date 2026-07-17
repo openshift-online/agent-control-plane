@@ -248,6 +248,7 @@ jobs:
         fuser -k 18592/tcp 2>/dev/null || true
 
         TEST_TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d) \
+        OPENSHELL_RUNNER_IMAGE=localhost/acp_runner_openshell:kind-preloaded \
         bash tests/e2e/openshell-cli-e2e.sh || {
           echo "OpenShell CLI E2E failed - showing debugging information..."
           kubectl get pods -n tenant-a -o wide 2>&1 || true
