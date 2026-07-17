@@ -3,8 +3,7 @@ package create
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
+"errors"
 	"fmt"
 	"strings"
 
@@ -409,6 +408,7 @@ func createGateway(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 	}
 
 	gw := &sdktypes.Gateway{
+		Name:      "openshell-gateway",
 		ProjectID: projectID,
 	}
 
@@ -429,16 +429,14 @@ func createGateway(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 		if parseErr != nil {
 			return fmt.Errorf("invalid --labels: %w", parseErr)
 		}
-		raw, _ := json.Marshal(parsed)
-		gw.Labels = string(raw)
+		gw.Labels = parsed
 	}
 	if cmd.Flags().Changed("annotations") {
 		parsed, parseErr := parseKeyValuePairs(createArgs.gwAnnotations)
 		if parseErr != nil {
 			return fmt.Errorf("invalid --annotations: %w", parseErr)
 		}
-		raw, _ := json.Marshal(parsed)
-		gw.Annotations = string(raw)
+		gw.Annotations = parsed
 	}
 
 	var oidc *sdktypes.GatewayOidc
