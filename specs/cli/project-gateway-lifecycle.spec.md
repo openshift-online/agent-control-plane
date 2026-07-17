@@ -95,7 +95,7 @@ All Gateway data model attributes are available as flags. When a flag is omitted
 | `--config` | No | `""` | OpenShell gateway TOML configuration |
 | `--labels` | No | Server defaults | Key=value pairs (comma-separated or repeated flag) |
 | `--annotations` | No | `""` | Key=value pairs (comma-separated or repeated flag) |
-| `--oidc-issuer` | No | Platform default (Red Hat SSO) | OIDC issuer URL; override for custom Keycloak |
+| `--oidc-issuer` | No | Server default (`OIDC_ISSUER_URL` env var) | OIDC issuer URL |
 | `--oidc-audience` | No | `openshell-cli` | Expected `aud` claim in JWT |
 | `--oidc-jwks-ttl` | No | `3600` | JWKS key cache retention in seconds |
 | `--oidc-roles-claim` | No | `realm_access.roles` | Dot-delimited path to roles array in JWT |
@@ -114,14 +114,14 @@ When the API server receives a gateway create request with absent fields, it SHA
 | `name` | Auto-generated (e.g., `openshell-gateway`) | Convention / name generator |
 | `image` | Value of `GATEWAY_IMAGE` env var | Environment variable |
 | `server_dns_names` | `["<name>.<project>.svc.cluster.local"]` | Derived from name + project |
-| `oidc.issuer` | Red Hat SSO URL (platform default) | Platform configuration |
+| `oidc.issuer` | Value of `OIDC_ISSUER_URL` env var | Environment variable |
 | `oidc.audience` | `openshell-cli` | Fixed default |
 | `oidc.roles_claim` | `realm_access.roles` | Fixed default |
 | `oidc.admin_role` | `openshell-admin` | Fixed default |
 | `oidc.user_role` | `openshell-user` | Fixed default |
 | `labels` | `{"purpose": "openshell", "env": "dev", "auth": "oidc"}` | Fixed defaults |
 
-The OIDC issuer defaults to Red Hat SSO at the platform level. It is overridden only when a custom Keycloak (or other OIDC provider) is in use — e.g., `KEYCLOAK_REALM_URL` in local dev environments. This means production deployments need no OIDC flags at all.
+The OIDC issuer is read from the API server's `OIDC_ISSUER_URL` environment variable, which is a required deployment configuration (similar to `SSO_REALM_URL` on the UI). The CLI user does not need to provide `--oidc-issuer` unless overriding the server default.
 
 The resulting Gateway resource is equivalent to applying the following via `acpctl apply`:
 
@@ -133,7 +133,7 @@ image: <GATEWAY_IMAGE>
 server_dns_names:
   - openshell-gateway.<project>.svc.cluster.local
 oidc:
-  issuer: <platform-default-or-KEYCLOAK_REALM_URL>
+  issuer: <OIDC_ISSUER_URL>
   audience: openshell-cli
   roles_claim: realm_access.roles
   admin_role: openshell-admin
@@ -272,34 +272,26 @@ Future RBAC enhancements MAY introduce finer-grained roles (e.g., a project-scop
 
 ### Requirement: Server-Side Default Configuration
 
-The system SHALL read gateway defaults from environment variables and platform configuration. These variables MUST be set in the deployment manifests for the component that applies the defaults.
+The system SHALL read gateway defaults from environment variables. These variables MUST be set in the deployment manifests for the API server.
 
-| Variable | Purpose | Description |
-|----------|---------|-------------|
-| `GATEWAY_IMAGE` | Default gateway container image | The OpenShell gateway image tag. Changes when the project updates OpenShell versions. |
-| `OIDC_ISSUER_URL` | OIDC issuer URL (optional override) | Overrides the platform default OIDC issuer (Red Hat SSO). Set only when using a custom Keycloak or alternative OIDC provider. If absent, the platform default (Red Hat SSO) is used. |
-
-The OIDC issuer defaults to Red Hat SSO at the platform level. The `OIDC_ISSUER_URL` env var exists solely to override this default in environments that use a custom Keycloak (e.g., local Kind dev, CRC). Production deployments that use RH SSO need no issuer configuration.
+| Variable | Purpose | Required | Description |
+|----------|---------|----------|-------------|
+| `GATEWAY_IMAGE` | Default gateway container image | Yes | The OpenShell gateway image tag. Changes when the project updates OpenShell versions. |
+| `OIDC_ISSUER_URL` | OIDC issuer URL | Yes | The OIDC issuer URL for token validation. Required on the API server deployment, similar to `SSO_REALM_URL` on the UI deployment. Varies per environment. |
 
 #### Scenario: Kind manifest values
 
-- GIVEN a Kind (local development) deployment with custom Keycloak
+- GIVEN a Kind (local development) deployment
 - THEN the manifests SHALL set:
   - `GATEWAY_IMAGE=ghcr.io/nvidia/openshell/gateway:0.0.80`
   - `OIDC_ISSUER_URL=http://keycloak-service.ambient-code.svc.cluster.local:11880/realms/ambient-code`
 
 #### Scenario: CRC manifest values
 
-- GIVEN a CRC (OpenShift Local) deployment with custom Keycloak
+- GIVEN a CRC (OpenShift Local) deployment
 - THEN the manifests SHALL set:
   - `GATEWAY_IMAGE=ghcr.io/nvidia/openshell/gateway:0.0.80`
   - `OIDC_ISSUER_URL=https://keycloak-ambient-code.apps-crc.testing/realms/ambient-code`
-
-#### Scenario: Production deployment with RH SSO
-
-- GIVEN a production deployment using Red Hat SSO
-- THEN `OIDC_ISSUER_URL` SHALL NOT be set (the platform default applies)
-- AND `GATEWAY_IMAGE` SHALL be set to the current production image tag
 
 #### Scenario: Gateway image version update
 
@@ -327,10 +319,10 @@ The OIDC issuer defaults to Red Hat SSO at the platform level. The `OIDC_ISSUER_
 
 ### Environment Variables
 
-| Variable | Component | Kind Default | CRC Default | Production |
-|----------|-----------|-------------|-------------|------------|
-| `GATEWAY_IMAGE` | API server | `ghcr.io/nvidia/openshell/gateway:0.0.80` | `ghcr.io/nvidia/openshell/gateway:0.0.80` | Current release tag |
-| `OIDC_ISSUER_URL` | API server | `http://keycloak-service.ambient-code.svc.cluster.local:11880/realms/ambient-code` | `https://keycloak-ambient-code.apps-crc.testing/realms/ambient-code` | _(not set — RH SSO default)_ |
+| Variable | Component | Required | Kind Value | CRC Value |
+|----------|-----------|----------|------------|-----------|
+| `GATEWAY_IMAGE` | API server | Yes | `ghcr.io/nvidia/openshell/gateway:0.0.80` | `ghcr.io/nvidia/openshell/gateway:0.0.80` |
+| `OIDC_ISSUER_URL` | API server | Yes | `http://keycloak-service.ambient-code.svc.cluster.local:11880/realms/ambient-code` | `https://keycloak-ambient-code.apps-crc.testing/realms/ambient-code` |
 
 ---
 
@@ -341,7 +333,7 @@ The OIDC issuer defaults to Red Hat SSO at the platform level. The `OIDC_ISSUER_
 | Consumer | Impact |
 |---|---|
 | `acpctl` CLI | Add `gateway` to the `create` and `delete` resource type switch; add gateway-specific flags |
-| API server | Add namespace validation on project create endpoint; add server-side defaulting for gateway create; default OIDC issuer to RH SSO when absent |
+| API server | Add namespace validation on project create endpoint; add server-side defaulting for gateway create; require `OIDC_ISSUER_URL` env var |
 | Gateway API schema | No changes — reuses existing Gateway fields |
 | ProjectReconciler | No changes — existing `ensureNamespace()` behavior unchanged |
 | GatewayReconciler | No changes — reconciles the created Gateway resource as normal |
