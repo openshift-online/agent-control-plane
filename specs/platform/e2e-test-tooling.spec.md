@@ -296,7 +296,7 @@ kind: Policy
 name: mock-llm-permissive
 spec:
   version: 1
-  filesystem:
+  filesystem_policy:
     include_workdir: true
     read_only:
       - /usr

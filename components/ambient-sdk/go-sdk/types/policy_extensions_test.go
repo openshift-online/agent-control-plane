@@ -9,7 +9,7 @@ func TestPolicyMarshalJSON_SpecAsObject(t *testing.T) {
 	p := Policy{
 		Name:      "test",
 		ProjectID: "proj-1",
-		Spec:      `{"version":1,"filesystem":{"include_workdir":true}}`,
+		Spec:      `{"version":1,"filesystem_policy":{"include_workdir":true}}`,
 	}
 
 	data, err := json.Marshal(&p)

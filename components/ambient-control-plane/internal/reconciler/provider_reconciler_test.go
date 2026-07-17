@@ -353,7 +353,7 @@ func TestReadProviderSecretCredentials(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestResolveAgentSandboxPolicy(t *testing.T) {
-	validSpec := `{"version":1,"filesystem":{"includeWorkdir":true}}`
+	validSpec := `{"version":1,"filesystem_policy":{"includeWorkdir":true}}`
 
 	tests := []struct {
 		name       string

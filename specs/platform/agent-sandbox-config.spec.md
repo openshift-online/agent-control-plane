@@ -260,7 +260,7 @@ data:
               - allow:
                   method: POST
                   path: "/v1/**"
-    filesystem:
+    filesystem_policy:
       read_write:
         - /sandbox
         - /tmp
@@ -275,7 +275,7 @@ data:
       compatibility: best_effort
   permissive-dev: |
     name: permissive-dev
-    filesystem:
+    filesystem_policy:
       read_write:
         - /sandbox
         - /tmp
@@ -900,7 +900,7 @@ This spec describes the complete desired state. Implementation is expected to pr
 
 > **Known gap (PR #246):** The `ApplicationReconciler`'s `gitAgentDeclaration` struct currently supports `name`, `display_name`, `description`, `prompt`, `entrypoint`, `providers`, `payloads`, `environment`, `repo_url`, `llm_model`, `labels`, and `annotations` — but does NOT include `sandbox_template` or `sandbox_policy`. Git-sourced agent declarations cannot yet declare compute resources or custom sandbox policies. The `UploadPayloads` SSH mechanism (Iteration 1) is wired to `agent.Payloads` at sandbox creation time, so payload delivery works end-to-end for git-sourced agents.
 >
-> **Resolved (`acpctl apply`, PR #280):** `sandbox_policy` is now wired in `acpctl apply` — added to the `resource` struct, `applyAgent()` create path, `buildAgentPatch()` update diffing, and `strategicMerge()` for kustomize overlays. `Policy` is a supported `kind` with full create-or-update semantics. A data migration renames `filesystem_policy` → `filesystem` in stored JSONB specs. The control plane injects `acp_internal` network rules server-side so runners always reach ACP services. Remaining: `sandbox_template` and `entrypoint` are not yet wired in `acpctl apply`.
+> **Resolved (`acpctl apply`, PR #280):** `sandbox_policy` is now wired in `acpctl apply` — added to the `resource` struct, `applyAgent()` create path, `buildAgentPatch()` update diffing, and `strategicMerge()` for kustomize overlays. `Policy` is a supported `kind` with full create-or-update semantics. Stored JSONB specs use the upstream `filesystem_policy` key name. The control plane injects `acp_internal` network rules server-side so runners always reach ACP services. Remaining: `sandbox_template` and `entrypoint` are not yet wired in `acpctl apply`.
 
 **Depends on:** Iteration 1 (gateway provisioning)
 
@@ -926,7 +926,7 @@ This spec describes the complete desired state. Implementation is expected to pr
 - Opaque passthrough to `CreateSandbox`
 - Platform minimum enforcement (merge semantics to be defined in a future spec)
 
-> **Partially delivered (PR #280):** `Policy` is a first-class ACP kind with full CRUD via the SDK and `acpctl apply`. Policies contain upstream OpenShell `SandboxPolicy` JSON in their `spec` field and are passed through to `CreateSandbox` opaquely. Platform-required network rules (`_acp_internal`, `_mlflow_rh`) are merged into agent-specific policies at `CreateSandbox` time via `mergePlatformRules()` and reinforced post-ready via `UpdateConfig` merge operations. A data migration renames `filesystem_policy` → `filesystem` in stored JSONB specs. ConfigMap-based policy watching is not yet implemented — policies are currently managed via `acpctl apply` and the REST API.
+> **Partially delivered (PR #280):** `Policy` is a first-class ACP kind with full CRUD via the SDK and `acpctl apply`. Policies contain upstream OpenShell `SandboxPolicy` JSON in their `spec` field and are passed through to `CreateSandbox` opaquely. Platform-required network rules (`_acp_internal`, `_mlflow_rh`) are merged into agent-specific policies at `CreateSandbox` time via `mergePlatformRules()` and reinforced post-ready via `UpdateConfig` merge operations. Stored JSONB specs use the upstream `filesystem_policy` key name. ConfigMap-based policy watching is not yet implemented — policies are currently managed via `acpctl apply` and the REST API.
 
 **Depends on:** Iteration 2 (ConfigMap agent declarations, to provide the `sandbox_policy` name reference)
 
@@ -1055,7 +1055,7 @@ data:
           - host: api.github.com
             port: 443
             protocol: rest
-    filesystem:
+    filesystem_policy:
       read_write:
         - /sandbox
       read_only:
