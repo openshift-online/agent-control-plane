@@ -30,6 +30,7 @@ NAMESPACE="${NAMESPACE:-ambient-code}"
 TENANT="tenant-a"
 SKIP_CLEANUP=false
 TEST_FILTER=""
+export OPENSHELL_GATEWAY_INSECURE=1
 
 # Parse flags
 while [[ "${1:-}" == --* ]]; do
