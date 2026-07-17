@@ -6,7 +6,9 @@
 
 ## Purpose
 
-The `acpctl` CLI SHALL provide simplified lifecycle commands for creating and deleting projects and gateways. These commands enable operators to provision a fully configured OpenShell gateway with a single command (`acpctl gateway create --project <p>`) without requiring kustomize overlays or knowledge of gateway configuration details. The system derives all gateway configuration from server-side defaults and conventions — the user only specifies which project the gateway belongs to.
+The `acpctl` CLI SHALL provide lifecycle commands for creating and deleting projects and gateways via `acpctl create <kind>` and `acpctl delete <kind>`. These commands are pure HTTP REST — `acpctl create gateway --name foo` is equivalent to `acpctl apply -f` with a YAML file containing `kind: Gateway` and `name: foo`. Both HTTP POST to the same API endpoint. The CLI commands contain no bespoke orchestration logic; they are HTTP REST with flag-to-field mapping.
+
+When no flags are provided, the system derives all gateway configuration from server-side defaults. If the user has entered a project via `acpctl project <name>`, then `acpctl create gateway` requires zero flags — the project is taken from context and the name is auto-generated.
 
 This complements the existing `acpctl apply -k` flow (which provides full declarative control via kustomize) with an imperative, opinionated path for common use cases.
 
@@ -76,32 +78,50 @@ The `acpctl project delete` command SHALL delete a project from ACP.
 
 ---
 
-### Requirement: Gateway Create with Server-Side Defaults
+### Requirement: Gateway Create with Full Flag Coverage
 
-The `acpctl gateway create` command SHALL create an OpenShell gateway in the specified project with all configuration derived from server-side defaults. The user provides only the project name. The system fills in gateway image, OIDC configuration, DNS names, route exposure, and labels.
+The `acpctl create gateway` command SHALL create an OpenShell gateway by HTTP POSTing to `/projects/{p}/gateways`. Every Gateway data model attribute SHALL be exposed as a CLI flag. This command is equivalent to `acpctl apply -f <yaml>` with a Gateway kind — both POST to the same endpoint with no bespoke orchestration logic.
 
 #### Flags
 
+All Gateway data model attributes are available as flags. When a flag is omitted, the server-side default applies.
+
 | Flag | Required | Default | Description |
 |------|----------|---------|-------------|
-| `--project` | Yes | — | Name of an existing ACP project to deploy the gateway into. |
+| `--project` | No | Configured project (`acpctl project <name>`) | Project to deploy the gateway into |
+| `--name` | No | Auto-generated | Gateway name |
+| `--image` | No | Server default (`GATEWAY_IMAGE` env var) | Gateway container image reference |
+| `--server-dns-names` | No | Server default (derived from project) | Comma-separated DNS names for TLS cert generation |
+| `--config` | No | `""` | OpenShell gateway TOML configuration |
+| `--labels` | No | Server defaults | Key=value pairs (comma-separated or repeated flag) |
+| `--annotations` | No | `""` | Key=value pairs (comma-separated or repeated flag) |
+| `--oidc-issuer` | No | Platform default (Red Hat SSO) | OIDC issuer URL; override for custom Keycloak |
+| `--oidc-audience` | No | `openshell-cli` | Expected `aud` claim in JWT |
+| `--oidc-jwks-ttl` | No | `3600` | JWKS key cache retention in seconds |
+| `--oidc-roles-claim` | No | `realm_access.roles` | Dot-delimited path to roles array in JWT |
+| `--oidc-admin-role` | No | `openshell-admin` | Role name conferring admin access |
+| `--oidc-user-role` | No | `openshell-user` | Role name conferring user access |
+| `--oidc-scopes-claim` | No | `""` | Dot-delimited path to scopes array in JWT |
+
+**No flags are required.** If the user has entered a project via `acpctl project <name>`, then `acpctl create gateway` with zero flags SHALL work — project from context, name auto-generated, all other fields from server-side defaults.
 
 #### Server-Side Defaults
 
-When the system receives a gateway create request via this command, it SHALL populate the following fields:
+When the API server receives a gateway create request with absent fields, it SHALL populate defaults:
 
-| Field | Value | Source |
-|-------|-------|--------|
-| `name` | `openshell-gateway` | Convention |
+| Field | Default Value | Source |
+|-------|---------------|--------|
+| `name` | Auto-generated (e.g., `openshell-gateway`) | Convention / name generator |
 | `image` | Value of `GATEWAY_IMAGE` env var | Environment variable |
-| `server_dns_names` | `["openshell-gateway.<project>.svc.cluster.local"]` | Derived from project name |
-| `oidc.issuer` | Value of `KEYCLOAK_REALM_URL` env var | Environment variable |
+| `server_dns_names` | `["<name>.<project>.svc.cluster.local"]` | Derived from name + project |
+| `oidc.issuer` | Red Hat SSO URL (platform default) | Platform configuration |
 | `oidc.audience` | `openshell-cli` | Fixed default |
 | `oidc.roles_claim` | `realm_access.roles` | Fixed default |
 | `oidc.admin_role` | `openshell-admin` | Fixed default |
 | `oidc.user_role` | `openshell-user` | Fixed default |
-| `route` | `{}` (empty object — auto-derive hostname) | Fixed default |
 | `labels` | `{"purpose": "openshell", "env": "dev", "auth": "oidc"}` | Fixed defaults |
+
+The OIDC issuer defaults to Red Hat SSO at the platform level. It is overridden only when a custom Keycloak (or other OIDC provider) is in use — e.g., `KEYCLOAK_REALM_URL` in local dev environments. This means production deployments need no OIDC flags at all.
 
 The resulting Gateway resource is equivalent to applying the following via `acpctl apply`:
 
@@ -113,87 +133,97 @@ image: <GATEWAY_IMAGE>
 server_dns_names:
   - openshell-gateway.<project>.svc.cluster.local
 oidc:
-  issuer: <KEYCLOAK_REALM_URL>
+  issuer: <platform-default-or-KEYCLOAK_REALM_URL>
   audience: openshell-cli
   roles_claim: realm_access.roles
   admin_role: openshell-admin
   user_role: openshell-user
-route: {}
 labels:
   purpose: openshell
   env: dev
   auth: oidc
 ```
 
-#### Scenario: Create gateway in existing project
+#### Scenario: Create gateway with zero flags (project from context)
+
+- GIVEN the user has run `acpctl project team-alpha` (project context is set)
+- AND project `team-alpha` exists in ACP
+- WHEN the user runs `acpctl create gateway`
+- THEN a Gateway resource SHALL be created in project `team-alpha` with all server-side defaults applied
+- AND the gateway name SHALL be auto-generated
+- AND the output SHALL confirm: `gateway/<generated-name> created in project team-alpha`
+
+#### Scenario: Create gateway with explicit flags
 
 - GIVEN a project `team-alpha` exists in ACP
-- AND no gateway exists in project `team-alpha`
-- AND `GATEWAY_IMAGE` is set to `ghcr.io/nvidia/openshell/gateway:0.0.80`
-- AND `KEYCLOAK_REALM_URL` is set to `http://keycloak-service.ambient-code.svc.cluster.local:11880/realms/ambient-code`
-- WHEN the user runs `acpctl gateway create --project team-alpha`
-- THEN a Gateway resource SHALL be created in project `team-alpha` with all server-side defaults applied
-- AND the gateway SHALL have `server_dns_names: ["openshell-gateway.team-alpha.svc.cluster.local"]`
-- AND the gateway SHALL have OIDC enabled with the Keycloak issuer
-- AND the gateway SHALL have `route: {}` for GRPCRoute provisioning
-- AND the output SHALL confirm: `gateway/openshell-gateway created in project team-alpha`
+- WHEN the user runs `acpctl create gateway --project team-alpha --name my-gw --image ghcr.io/nvidia/openshell/gateway:0.0.85 --oidc-issuer https://sso.example.com/realms/prod`
+- THEN a Gateway resource SHALL be created with the explicit values overriding defaults
+- AND the gateway SHALL have `name: my-gw`, the specified image, and the specified OIDC issuer
+- AND all other fields SHALL use server-side defaults
+
+#### Scenario: Create gateway is equivalent to apply
+
+- GIVEN a project `team-alpha` exists in ACP
+- WHEN the user runs `acpctl create gateway --project team-alpha --name foo`
+- THEN the result SHALL be identical to `acpctl apply -f` with a YAML file containing:
+  ```yaml
+  kind: Gateway
+  name: foo
+  project: team-alpha
+  ```
+- AND both SHALL HTTP POST to `/projects/team-alpha/gateways` with the same payload
 
 #### Scenario: Project does not exist
 
 - GIVEN no project named `team-alpha` exists in ACP
-- WHEN the user runs `acpctl gateway create --project team-alpha`
-- THEN the command SHALL exit with an error: `project "team-alpha" not found — create the project first with "acpctl project create --name team-alpha"`
+- WHEN the user runs `acpctl create gateway --project team-alpha`
+- THEN the command SHALL exit with an error: `project "team-alpha" not found — create the project first or run 'acpctl project <name>'`
 - AND no gateway SHALL be created
 
-#### Scenario: Gateway already exists in project
+#### Scenario: No project set
 
-- GIVEN a project `team-alpha` exists in ACP
-- AND a gateway already exists in project `team-alpha`
-- WHEN the user runs `acpctl gateway create --project team-alpha`
-- THEN the command SHALL exit with an error: `a gateway already exists in project "team-alpha"`
-
-#### Scenario: GATEWAY_IMAGE not configured
-
-- GIVEN `GATEWAY_IMAGE` is not set on the system
-- WHEN the user runs `acpctl gateway create --project team-alpha`
-- THEN the command SHALL exit with an error indicating that the gateway image is not configured
-
-#### Scenario: KEYCLOAK_REALM_URL not configured
-
-- GIVEN `KEYCLOAK_REALM_URL` is not set on the system
-- WHEN the user runs `acpctl gateway create --project team-alpha`
-- THEN the command SHALL exit with an error indicating that the OIDC issuer is not configured
+- GIVEN no project is set in context and `--project` is not provided
+- WHEN the user runs `acpctl create gateway`
+- THEN the command SHALL exit with an error: `no project set; use --project or run 'acpctl project <name>' first`
 
 ---
 
 ### Requirement: Gateway Delete
 
-The `acpctl gateway delete` command SHALL remove the gateway from the specified project.
+The `acpctl delete gateway <name>` command SHALL remove the named gateway from the current or specified project. This follows the existing `acpctl delete <kind> <name>` pattern used for sessions, projects, and other resources.
 
 #### Flags
 
 | Flag | Required | Default | Description |
 |------|----------|---------|-------------|
-| `--project` | Yes | — | Name of the project to remove the gateway from. |
+| `<name>` (positional) | Yes | — | Name of the gateway to delete |
+| `--project` | No | Configured project (`acpctl project <name>`) | Project containing the gateway |
 
 #### Scenario: Delete existing gateway
 
-- GIVEN a gateway exists in project `team-alpha`
-- WHEN the user runs `acpctl gateway delete --project team-alpha`
+- GIVEN the user has run `acpctl project team-alpha`
+- AND a gateway named `openshell-gateway` exists in project `team-alpha`
+- WHEN the user runs `acpctl delete gateway openshell-gateway`
 - THEN the gateway SHALL be deleted from project `team-alpha`
 - AND the GatewayReconciler SHALL clean up associated K8s resources (StatefulSet, Service, RBAC, certs, GRPCRoute, etc.)
-- AND the output SHALL confirm: `gateway/openshell-gateway deleted from project team-alpha`
+- AND the output SHALL confirm: `gateway/openshell-gateway deleted`
 
-#### Scenario: No gateway in project
+#### Scenario: Delete with explicit project
 
-- GIVEN no gateway exists in project `team-alpha`
-- WHEN the user runs `acpctl gateway delete --project team-alpha`
-- THEN the command SHALL exit with an error: `no gateway found in project "team-alpha"`
+- GIVEN a gateway named `my-gw` exists in project `team-alpha`
+- WHEN the user runs `acpctl delete gateway my-gw --project team-alpha`
+- THEN the gateway SHALL be deleted from project `team-alpha`
+
+#### Scenario: Gateway not found
+
+- GIVEN no gateway named `nonexistent` exists in the current project
+- WHEN the user runs `acpctl delete gateway nonexistent`
+- THEN the command SHALL exit with an error: `gateway "nonexistent" not found`
 
 #### Scenario: Project does not exist
 
 - GIVEN no project named `team-alpha` exists in ACP
-- WHEN the user runs `acpctl gateway delete --project team-alpha`
+- WHEN the user runs `acpctl delete gateway openshell-gateway --project team-alpha`
 - THEN the command SHALL exit with an error: `project "team-alpha" not found`
 
 ---
@@ -220,7 +250,7 @@ Future RBAC enhancements MAY introduce finer-grained roles (e.g., a project-scop
 #### Scenario: Non-admin attempts to create a gateway
 
 - GIVEN the user does NOT hold the `platform:admin` role
-- WHEN the user runs `acpctl gateway create --project team-alpha`
+- WHEN the user runs `acpctl create gateway --project team-alpha`
 - THEN the command SHALL exit with a `403 Forbidden` error
 - AND no gateway SHALL be created
 
@@ -234,7 +264,7 @@ Future RBAC enhancements MAY introduce finer-grained roles (e.g., a project-scop
 #### Scenario: Non-admin attempts to delete a gateway
 
 - GIVEN the user does NOT hold the `platform:admin` role
-- WHEN the user runs `acpctl gateway delete --project team-alpha`
+- WHEN the user runs `acpctl delete gateway openshell-gateway --project team-alpha`
 - THEN the command SHALL exit with a `403 Forbidden` error
 - AND the gateway SHALL NOT be deleted
 
@@ -242,26 +272,34 @@ Future RBAC enhancements MAY introduce finer-grained roles (e.g., a project-scop
 
 ### Requirement: Server-Side Default Configuration
 
-The system SHALL read gateway defaults from environment variables. These variables MUST be set in the deployment manifests for the component that applies the defaults.
+The system SHALL read gateway defaults from environment variables and platform configuration. These variables MUST be set in the deployment manifests for the component that applies the defaults.
 
 | Variable | Purpose | Description |
 |----------|---------|-------------|
 | `GATEWAY_IMAGE` | Default gateway container image | The OpenShell gateway image tag. Changes when the project updates OpenShell versions. |
-| `KEYCLOAK_REALM_URL` | OIDC issuer URL | The Keycloak realm URL for OIDC token validation. Varies per deployment environment. |
+| `OIDC_ISSUER_URL` | OIDC issuer URL (optional override) | Overrides the platform default OIDC issuer (Red Hat SSO). Set only when using a custom Keycloak or alternative OIDC provider. If absent, the platform default (Red Hat SSO) is used. |
+
+The OIDC issuer defaults to Red Hat SSO at the platform level. The `OIDC_ISSUER_URL` env var exists solely to override this default in environments that use a custom Keycloak (e.g., local Kind dev, CRC). Production deployments that use RH SSO need no issuer configuration.
 
 #### Scenario: Kind manifest values
 
-- GIVEN a Kind (local development) deployment
+- GIVEN a Kind (local development) deployment with custom Keycloak
 - THEN the manifests SHALL set:
   - `GATEWAY_IMAGE=ghcr.io/nvidia/openshell/gateway:0.0.80`
-  - `KEYCLOAK_REALM_URL=http://keycloak-service.ambient-code.svc.cluster.local:11880/realms/ambient-code`
+  - `OIDC_ISSUER_URL=http://keycloak-service.ambient-code.svc.cluster.local:11880/realms/ambient-code`
 
 #### Scenario: CRC manifest values
 
-- GIVEN a CRC (OpenShift Local) deployment
+- GIVEN a CRC (OpenShift Local) deployment with custom Keycloak
 - THEN the manifests SHALL set:
   - `GATEWAY_IMAGE=ghcr.io/nvidia/openshell/gateway:0.0.80`
-  - `KEYCLOAK_REALM_URL=https://keycloak-ambient-code.apps-crc.testing/realms/ambient-code`
+  - `OIDC_ISSUER_URL=https://keycloak-ambient-code.apps-crc.testing/realms/ambient-code`
+
+#### Scenario: Production deployment with RH SSO
+
+- GIVEN a production deployment using Red Hat SSO
+- THEN `OIDC_ISSUER_URL` SHALL NOT be set (the platform default applies)
+- AND `GATEWAY_IMAGE` SHALL be set to the current production image tag
 
 #### Scenario: Gateway image version update
 
@@ -280,17 +318,19 @@ The system SHALL read gateway defaults from environment variables. These variabl
 |---|---|---|
 | `acpctl project create --name <n> [--description <d>]` | `POST /projects` (with namespace validation) | 🔲 planned |
 | `acpctl project delete --name <n>` | `DELETE /projects/{id}` | 🔲 planned |
-| `acpctl gateway create --project <p>` | `POST /projects/{p}/gateways` (with server-side defaults) | 🔲 planned |
-| `acpctl gateway delete --project <p>` | `DELETE /projects/{p}/gateways/{name}` | 🔲 planned |
+| `acpctl create gateway [--name <n>] [--project <p>] [--image <i>] [--server-dns-names <d>] [--oidc-issuer <u>] ...` | `POST /projects/{p}/gateways` | 🔲 planned |
+| `acpctl delete gateway <name> [--project <p>]` | `DELETE /projects/{p}/gateways/{name}` | 🔲 planned |
 
 **Note:** `acpctl project create` and `acpctl project delete` already exist in the data model spec as implemented commands. This spec adds the namespace pre-existence validation to the create path for the `acpctl project create` command. The existing `acpctl create project` alias continues to work but does NOT perform namespace validation (backward compatible).
 
+`acpctl create gateway` follows the same pattern as `acpctl create session` — it is pure HTTP REST with flag-to-field mapping. Every Gateway data model attribute is exposed as a flag. The command has no required flags when a project is set via `acpctl project <name>`.
+
 ### Environment Variables
 
-| Variable | Component | Kind Default | CRC Default |
-|----------|-----------|-------------|-------------|
-| `GATEWAY_IMAGE` | API server | `ghcr.io/nvidia/openshell/gateway:0.0.80` | `ghcr.io/nvidia/openshell/gateway:0.0.80` |
-| `KEYCLOAK_REALM_URL` | API server | `http://keycloak-service.ambient-code.svc.cluster.local:11880/realms/ambient-code` | `https://keycloak-ambient-code.apps-crc.testing/realms/ambient-code` |
+| Variable | Component | Kind Default | CRC Default | Production |
+|----------|-----------|-------------|-------------|------------|
+| `GATEWAY_IMAGE` | API server | `ghcr.io/nvidia/openshell/gateway:0.0.80` | `ghcr.io/nvidia/openshell/gateway:0.0.80` | Current release tag |
+| `OIDC_ISSUER_URL` | API server | `http://keycloak-service.ambient-code.svc.cluster.local:11880/realms/ambient-code` | `https://keycloak-ambient-code.apps-crc.testing/realms/ambient-code` | _(not set — RH SSO default)_ |
 
 ---
 
@@ -300,15 +340,16 @@ The system SHALL read gateway defaults from environment variables. These variabl
 
 | Consumer | Impact |
 |---|---|
-| `acpctl` CLI | Add `project create`, `project delete`, `gateway create`, `gateway delete` commands |
-| API server | Add namespace validation on project create endpoint; add server-side defaulting for gateway create |
+| `acpctl` CLI | Add `gateway` to the `create` and `delete` resource type switch; add gateway-specific flags |
+| API server | Add namespace validation on project create endpoint; add server-side defaulting for gateway create; default OIDC issuer to RH SSO when absent |
 | Gateway API schema | No changes — reuses existing Gateway fields |
 | ProjectReconciler | No changes — existing `ensureNamespace()` behavior unchanged |
 | GatewayReconciler | No changes — reconciles the created Gateway resource as normal |
-| Deployment manifests (Kind, CRC) | Add `GATEWAY_IMAGE` and `KEYCLOAK_REALM_URL` env vars |
+| Deployment manifests (Kind, CRC) | Add `GATEWAY_IMAGE` and `OIDC_ISSUER_URL` env vars |
 
 ### Backward Compatibility
 
 - `acpctl apply -k` with explicit Gateway YAML continues to work without change
 - The existing `acpctl create project` command is unchanged — namespace validation applies only to the new `acpctl project create` path
-- Gateway resources created via `acpctl gateway create` are identical in structure to those created via `acpctl apply` — the GatewayReconciler treats them the same way
+- `acpctl create gateway` follows the same pure HTTP REST pattern as `acpctl create session` — both POST to the API with flag-to-field mapping, no orchestration logic
+- Gateway resources created via `acpctl create gateway` are identical in structure to those created via `acpctl apply` — the GatewayReconciler treats them the same way
