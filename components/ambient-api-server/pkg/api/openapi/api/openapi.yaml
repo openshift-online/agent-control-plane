@@ -7667,7 +7667,7 @@ components:
             type: string
           spec:
             additionalProperties: true
-            description: "Full policy specification (network_policies, filesystem,\
+            description: "Full policy specification (network_policies, filesystem_policy,\
               \ process, landlock)"
             type: object
           labels:
