@@ -49,6 +49,24 @@ patches:
   target:
     kind: LimitRange
     name: ambient-default-limits
+- path: api-server-resources-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-api-server
+- path: control-plane-resources-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-control-plane
+- path: ui-resources-patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ambient-ui
 
 replicas:
 - name: minio

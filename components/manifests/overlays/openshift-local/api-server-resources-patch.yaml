@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: migration
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 250m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop: ["ALL"]
+      containers:
+      - name: api-server
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop: ["ALL"]

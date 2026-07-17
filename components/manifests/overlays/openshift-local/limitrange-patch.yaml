@@ -9,5 +9,5 @@ spec:
       cpu: 50m
       memory: 128Mi
     default:
-      cpu: "1"
+      cpu: 500m
       memory: 2Gi

@@ -39,8 +39,8 @@ spec:
           mountPath: /var/lib/pgsql/data
         resources:
           requests:
-            cpu: 100m
-            memory: 256Mi
+            cpu: 50m
+            memory: 128Mi
           limits:
-            cpu: 500m
+            cpu: 250m
             memory: 512Mi
