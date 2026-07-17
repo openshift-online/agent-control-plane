@@ -242,6 +242,7 @@ jobs:
         }
 
     - name: Run OpenShell CLI E2E tests
+      timeout-minutes: 10
       run: |
         fuser -k 13592/tcp 2>/dev/null || true
         fuser -k 18592/tcp 2>/dev/null || true

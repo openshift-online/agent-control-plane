@@ -148,7 +148,7 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | P29 | control-plane | ClusterHealthSyncer periodic health checker | CP | **done** | critical | `cluster_health_syncer.go` polls cluster heartbeat endpoint on configurable interval (default 30s). Wired into `main.go` with error channel pattern. Config: `CLUSTER_HEALTH_INTERVAL`. |
 | P30 | control-plane | PlacementStrategy interface + RoundRobinPlacement | CP | **done** | critical | `internal/placement/strategy.go` with `PlacementStrategy` interface, `PlacementRequest`/`PlacementDecision` types, `RoundRobinPlacement` default. Filters by role, status, labels, heartbeat threshold. Config: `PLACEMENT_HEARTBEAT_THRESHOLD`. |
 | P28 | openshell-cli-e2e-test | E2E test script (sections 1-8) | Tests | **done** | major | `tests/e2e/openshell-cli-e2e.sh` created with 8 numbered sections. Follows `gateway-e2e-test.sh` patterns (pass/fail/skip helpers, trap cleanup, port-forward). Exercises sandbox create/list/get/exec/delete, provider CRUD, policy set/idempotent/get/list/enforcement/delete, settings global+per-sandbox, optional --cluster-validate cross-validation. |
-| P29 | openshell-cli-e2e-test | Demo script (tmux-based) | CLI | **done** | minor | `components/ambient-cli/demo-openshell.sh` created following `demo-kind.sh` pattern. tmux self-bootstrap, step/announce/color helpers, PAUSE env var, 6 numbered sections (gateway setup, sandbox create, provider create, policy enforcement, settings, cleanup). |
+| P29 | openshell-cli-e2e-test | Demo script (tmux-based) | Tests | **done** | minor | Merged into e2e test. `run_cmd()` helper prints commands and output for CI visibility. Separate demo script removed. |
 
 ### UI Gaps
 
