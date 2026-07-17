@@ -296,7 +296,7 @@ func fetchClientTLS(localName, namespace string) error {
 		return fmt.Errorf("create mtls dir: %w", err)
 	}
 
-	secretName := "openshell-client-tls"
+	secretName := "openshell-server-tls"
 	files := []struct {
 		field string
 		name  string
