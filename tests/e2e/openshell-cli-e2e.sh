@@ -70,6 +70,8 @@ CREATED_SETTING_SANDBOX=""
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+CYAN='\033[36m'
+ORANGE='\033[38;5;214m'
 DIM='\033[2m'
 BOLD='\033[1m'
 NC='\033[0m'
@@ -77,10 +79,17 @@ NC='\033[0m'
 PASSED=0
 FAILED=0
 
-pass() { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
-fail() { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
-skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
-section() { echo ""; echo -e "${BOLD}$1${NC}"; }
+sep()     { printf '%b%s%b\n' "${DIM}" "──────────────────────────────────────────────────" "${NC}"; }
+pass()    { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
+fail()    { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
+skip()    { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
+
+section() {
+  echo ""
+  sep
+  printf '%b━━  %s%b\n' "${CYAN}" "$*" "${NC}"
+  sep
+}
 
 # Run a command with visibility: print it, execute, capture + display output.
 # Sets CMD_OUTPUT and CMD_RC for callers to inspect.
@@ -88,11 +97,13 @@ CMD_OUTPUT=""
 CMD_RC=0
 run_cmd() {
   CMD_RC=0
-  printf '  %b$ %s%b\n' "${DIM}" "$*" "${NC}"
+  echo ""
+  printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "$*" "${NC}"
   CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
   if [ -n "$CMD_OUTPUT" ]; then
     echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
   fi
+  echo ""
 }
 
 # --- Cleanup ---
@@ -113,7 +124,7 @@ cleanup() {
   fi
 
   echo ""
-  echo -e "${BOLD}Cleaning up...${NC}"
+  printf '%b%s%b\n' "${DIM}" "cleaning up..." "${NC}"
 
   if [ -n "$CREATED_SETTING_GLOBAL" ] && [ -n "$GATEWAY_NAME" ]; then
     openshell settings delete --gateway "$GATEWAY_NAME" --global --yes \
@@ -177,16 +188,24 @@ find_acpctl() {
   echo ""
 }
 
+# ── intro ────────────────────────────────────────────────────────────────────
+
+echo ""
+printf '%b%s%b\n' "${BOLD}" "OpenShell CLI E2E Test" "${NC}"
+printf '%b  Tenant:    %s%b\n' "${DIM}" "${TENANT}" "${NC}"
+printf '%b  API:       %s%b\n' "${DIM}" "${API_URL}" "${NC}"
+printf '%b  Image:     %s%b\n' "${DIM}" "${SANDBOX_IMAGE}" "${NC}"
+
 # ============================================================================
 # Section 1: Prerequisites
 # ============================================================================
 
-section "1. Prerequisites"
+section "1 · Prerequisites"
 
 # Token
 if [ -z "$TOKEN" ]; then
   fail "TEST_TOKEN not set — run 'make kind-up' first, or: source tests/cypress/.env.test"
-  echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
 pass "TEST_TOKEN available"
@@ -194,7 +213,7 @@ pass "TEST_TOKEN available"
 # openshell CLI
 if ! command -v openshell &>/dev/null; then
   fail "openshell CLI not found — install it or add to PATH"
-  echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
 pass "openshell CLI found: $(command -v openshell)"
@@ -205,7 +224,7 @@ if [ -n "$ACPCTL" ]; then
   pass "acpctl found: $ACPCTL"
 else
   fail "acpctl not found — run 'make build-cli'"
-  echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
 
@@ -220,7 +239,7 @@ if [ "$CMD_RC" -eq 0 ]; then
   pass "acpctl login succeeded (${API_URL}, project: ${TENANT})"
 else
   fail "acpctl login failed — is the API server reachable at ${API_URL}?"
-  echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
 
@@ -228,7 +247,7 @@ fi
 # Section 2: Gateway Connectivity
 # ============================================================================
 
-section "2. Gateway connectivity"
+section "2 · Gateway Connectivity"
 
 # Check gateway is deployed
 GW_READY=$(kubectl get statefulset openshell-gateway -n "$TENANT" \
@@ -237,7 +256,7 @@ GW_READY="${GW_READY:-0}"
 
 if [ "${GW_READY}" -lt 1 ]; then
   fail "openshell-gateway not ready in ${TENANT} (readyReplicas=${GW_READY})"
-  echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
 pass "openshell-gateway StatefulSet ready in ${TENANT}"
@@ -260,7 +279,7 @@ rm -f "$gw_log"
 
 if [ -z "$gw_port" ]; then
   fail "Could not establish port-forward to gateway gRPC endpoint"
-  echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
 pass "Gateway port-forward established (localhost:${gw_port})"
@@ -284,7 +303,7 @@ if [ "$CMD_RC" -eq 0 ]; then
   pass "Gateway registered as '${GATEWAY_NAME}'"
 else
   fail "openshell gateway add failed"
-  echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
 
@@ -302,7 +321,7 @@ if [ "$CMD_RC" -eq 0 ]; then
   pass "openshell sandbox list --gateway ${GATEWAY_NAME} succeeded (connectivity verified)"
 else
   fail "openshell sandbox list failed — gateway not reachable"
-  echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
 
@@ -310,13 +329,17 @@ fi
 # Section 3: Sandbox Operations
 # ============================================================================
 
-section "3. Sandbox operations"
+section "3 · Sandbox Operations"
 
 # Create sandbox (with timeout to prevent CI hang)
-echo -e "  ${DIM}$ timeout 60 openshell sandbox create --gateway $GATEWAY_NAME --from $SANDBOX_FROM_IMAGE --no-tty -- echo ready${NC}"
+echo ""
+printf '  %b▶%b  Create sandbox\n' "${BOLD}" "${NC}"
+printf '  %b$ timeout 60 openshell sandbox create --gateway %s --from %s --no-tty -- echo ready%b\n' \
+  "${ORANGE}" "$GATEWAY_NAME" "$SANDBOX_FROM_IMAGE" "${NC}"
 SANDBOX_OUTPUT=$(timeout 60 openshell sandbox create --gateway "$GATEWAY_NAME" \
   --from "$SANDBOX_FROM_IMAGE" --no-tty -- echo ready 2>&1) || true
 echo "$SANDBOX_OUTPUT" | head -20 | sed 's/^/    /'
+echo ""
 
 SANDBOX_CLEAN=$(echo "$SANDBOX_OUTPUT" | sed 's/\x1b\[[0-9;]*m//g')
 SANDBOX_NAME=$(echo "$SANDBOX_CLEAN" | grep -i 'Created sandbox:' | sed 's/.*Created sandbox:[[:space:]]*//' | tr -d '[:space:]' | head -1 || echo "")
@@ -330,7 +353,7 @@ if [ -n "$SANDBOX_NAME" ]; then
 else
   fail "Sandbox create failed"
   echo "  Output: $(echo "$SANDBOX_OUTPUT" | head -c 500)"
-  echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
 
@@ -343,7 +366,7 @@ else
 fi
 
 # Poll for sandbox readiness (120s timeout, 2s interval)
-echo -e "  ${DIM}Polling sandbox status (up to 120s)...${NC}"
+printf '  %b▶%b  Waiting for sandbox READY (up to 120s)...\n' "${BOLD}" "${NC}"
 SANDBOX_READY=false
 for _i in $(seq 1 60); do
   GET_OUTPUT=$(openshell sandbox get --gateway "$GATEWAY_NAME" "$SANDBOX_NAME" 2>&1 || echo "")
@@ -389,7 +412,7 @@ fi
 # Section 4: Provider Operations
 # ============================================================================
 
-section "4. Provider operations"
+section "4 · Provider Operations"
 
 PROVIDER_NAME="e2e-test-provider"
 
@@ -448,7 +471,7 @@ fi
 # Section 5: Policy Operations
 # ============================================================================
 
-section "5. Policy operations"
+section "5 · Policy Operations"
 
 POLICY_FIXTURE="$SCRIPT_DIR/fixtures/openshell-cli-test/test-policy.yaml"
 
@@ -490,7 +513,7 @@ else
   fi
 
   # Policy enforcement: allowed endpoint
-  echo -e "  ${DIM}Waiting 3s for policy propagation...${NC}"
+  printf '  %b▶%b  Policy enforcement (waiting 3s for propagation)...\n' "${BOLD}" "${NC}"
   sleep 3
   run_cmd openshell sandbox exec --gateway "$GATEWAY_NAME" \
     -n "$SANDBOX_NAME" -- curl -sf https://update.code.visualstudio.com
@@ -526,7 +549,7 @@ fi
 # Section 6: Settings Operations
 # ============================================================================
 
-section "6. Settings operations"
+section "6 · Settings Operations"
 
 # Global setting: set
 SETTING_KEY_GLOBAL="providers_v2_enabled"
@@ -613,7 +636,7 @@ fi
 # Section 7: Cross-Validation (optional)
 # ============================================================================
 
-section "7. Cross-validation with cluster state"
+section "7 · Cross-Validation"
 
 if [ "$CLUSTER_VALIDATE" != "true" ]; then
   skip "Cross-validation" "--cluster-validate not set"
@@ -656,7 +679,7 @@ fi
 # Section 8: Cleanup
 # ============================================================================
 
-section "8. Sandbox delete"
+section "8 · Cleanup"
 
 if [ -n "$CREATED_SANDBOX" ] && [ "$SKIP_CLEANUP" != "true" ]; then
   run_cmd openshell sandbox delete --gateway "$GATEWAY_NAME" "$SANDBOX_NAME"
@@ -685,7 +708,13 @@ fi
 # ============================================================================
 
 echo ""
-echo -e "${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}"
+sep
+if [ "$FAILED" -gt 0 ]; then
+  printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"
+else
+  printf '%b  %d passed ✓%b\n' "${GREEN}" "$PASSED" "${NC}"
+fi
+sep
 echo ""
 
 if [ "$FAILED" -gt 0 ]; then
