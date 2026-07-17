@@ -16,8 +16,9 @@ import (
 var activePhases = map[string]bool{"Pending": true, "Creating": true, "Running": true}
 
 var deleteArgs struct {
-	yes bool
-	all bool
+	yes     bool
+	all     bool
+	project string
 }
 
 var Cmd = &cobra.Command{
@@ -49,6 +50,7 @@ For sessions, active sessions are stopped before deletion.`,
 func init() {
 	Cmd.Flags().BoolVarP(&deleteArgs.yes, "yes", "y", false, "Skip confirmation prompt")
 	Cmd.Flags().BoolVarP(&deleteArgs.all, "all", "A", false, "Delete all resources of this type")
+	Cmd.Flags().StringVar(&deleteArgs.project, "project", "", "Project override (gateway)")
 }
 
 func run(cmd *cobra.Command, cmdArgs []string) error {
@@ -149,7 +151,18 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return nil
 
 	case "gateway", "gateways", "gw":
-		if err := client.Gateways().Delete(ctx, name); err != nil {
+		gwClient := client
+		if cmd.Flags().Changed("project") {
+			factory, factoryErr := connection.NewClientFactory()
+			if factoryErr != nil {
+				return factoryErr
+			}
+			gwClient, err = factory.ForProject(deleteArgs.project)
+			if err != nil {
+				return fmt.Errorf("create client for project %q: %w", deleteArgs.project, err)
+			}
+		}
+		if err := gwClient.Gateways().Delete(ctx, name); err != nil {
 			return fmt.Errorf("delete gateway %q: %w", name, err)
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "gateway/%s deleted\n", name)

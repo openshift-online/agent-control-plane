@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"regexp"
 	"time"
 
@@ -15,6 +16,15 @@ import (
 	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	"github.com/spf13/cobra"
 )
+
+var projectCreateArgs struct {
+	name        string
+	description string
+}
+
+var projectDeleteArgs struct {
+	name string
+}
 
 var projectUpdateArgs struct {
 	name        string
@@ -114,11 +124,37 @@ var listCmd = &cobra.Command{
 	RunE:  listProjects,
 }
 
+var createCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create a project (requires existing K8s namespace)",
+	Long: `Create a new project in ACP. The backing Kubernetes namespace must
+already exist on the cluster — ACP does not create it.
+
+This differs from 'acpctl create project', which does not validate
+namespace existence.`,
+	Args: cobra.NoArgs,
+	RunE: createProject,
+}
+
+var deleteCmd = &cobra.Command{
+	Use:   "delete",
+	Short: "Delete a project (does not delete K8s namespace)",
+	Args:  cobra.NoArgs,
+	RunE:  deleteProject,
+}
+
 func init() {
 	Cmd.AddCommand(setCmd)
 	Cmd.AddCommand(currentCmd)
 	Cmd.AddCommand(listCmd)
 	Cmd.AddCommand(updateCmd)
+	Cmd.AddCommand(createCmd)
+	Cmd.AddCommand(deleteCmd)
+
+	createCmd.Flags().StringVar(&projectCreateArgs.name, "name", "", "Project name (must match an existing K8s namespace)")
+	createCmd.Flags().StringVar(&projectCreateArgs.description, "description", "", "Human-readable project description")
+
+	deleteCmd.Flags().StringVar(&projectDeleteArgs.name, "name", "", "Project name to delete")
 
 	updateCmd.Flags().StringVar(&projectUpdateArgs.name, "name", "", "New project name")
 	updateCmd.Flags().StringVar(&projectUpdateArgs.description, "description", "", "New description")
@@ -238,6 +274,99 @@ func printProjectTable(printer *output.Printer, projects []sdktypes.Project) err
 		}
 		table.WriteRow(p.Name, p.Description, age)
 	}
+	return nil
+}
+
+func createProject(cmd *cobra.Command, args []string) error {
+	if projectCreateArgs.name == "" {
+		return fmt.Errorf("--name is required")
+	}
+
+	if err := validateProjectName(projectCreateArgs.name); err != nil {
+		return fmt.Errorf("invalid project name: %w", err)
+	}
+
+	nsCheck := exec.Command("kubectl", "get", "namespace", projectCreateArgs.name, "-o", "name")
+	if err := nsCheck.Run(); err != nil {
+		return fmt.Errorf("namespace %q does not exist — a backing namespace must be provisioned before creating a project", projectCreateArgs.name)
+	}
+
+	factory, err := connection.NewClientFactory()
+	if err != nil {
+		return err
+	}
+
+	client, err := factory.ForProject(projectCreateArgs.name)
+	if err != nil {
+		return fmt.Errorf("create client: %w", err)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
+	defer cancel()
+
+	builder := sdktypes.NewProjectBuilder().Name(projectCreateArgs.name)
+	if projectCreateArgs.description != "" {
+		builder = builder.Description(projectCreateArgs.description)
+	}
+	project, err := builder.Build()
+	if err != nil {
+		return fmt.Errorf("build project: %w", err)
+	}
+
+	created, err := client.Projects().Create(ctx, project)
+	if err != nil {
+		var apiErr *sdktypes.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == 409 {
+			return fmt.Errorf("project %q already exists", projectCreateArgs.name)
+		}
+		return fmt.Errorf("create project: %w", err)
+	}
+
+	cfg.Project = created.Name
+	if saveErr := config.Save(cfg); saveErr == nil {
+		fmt.Fprintf(cmd.OutOrStdout(), "Switched to project %q\n", created.Name)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "project/%s created\n", created.Name)
+	return nil
+}
+
+func deleteProject(cmd *cobra.Command, args []string) error {
+	if projectDeleteArgs.name == "" {
+		return fmt.Errorf("--name is required")
+	}
+
+	factory, err := connection.NewClientFactory()
+	if err != nil {
+		return err
+	}
+
+	client, err := factory.ForProject(projectDeleteArgs.name)
+	if err != nil {
+		return fmt.Errorf("create client: %w", err)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.GetRequestTimeout())
+	defer cancel()
+
+	if err := client.Projects().Delete(ctx, projectDeleteArgs.name); err != nil {
+		if isNotFoundError(err) {
+			return fmt.Errorf("project %q not found", projectDeleteArgs.name)
+		}
+		return fmt.Errorf("delete project: %w", err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "project/%s deleted\n", projectDeleteArgs.name)
 	return nil
 }
 
