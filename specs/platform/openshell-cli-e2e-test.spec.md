@@ -15,10 +15,9 @@ This spec defines an e2e test script that authenticates to an ACP-managed OpenSh
 
 ### Scope
 
-- New e2e test script at `tests/e2e/openshell-cli-e2e.sh`
-- Demo script at `components/ambient-cli/demo-openshell.sh` following the `demo-*` pattern
+- E2e test script at `tests/e2e/openshell-cli-e2e.sh` with built-in demo-style verbose output
 - CLI-only testing: sandbox ops, provider ops, policy ops, settings ops
-- Gateway connectivity setup via `acpctl gateway setup-cli` (validates the `acpctl` → `openshell` CLI handoff)
+- Gateway connectivity setup via mTLS certificate extraction from the `openshell-server-tls` secret
 - Optional cross-validation between `openshell` CLI state and cluster state (via `--cluster-validate`)
 - Test fixtures at `tests/e2e/fixtures/openshell-cli-test/`
 
@@ -47,11 +46,15 @@ The test SHALL be a self-contained bash script at `tests/e2e/openshell-cli-e2e.s
 The script SHALL:
 - Use `set -euo pipefail` for strict error handling
 - Implement `pass()`, `fail()`, `skip()`, and `section()` helper functions with pass/fail counters
+- Implement a `run_cmd()` helper that prints each command in orange `$ ...` text with `▶` markers, executes it, and displays indented output before asserting pass/fail — serving as both a test harness and a human-readable demo
+- Use `sep()` separator lines and cyan `━━` section banners for visual structure
+- Print an intro banner showing tenant, API URL, and sandbox image
 - Accept `--skip-cleanup` flag for post-mortem inspection
 - Accept an optional `API_URL` positional argument (default: `http://localhost:<port-forward>`)
 - Set up a port-forward to the API server
-- Register the gateway with the `openshell` CLI via `acpctl gateway setup-cli` (validates the `acpctl`-to-`openshell` handoff path)
-- Report per-section results with a final pass/fail summary
+- Register the gateway with the `openshell` CLI via mTLS certificate extraction from the `openshell-server-tls` Kubernetes secret and `openshell gateway add --local`
+- Wrap `sandbox create` in `timeout 60` to prevent CI hangs
+- Report per-section results with a styled pass/fail summary footer
 - Exit non-zero if any test fails
 - Clean up all resources created during the test, even on failure (via trap)
 
@@ -86,36 +89,31 @@ The test SHALL organize assertions into numbered sections by command category:
 - THEN it SHALL print a clear message indicating the CLI is required and exit with a non-zero code
 - AND in CI (`local-dev-simulation` pipeline), the `openshell` CLI SHALL be installed as a prerequisite step before the test runs
 
-### Requirement: Gateway Connectivity via `acpctl gateway setup-cli`
+### Requirement: Gateway Connectivity via mTLS Certificate Extraction
 
-The test SHALL authenticate to an ACP-managed OpenShell gateway using `acpctl gateway setup-cli`. This command reads the gateway's connection details and OIDC configuration from the ACP API, then delegates to the `openshell` CLI to register the gateway. Using `acpctl gateway setup-cli` (rather than manual mTLS cert extraction) validates the full "OpenShell as a Service" connectivity path that a power user would follow.
-
-> **Implementation status:** The `acpctl gateway setup-cli` command exists at [`components/ambient-cli/cmd/acpctl/gateway/setup.go`](../../components/ambient-cli/cmd/acpctl/gateway/setup.go). Its verified signature is:
-> ```
-> acpctl gateway setup-cli [name] --gateway-url <url> [--project <namespace>] [--print]
-> ```
-> The `name` argument is optional (defaults to the project name). `--project` selects the namespace/project to look up the gateway in. `--print` outputs the `openshell gateway add` command instead of running it.
+The test SHALL authenticate to an ACP-managed OpenShell gateway by extracting the mTLS client certificate from the `openshell-server-tls` Kubernetes secret in the tenant namespace and registering the gateway via `openshell gateway add --local`. This approach validates the direct gateway connectivity path available to a power user with cluster access.
 
 The gateway registration SHALL:
-1. Call `acpctl gateway setup-cli --gateway-url <url> --project tenant-a` where `<url>` is the gateway's externally-reachable endpoint
-2. For OIDC-enabled gateways: `acpctl gateway setup-cli` constructs and prints an `openshell gateway add` command with `--oidc-issuer`, `--oidc-client-id`, and `--oidc-audience` flags sourced from the Gateway resource's OIDC config. For local/Kind gateways, `--gateway-insecure` is added when the URL targets localhost
-3. For non-OIDC (local) gateways: `acpctl gateway setup-cli` runs `openshell gateway add --name <name> --local <url>` directly
-4. Verify connectivity via `openshell provider list --gateway <tenant>` or `openshell sandbox list --gateway <tenant>`
+1. Wait for the `openshell-server-tls` secret to appear in the `tenant-a` namespace (certgen job may still be running)
+2. Extract `tls.crt` and `tls.key` from the secret and write them to temporary files
+3. Set up a `kubectl port-forward` to the gateway StatefulSet
+4. Register via `openshell gateway add --name <gateway> --local https://localhost:<port> --cert <cert> --key <key> --insecure`
+5. Verify connectivity via `openshell sandbox list --gateway <gateway>`
 
-#### Scenario: Gateway registration succeeds via acpctl setup-cli
+#### Scenario: Gateway registration succeeds via mTLS cert extraction
 
 - GIVEN an ACP-managed OpenShell gateway is running in the `tenant-a` namespace
-- AND the gateway is registered in the ACP API (via `acpctl apply -k`)
-- WHEN the test runs `acpctl gateway setup-cli --gateway-url <url> --project tenant-a`
+- AND the `openshell-server-tls` secret contains valid mTLS certificates
+- WHEN the test extracts certs and runs `openshell gateway add --local`
 - THEN the command SHALL register the gateway with the `openshell` CLI
-- AND `openshell sandbox list --gateway tenant-a` SHALL return without error (empty list or existing sandboxes)
+- AND `openshell sandbox list --gateway <gateway>` SHALL return without error
 
-#### Scenario: Gateway registration fails — gateway not found in API
+#### Scenario: Gateway TLS secret not found
 
-- GIVEN no gateway named `tenant-a` exists in the ACP API
-- WHEN the test runs `acpctl gateway setup-cli --gateway-url <url> --project tenant-a`
-- THEN the command SHALL fail with an error indicating the gateway was not found
-- AND the test SHALL skip gateway-dependent sections with a clear message
+- GIVEN the `openshell-server-tls` secret does not exist in the tenant namespace
+- WHEN the test waits for the secret
+- THEN after the timeout it SHALL fail with a clear message
+- AND the test SHALL skip gateway-dependent sections
 
 ### Requirement: Sandbox Operations
 
@@ -124,8 +122,8 @@ The test SHALL exercise the full sandbox lifecycle using the `openshell` CLI aga
 #### Scenario: Sandbox create
 
 - GIVEN a registered gateway `tenant-a`
-- WHEN the test runs `openshell sandbox create --gateway tenant-a --image <runner-image> -- sleep infinity`
-- THEN the command SHALL succeed
+- WHEN the test runs `timeout 60 openshell sandbox create --gateway <gateway> --from <runner-image> --no-tty -- echo ready`
+- THEN the command SHALL succeed within 60 seconds
 - AND it SHALL return a sandbox name or identifier
 - AND the sandbox SHALL appear in `openshell sandbox list --gateway tenant-a`
 
@@ -326,34 +324,31 @@ The test SHALL use fixture files in `tests/e2e/fixtures/openshell-cli-test/` for
   - Process rules (`run_as_user: sandbox`, `run_as_group: sandbox`)
 - AND the policy SHALL be valid for use with `openshell policy set --file`
 
-### Requirement: Demo Script (`demo-openshell.sh`)
+### Requirement: Verbose Output (Integrated Demo)
 
-The test SHALL have a companion demo script at `components/ambient-cli/demo-openshell.sh` following the `demo-*` pattern established by `demo-kind.sh`, `demo-remote.sh`, and `demo-github.sh`. The demo script presents the same OpenShell CLI operations as the e2e test but in a human-readable, step-by-step, tmux-based format suitable for live demonstrations.
+Rather than maintaining a separate demo script, the e2e test itself SHALL produce demo-quality output suitable for both CI debugging and live walkthroughs. This is achieved through the `run_cmd()` helper and styled formatting integrated directly into the test script.
 
-The demo script SHALL:
-- Bootstrap a tmux session with a left pane (demo output) and right panes (sandbox watch/exec panels)
-- Use colorized helpers (`bold()`, `dim()`, `cyan()`, `green()`, `yellow()`, `red()`, `sep()`, `step()`, `announce()`) matching the `demo-kind.sh` style
-- Accept a `PAUSE` env var (default `0`) to control delay between steps for live presentation
-- Walk through numbered sections: gateway setup, sandbox create, provider create, policy set + enforcement, settings set, cleanup
-- Show `openshell` CLI commands as orange-highlighted `$ <command>` lines before executing them
-- Attach a live `openshell sandbox exec` or SSH watch in a right-side tmux pane when a sandbox reaches READY
-- Clean up all created resources on exit via trap
-- Work against a Kind cluster provisioned by `make kind-up` (same prerequisites as the e2e test)
+The test output SHALL:
+- Print each `openshell` CLI command in orange-highlighted `$ <command>` text with a `▶` marker before execution
+- Display the first 20 lines of each command's output, indented under the command
+- Use cyan `━━` double-line section banners with dim `──────` separator lines between sections
+- Use `N · Title` format for section headers (e.g., `3 · Sandbox Operations`)
+- Show a styled results footer with separator-bordered pass/fail summary in green (all pass) or red (failures)
+- Print an intro banner showing tenant namespace, API URL, and sandbox image
 
-#### Scenario: Demo runs end-to-end
+#### Scenario: CI output is debuggable
 
-- GIVEN `make kind-up` has completed with `OPENSHELL_USE_GATEWAY=true`
-- AND the `openshell` and `acpctl` CLIs are available
-- WHEN `./components/ambient-cli/demo-openshell.sh` is executed
-- THEN a tmux session SHALL open showing the step-by-step demo
-- AND each step SHALL display the command being run and its output
-- AND all resources SHALL be cleaned up at the end
+- GIVEN the test is running in CI
+- WHEN a step fails or hangs
+- THEN the CI log SHALL show which command was being executed, its output, and the pass/fail result
+- AND the `timeout 60` on sandbox create SHALL prevent indefinite hangs
 
-#### Scenario: Demo with pause for live presentation
+#### Scenario: Test serves as a walkthrough
 
-- GIVEN the demo is invoked with `PAUSE=3`
-- WHEN each step completes
-- THEN the script SHALL wait 3 seconds before proceeding to the next step
+- GIVEN a developer runs the test locally
+- WHEN the test executes
+- THEN the terminal output SHALL read as a step-by-step walkthrough of OpenShell CLI operations
+- AND each command and its result SHALL be clearly visible without `--verbose` flags or log level changes
 
 ### Requirement: Cleanup
 
@@ -390,9 +385,8 @@ The test SHALL clean up all resources it creates, even on failure. Cleanup is cr
 | Component | Path |
 |---|---|
 | Test script | `tests/e2e/openshell-cli-e2e.sh` |
-| Demo script | `components/ambient-cli/demo-openshell.sh` |
 | Policy fixture | `tests/e2e/fixtures/openshell-cli-test/test-policy.yaml` |
-| Gateway CLI setup | `acpctl gateway setup-cli` (from `components/ambient-cli/cmd/acpctl/gateway/setup.go`) |
+| Gateway CLI setup | mTLS cert extraction from `openshell-server-tls` secret + `openshell gateway add --local` |
 
 ### OpenShell CLI Command Reference
 
@@ -400,7 +394,7 @@ The test exercises the following `openshell` CLI command groups. Exact flag name
 
 | Command | Purpose |
 |---|---|
-| `acpctl gateway setup-cli [name] --gateway-url <url> [--project <ns>] [--print]` | Register gateway (delegates to `openshell gateway add`) |
+| `openshell gateway add --name <gw> --local <url> --cert <cert> --key <key> --insecure` | Register gateway via mTLS certs extracted from `openshell-server-tls` secret |
 | `openshell gateway remove <name>` | Remove gateway registration |
 | `openshell sandbox create --gateway <gw> --image <img> -- <cmd>` | Create a sandbox |
 | `openshell sandbox list --gateway <gw>` | List sandboxes |
@@ -440,8 +434,6 @@ The test SHALL use a lightweight image for sandbox creation — not the full ACP
 |---|---|---|
 | `gateway-e2e-test.sh` | ACP session lifecycle via API + `acpctl` | `acpctl` |
 | `openshell-dual-tenant.sh` | Multi-tenant provisioning, observability | `curl` (API) |
-| **`openshell-cli-e2e.sh`** (this spec) | OpenShell CLI commands against ACP gateways | `openshell` |
+| **`openshell-cli-e2e.sh`** (this spec) | OpenShell CLI commands against ACP gateways, with built-in demo-style verbose output | `openshell` |
 
-| **`demo-openshell.sh`** (this spec) | Interactive tmux demo of the same CLI flows | `openshell` |
-
-The tests are complementary. `gateway-e2e-test.sh` validates the ACP platform plumbing. `openshell-cli-e2e.sh` validates that a power user can use the native OpenShell CLI directly against ACP-managed gateways without going through `acpctl`. `demo-openshell.sh` presents the same CLI operations in a step-by-step tmux format for live demonstrations.
+The tests are complementary. `gateway-e2e-test.sh` validates the ACP platform plumbing. `openshell-cli-e2e.sh` validates that a power user can use the native OpenShell CLI directly against ACP-managed gateways without going through `acpctl`. Its integrated `run_cmd()` helper produces demo-quality output directly in CI logs, eliminating the need for a separate demo script.
