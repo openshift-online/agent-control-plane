@@ -23,6 +23,7 @@ import (
 var setupArgs struct {
 	gatewayURL string
 	project    string
+	localName  string
 	printOnly  bool
 	kubectl    bool
 }
@@ -47,9 +48,9 @@ If the gateway was previously registered, re-authenticates using the
 existing registration instead of creating a new one.
 
 The API-side gateway name defaults to "openshell-gateway" if not specified.
-The local openshell registration is named "<project>-openshell-gateway",
-with a numeric suffix added if a new registration is needed and the name
-is already taken.
+The local openshell registration is named "<project>-openshell-gateway"
+by default. Use --name to override the local registration name (e.g.
+to match an existing convention like using the namespace name directly).
 
 Use --print to show the openshell commands instead of running them.
 
@@ -57,6 +58,7 @@ Requires openshell to be installed.`,
 	Example: `  acpctl gateway setup-cli --project tenant-a
   acpctl gateway setup-cli my-gateway --gateway-url https://gateway.example.com:8080
   acpctl gateway setup-cli --kubectl --project tenant-a
+  acpctl gateway setup-cli --kubectl --project tenant-a --name tenant-a
   acpctl gateway setup-cli --project tenant-a --print`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runSetup,
@@ -65,6 +67,7 @@ Requires openshell to be installed.`,
 func init() {
 	setupCmd.Flags().StringVar(&setupArgs.gatewayURL, "gateway-url", "", "Gateway URL (e.g. https://gateway.example.com:8080). If omitted, uses the gateway's route address")
 	setupCmd.Flags().StringVar(&setupArgs.project, "project", "", "Project/namespace to look up the gateway in (defaults to configured project)")
+	setupCmd.Flags().StringVar(&setupArgs.localName, "name", "", "Local openshell registration name (defaults to <project>-<gateway-name>)")
 	setupCmd.Flags().BoolVar(&setupArgs.printOnly, "print", false, "Print the openshell commands instead of running them")
 	setupCmd.Flags().BoolVar(&setupArgs.kubectl, "kubectl", false, "Fall back to kubectl port-forward and cert extraction when no route address is available")
 }
@@ -121,7 +124,10 @@ func runSetup(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	localName := resolveLocalName(project, apiGWName)
+	localName := setupArgs.localName
+	if localName == "" {
+		localName = resolveLocalName(project, apiGWName)
+	}
 
 	format, err := output.ParseFormat("")
 	if err != nil {
@@ -533,11 +539,6 @@ func setupOpenshellKubectl(w io.Writer, gw *sdktypes.Gateway, cfg *config.Config
 	if err := pfCmd.Start(); err != nil {
 		return fmt.Errorf("start port-forward: %w", err)
 	}
-	defer func() {
-		if pfCmd.Process != nil {
-			_ = pfCmd.Process.Kill()
-		}
-	}()
 
 	scanner := bufio.NewScanner(pfOut)
 	var localPort string
@@ -552,13 +553,23 @@ func setupOpenshellKubectl(w io.Writer, gw *sdktypes.Gateway, cfg *config.Config
 		}
 	}
 	if localPort == "" {
+		if pfCmd.Process != nil {
+			_ = pfCmd.Process.Kill()
+		}
 		return fmt.Errorf("could not determine local port from kubectl port-forward")
 	}
 
 	gwURL := "https://localhost:" + localPort
-	fmt.Fprintf(w, "Port-forward active at %s\n", gwURL)
+	fmt.Fprintf(w, "Port-forward active at %s (PID %d)\n", gwURL, pfCmd.Process.Pid)
 
-	return setupOpenshellGateway(w, gw, cfg, localName, gwURL, namespace, false, true)
+	if err := setupOpenshellGateway(w, gw, cfg, localName, gwURL, namespace, false, true); err != nil {
+		if pfCmd.Process != nil {
+			_ = pfCmd.Process.Kill()
+		}
+		return err
+	}
+	fmt.Fprintf(w, "Port-forward running in background (PID %d) — kill it when done\n", pfCmd.Process.Pid)
+	return nil
 }
 
 func verifyGateway(localName string) error {

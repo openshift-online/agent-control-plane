@@ -119,8 +119,9 @@ for NS in "${NAMESPACES[@]}"; do
   if [ -n "$OIDC_ISSUER" ]; then
     # OIDC-authenticated gateway — extract the CA cert so the CLI can verify
     # TLS, then print the registration command for the user to run manually.
-    # Running `gateway add` here triggers a browser-based OIDC login flow,
-    # which is not suitable for automated setup.
+    # Running `openshell gateway add` here triggers a browser-based OIDC login
+    # flow, which is not suitable for automated setup. `acpctl gateway setup-cli`
+    # can inject OIDC tokens non-interactively when acpctl is already logged in.
     mkdir -p "$CERT_DIR"
     echo "  Extracting CA cert from openshell-server-tls..."
     kubectl get secret openshell-server-tls -n "$NS" \
@@ -132,15 +133,10 @@ for NS in "${NAMESPACES[@]}"; do
     echo "    CA cert:  $CERT_DIR/ca.crt"
     echo ""
     echo "  To register this gateway, run:"
-    echo "    openshell gateway add --name $GW_NAME \\"
-    echo "      --oidc-issuer $OIDC_ISSUER \\"
-    echo "      --oidc-client-id $OIDC_AUDIENCE \\"
-    echo "      --oidc-audience $OIDC_AUDIENCE \\"
-    echo "      --gateway-insecure \\"
-    echo "      https://localhost:$PORT"
+    echo "    acpctl gateway setup-cli --kubectl --project $NS --name $GW_NAME"
   else
-    # mTLS-authenticated gateway — extract certs and print the registration
-    # command for the user to run manually.
+    # mTLS-authenticated gateway — extract certs so they are on disk for the
+    # openshell CLI. Print the acpctl command the user should run to register.
     mkdir -p "$CERT_DIR"
     echo "  Extracting mTLS certs from openshell-server-tls..."
     kubectl get secret openshell-server-tls -n "$NS" \
@@ -154,7 +150,7 @@ for NS in "${NAMESPACES[@]}"; do
     echo "  Certs extracted to: $CERT_DIR"
     echo ""
     echo "  To register this gateway, run:"
-    echo "    openshell gateway add --name $GW_NAME --local https://localhost:$PORT"
+    echo "    acpctl gateway setup-cli --kubectl --project $NS --name $GW_NAME"
   fi
 
   # Verify the gateway port-forward is reachable (avoid openshell commands that
@@ -188,14 +184,19 @@ echo ""
 
 echo "=== Gateway CLI Setup Complete ==="
 echo ""
-echo "Gateways (port-forwards active, register manually with commands above):"
+echo "Gateways (port-forwards active, register with acpctl commands above):"
 for i in "${!NAMESPACES[@]}"; do
   if [ "$i" -lt "${#GW_PORTS[@]}" ]; then
     echo "  ${NAMESPACES[$i]} -> localhost:${GW_PORTS[$i]}"
   fi
 done
 echo ""
-echo "Usage:"
+echo "Register all gateways at once:"
+for NS in "${NAMESPACES[@]}"; do
+  echo "  acpctl gateway setup-cli --kubectl --project ${NS} --name ${NS}"
+done
+echo ""
+echo "After registration:"
 for NS in "${NAMESPACES[@]}"; do
   echo "  openshell sandbox list --gateway ${NS}"
 done

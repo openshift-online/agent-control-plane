@@ -230,8 +230,15 @@ jobs:
 
         PF_DIR=/tmp/ambient-code ./scripts/setup-gateway-cli.sh tenant-a
 
-        TEST_TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d) \
+        # Register the gateway with the openshell CLI via acpctl
+        ACPCTL=components/ambient-cli/acpctl
+        TEST_TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d)
+        $ACPCTL login --url "http://localhost:13592" --token "$TEST_TOKEN"
+        $ACPCTL gateway setup-cli --kubectl --project tenant-a --name tenant-a || \
+          echo "Warning: acpctl gateway setup-cli failed — test will attempt self-registration"
+
         API_URL=http://localhost:13592 \
+        TEST_TOKEN="$TEST_TOKEN" \
         bash tests/e2e/gateway-e2e-test.sh || {
           echo "Gateway E2E failed - showing debugging information..."
           kubectl get pods -n tenant-a -o wide 2>&1 || true
