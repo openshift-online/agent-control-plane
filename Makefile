@@ -1920,6 +1920,10 @@ crc-up: build-cli ## Deploy the platform to CRC (OpenShift Local). LOCAL_IMAGES=
 			oc set image deployment/$$_DEPLOY -n $(CRC_NAMESPACE) $$_CONTAINER=$$_INTERNAL $(QUIET_REDIRECT) || \
 			echo "  $(COLOR_YELLOW)⚠$(COLOR_RESET) Failed to push $$_LABEL"; \
 		done; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Syncing migration init container to match api-server image..."; \
+		_API_IMG=$$(oc get deployment ambient-api-server -n $(CRC_NAMESPACE) -o jsonpath='{.spec.template.spec.containers[0].image}') && \
+		oc set image deployment/ambient-api-server -n $(CRC_NAMESPACE) migration=$$_API_IMG $(QUIET_REDIRECT) && \
+		echo "  Migration init container → $$_API_IMG"; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for deployments to roll out..."; \
 		for deploy in ambient-api-server ambient-control-plane ambient-ui; do \
 			echo "  Waiting for $$deploy..."; \
