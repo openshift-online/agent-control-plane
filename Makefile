@@ -1960,10 +1960,11 @@ crc-up: build-cli ## Deploy the platform to CRC (OpenShift Local). LOCAL_IMAGES=
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Provisioning tenant namespaces ($(OPENSHELL_TENANTS))..."
 	@for ns in $(OPENSHELL_TENANTS); do \
 		oc new-project $$ns 2>/dev/null || oc project $$ns >/dev/null 2>&1 || true; \
+		oc adm policy add-scc-to-user privileged -z openshell-gateway-sandbox -n $$ns 2>/dev/null || true; \
 		oc create secret generic mock-llm-creds --namespace=$$ns \
 			--from-literal=ANTHROPIC_AUTH_TOKEN=mock-llm-token \
 			--dry-run=client -o yaml | oc apply -f - >/dev/null 2>&1; \
-		echo "  $$ns: namespace and mock-llm-creds ready"; \
+		echo "  $$ns: namespace, SCC, and mock-llm-creds ready"; \
 	done
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Creating ACP projects and applying fleet definitions..."
 	@ACPCTL=components/ambient-cli/acpctl; \
