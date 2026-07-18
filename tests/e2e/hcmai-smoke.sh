@@ -111,6 +111,17 @@ run_cmd() {
   echo ""
 }
 
+run_cmd_redact() {
+  CMD_RC=0
+  echo ""
+  local redacted
+  redacted=$(printf '%s ' "$@" | sed -E \
+    -e 's/(--token |--client-secret |password=|client_secret=|clientSecret[":= ]*|Authorization: Bearer )[^ "}]*/\1[REDACTED]/g')
+  printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "${redacted% }" "${NC}"
+  CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+  echo ""
+}
+
 json_field() {
   local json="$1" field="$2"
   echo "$json" | python3 -c "
@@ -248,7 +259,7 @@ announce "1 · Authenticate"
 
 AUTH_MODE="oidc"
 
-run_cmd "$ACPCTL" login \
+run_cmd_redact "$ACPCTL" login \
   --client-credentials \
   --client-id "${OIDC_CLIENT_ID}" \
   --client-secret "${OIDC_CLIENT_SECRET}" \

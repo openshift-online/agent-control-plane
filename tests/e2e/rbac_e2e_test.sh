@@ -47,6 +47,17 @@ run_cmd() {
   echo ""
 }
 
+run_cmd_redact() {
+  CMD_RC=0
+  echo ""
+  local redacted
+  redacted=$(printf '%s ' "$@" | sed -E \
+    -e 's/(--token |--client-secret |password=|client_secret=|clientSecret[":= ]*|Authorization: Bearer )[^ "}]*/\1[REDACTED]/g')
+  printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "${redacted% }" "${NC}"
+  CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+  echo ""
+}
+
 HTTP_STATUS=""
 HTTP_BODY=""
 
@@ -131,7 +142,7 @@ assert_list_count() {
 KC_ADMIN_TOKEN=""
 
 get_admin_token() {
-  run_cmd curl -s --max-time 10 -X POST "${KC_URL}/realms/master/protocol/openid-connect/token" \
+  run_cmd_redact curl -s --max-time 10 -X POST "${KC_URL}/realms/master/protocol/openid-connect/token" \
     -d "client_id=admin-cli" \
     -d "grant_type=password" \
     -d "username=${KC_ADMIN_USER}" \
@@ -146,7 +157,7 @@ get_admin_token() {
 KC_CLIENT_SECRET=""
 
 get_client_secret() {
-  run_cmd curl -s -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
+  run_cmd_redact curl -s -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
     "${KC_URL}/admin/realms/${KC_REALM}/clients?clientId=${KC_CLIENT_ID}"
   local clients="${CMD_OUTPUT:-}"
   local client_uuid
@@ -155,7 +166,7 @@ get_client_secret() {
     echo "WARN: Could not find client ${KC_CLIENT_ID} (response: $(echo "$clients" | head -c 120)), trying without secret"
     return
   fi
-  run_cmd curl -s -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
+  run_cmd_redact curl -s -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
     "${KC_URL}/admin/realms/${KC_REALM}/clients/${client_uuid}/client-secret"
   KC_CLIENT_SECRET=$(echo "$CMD_OUTPUT" | jq -r '.value // empty')
 }
@@ -163,7 +174,7 @@ get_client_secret() {
 create_keycloak_user() {
   local username="$1" password="$2" email="$3"
   local firstname="${4:-Test}" lastname="${5:-User}"
-  run_cmd curl -s -X POST \
+  run_cmd_redact curl -s -X POST \
     -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
     -H "Content-Type: application/json" \
     "${KC_URL}/admin/realms/${KC_REALM}/users" \
@@ -172,12 +183,12 @@ create_keycloak_user() {
 
 delete_keycloak_user() {
   local username="$1"
-  run_cmd curl -s -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
+  run_cmd_redact curl -s -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
     "${KC_URL}/admin/realms/${KC_REALM}/users?username=${username}&exact=true"
   local kc_uid
   kc_uid=$(echo "$CMD_OUTPUT" | jq -r '.[0].id // empty')
   if [[ -n "$kc_uid" ]]; then
-    run_cmd curl -s -X DELETE \
+    run_cmd_redact curl -s -X DELETE \
       -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
       "${KC_URL}/admin/realms/${KC_REALM}/users/${kc_uid}"
   fi
@@ -354,7 +365,7 @@ echo "  Updated ambient-api-server-auth ConfigMap with Keycloak JWKS"
 # 2. Patch ambient-api-server secret to include OIDC client credentials.
 #    The control plane reads clientId / clientSecret from this secret to
 #    authenticate to the API server via OIDC client_credentials grant.
-run_cmd kubectl patch secret ambient-api-server -n "$NS" -p \
+run_cmd_redact kubectl patch secret ambient-api-server -n "$NS" -p \
   "{\"stringData\":{\"clientId\":\"${OIDC_CLIENT_ID_CP}\",\"clientSecret\":\"${OIDC_CLIENT_SECRET_CP}\"}}"
 echo "  Patched ambient-api-server secret with OIDC client credentials"
 

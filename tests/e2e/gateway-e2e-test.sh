@@ -159,6 +159,17 @@ run_cmd() {
   echo ""
 }
 
+run_cmd_redact() {
+  CMD_RC=0
+  echo ""
+  local redacted
+  redacted=$(printf '%s ' "$@" | sed -E \
+    -e 's/(--token |--client-secret |password=|client_secret=|clientSecret[":= ]*|Authorization: Bearer )[^ "}]*/\1[REDACTED]/g')
+  printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "${redacted% }" "${NC}"
+  CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+  echo ""
+}
+
 section() {
   echo ""
   sep
@@ -286,7 +297,7 @@ fi
 
 section "2. Login acpctl"
 
-run_cmd $ACPCTL login --url "$API_URL" --token "$TOKEN" --project "$TENANT"
+run_cmd_redact $ACPCTL login --url "$API_URL" --token "$TOKEN" --project "$TENANT"
 if [ "$CMD_RC" -eq 0 ]; then
   run_cmd $ACPCTL whoami
 fi

@@ -110,6 +110,17 @@ run_cmd() {
   echo ""
 }
 
+run_cmd_redact() {
+  CMD_RC=0
+  echo ""
+  local redacted
+  redacted=$(printf '%s ' "$@" | sed -E \
+    -e 's/(--token |--client-secret |password=|client_secret=|clientSecret[":= ]*|Authorization: Bearer )[^ "}]*/\1[REDACTED]/g')
+  printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "${redacted% }" "${NC}"
+  CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+  echo ""
+}
+
 json_field() {
   local json="$1" field="$2"
   echo "$json" | python3 -c "
@@ -248,7 +259,7 @@ if [[ -n "${OIDC_CLIENT_ID:-}" && -n "${OIDC_CLIENT_SECRET:-}" ]]; then
   dim "issuer: ${OIDC_ISSUER_URL}"
   dim "client: ${OIDC_CLIENT_ID}"
 
-  run_cmd $ACPCTL login \
+  run_cmd_redact $ACPCTL login \
     --client-credentials \
     --client-id "${OIDC_CLIENT_ID}" \
     --client-secret "${OIDC_CLIENT_SECRET}" \
@@ -280,7 +291,7 @@ elif [[ -n "${TEST_TOKEN:-}" ]]; then
   AUTH_MODE="token"
   AUTH_BEARER="${TEST_TOKEN}"
 
-  run_cmd $ACPCTL login "${API_URL}" \
+  run_cmd_redact $ACPCTL login "${API_URL}" \
     --token "${AUTH_BEARER}" \
     --project "${PROJECT_NAME}" \
     --insecure-skip-tls-verify
@@ -299,7 +310,7 @@ elif [[ -f "$SCRIPT_DIR/../cypress/.env.test" ]]; then
   AUTH_BEARER="${TEST_TOKEN:-}"
 
   if [[ -n "${AUTH_BEARER}" ]]; then
-    run_cmd $ACPCTL login "${API_URL}" \
+    run_cmd_redact $ACPCTL login "${API_URL}" \
       --token "${AUTH_BEARER}" \
       --project "${PROJECT_NAME}" \
       --insecure-skip-tls-verify

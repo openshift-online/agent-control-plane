@@ -103,6 +103,17 @@ run_cmd() {
   echo ""
 }
 
+run_cmd_redact() {
+  CMD_RC=0
+  echo ""
+  local redacted
+  redacted=$(printf '%s ' "$@" | sed -E \
+    -e 's/(--token |--client-secret |password=|client_secret=|clientSecret[":= ]*|Authorization: Bearer )[^ "}]*/\1[REDACTED]/g')
+  printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "${redacted% }" "${NC}"
+  CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+  echo ""
+}
+
 require_token() {
   if [ -z "$TOKEN" ]; then
     echo -e "${RED}Error:${NC} TEST_TOKEN not set. Run 'make kind-up OPENSHELL_USE_GATEWAY=true' first."
@@ -453,7 +464,7 @@ fi
 section "Cleanup"
 
 for SESSION_ID in "${CREATED_SESSION_IDS[@]}"; do
-  run_cmd curl -sf --max-time 10 -X DELETE \
+  run_cmd_redact curl -sf --max-time 10 -X DELETE \
     -H "Authorization: Bearer ${TOKEN}" "${API_URL}/api/ambient/v1/sessions/${SESSION_ID}"
   if [ "$CMD_RC" -eq 0 ]; then
     echo "  Deleted session $SESSION_ID"

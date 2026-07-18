@@ -417,7 +417,22 @@ run_cmd() {
 
 Scripts SHALL use `run_cmd` for all `kubectl`, `acpctl`, `openshell`, `oc`, and `ssh` commands. Commands whose output was previously suppressed with `>/dev/null 2>&1` SHALL be converted to use `run_cmd` so their output is visible during test runs.
 
-After calling `run_cmd`, scripts access results via:
+Commands that pass secrets, tokens, or passwords as CLI arguments (e.g., `--token`, `--client-secret`, `-d password=`, `-H "Authorization: Bearer ..."`) SHALL use `run_cmd_redact` instead of `run_cmd`. This variant prints the command with sensitive values masked as `[REDACTED]` and suppresses output display (since auth responses typically contain tokens):
+
+```bash
+run_cmd_redact() {
+  CMD_RC=0
+  echo ""
+  local redacted
+  redacted=$(printf '%s ' "$@" | sed -E \
+    -e 's/(--token |--client-secret |password=|client_secret=|clientSecret[":= ]*|Authorization: Bearer )[^ "}]*/\1[REDACTED]/g')
+  printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "${redacted% }" "${NC}"
+  CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+  echo ""
+}
+```
+
+After calling `run_cmd` or `run_cmd_redact`, scripts access results via:
 - `CMD_RC` — the command's exit code (0 on success)
 - `CMD_OUTPUT` — the command's combined stdout+stderr output
 
