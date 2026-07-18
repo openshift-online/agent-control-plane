@@ -17,11 +17,13 @@ filesystem_policy:
     - /runner
     - /etc
     - /var/log
+    - /var/run/secrets
   read_write:
     - /sandbox
     - /tmp
     - /dev/null
     - /sandbox/.runner/logs
+    - /workspace
 
 landlock:
   compatibility: best_effort

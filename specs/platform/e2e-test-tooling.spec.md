@@ -308,10 +308,12 @@ spec:
       - /runner
       - /etc
       - /var/log
+      - /var/run/secrets
     read_write:
       - /sandbox
       - /tmp
       - /dev/null
+      - /workspace
   landlock:
     compatibility: best_effort
   process:
