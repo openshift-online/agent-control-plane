@@ -1,0 +1,113 @@
+name: "PR Test — /pr-test Trigger"
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  gate:
+    name: Validate /pr-test command
+    if: >-
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/pr-test')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    outputs:
+      pr-number: ${{ steps.pr.outputs.number }}
+      head-sha: ${{ steps.pr.outputs.sha }}
+      head-ref: ${{ steps.pr.outputs.ref }}
+    steps:
+      - name: Check author permission
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PERM=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.event.comment.user.login }}/permission" \
+            --jq '.permission')
+          if [[ "$PERM" != "admin" && "$PERM" != "write" && "$PERM" != "maintain" ]]; then
+            echo "::error::User ${{ github.event.comment.user.login }} lacks write access (has: $PERM)"
+            exit 1
+          fi
+
+      - name: Get PR metadata
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}")
+          echo "number=$(echo "$PR" | jq -r '.number')" >> "$GITHUB_OUTPUT"
+          echo "sha=$(echo "$PR" | jq -r '.head.sha')" >> "$GITHUB_OUTPUT"
+          echo "ref=$(echo "$PR" | jq -r '.head.ref')" >> "$GITHUB_OUTPUT"
+
+      - name: React to comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content='rocket' --silent
+
+  build:
+    name: "Build ${{ matrix.component.name }}"
+    needs: gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - {"name":"ambient-runner","context":"./components/runners/ambient-runner","image":"quay.io/ambient_code/acp_claude_runner","dockerfile":"./components/runners/ambient-runner/Dockerfile"}
+          - {"name":"ambient-runner-openshell","context":"./components/runners/ambient-runner","image":"quay.io/ambient_code/acp_runner_openshell","dockerfile":"./components/runners/ambient-runner/Dockerfile.openshell"}
+          - {"name":"ambient-api-server","context":"./components/ambient-api-server","image":"quay.io/ambient_code/acp_api_server","dockerfile":"./components/ambient-api-server/Dockerfile"}
+          - {"name":"ambient-control-plane","context":"./components","image":"quay.io/ambient_code/acp_control_plane","dockerfile":"./components/ambient-control-plane/Dockerfile"}
+          - {"name":"ambient-mcp","context":"./components/ambient-mcp","image":"quay.io/ambient_code/acp_mcp","dockerfile":"./components/ambient-mcp/Dockerfile"}
+          - {"name":"ambient-ui","context":"./components","image":"quay.io/ambient_code/acp_ambient_ui","dockerfile":"./components/ambient-ui/Dockerfile"}
+          - {"name":"credential-github","context":".","image":"quay.io/ambient_code/acp_credential_github","dockerfile":"./components/credential-sidecars/github/Dockerfile"}
+          - {"name":"credential-jira","context":".","image":"quay.io/ambient_code/acp_credential_jira","dockerfile":"./components/credential-sidecars/jira/Dockerfile"}
+          - {"name":"credential-k8s","context":".","image":"quay.io/ambient_code/acp_credential_k8s","dockerfile":"./components/credential-sidecars/k8s/Dockerfile"}
+          - {"name":"credential-google","context":".","image":"quay.io/ambient_code/acp_credential_google","dockerfile":"./components/credential-sidecars/google/Dockerfile"}
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.gate.outputs.head-sha }}
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Login to Quay.io
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: "Build and push ${{ matrix.component.name }}"
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: ${{ matrix.component.context }}
+          file: ${{ matrix.component.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: "${{ matrix.component.image }}:pr-${{ needs.gate.outputs.pr-number }}-amd64"
+          build-args: |
+            AMBIENT_VERSION=${{ needs.gate.outputs.head-sha }}
+            GIT_COMMIT=${{ needs.gate.outputs.head-sha }}
+            IMAGE_EXPIRY=48h
+          cache-from: type=gha,scope=${{ matrix.component.name }}-amd64
+          cache-to: type=gha,mode=max,ignore-error=true,scope=${{ matrix.component.name }}-amd64
+
+  deploy:
+    name: Deploy to Stage
+    needs: [gate, build]
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/pr-test-stage.yml
+    with:
+      image-tag: "pr-${{ needs.gate.outputs.pr-number }}"
+    secrets:
+      STAGE_KUBECONFIG: ${{ secrets.STAGE_KUBECONFIG }}
+      VERTEX_SA_KEY: ${{ secrets.VERTEX_SA_KEY }}

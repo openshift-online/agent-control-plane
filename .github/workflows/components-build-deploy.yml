@@ -278,16 +278,6 @@ jobs:
       image-tag: pr-${{ github.event.pull_request.number }}
       built-images: ${{ needs.build-matrix.outputs.built-images }}
 
-  pr-test-stage:
-    needs: [build-matrix, build-amd64]
-    if: github.event_name == 'pull_request'
-    uses: ./.github/workflows/pr-test-stage.yml
-    with:
-      image-tag: pr-${{ github.event.pull_request.number }}
-    secrets:
-      STAGE_KUBECONFIG: ${{ secrets.STAGE_KUBECONFIG }}
-      VERTEX_SA_KEY: ${{ secrets.VERTEX_SA_KEY }}
-
   build-ci-gate:
     name: Build CI Gate
     runs-on: ubuntu-latest
