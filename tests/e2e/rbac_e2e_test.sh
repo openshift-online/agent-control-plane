@@ -28,9 +28,9 @@ YELLOW='\033[0;33m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-pass() { PASSED=$((PASSED + 1)); echo -e "  ${GREEN}✓${NC} $1"; }
-fail() { FAILED=$((FAILED + 1)); echo -e "  ${RED}✗${NC} $1: $2"; }
-skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped)"; }
+pass() { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
+fail() { echo -e "  ${RED}✗${NC} $1${2:+: $2}"; FAILED=$((FAILED + 1)); }
+skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped${2:+: $2})"; }
 section() { echo ""; echo -e "${BOLD}$1${NC}"; }
 
 HTTP_STATUS=""

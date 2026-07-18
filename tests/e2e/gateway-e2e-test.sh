@@ -47,8 +47,6 @@ elif [ -n "${1:-}" ]; then
 else
   API_URL="http://localhost:${PF_PORT}"
 fi
-trap cleanup EXIT INT TERM
-
 _ensure_port_forward() {
   local port
   port=$(echo "$API_URL" | sed -n 's|.*localhost:\([0-9]*\).*|\1|p' | head -1)
@@ -177,7 +175,8 @@ cleanup() {
 
   if [ "$SKIP_CLEANUP" = "true" ]; then
     echo -e "  ${YELLOW}Skipping cleanup (--skip-cleanup)${NC}"
-    for _sid in "${CREATED_SESSIONS[@]}"; do
+    for (( _i=${#CREATED_SESSIONS[@]}-1; _i>=0; _i-- )); do
+      local _sid="${CREATED_SESSIONS[$_i]}"
       [ -z "$_sid" ] && continue
       _pod="session-$(echo "${_sid:0:40}" | tr '[:upper:]' '[:lower:]')"
       _phase=$(kubectl get pod "$_pod" -n "$TENANT" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
@@ -202,6 +201,7 @@ cleanup() {
   kill "${PF_PID}" 2>/dev/null || true
   kill "${GW_PF_PID}" 2>/dev/null || true
 }
+trap cleanup EXIT INT TERM
 
 api() {
   local method="$1" path="$2"
@@ -657,10 +657,10 @@ else
 fi
 
 # ============================================================================
-# Section 11: Long-running session — LLM response and sandbox persistence
+# Section 12: Long-running session — LLM response and sandbox persistence
 # ============================================================================
 
-section "11. Long-running session: LLM response and sandbox persistence"
+section "12. Long-running session: LLM response and sandbox persistence"
 
 if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; then
   # Poll acpctl session messages until we see an assistant response (up to 180s).
@@ -767,10 +767,10 @@ fi # end long_running
 
 if should_run_test "short_running"; then
 # ============================================================================
-# Section 12: Short-running session lifecycle (stop_on_run_finished)
+# Section 13: Short-running session lifecycle (stop_on_run_finished)
 # ============================================================================
 
-section "12. Short-running session lifecycle (stop_on_run_finished) [short_running]"
+section "13. Short-running session lifecycle (stop_on_run_finished) [short_running]"
 
 # Start a new session with stop_on_run_finished=true in the request body.
 # The flag must be set at creation time so the sandbox is provisioned with the
@@ -863,10 +863,10 @@ fi # end short_running
 
 if should_run_test "repo_payload"; then
 # ============================================================================
-# Section 13: Repository payload verification
+# Section 14: Repository payload verification
 # ============================================================================
 
-section "13. Repository payload verification [repo_payload]"
+section "14. Repository payload verification [repo_payload]"
 
 REPO_SESSION_ID=""
 skip "Repo payload verification" "vertex provider not available in CI"
@@ -874,10 +874,10 @@ fi # end repo_payload
 
 if should_run_test "network_policy"; then
 # ============================================================================
-# Section 14: Network policy enforcement
+# Section 15: Network policy enforcement
 # ============================================================================
 
-section "14. Network policy enforcement [network_policy]"
+section "15. Network policy enforcement [network_policy]"
 
 LOCKED_SESSION_ID=""
 PERM_SESSION_ID=""
