@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
-# Scheduled Sessions E2E Test
+# E2E test: scheduled session lifecycle
+#
 # Exercises the full lifecycle: CRUD, cron validation, suspend/resume,
 # manual trigger, runs history, and scheduler polling against a real ACP cluster.
+#
+# Prerequisites:
+#   - Kind cluster running with ACP deployed (make kind-up)
+#   - Keycloak configured with admin user
+#
+# Usage:
+#   ./tests/e2e/scheduled_sessions_e2e_test.sh
 set -euo pipefail
 
 API_URL="${API_URL:-http://localhost:13592/api/ambient/v1}"
@@ -21,9 +29,8 @@ kubectl() {
   fi
 }
 
-PASS_COUNT=0
-FAIL_COUNT=0
-SKIP_COUNT=0
+PASSED=0
+FAILED=0
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -31,9 +38,10 @@ YELLOW='\033[0;33m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-pass() { PASS_COUNT=$((PASS_COUNT + 1)); echo -e "  ${GREEN}[PASS]${NC} $1"; }
-fail() { FAIL_COUNT=$((FAIL_COUNT + 1)); echo -e "  ${RED}[FAIL]${NC} $1: $2"; }
-skip() { SKIP_COUNT=$((SKIP_COUNT + 1)); echo -e "  ${YELLOW}[SKIP]${NC} $1"; }
+pass() { PASSED=$((PASSED + 1)); echo -e "  ${GREEN}✓${NC} $1"; }
+fail() { FAILED=$((FAILED + 1)); echo -e "  ${RED}✗${NC} $1: $2"; }
+skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped)"; }
+section() { echo ""; echo -e "${BOLD}$1${NC}"; }
 
 HTTP_STATUS=""
 HTTP_BODY=""
@@ -170,11 +178,11 @@ cleanup() {
 
 trap cleanup EXIT
 
-# =============================================================================
-echo -e "\n${BOLD}=== Scheduled Sessions E2E Test ===${NC}\n"
+# ============================================================================
+# Section 0: Auth Setup
+# ============================================================================
 
-# --- Phase 0: Auth Setup ---
-echo -e "${BOLD}Phase 0: Auth setup${NC}"
+section "0. Auth setup"
 get_admin_token
 get_client_secret
 TOKEN=$(get_token "admin" "admin")
@@ -184,8 +192,11 @@ if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
 fi
 pass "Got admin auth token"
 
-# --- Phase 1: Create project + agent ---
-echo -e "\n${BOLD}Phase 1: Create project and agent${NC}"
+# ============================================================================
+# Section 1: Create project and agent
+# ============================================================================
+
+section "1. Create project and agent"
 
 api POST "/projects" "$TOKEN" '{"name":"'"${PROJECT_ID}"'","description":"Scheduled sessions e2e test"}'
 if [[ "$HTTP_STATUS" == "201" || "$HTTP_STATUS" == "409" ]]; then
@@ -199,8 +210,11 @@ assert_status "201" "$HTTP_STATUS" "Create agent"
 AGENT_ID=$(echo "$HTTP_BODY" | jq -r '.id')
 assert_not_null "$HTTP_BODY" "id" "Agent has ID"
 
-# --- Phase 2: Create scheduled session ---
-echo -e "\n${BOLD}Phase 2: Create scheduled session${NC}"
+# ============================================================================
+# Section 2: Create scheduled session
+# ============================================================================
+
+section "2. Create scheduled session"
 
 api POST "/projects/${PROJECT_ID}/scheduled-sessions" "$TOKEN" \
   '{"name":"e2e-daily","schedule":"0 9 * * 1-5","agent_id":"'"${AGENT_ID}"'","timezone":"UTC","enabled":true,"session_prompt":"Run e2e checks","overlap_policy":"skip"}'
@@ -215,8 +229,11 @@ assert_field "$HTTP_BODY" "overlap_policy" "skip" "Overlap policy is skip"
 assert_not_null "$HTTP_BODY" "next_run_at" "next_run_at computed"
 assert_not_null "$HTTP_BODY" "created_by_user_id" "created_by_user_id set"
 
-# --- Phase 3: Cron validation ---
-echo -e "\n${BOLD}Phase 3: Cron validation${NC}"
+# ============================================================================
+# Section 3: Cron validation
+# ============================================================================
+
+section "3. Cron validation"
 
 api POST "/projects/${PROJECT_ID}/scheduled-sessions" "$TOKEN" \
   '{"name":"bad-cron","schedule":"not-a-cron","agent_id":"'"${AGENT_ID}"'"}'
@@ -226,8 +243,11 @@ api POST "/projects/${PROJECT_ID}/scheduled-sessions" "$TOKEN" \
   '{"name":"bad-tz","schedule":"0 9 * * *","timezone":"Mars/Olympus","agent_id":"'"${AGENT_ID}"'"}'
 assert_status "400" "$HTTP_STATUS" "Invalid timezone rejected"
 
-# --- Phase 4: Get and list ---
-echo -e "\n${BOLD}Phase 4: Get and list${NC}"
+# ============================================================================
+# Section 4: Get and list
+# ============================================================================
+
+section "4. Get and list"
 
 api GET "/projects/${PROJECT_ID}/scheduled-sessions/${SCHED_ID}" "$TOKEN"
 assert_status "200" "$HTTP_STATUS" "Get schedule by ID"
@@ -242,8 +262,11 @@ else
   fail "List returns at least 1 schedule" "got $ITEM_COUNT items"
 fi
 
-# --- Phase 5: Patch ---
-echo -e "\n${BOLD}Phase 5: Patch schedule${NC}"
+# ============================================================================
+# Section 5: Patch schedule
+# ============================================================================
+
+section "5. Patch schedule"
 
 api PATCH "/projects/${PROJECT_ID}/scheduled-sessions/${SCHED_ID}" "$TOKEN" \
   '{"schedule":"*/30 * * * *","description":"Updated to every 30 min","overlap_policy":"allow"}'
@@ -257,8 +280,11 @@ api PATCH "/projects/${PROJECT_ID}/scheduled-sessions/${SCHED_ID}" "$TOKEN" \
   '{"schedule":"invalid!!!"}'
 assert_status "400" "$HTTP_STATUS" "Patch with invalid cron rejected"
 
-# --- Phase 6: Suspend and resume ---
-echo -e "\n${BOLD}Phase 6: Suspend and resume${NC}"
+# ============================================================================
+# Section 6: Suspend and resume
+# ============================================================================
+
+section "6. Suspend and resume"
 
 api POST "/projects/${PROJECT_ID}/scheduled-sessions/${SCHED_ID}/suspend" "$TOKEN"
 assert_status "200" "$HTTP_STATUS" "Suspend schedule"
@@ -270,8 +296,11 @@ assert_status "200" "$HTTP_STATUS" "Resume schedule"
 assert_field "$HTTP_BODY" "enabled" "true" "Schedule is re-enabled"
 assert_not_null "$HTTP_BODY" "next_run_at" "next_run_at recomputed on resume"
 
-# --- Phase 7: Manual trigger ---
-echo -e "\n${BOLD}Phase 7: Manual trigger${NC}"
+# ============================================================================
+# Section 7: Manual trigger
+# ============================================================================
+
+section "7. Manual trigger"
 
 # Reset overlap_policy to skip for trigger test
 api PATCH "/projects/${PROJECT_ID}/scheduled-sessions/${SCHED_ID}" "$TOKEN" '{"overlap_policy":"skip"}'
@@ -295,8 +324,11 @@ else
   fail "Trigger returned session with ID" "no session ID in response"
 fi
 
-# --- Phase 8: Runs endpoint ---
-echo -e "\n${BOLD}Phase 8: Runs history${NC}"
+# ============================================================================
+# Section 8: Runs history
+# ============================================================================
+
+section "8. Runs history"
 
 api GET "/projects/${PROJECT_ID}/scheduled-sessions/${SCHED_ID}/runs" "$TOKEN"
 assert_status "200" "$HTTP_STATUS" "Get runs"
@@ -307,8 +339,11 @@ else
   fail "Runs shows at least 1 triggered session" "got $RUNS_COUNT"
 fi
 
-# --- Phase 9: Second trigger (same schedule) ---
-echo -e "\n${BOLD}Phase 9: Multiple triggers${NC}"
+# ============================================================================
+# Section 9: Multiple triggers
+# ============================================================================
+
+section "9. Multiple triggers"
 
 sleep 2  # ensure different scheduled_for timestamp
 api POST "/projects/${PROJECT_ID}/scheduled-sessions/${SCHED_ID}/trigger" "$TOKEN"
@@ -329,8 +364,11 @@ else
   fail "Runs shows at least 2 triggered sessions" "got $RUNS_COUNT"
 fi
 
-# --- Phase 10: Scheduler is running (advisory lock cycling) ---
-echo -e "\n${BOLD}Phase 10: Scheduler health check${NC}"
+# ============================================================================
+# Section 10: Scheduler health check
+# ============================================================================
+
+section "10. Scheduler health check"
 
 SCHEDULER_LOGS=$(kubectl logs -n "$NS" -l app=ambient-api-server --tail=50 2>/dev/null | grep -c "scheduled-session-scheduler" || true)
 if [[ "$SCHEDULER_LOGS" -ge 1 ]]; then
@@ -339,8 +377,11 @@ else
   skip "Scheduler log check (may not have cycled yet)"
 fi
 
-# --- Phase 11: Delete ---
-echo -e "\n${BOLD}Phase 11: Delete schedule${NC}"
+# ============================================================================
+# Section 11: Delete schedule
+# ============================================================================
+
+section "11. Delete schedule"
 
 api DELETE "/projects/${PROJECT_ID}/scheduled-sessions/${SCHED_ID}" "$TOKEN"
 assert_status "204" "$HTTP_STATUS" "Delete schedule"
@@ -350,13 +391,10 @@ api GET "/projects/${PROJECT_ID}/scheduled-sessions" "$TOKEN"
 assert_status "200" "$HTTP_STATUS" "List after delete"
 assert_list_count "$HTTP_BODY" "0" "Schedule removed from list"
 
-# =============================================================================
-echo -e "\n${BOLD}=== Results ===${NC}"
-echo -e "  ${GREEN}Passed: ${PASS_COUNT}${NC}"
-echo -e "  ${RED}Failed: ${FAIL_COUNT}${NC}"
-echo -e "  ${YELLOW}Skipped: ${SKIP_COUNT}${NC}"
+echo ""
+echo -e "${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}"
 
-if [[ "$FAIL_COUNT" -gt 0 ]]; then
+if [[ "$FAILED" -gt 0 ]]; then
   echo -e "\n${RED}FAILED${NC}"
   exit 1
 fi

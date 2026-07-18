@@ -19,9 +19,8 @@ kubectl() {
   fi
 }
 
-PASS_COUNT=0
-FAIL_COUNT=0
-SKIP_COUNT=0
+PASSED=0
+FAILED=0
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -29,9 +28,10 @@ YELLOW='\033[0;33m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-pass() { PASS_COUNT=$((PASS_COUNT + 1)); echo -e "  ${GREEN}[PASS]${NC} $1"; }
-fail() { FAIL_COUNT=$((FAIL_COUNT + 1)); echo -e "  ${RED}[FAIL]${NC} $1: $2"; }
-skip() { SKIP_COUNT=$((SKIP_COUNT + 1)); echo -e "  ${YELLOW}[SKIP]${NC} $1"; }
+pass() { PASSED=$((PASSED + 1)); echo -e "  ${GREEN}✓${NC} $1"; }
+fail() { FAILED=$((FAILED + 1)); echo -e "  ${RED}✗${NC} $1: $2"; }
+skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped)"; }
+section() { echo ""; echo -e "${BOLD}$1${NC}"; }
 
 HTTP_STATUS=""
 HTTP_BODY=""
@@ -245,14 +245,18 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# ============================================================
+# ============================================================================
+# RBAC Enforcement E2E Tests
+# ============================================================================
 echo -e "${BOLD}RBAC Enforcement E2E Tests${NC}"
 echo "API: $API_URL"
 echo "Keycloak: $KC_URL"
-echo ""
 
-# ============================================================
-echo -e "${BOLD}Phase 0: Pre-clean stale data${NC}"
+# ============================================================================
+# Section 0: Pre-clean stale data
+# ============================================================================
+
+section "0. Pre-clean stale data"
 
 clean_db
 echo "  DB cleaned"
@@ -263,9 +267,11 @@ delete_keycloak_user "rbac-user-b"
 delete_keycloak_user "rbac-user-c"
 echo "  Keycloak users cleaned"
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 0.5: Enable JWT + RBAC enforcement${NC}"
+# ============================================================================
+# Section 0.5: Enable JWT + RBAC enforcement
+# ============================================================================
+
+section "0.5. Enable JWT + RBAC enforcement"
 # The test manages its own infrastructure setup so it works identically
 # in local Kind clusters and GitHub Actions CI.
 
@@ -497,9 +503,11 @@ fi
 
 echo "  Phase 0.5 complete: JWT + RBAC enforcement enabled"
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 1: Setup${NC}"
+# ============================================================================
+# Section 1: Setup
+# ============================================================================
+
+section "1. Setup"
 
 get_admin_token
 get_client_secret
@@ -548,9 +556,11 @@ assert_status "200" "$HTTP_STATUS" "User B can GET /roles (auth-exempt)"
 api GET "/roles/${ROLE_PROJECT_OWNER}" "$TOKEN_A"
 assert_status "200" "$HTTP_STATUS" "GET /roles/{id} is auth-exempt"
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 2: Bootstrap & Auto-Provisioning (scenarios 10, 14-17)${NC}"
+# ============================================================================
+# Section 2: Bootstrap & Auto-Provisioning (scenarios 10, 14-17)
+# ============================================================================
+
+section "2. Bootstrap & Auto-Provisioning (scenarios 10, 14-17)"
 
 # Scenario 17: New user has zero bindings, sees empty project list
 api GET "/projects?page=1&size=100" "$TOKEN_A"
@@ -580,9 +590,11 @@ fi
 api GET "/projects/rbac-proj-alpha" "$TOKEN_A"
 assert_status "200" "$HTTP_STATUS" "Scenario 15: User A can immediately GET own project after creation"
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 3: Project Isolation (scenarios 1, 7, 9, 16-17, 50, 52)${NC}"
+# ============================================================================
+# Section 3: Project Isolation (scenarios 1, 7, 9, 16-17, 50, 52)
+# ============================================================================
+
+section "3. Project Isolation (scenarios 1, 7, 9, 16-17, 50, 52)"
 
 # User B creates proj-beta
 api POST "/projects" "$TOKEN_B" '{"name":"rbac-proj-beta","description":"Bob project"}'
@@ -621,9 +633,11 @@ assert_status "404" "$HTTP_STATUS" "Scenario 17: User C GET existing project ret
 api GET "/sessions?page=1&size=100" "$TOKEN_C"
 assert_status "200" "$HTTP_STATUS" "Scenario 17: User C GET /sessions returns 200 (empty, not 403)"
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 4: Agent Isolation (scenarios 3-4)${NC}"
+# ============================================================================
+# Section 4: Agent Isolation (scenarios 3-4)
+# ============================================================================
+
+section "4. Agent Isolation (scenarios 3-4)"
 
 # Scenario 3: User A creates agent in proj-alpha
 api POST "/projects/rbac-proj-alpha/agents" "$TOKEN_A" '{"name":"agent-alpha","prompt":"test agent alpha","project_id":"rbac-proj-alpha"}'
@@ -654,9 +668,11 @@ if [[ -n "$AGENT_A_ID" ]]; then
   assert_status "200" "$HTTP_STATUS" "Scenario 4: project:owner covers GET specific agent in project"
 fi
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 5: Session Isolation (scenario 6)${NC}"
+# ============================================================================
+# Section 5: Session Isolation (scenario 6)
+# ============================================================================
+
+section "5. Session Isolation (scenario 6)"
 
 # Scenario 6: Sessions list filtered by project bindings
 # User A can only see sessions from projects they have access to
@@ -674,9 +690,11 @@ assert_status "200" "$HTTP_STATUS" "Scenario 6: User C GET /sessions returns 200
 
 pass "Scenario 6: Session list endpoints return 200 for all users (filtered by project access)"
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 6: Credential Isolation (scenarios 18-23)${NC}"
+# ============================================================================
+# Section 6: Credential Isolation (scenarios 18-23)
+# ============================================================================
+
+section "6. Credential Isolation (scenarios 18-23)"
 
 # Scenario 18: User A creates credential -> 201
 api POST "/credentials" "$TOKEN_A" '{"name":"rbac-cred-a","provider":"github","token":"test-fake-token-a"}'
@@ -738,9 +756,11 @@ if [[ -n "$CRED_BIND_ID" ]]; then
   # Don't assert — best effort cleanup
 fi
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 7: Sharing via RoleBindings (scenarios 5, 27, 34)${NC}"
+# ============================================================================
+# Section 7: Sharing via RoleBindings (scenarios 5, 27, 34)
+# ============================================================================
+
+section "7. Sharing via RoleBindings (scenarios 5, 27, 34)"
 
 # Scenario 27: User A grants User B project:editor on proj-alpha -> 201
 api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_PROJECT_EDITOR}\",\"scope\":\"project\",\"user_id\":\"rbac-user-b\",\"project_id\":\"rbac-proj-alpha\"}"
@@ -782,9 +802,11 @@ else
   fail "Scenario 34: Revoke binding" "could not find editor binding ID"
 fi
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 8: Escalation Prevention (scenarios 28, 30-33)${NC}"
+# ============================================================================
+# Section 8: Escalation Prevention (scenarios 28, 30-33)
+# ============================================================================
+
+section "8. Escalation Prevention (scenarios 28, 30-33)"
 
 # First, re-grant User B as editor so we can test editor escalation
 api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_PROJECT_EDITOR}\",\"scope\":\"project\",\"user_id\":\"rbac-user-b\",\"project_id\":\"rbac-proj-alpha\"}"
@@ -838,9 +860,11 @@ if [[ -n "$EDITOR_BINDING_ID_2" ]]; then
   api DELETE "/role_bindings/${EDITOR_BINDING_ID_2}" "$TOKEN_A"
 fi
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 9: Last-Owner Protection (scenarios 35-36)${NC}"
+# ============================================================================
+# Section 9: Last-Owner Protection (scenarios 35-36)
+# ============================================================================
+
+section "9. Last-Owner Protection (scenarios 35-36)"
 
 # Scenario 35: Cannot delete sole project:owner binding -> 409
 # Find User A's owner binding on proj-alpha
@@ -872,9 +896,11 @@ else
   fail "Scenario 36: Last credential owner protection" "could not find credential owner binding to test"
 fi
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 10: Non-admin Cannot Create Global Bindings (scenario 26)${NC}"
+# ============================================================================
+# Section 10: Non-admin Cannot Create Global Bindings (scenario 26)
+# ============================================================================
+
+section "10. Non-admin Cannot Create Global Bindings (scenario 26)"
 
 # Scenario 26: User A (project:owner but not platform:admin) tries to create global binding -> 403
 if [[ -n "$ROLE_PLATFORM_ADMIN" ]]; then
@@ -888,9 +914,11 @@ fi
 api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_PROJECT_EDITOR}\",\"scope\":\"global\",\"user_id\":\"rbac-user-c\"}"
 assert_status "403" "$HTTP_STATUS" "Scenario 26: Non-admin cannot create any global-scoped binding"
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 11: Mutation Opacity (scenario 51)${NC}"
+# ============================================================================
+# Section 11: Mutation Opacity (scenario 51)
+# ============================================================================
+
+section "11. Mutation Opacity (scenario 51)"
 
 # Scenario 51: User A PATCHes proj-beta (no access) -> 403 with generic body
 api PATCH "/projects/rbac-proj-beta" "$TOKEN_A" '{"description":"hacked"}'
@@ -926,9 +954,11 @@ else
   pass "Scenario 51: DELETE 403 body has no structured reason field"
 fi
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 12: Auth-Exempt Endpoints (scenario 46)${NC}"
+# ============================================================================
+# Section 12: Auth-Exempt Endpoints (scenario 46)
+# ============================================================================
+
+section "12. Auth-Exempt Endpoints (scenario 46)"
 
 # Scenario 46: Fresh user (zero bindings) can use auth-exempt endpoints
 
@@ -956,9 +986,11 @@ CREATED_CRED_IDS+=("$CRED_C_ID")
 api GET "/roles" "$TOKEN_C"
 assert_status "200" "$HTTP_STATUS" "Scenario 46: Fresh user can GET /roles -> 200"
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 13: Additional Edge Cases${NC}"
+# ============================================================================
+# Section 13: Additional Edge Cases
+# ============================================================================
+
+section "13. Additional Edge Cases"
 
 # --- Scenario 1: Project-scoped binding restricts access ---
 # User A has project:owner on proj-alpha; verify it does NOT grant access to proj-beta
@@ -1016,9 +1048,11 @@ fi
 api GET "/credentials?page=1&size=100" "$TOKEN_C"
 assert_status "200" "$HTTP_STATUS" "Scenario 9: Credential list always returns 200, never 403"
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 14: Escalation Matrix (generative — all caller × target combos)${NC}"
+# ============================================================================
+# Section 14: Escalation Matrix (generative -- all caller x target combos)
+# ============================================================================
+
+section "14. Escalation Matrix (generative -- all caller x target combos)"
 
 # Setup: give User B project:editor, User C project:viewer on proj-alpha
 api POST "/role_bindings" "$TOKEN_A" "{\"role_id\":\"${ROLE_PROJECT_EDITOR}\",\"scope\":\"project\",\"user_id\":\"rbac-user-b\",\"project_id\":\"rbac-proj-alpha\"}"
@@ -1106,7 +1140,7 @@ for caller_entry in "${CALLERS[@]}"; do
 done
 
 echo -e "  Matrix same-project: ${GREEN}${MATRIX_PASS} passed${NC}, ${RED}${MATRIX_FAIL} failed${NC} (of $(( ${#CALLERS[@]} * ${#GRANTABLE_ROLES[@]} )))"
-PASS_COUNT=$((PASS_COUNT + MATRIX_PASS))
+PASSED=$((PASSED + MATRIX_PASS))
 
 # --- Cross-project grants (always 403) ---
 echo ""
@@ -1134,7 +1168,7 @@ for target_entry in "${GRANTABLE_ROLES[@]}"; do
 done
 
 echo -e "  Cross-project: ${GREEN}${CROSS_PASS} passed${NC}, ${RED}${CROSS_FAIL} failed${NC} (of ${#GRANTABLE_ROLES[@]})"
-PASS_COUNT=$((PASS_COUNT + CROSS_PASS))
+PASSED=$((PASSED + CROSS_PASS))
 
 # --- Global scope grants (only admin allowed, all others 403) ---
 echo ""
@@ -1161,7 +1195,7 @@ for caller_entry in "${CALLERS[@]}"; do
 done
 
 echo -e "  Global scope: ${GREEN}${GLOBAL_PASS} passed${NC}, ${RED}${GLOBAL_FAIL} failed${NC} (of ${#CALLERS[@]})"
-PASS_COUNT=$((PASS_COUNT + GLOBAL_PASS))
+PASSED=$((PASSED + GLOBAL_PASS))
 
 # Cleanup matrix bindings
 [[ -n "$MATRIX_EDITOR_BIND" ]] && api DELETE "/role_bindings/${MATRIX_EDITOR_BIND}" "$TOKEN_A"
@@ -1171,9 +1205,11 @@ TOTAL_MATRIX=$((MATRIX_PASS + MATRIX_FAIL + CROSS_PASS + CROSS_FAIL + GLOBAL_PAS
 echo ""
 echo -e "  ${BOLD}Escalation matrix total: $((MATRIX_PASS + CROSS_PASS + GLOBAL_PASS)) passed, $((MATRIX_FAIL + CROSS_FAIL + GLOBAL_FAIL)) failed (${TOTAL_MATRIX} tests)${NC}"
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 15: Session Sub-resource Isolation${NC}"
+# ============================================================================
+# Section 15: Session Sub-resource Isolation
+# ============================================================================
+
+section "15. Session Sub-resource Isolation"
 
 # User A starts a session via agent ignite
 api POST "/projects/rbac-proj-alpha/agents/${AGENT_A_ID}/start" "$TOKEN_A" '{"prompt":"test session"}'
@@ -1253,9 +1289,11 @@ if [[ -n "$SESSION_A_ID" ]]; then
   assert_status "404" "$HTTP_STATUS" "User C GET session returns 404 (no bindings)"
 fi
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 16: Role Binding List Isolation${NC}"
+# ============================================================================
+# Section 16: Role Binding List Isolation
+# ============================================================================
+
+section "16. Role Binding List Isolation"
 
 # User A lists role_bindings -> should only see own bindings, not User B's
 api GET "/role_bindings?page=1&size=100" "$TOKEN_A"
@@ -1271,9 +1309,11 @@ assert_list_not_contains "$HTTP_BODY" "user_id" "rbac-user-a" "User B role_bindi
 api GET "/role_bindings?page=1&size=100" "$TOKEN_C"
 assert_status "200" "$HTTP_STATUS" "User C GET /role_bindings returns 200"
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 17: Project Settings Isolation${NC}"
+# ============================================================================
+# Section 17: Project Settings Isolation
+# ============================================================================
+
+section "17. Project Settings Isolation"
 
 # project_settings is a top-level route without project scope in URL
 # The middleware blocks it since no scope can be extracted -> safe (no leak)
@@ -1291,9 +1331,11 @@ else
   fail "User C GET /project_settings" "unexpected status $HTTP_STATUS"
 fi
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 18: CRITICAL — PATCH /role_bindings escalation prevention${NC}"
+# ============================================================================
+# Section 18: CRITICAL -- PATCH /role_bindings escalation prevention
+# ============================================================================
+
+section "18. CRITICAL -- PATCH /role_bindings escalation prevention"
 
 # Get User A's own owner binding ID for proj-alpha
 OWNER_BIND_A=$(get_binding_id "$TOKEN_A" "user_id='rbac-user-a' and project_id='rbac-proj-alpha'")
@@ -1310,9 +1352,11 @@ else
   fail "CRITICAL: Could not find User A's owner binding" "binding lookup returned empty — skipping PATCH escalation tests"
 fi
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 19: Session sub-resource access for project owner${NC}"
+# ============================================================================
+# Section 19: Session sub-resource access for project owner
+# ============================================================================
+
+section "19. Session sub-resource access for project owner"
 
 # These test that RBAC does NOT block the project owner from session sub-resources.
 # 403 = RBAC blocked = always FAIL.
@@ -1383,9 +1427,11 @@ if [[ -n "$SESSION_A_ID" ]]; then
   echo "  Cleaned up test session ${SESSION_A_ID}"
 fi
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 20: Scheduled Sessions RBAC${NC}"
+# ============================================================================
+# Section 20: Scheduled Sessions RBAC
+# ============================================================================
+
+section "20. Scheduled Sessions RBAC"
 
 # Create a scheduled session — project:owner should be able to
 api POST "/projects/rbac-proj-alpha/scheduled-sessions" "$TOKEN_A" '{"name":"rbac-sched-test","schedule":"0 9 * * 1-5","agent_id":"'"${AGENT_A_ID}"'","session_prompt":"test"}'
@@ -1406,9 +1452,11 @@ if [[ -n "$SCHED_ID" ]]; then
   api DELETE "/projects/rbac-proj-alpha/scheduled-sessions/${SCHED_ID}" "$TOKEN_A"
 fi
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 21: Credential Token Fetch RBAC${NC}"
+# ============================================================================
+# Section 21: Credential Token Fetch RBAC
+# ============================================================================
+
+section "21. Credential Token Fetch RBAC"
 
 # Credential owner should be able to fetch token (GET /credentials/{id}/token)
 # This tests that pathToResource maps correctly for the /token sub-resource
@@ -1421,10 +1469,11 @@ if [[ -n "$CRED_A_ID" ]]; then
   assert_status "404" "$HTTP_STATUS" "Non-owner cannot GET /credentials/{id}/token"
 fi
 
-# ============================================================
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 22: PATCH Scope Widening Attack${NC}"
+# ============================================================================
+# Section 22: PATCH Scope Widening Attack
+# ============================================================================
+
+section "22. PATCH Scope Widening Attack"
 
 # User B owns proj-beta. User B has NO access to proj-alpha.
 # User B gets their own project:owner binding ID on proj-beta.
@@ -1447,9 +1496,11 @@ else
   fail "PATCH scope widening test" "could not find User B's owner binding on proj-beta — skipping remaining tests"
 fi
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 23: Nil SessionFactory Guard${NC}"
+# ============================================================================
+# Section 23: Nil SessionFactory Guard
+# ============================================================================
+
+section "23. Nil SessionFactory Guard"
 
 # This is a code-level guard, not directly testable via HTTP.
 # But we can verify the escalation checks ARE running by testing
@@ -1458,9 +1509,11 @@ echo -e "${BOLD}Phase 23: Nil SessionFactory Guard${NC}"
 api POST "/role_bindings" "$TOKEN_C" "{\"role_id\":\"${ROLE_PLATFORM_ADMIN}\",\"scope\":\"global\",\"user_id\":\"rbac-user-c\"}"
 assert_status "403" "$HTTP_STATUS" "Zero-binding user cannot create platform:admin binding (escalation checks active)"
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 24: Platform Viewer Cannot Escalate to Admin${NC}"
+# ============================================================================
+# Section 24: Platform Viewer Cannot Escalate to Admin
+# ============================================================================
+
+section "24. Platform Viewer Cannot Escalate to Admin"
 
 # Grant User C platform:viewer (via direct DB insert since we need a global binding)
 # We can't grant global from a non-admin, so we use the seed-admin pattern via kubectl
@@ -1488,9 +1541,11 @@ else
   assert_status "403" "$HTTP_STATUS" "platform:viewer cannot grant platform:viewer (no self-mint)"
 fi
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 25: Delete Hierarchy — owner cannot delete higher-privilege bindings${NC}"
+# ============================================================================
+# Section 25: Delete Hierarchy -- owner cannot delete higher-privilege bindings
+# ============================================================================
+
+section "25. Delete Hierarchy -- owner cannot delete higher-privilege bindings"
 
 # Seed a platform:admin binding scoped to proj-alpha via direct DB insert.
 # No user can grant platform:admin on a project via the API, so we seed it.
@@ -1515,9 +1570,11 @@ else
   skip "F5: DB pod not found"
 fi
 
-# ============================================================
-echo ""
-echo -e "${BOLD}Phase 26: Credential Binding Enforcement (spec: credential-binding-enforcement)${NC}"
+# ============================================================================
+# Section 26: Credential Binding Enforcement (spec: credential-binding-enforcement)
+# ============================================================================
+
+section "26. Credential Binding Enforcement (spec: credential-binding-enforcement)"
 
 # This phase tests the hierarchical credential binding authorization rules:
 #   - project:editor can bind credentials (not just owner)
@@ -1639,14 +1696,12 @@ fi
 # Cleanup phase bindings
 [[ -n "$CB_EDITOR_BIND_ID" ]] && api DELETE "/role_bindings/${CB_EDITOR_BIND_ID}" "$TOKEN_A"
 
-# ============================================================
+# ============================================================================
 # Cleanup is handled by the EXIT trap (clean_db + Keycloak user deletion)
-# ============================================================
+# ============================================================================
 echo ""
-echo -e "${BOLD}Summary${NC}"
-TOTAL=$((PASS_COUNT + FAIL_COUNT + SKIP_COUNT))
-echo -e "  ${GREEN}${PASS_COUNT} passed${NC}, ${RED}${FAIL_COUNT} failed${NC}, ${YELLOW}${SKIP_COUNT} skipped${NC} (${TOTAL} total)"
+echo -e "${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}"
 
-if [[ "$FAIL_COUNT" -gt 0 ]]; then
+if [[ "$FAILED" -gt 0 ]]; then
   exit 1
 fi
