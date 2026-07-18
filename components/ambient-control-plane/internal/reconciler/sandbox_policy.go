@@ -1,9 +1,34 @@
 package reconciler
 
 import (
+	"encoding/json"
+
 	sandboxpb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/sandbox/v1"
 	openshellpb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 )
+
+// remapFilesystemPolicyKey rewrites the JSON key "filesystem_policy" to
+// "filesystem" so that json.Unmarshal can populate the protobuf
+// SandboxPolicy.Filesystem field. The openshell YAML convention and Rego
+// use "filesystem_policy", but the proto field is named "filesystem".
+func remapFilesystemPolicyKey(spec string) string {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(spec), &raw); err != nil {
+		return spec
+	}
+	fsp, hasFSP := raw["filesystem_policy"]
+	_, hasFS := raw["filesystem"]
+	if !hasFSP || hasFS {
+		return spec
+	}
+	raw["filesystem"] = fsp
+	delete(raw, "filesystem_policy")
+	out, err := json.Marshal(raw)
+	if err != nil {
+		return spec
+	}
+	return string(out)
+}
 
 const acpInternalPolicyKey = "_acp_internal"
 const mlflowPolicyKey = "_mlflow_rh"

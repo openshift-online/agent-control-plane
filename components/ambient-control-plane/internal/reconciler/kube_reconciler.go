@@ -1652,6 +1652,12 @@ func (r *SimpleKubeReconciler) resolveAgentSandboxPolicy(ctx context.Context, sd
 		return nil, nil
 	}
 
+	// The openshell upstream YAML convention and Rego use "filesystem_policy"
+	// as the key name, but the protobuf SandboxPolicy message uses
+	// "filesystem" as its JSON tag. Remap so json.Unmarshal populates the
+	// Filesystem field correctly.
+	policySpec = remapFilesystemPolicyKey(policySpec)
+
 	var sbxPolicy sandboxpb.SandboxPolicy
 	if err := json.Unmarshal([]byte(policySpec), &sbxPolicy); err != nil {
 		return nil, fmt.Errorf("deserializing policy %s spec: %w", policyName, err)
