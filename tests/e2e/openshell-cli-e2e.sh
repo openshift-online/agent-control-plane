@@ -279,30 +279,42 @@ kubectl wait --for=condition=ready pod -l "$GW_POD_LABELS" \
   }
 pass "Gateway pod ready in ${TENANT}"
 
-# Wait for cert-manager Certificates to be Ready — certgen creates initial secrets, then
-# the reconciler deletes them and cert-manager re-issues under its own CA. The gateway pod
-# loaded certgen certs at startup; Kubernetes volume propagation can take up to 60s, so
-# restart the pod to ensure it loads the final cert-manager certs.
-printf '  %b▶%b  Waiting for cert-manager certificates in %s...\n' "${BOLD}" "${NC}" "$TENANT"
+# Resolve the certgen/cert-manager TLS race.  The certgen Job pod creates initial TLS
+# secrets (CA_A).  The control plane then deletes them and creates cert-manager Certificate
+# CRs, but the certgen pod may still be running (orphaned after Job deletion) and can
+# overwrite cert-manager's secrets (CA_B).  To guarantee cert-manager is the sole writer:
+#   1. Wait for certgen pod to finish
+#   2. Delete the server/client secrets (force cert-manager re-issue)
+#   3. Wait for cert-manager to recreate them
+#   4. Restart the gateway pod so it loads the final certs
+printf '  %b▶%b  Waiting for certgen to finish in %s...\n' "${BOLD}" "${NC}" "$TENANT"
+for _i in $(seq 1 30); do
+  _cg=$(kubectl get pod -n "$TENANT" --no-headers 2>/dev/null | grep "certgen" || true)
+  if [ -n "$_cg" ] && echo "$_cg" | grep -qE "Completed|Error"; then
+    break
+  fi
+  sleep 2
+done
+
+kubectl delete secret openshell-server-tls openshell-client-tls \
+  -n "$TENANT" --ignore-not-found 2>/dev/null || true
+
+printf '  %b▶%b  Waiting for cert-manager to issue TLS secrets in %s...\n' "${BOLD}" "${NC}" "$TENANT"
 for _i in $(seq 1 60); do
-  _ready=$(kubectl get certificate -n "$TENANT" \
-    -o jsonpath='{range .items[*]}{.status.conditions[?(@.type=="Ready")].status}{" "}{end}' 2>/dev/null || true)
-  _count=$(echo "$_ready" | tr ' ' '\n' | grep -c "True" 2>/dev/null || echo "0")
-  [ "$_count" -ge 3 ] && break
+  kubectl get secret openshell-ca-tls openshell-server-tls openshell-client-tls \
+    -n "$TENANT" &>/dev/null && break
   sleep 3
 done
-if [ "$_count" -ge 3 ]; then
-  pass "cert-manager certificates Ready in ${TENANT} (${_count} certs)"
+if kubectl get secret openshell-ca-tls openshell-server-tls openshell-client-tls \
+  -n "$TENANT" &>/dev/null; then
+  pass "cert-manager TLS secrets ready in ${TENANT}"
 else
-  fail "cert-manager certificates not Ready in ${TENANT} after 180s (${_count}/3)"
-  kubectl get certificate -n "$TENANT" 2>&1 | sed 's/^/    /' || true
+  fail "cert-manager TLS secrets not ready in ${TENANT} after 180s"
   kubectl get secrets -n "$TENANT" 2>&1 | sed 's/^/    /' || true
   echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
 
-# Restart gateway pod so it loads cert-manager certs at startup (avoids depending on
-# volume propagation and file watcher timing).
 kubectl delete pod -l "$GW_POD_LABELS" -n "$TENANT" --wait=false
 for _i in $(seq 1 60); do
   kubectl get pod -l "$GW_POD_LABELS" -n "$TENANT" --no-headers 2>/dev/null | grep -q "Running" && break
@@ -361,16 +373,14 @@ pass "Gateway port-forward established (localhost:${gw_port})"
 GATEWAY_NAME="${TENANT}-openshell-gateway"
 openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
 
-# Retry gateway setup — the TLS file watcher may need a moment to reload after
-# cert-manager overwrites the certgen-issued certs.
 _gw_setup_ok=false
-for _attempt in $(seq 1 6); do
+for _attempt in $(seq 1 12); do
   run_cmd $ACPCTL gateway setup-cli --gateway-url "$GW_URL" --project "$TENANT"
   if [ "$CMD_RC" -eq 0 ]; then
     _gw_setup_ok=true
     break
   fi
-  printf '    gateway setup-cli attempt %d/6 failed, retrying in 5s...\n' "$_attempt"
+  printf '    gateway setup-cli attempt %d/12 failed, retrying in 5s...\n' "$_attempt"
   sleep 5
   start_gw_portforward
   openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
@@ -378,7 +388,7 @@ done
 if $_gw_setup_ok; then
   pass "Gateway registered via acpctl setup-cli as '${GATEWAY_NAME}'"
 else
-  fail "acpctl gateway setup-cli failed after 6 attempts"
+  fail "acpctl gateway setup-cli failed after 12 attempts"
   echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
