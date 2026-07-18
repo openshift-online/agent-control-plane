@@ -94,6 +94,27 @@ section() {
   sep
 }
 
+# Start (or restart) the port-forward to the gateway gRPC port.
+# Sets gw_port and GW_PF_PID; updates GW_URL. Kills any prior port-forward first.
+start_gw_portforward() {
+  kill "${GW_PF_PID}" 2>/dev/null || true
+  local _gw_log
+  _gw_log=$(mktemp)
+  kubectl port-forward -n "${TENANT}" statefulset/openshell-gateway ":8080" \
+    >"$_gw_log" 2>&1 &
+  GW_PF_PID=$!
+  gw_port=""
+  for _i in $(seq 1 30); do
+    if [ -s "$_gw_log" ]; then
+      gw_port=$(grep -oE 'Forwarding from 127\.0\.0\.1:[0-9]+' "$_gw_log" | grep -oE '[0-9]+$' | head -1)
+      [ -n "$gw_port" ] && break
+    fi
+    sleep 0.2
+  done
+  rm -f "$_gw_log"
+  GW_URL="https://localhost:${gw_port}"
+}
+
 # Run a command with visibility: print it, execute, capture + display output.
 # Sets CMD_OUTPUT and CMD_RC for callers to inspect.
 CMD_OUTPUT=""
@@ -241,15 +262,16 @@ else
   exit 1
 fi
 
-# Wait for gateway TLS secret + pod readiness (control plane reconciles asynchronously)
-printf '  %b▶%b  Waiting for gateway TLS secret in %s...\n' "${BOLD}" "${NC}" "$TENANT"
-for _i in $(seq 1 60); do
-  kubectl get secret openshell-server-tls -n "$TENANT" &>/dev/null && break
-  sleep 5
+# Wait for gateway pod to exist and reach ready (control plane reconciles asynchronously)
+printf '  %b▶%b  Waiting for gateway pod in %s...\n' "${BOLD}" "${NC}" "$TENANT"
+GW_POD_LABELS="app.kubernetes.io/instance=openshell-gateway,app.kubernetes.io/component=gateway"
+for _i in $(seq 1 120); do
+  kubectl get pod -l "$GW_POD_LABELS" -n "$TENANT" --no-headers 2>/dev/null | grep -q . && break
+  sleep 3
 done
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=openshell-gateway \
+kubectl wait --for=condition=ready pod -l "$GW_POD_LABELS" \
   -n "$TENANT" --timeout=180s 2>/dev/null || {
-    fail "Gateway pod not ready in ${TENANT} after 180s"
+    fail "Gateway pod not ready in ${TENANT} after waiting"
     kubectl get pods -n "$TENANT" -o wide 2>&1 | sed 's/^/    /' || true
     kubectl logs -n "$TENANT" -l app.kubernetes.io/instance=openshell-gateway --tail=20 2>&1 | sed 's/^/    /' || true
     echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
@@ -291,20 +313,7 @@ fi
 pass "openshell-gateway StatefulSet ready in ${TENANT}"
 
 # Port-forward to gateway gRPC port
-gw_log=$(mktemp)
-kubectl port-forward -n "${TENANT}" statefulset/openshell-gateway ":8080" \
-  >"$gw_log" 2>&1 &
-GW_PF_PID=$!
-
-gw_port=""
-for _i in $(seq 1 30); do
-  if [ -s "$gw_log" ]; then
-    gw_port=$(grep -oE 'Forwarding from 127\.0\.0\.1:[0-9]+' "$gw_log" | grep -oE '[0-9]+$' | head -1)
-    [ -n "$gw_port" ] && break
-  fi
-  sleep 0.2
-done
-rm -f "$gw_log"
+start_gw_portforward
 
 if [ -z "$gw_port" ]; then
   fail "Could not establish port-forward to gateway gRPC endpoint"
@@ -312,9 +321,6 @@ if [ -z "$gw_port" ]; then
   exit 1
 fi
 pass "Gateway port-forward established (localhost:${gw_port})"
-
-# Register gateway via acpctl setup-cli (OIDC path with non-interactive credential injection)
-GW_URL="https://localhost:${gw_port}"
 GATEWAY_NAME="${TENANT}-openshell-gateway"
 openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
 
@@ -372,6 +378,16 @@ else
   echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
+
+# Refresh token + port-forward — sandbox create can exceed the token TTL and kill the pf
+run_cmd $ACPCTL login --password-grant \
+  --username "$KEYCLOAK_DEV_USER" --password "$KEYCLOAK_DEV_PASS" \
+  --client-id "$KEYCLOAK_CLIENT_ID" \
+  --issuer-url "$KEYCLOAK_ISSUER" \
+  --url "$API_URL" --project "$TENANT"
+start_gw_portforward
+openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
+run_cmd $ACPCTL gateway setup-cli --gateway-url "$GW_URL" --project "$TENANT"
 
 # List sandboxes
 run_cmd openshell sandbox list --gateway "$GATEWAY_NAME"
