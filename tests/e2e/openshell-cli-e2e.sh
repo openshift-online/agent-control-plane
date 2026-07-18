@@ -279,6 +279,24 @@ kubectl wait --for=condition=ready pod -l "$GW_POD_LABELS" \
   }
 pass "Gateway pod ready in ${TENANT}"
 
+# Wait for TLS secrets to be issued (certgen or cert-manager may still be writing)
+printf '  %b▶%b  Waiting for TLS secrets in %s...\n' "${BOLD}" "${NC}" "$TENANT"
+for _i in $(seq 1 60); do
+  kubectl get secret openshell-server-tls openshell-client-tls -n "$TENANT" &>/dev/null && break
+  sleep 3
+done
+if kubectl get secret openshell-server-tls openshell-client-tls -n "$TENANT" &>/dev/null; then
+  # Allow cert-manager rotation to settle — the reconciler may delete certgen-issued
+  # secrets and reissue via cert-manager, causing a brief CA mismatch window.
+  sleep 10
+  pass "TLS secrets ready in ${TENANT}"
+else
+  fail "TLS secrets not found in ${TENANT} after 180s"
+  kubectl get secrets -n "$TENANT" 2>&1 | sed 's/^/    /' || true
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
+  exit 1
+fi
+
 # Login as developer via OIDC password grant (headless, no browser)
 run_cmd $ACPCTL login --password-grant \
   --username "$KEYCLOAK_DEV_USER" --password "$KEYCLOAK_DEV_PASS" \
