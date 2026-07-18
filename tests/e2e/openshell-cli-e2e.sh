@@ -24,7 +24,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 NAMESPACE="${NAMESPACE:-ambient-code}"
-TENANT="tenant-c"
+TENANT="${TENANT:-e2e-openshell-oidc}"
+FIXTURE_DIR="$SCRIPT_DIR/fixtures/openshell-cli-test"
 SKIP_CLEANUP=false
 CLUSTER_VALIDATE=true
 GATEWAY_NAME=""
@@ -225,6 +226,36 @@ fi
 # Port-forward
 _ensure_port_forward
 pass "API server port-forward ready (${API_URL})"
+
+# Provision test tenant (self-contained — creates namespace, project, OIDC gateway)
+printf '  %b▶%b  Provisioning test tenant "%s" from fixture...\n' "${BOLD}" "${NC}" "$TENANT"
+kubectl create namespace "$TENANT" --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
+TEST_TOKEN=$(kubectl get secret test-user-token -n "${NAMESPACE}" -o jsonpath='{.data.token}' | base64 -d 2>/dev/null)
+$ACPCTL login --url "$API_URL" --token "$TEST_TOKEN" >/dev/null 2>&1
+run_cmd $ACPCTL apply -k "$FIXTURE_DIR" --project "$TENANT"
+if [ "$CMD_RC" -eq 0 ]; then
+  pass "Test tenant provisioned via fixture (project + OIDC gateway)"
+else
+  fail "Failed to provision test tenant — acpctl apply -k returned rc=${CMD_RC}"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
+  exit 1
+fi
+
+# Wait for gateway TLS secret + pod readiness (control plane reconciles asynchronously)
+printf '  %b▶%b  Waiting for gateway TLS secret in %s...\n' "${BOLD}" "${NC}" "$TENANT"
+for _i in $(seq 1 60); do
+  kubectl get secret openshell-server-tls -n "$TENANT" &>/dev/null && break
+  sleep 5
+done
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=openshell-gateway \
+  -n "$TENANT" --timeout=180s 2>/dev/null || {
+    fail "Gateway pod not ready in ${TENANT} after 180s"
+    kubectl get pods -n "$TENANT" -o wide 2>&1 | sed 's/^/    /' || true
+    kubectl logs -n "$TENANT" -l app.kubernetes.io/instance=openshell-gateway --tail=20 2>&1 | sed 's/^/    /' || true
+    echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
+    exit 1
+  }
+pass "Gateway pod ready in ${TENANT}"
 
 # Login as developer via OIDC password grant (headless, no browser)
 run_cmd $ACPCTL login --password-grant \

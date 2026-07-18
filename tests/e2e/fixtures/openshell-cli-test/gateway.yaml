@@ -1,0 +1,15 @@
+kind: Gateway
+name: openshell-gateway
+image: ghcr.io/nvidia/openshell/gateway:0.0.83
+server_dns_names:
+  - openshell-gateway.e2e-openshell-oidc.svc.cluster.local
+oidc:
+  issuer: http://keycloak-service.ambient-code.svc.cluster.local:11880/realms/ambient-code
+  audience: openshell-cli
+  roles_claim: realm_access.roles
+  admin_role: openshell-admin
+  user_role: openshell-user
+labels:
+  purpose: openshell
+  env: test
+  auth: oidc
