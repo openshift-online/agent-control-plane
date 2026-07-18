@@ -2,32 +2,54 @@ package reconciler
 
 import (
 	"encoding/json"
+	"fmt"
 
 	sandboxpb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/sandbox/v1"
 	openshellpb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 )
 
-// remapFilesystemPolicyKey rewrites the JSON key "filesystem_policy" to
-// "filesystem" so that json.Unmarshal can populate the protobuf
-// SandboxPolicy.Filesystem field. The openshell YAML convention and Rego
-// use "filesystem_policy", but the proto field is named "filesystem".
-func remapFilesystemPolicyKey(spec string) string {
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(spec), &raw); err != nil {
-		return spec
+// policyFile mirrors the canonical openshell YAML/JSON schema where the
+// filesystem key is "filesystem_policy". The protobuf SandboxPolicy
+// message uses "filesystem" as its JSON tag, so we deserialize into this
+// intermediate struct first, then convert to proto.
+type policyFile struct {
+	Version          uint32                                  `json:"version"`
+	FilesystemPolicy *policyFilesystem                       `json:"filesystem_policy,omitempty"`
+	Landlock         *sandboxpb.LandlockPolicy               `json:"landlock,omitempty"`
+	Process          *sandboxpb.ProcessPolicy                `json:"process,omitempty"`
+	NetworkPolicies  map[string]*sandboxpb.NetworkPolicyRule `json:"network_policies,omitempty"`
+}
+
+type policyFilesystem struct {
+	IncludeWorkdir bool     `json:"include_workdir,omitempty"`
+	ReadOnly       []string `json:"read_only,omitempty"`
+	ReadWrite      []string `json:"read_write,omitempty"`
+}
+
+// parsePolicySpec deserializes a policy spec JSON string (using the
+// canonical openshell field names) into a protobuf SandboxPolicy.
+func parsePolicySpec(spec string) (*sandboxpb.SandboxPolicy, error) {
+	var pf policyFile
+	if err := json.Unmarshal([]byte(spec), &pf); err != nil {
+		return nil, fmt.Errorf("deserializing policy spec: %w", err)
 	}
-	fsp, hasFSP := raw["filesystem_policy"]
-	_, hasFS := raw["filesystem"]
-	if !hasFSP || hasFS {
-		return spec
+
+	proto := &sandboxpb.SandboxPolicy{
+		Version:         pf.Version,
+		Landlock:        pf.Landlock,
+		Process:         pf.Process,
+		NetworkPolicies: pf.NetworkPolicies,
 	}
-	raw["filesystem"] = fsp
-	delete(raw, "filesystem_policy")
-	out, err := json.Marshal(raw)
-	if err != nil {
-		return spec
+
+	if pf.FilesystemPolicy != nil {
+		proto.Filesystem = &sandboxpb.FilesystemPolicy{
+			IncludeWorkdir: pf.FilesystemPolicy.IncludeWorkdir,
+			ReadOnly:       pf.FilesystemPolicy.ReadOnly,
+			ReadWrite:      pf.FilesystemPolicy.ReadWrite,
+		}
 	}
-	return string(out)
+
+	return proto, nil
 }
 
 const acpInternalPolicyKey = "_acp_internal"

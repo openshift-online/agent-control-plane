@@ -1652,19 +1652,13 @@ func (r *SimpleKubeReconciler) resolveAgentSandboxPolicy(ctx context.Context, sd
 		return nil, nil
 	}
 
-	// The openshell upstream YAML convention and Rego use "filesystem_policy"
-	// as the key name, but the protobuf SandboxPolicy message uses
-	// "filesystem" as its JSON tag. Remap so json.Unmarshal populates the
-	// Filesystem field correctly.
-	policySpec = remapFilesystemPolicyKey(policySpec)
-
-	var sbxPolicy sandboxpb.SandboxPolicy
-	if err := json.Unmarshal([]byte(policySpec), &sbxPolicy); err != nil {
-		return nil, fmt.Errorf("deserializing policy %s spec: %w", policyName, err)
+	sbxPolicy, err := parsePolicySpec(policySpec)
+	if err != nil {
+		return nil, fmt.Errorf("policy %s: %w", policyName, err)
 	}
 
 	r.logger.Info().Str("policy", policyName).Msg("resolved sandbox policy from agent config")
-	return &sbxPolicy, nil
+	return sbxPolicy, nil
 }
 
 func (r *SimpleKubeReconciler) resolveMaxSeq(ctx context.Context, sdk *sdkclient.Client, sessionID string) string {
