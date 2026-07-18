@@ -1,0 +1,228 @@
+name: PR Test — Stage Deployment
+
+on:
+  workflow_call:
+    inputs:
+      image-tag:
+        description: 'Image tag prefix (e.g. pr-123)'
+        required: true
+        type: string
+    secrets:
+      STAGE_KUBECONFIG:
+        required: true
+      VERTEX_SA_KEY:
+        required: true
+  workflow_dispatch:
+    inputs:
+      pr-number:
+        description: 'PR number to deploy (images must already exist)'
+        required: true
+        type: string
+
+concurrency:
+  group: pr-test-stage-${{ inputs.image-tag || format('pr-{0}', inputs.pr-number) }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: quay.io/ambient_code
+  IMAGE_TAG: ${{ inputs.image-tag && format('{0}-amd64', inputs.image-tag) || format('pr-{0}-amd64', inputs.pr-number) }}
+  PR_NUMBER: ${{ inputs.image-tag && github.event.pull_request.number || inputs.pr-number }}
+
+jobs:
+  deploy:
+    name: Deploy to Stage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      namespace: ${{ steps.deploy.outputs.namespace }}
+      api_server_url: ${{ steps.deploy.outputs.api_server_url }}
+      ui_url: ${{ steps.deploy.outputs.ui_url }}
+      keycloak_url: ${{ steps.deploy.outputs.keycloak_url }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install oc CLI
+        uses: redhat-actions/openshift-tools-installer@144527c7d98999f2652264c048c7a9bd103f8a82 # v1.13.1
+        with:
+          oc: "4"
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.STAGE_KUBECONFIG }}" > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+          oc whoami
+          oc whoami --show-server
+
+      - name: Write Vertex SA key
+        run: |
+          VERTEX_DIR=$(mktemp -d)
+          echo '${{ secrets.VERTEX_SA_KEY }}' > "${VERTEX_DIR}/vertex-sa-key.json"
+          echo "VERTEX_SA_KEY_FILE=${VERTEX_DIR}/vertex-sa-key.json" >> "$GITHUB_ENV"
+          echo "VERTEX_DIR=${VERTEX_DIR}" >> "$GITHUB_ENV"
+
+      - name: Deploy ACP to Stage
+        id: deploy
+        run: |
+          NAMESPACE="pr-${{ env.PR_NUMBER }}"
+
+          DEV_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")
+          ADMIN_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")
+
+          export KC_DEV_PASSWORD="$DEV_PASSWORD"
+          export KC_ADMIN_PASSWORD="$ADMIN_PASSWORD"
+
+          bash components/pr-test/install-openshift.sh "$NAMESPACE" "${{ env.IMAGE_TAG }}"
+
+          oc create secret generic pr-test-credentials -n "$NAMESPACE" \
+            --from-literal=developer-password="$DEV_PASSWORD" \
+            --from-literal=admin-password="$ADMIN_PASSWORD" \
+            --dry-run=client -o yaml | oc apply -f -
+
+          API_HOST=$(oc get route ambient-api-server -n "$NAMESPACE" \
+            -o jsonpath='{.spec.host}' 2>/dev/null || true)
+          UI_HOST=$(oc get route ambient-ui -n "$NAMESPACE" \
+            -o jsonpath='{.spec.host}' 2>/dev/null || true)
+          KC_HOST=$(oc get route keycloak -n "$NAMESPACE" \
+            -o jsonpath='{.spec.host}' 2>/dev/null || true)
+
+          echo "namespace=$NAMESPACE" >> "$GITHUB_OUTPUT"
+          echo "api_server_url=https://${API_HOST}" >> "$GITHUB_OUTPUT"
+          echo "ui_url=https://${UI_HOST}" >> "$GITHUB_OUTPUT"
+          echo "keycloak_url=https://${KC_HOST}" >> "$GITHUB_OUTPUT"
+
+      - name: Clean up Vertex key
+        if: always()
+        run: rm -rf "${VERTEX_DIR:-/tmp/nonexistent}"
+
+  smoke-test:
+    name: E2E Smoke Test
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install oc CLI
+        uses: redhat-actions/openshift-tools-installer@144527c7d98999f2652264c048c7a9bd103f8a82 # v1.13.1
+        with:
+          oc: "4"
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: 'components/ambient-cli/go.mod'
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.STAGE_KUBECONFIG }}" > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Build acpctl
+        run: |
+          cd components/ambient-cli
+          go build -o "$GITHUB_WORKSPACE/bin/acpctl" ./cmd/acpctl/
+          echo "$GITHUB_WORKSPACE/bin" >> "$GITHUB_PATH"
+
+      - name: Read test credentials
+        id: creds
+        run: |
+          NAMESPACE="${{ needs.deploy.outputs.namespace }}"
+          DEV_PASS=$(oc get secret pr-test-credentials -n "$NAMESPACE" \
+            -o jsonpath='{.data.developer-password}' | base64 -d)
+          echo "::add-mask::${DEV_PASS}"
+          echo "dev_password=${DEV_PASS}" >> "$GITHUB_OUTPUT"
+
+      - name: Run E2E smoke test
+        env:
+          KC_USERNAME: developer
+          KC_PASSWORD: ${{ steps.creds.outputs.dev_password }}
+          SESSION_READY_TIMEOUT: "300"
+          MESSAGE_WAIT_TIMEOUT: "120"
+        run: |
+          bash components/pr-test/e2e-smoke.sh "${{ needs.deploy.outputs.namespace }}"
+
+  comment:
+    name: Post PR Comment
+    needs: [deploy, smoke-test]
+    if: always() && needs.deploy.result == 'success' && github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Determine smoke test result
+        id: result
+        run: |
+          if [ "${{ needs.smoke-test.result }}" == "success" ]; then
+            echo "badge=✅ Passed" >> "$GITHUB_OUTPUT"
+          else
+            echo "badge=❌ Failed" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment on PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_NAMESPACE: ${{ needs.deploy.outputs.namespace }}
+          DEPLOY_API_URL: ${{ needs.deploy.outputs.api_server_url }}
+          DEPLOY_UI_URL: ${{ needs.deploy.outputs.ui_url }}
+          DEPLOY_KC_URL: ${{ needs.deploy.outputs.keycloak_url }}
+          DEPLOY_BADGE: ${{ steps.result.outputs.badge }}
+          DEPLOY_IMAGE_TAG: ${{ env.IMAGE_TAG }}
+          DEPLOY_PR_NUMBER: ${{ env.PR_NUMBER }}
+          DEPLOY_REPO: ${{ github.repository }}
+        run: |
+          BODY="<!-- pr-test-stage -->
+          ## PR Test Environment — Stage
+
+          | Component | URL |
+          |-----------|-----|
+          | API Server | ${DEPLOY_API_URL} |
+          | UI | ${DEPLOY_UI_URL} |
+          | Keycloak | ${DEPLOY_KC_URL} |
+
+          **Image tag:** \`${DEPLOY_IMAGE_TAG}\`
+          **Namespace:** \`${DEPLOY_NAMESPACE}\`
+          **E2E Smoke Test:** ${DEPLOY_BADGE}
+
+          ### Login
+
+          Credentials are stored in a K8s Secret (requires Stage cluster access):
+          \`\`\`bash
+          oc get secret pr-test-credentials -n ${DEPLOY_NAMESPACE} -o jsonpath='{.data.developer-password}' | base64 -d && echo
+          oc get secret pr-test-credentials -n ${DEPLOY_NAMESPACE} -o jsonpath='{.data.admin-password}' | base64 -d && echo
+          \`\`\`
+
+          Then authenticate:
+          \`\`\`bash
+          acpctl login --password-grant \\\\
+            --username developer --password <from-above> \\\\
+            --issuer-url ${DEPLOY_KC_URL}/realms/ambient-code \\\\
+            --url ${DEPLOY_API_URL} --insecure-skip-tls-verify
+          \`\`\`
+
+          <details><summary>Manual teardown</summary>
+
+          \`\`\`bash
+          bash components/pr-test/teardown-openshift.sh ${DEPLOY_NAMESPACE}
+          \`\`\`
+
+          </details>"
+
+          EXISTING=$(gh api "repos/${DEPLOY_REPO}/issues/${DEPLOY_PR_NUMBER}/comments" \
+            --jq '.[] | select(.body | contains("<!-- pr-test-stage -->")) | .id' 2>/dev/null | head -1)
+
+          if [ -n "$EXISTING" ]; then
+            gh api "repos/${DEPLOY_REPO}/issues/comments/${EXISTING}" \
+              -X PATCH -f body="$BODY"
+          else
+            gh api "repos/${DEPLOY_REPO}/issues/${DEPLOY_PR_NUMBER}/comments" \
+              -f body="$BODY"
+          fi

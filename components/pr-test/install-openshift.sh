@@ -17,6 +17,8 @@
 #   SKIP_RBAC            Set to 1 to skip ClusterRole/ClusterRoleBinding creation
 #   SKIP_KEYCLOAK        Set to 1 to skip Keycloak deployment (use existing IdP)
 #   KEYCLOAK_REALM_URL   External Keycloak realm URL (required if SKIP_KEYCLOAK=1)
+#   KC_DEV_PASSWORD      Password for 'developer' user (default: developer)
+#   KC_ADMIN_PASSWORD    Password for 'admin' user (default: admin)
 #   DRY_RUN              Set to 1 to print manifests without applying
 set -euo pipefail
 
@@ -45,6 +47,8 @@ usage() {
   echo "  OC                  oc binary (default: oc)"
   echo "  SKIP_RBAC           Set to 1 to skip ClusterRole/ClusterRoleBinding"
   echo "  SKIP_KEYCLOAK       Set to 1 to skip Keycloak (set KEYCLOAK_REALM_URL)"
+  echo "  KC_DEV_PASSWORD     Password for 'developer' user (default: developer)"
+  echo "  KC_ADMIN_PASSWORD   Password for 'admin' user (default: admin)"
   echo "  DRY_RUN             Set to 1 to print manifests only"
   exit 1
 }
@@ -441,6 +445,13 @@ kc_host = '${KC_ROUTE_HOST}'
 ui_host = '${UI_ROUTE_HOST}'
 kc_secret = '${KC_CLIENT_SECRET}'
 oidc_secret = '${OIDC_CLIENT_SECRET}'
+dev_password = '${KC_DEV_PASSWORD:-developer}'
+admin_password = '${KC_ADMIN_PASSWORD:-admin}'
+for user in realm.get('users', []):
+    if user['username'] == 'developer':
+        user['credentials'] = [{'type': 'password', 'value': dev_password, 'temporary': False}]
+    elif user['username'] == 'admin':
+        user['credentials'] = [{'type': 'password', 'value': admin_password, 'temporary': False}]
 for client in realm.get('clients', []):
     if client['clientId'] == 'ambient-frontend':
         client['secret'] = kc_secret
@@ -505,7 +516,7 @@ spec:
         - name: KEYCLOAK_ADMIN
           value: admin
         - name: KEYCLOAK_ADMIN_PASSWORD
-          value: admin
+          value: "${KC_ADMIN_PASSWORD:-admin}"
         - name: KC_HOSTNAME
           value: "${KC_EXTERNAL_URL}"
         - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC

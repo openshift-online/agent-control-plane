@@ -40,6 +40,8 @@ type Resource struct {
 	Project        string            `yaml:"project"`
 	SandboxPolicy  string            `yaml:"sandbox_policy"`
 	Spec           map[string]any    `yaml:"spec"`
+	APIServerURL   string            `yaml:"api_server_url"`
+	CredentialID   string            `yaml:"credential_id"`
 }
 
 type PayloadDecl struct {
@@ -283,6 +285,15 @@ func StrategicMerge(base, patch Resource) Resource {
 	}
 	if patch.SandboxPolicy != "" {
 		base.SandboxPolicy = patch.SandboxPolicy
+	}
+	if patch.APIServerURL != "" {
+		base.APIServerURL = patch.APIServerURL
+	}
+	if patch.CredentialID != "" {
+		base.CredentialID = patch.CredentialID
+	}
+	if patch.Role != "" {
+		base.Role = patch.Role
 	}
 	for k, v := range patch.Spec {
 		if base.Spec == nil {
