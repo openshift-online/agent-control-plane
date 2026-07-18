@@ -130,6 +130,9 @@ _ensure_gateway_port_forward() {
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+CYAN='\033[36m'
+ORANGE='\033[38;5;214m'
+DIM='\033[2m'
 BOLD='\033[1m'
 NC='\033[0m'
 
@@ -138,10 +141,17 @@ FAILED=0
 CREATED_SESSION_ID=""
 CREATED_SESSIONS=()
 
-pass() { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
-fail() { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
-skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
-section() { echo ""; echo -e "${BOLD}$1${NC}"; }
+sep()     { printf '%b%s%b\n' "${DIM}" "──────────────────────────────────────────────────" "${NC}"; }
+pass()    { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
+fail()    { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
+skip()    { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
+
+section() {
+  echo ""
+  sep
+  printf '%b━━  %s%b\n' "${CYAN}" "$*" "${NC}"
+  sep
+}
 
 should_run_test() {
   local name="$1"
@@ -241,7 +251,7 @@ if [ -n "$ACPCTL" ]; then
   pass "acpctl found: $ACPCTL"
 else
   fail "acpctl not found — run 'make build-cli'"
-  echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
 
@@ -256,7 +266,7 @@ if $ACPCTL login --url "$API_URL" --token "$TOKEN" --project "$TENANT" >/dev/nul
   pass "acpctl login succeeded (${API_URL}, project: ${TENANT})"
 else
   fail "acpctl login failed — is the API server reachable at ${API_URL}?"
-  echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
 
@@ -353,7 +363,7 @@ if [ -n "$PROJECT_ID" ]; then
   pass "Project '${TENANT}' exists (id: ${PROJECT_ID})"
 else
   fail "Project '${TENANT}' not found — was 'make kind-up' run with OPENSHELL_USE_GATEWAY=true?"
-  echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
 
@@ -371,7 +381,7 @@ if [ -n "$AGENT_ID" ]; then
   pass "Agent 'test-agent-mock-llm' exists (id: ${AGENT_ID})"
 else
   fail "Agent 'test-agent-mock-llm' not found in project '${TENANT}'"
-  echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
 
@@ -935,7 +945,7 @@ PERM_SESSION_ID=""
 # used below needs a local port-forward to the gateway's gRPC endpoint.
 if ! _ensure_gateway_port_forward; then
   fail "Gateway port-forward could not be established — openshell CLI missing or gateway unreachable"
-  echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
 
@@ -1161,7 +1171,13 @@ section "Cleanup"
 cleanup
 
 echo ""
-echo -e "${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}"
+sep
+if [ "$FAILED" -gt 0 ]; then
+  printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"
+else
+  printf '%b  %d passed ✓%b\n' "${GREEN}" "$PASSED" "${NC}"
+fi
+sep
 echo ""
 
 if [ "$FAILED" -gt 0 ]; then
