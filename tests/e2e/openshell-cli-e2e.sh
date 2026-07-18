@@ -279,17 +279,17 @@ kubectl wait --for=condition=ready pod -l "$GW_POD_LABELS" \
   }
 pass "Gateway pod ready in ${TENANT}"
 
-# Wait for TLS secrets to be issued (certgen or cert-manager may still be writing)
-printf '  %b▶%b  Waiting for TLS secrets in %s...\n' "${BOLD}" "${NC}" "$TENANT"
+# Wait for cert-manager to issue TLS — openshell-ca-tls only exists after cert-manager
+# finishes (certgen creates server/client secrets first, then the reconciler deletes them
+# and cert-manager re-issues under its own CA).
+printf '  %b▶%b  Waiting for cert-manager TLS secrets in %s...\n' "${BOLD}" "${NC}" "$TENANT"
 for _i in $(seq 1 60); do
-  kubectl get secret openshell-server-tls openshell-client-tls -n "$TENANT" &>/dev/null && break
+  kubectl get secret openshell-ca-tls openshell-server-tls openshell-client-tls \
+    -n "$TENANT" &>/dev/null && break
   sleep 3
 done
-if kubectl get secret openshell-server-tls openshell-client-tls -n "$TENANT" &>/dev/null; then
-  # Allow cert-manager rotation to settle — the reconciler may delete certgen-issued
-  # secrets and reissue via cert-manager, causing a brief CA mismatch window.
-  sleep 10
-  pass "TLS secrets ready in ${TENANT}"
+if kubectl get secret openshell-ca-tls -n "$TENANT" &>/dev/null; then
+  pass "TLS secrets ready in ${TENANT} (cert-manager CA present)"
 else
   fail "TLS secrets not found in ${TENANT} after 180s"
   kubectl get secrets -n "$TENANT" 2>&1 | sed 's/^/    /' || true
@@ -342,11 +342,24 @@ pass "Gateway port-forward established (localhost:${gw_port})"
 GATEWAY_NAME="${TENANT}-openshell-gateway"
 openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
 
-run_cmd $ACPCTL gateway setup-cli --gateway-url "$GW_URL" --project "$TENANT"
-if [ "$CMD_RC" -eq 0 ]; then
+# Retry gateway setup — the TLS file watcher may need a moment to reload after
+# cert-manager overwrites the certgen-issued certs.
+_gw_setup_ok=false
+for _attempt in $(seq 1 6); do
+  run_cmd $ACPCTL gateway setup-cli --gateway-url "$GW_URL" --project "$TENANT"
+  if [ "$CMD_RC" -eq 0 ]; then
+    _gw_setup_ok=true
+    break
+  fi
+  printf '    gateway setup-cli attempt %d/6 failed, retrying in 5s...\n' "$_attempt"
+  sleep 5
+  start_gw_portforward
+  openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
+done
+if $_gw_setup_ok; then
   pass "Gateway registered via acpctl setup-cli as '${GATEWAY_NAME}'"
 else
-  fail "acpctl gateway setup-cli failed"
+  fail "acpctl gateway setup-cli failed after 6 attempts"
   echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi

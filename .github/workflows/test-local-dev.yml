@@ -202,8 +202,31 @@ jobs:
     - name: Install openshell CLI
       run: pipx install openshell
 
+    - name: Run OpenShell CLI E2E tests
+      timeout-minutes: 10
+      run: |
+        fuser -k 13592/tcp 2>/dev/null || true
+        fuser -k 18592/tcp 2>/dev/null || true
+
+        kubectl port-forward -n ambient-code svc/keycloak-service 18592:11880 &
+        sleep 3
+
+        KEYCLOAK_URL=http://localhost:18592 \
+        OPENSHELL_RUNNER_IMAGE=localhost/acp_runner_openshell:kind-preloaded \
+        bash tests/e2e/openshell-cli-e2e.sh || {
+          echo "OpenShell CLI E2E failed - showing debugging information..."
+          TENANT=e2e-openshell-oidc
+          kubectl get pods -n $TENANT -o wide 2>&1 || true
+          kubectl logs -n $TENANT -l app.kubernetes.io/instance=openshell-gateway --tail=50 2>&1 || true
+          kubectl logs -n ambient-code -l app=ambient-control-plane --tail=50 2>&1 || true
+          exit 1
+        }
+
     - name: Run Gateway E2E tests
       run: |
+        fuser -k 13592/tcp 2>/dev/null || true
+        fuser -k 18592/tcp 2>/dev/null || true
+
         kubectl port-forward -n ambient-code svc/ambient-api-server 13592:8000 &
         kubectl port-forward -n ambient-code svc/keycloak-service 18592:11880 &
         sleep 3
@@ -237,26 +260,6 @@ jobs:
         bash tests/e2e/gateway-e2e-test.sh || {
           echo "Gateway E2E failed - showing debugging information..."
           kubectl get pods -n tenant-a -o wide 2>&1 || true
-          kubectl logs -n ambient-code -l app=ambient-control-plane --tail=50 2>&1 || true
-          exit 1
-        }
-
-    - name: Run OpenShell CLI E2E tests
-      timeout-minutes: 10
-      run: |
-        fuser -k 13592/tcp 2>/dev/null || true
-        fuser -k 18592/tcp 2>/dev/null || true
-
-        kubectl port-forward -n ambient-code svc/keycloak-service 18592:11880 &
-        sleep 3
-
-        KEYCLOAK_URL=http://localhost:18592 \
-        OPENSHELL_RUNNER_IMAGE=localhost/acp_runner_openshell:kind-preloaded \
-        bash tests/e2e/openshell-cli-e2e.sh || {
-          echo "OpenShell CLI E2E failed - showing debugging information..."
-          TENANT=e2e-openshell-oidc
-          kubectl get pods -n $TENANT -o wide 2>&1 || true
-          kubectl logs -n $TENANT -l app.kubernetes.io/instance=openshell-gateway --tail=50 2>&1 || true
           kubectl logs -n ambient-code -l app=ambient-control-plane --tail=50 2>&1 || true
           exit 1
         }
