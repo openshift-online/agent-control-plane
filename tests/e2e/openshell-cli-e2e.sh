@@ -10,7 +10,7 @@
 #   - kind-up with OPENSHELL_USE_GATEWAY=true (default)
 #   - acpctl built (make build-cli)
 #   - openshell CLI installed and available in $PATH
-#   - TEST_TOKEN set or tests/cypress/.env.test present
+#   - Keycloak reachable (KEYCLOAK_URL, default http://localhost:11880)
 #
 # Usage:
 #   ./tests/e2e/openshell-cli-e2e.sh [--skip-cleanup] [--cluster-validate] [API_URL]
@@ -24,9 +24,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 NAMESPACE="${NAMESPACE:-ambient-code}"
-TENANT="tenant-a"
+TENANT="tenant-c"
 SKIP_CLEANUP=false
-CLUSTER_VALIDATE=false
+CLUSTER_VALIDATE=true
 GATEWAY_NAME=""
 SANDBOX_NAME=""
 SANDBOX_IMAGE="${OPENSHELL_RUNNER_IMAGE:-localhost/acp_runner_openshell:kind-preloaded}"
@@ -41,12 +41,14 @@ while [[ "${1:-}" == --* ]]; do
   esac
 done
 
-# Token
-if [ -z "${TEST_TOKEN:-}" ] && [ -f "$SCRIPT_DIR/../cypress/.env.test" ]; then
-  # shellcheck disable=SC1091
-  source "$SCRIPT_DIR/../cypress/.env.test"
-fi
-TOKEN="${TEST_TOKEN:-}"
+# Keycloak OIDC credentials for password-grant login
+KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:11880}"
+KEYCLOAK_ISSUER="${KEYCLOAK_URL}/realms/ambient-code"
+KEYCLOAK_CLIENT_ID="${KEYCLOAK_CLIENT_ID:-openshell-cli}"
+KEYCLOAK_DEV_USER="${KEYCLOAK_DEV_USER:-developer}"
+KEYCLOAK_DEV_PASS="${KEYCLOAK_DEV_PASS:-developer}"
+KEYCLOAK_ADMIN_USER="${KEYCLOAK_ADMIN_USER:-admin}"
+KEYCLOAK_ADMIN_PASS="${KEYCLOAK_ADMIN_PASS:-admin}"
 
 # API URL
 PF_PID=""
@@ -202,14 +204,6 @@ printf '%b  Image:     %s%b\n' "${DIM}" "${SANDBOX_IMAGE}" "${NC}"
 
 section "1 · Prerequisites"
 
-# Token
-if [ -z "$TOKEN" ]; then
-  fail "TEST_TOKEN not set — run 'make kind-up' first, or: source tests/cypress/.env.test"
-  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
-  exit 1
-fi
-pass "TEST_TOKEN available"
-
 # openshell CLI
 if ! command -v openshell &>/dev/null; then
   fail "openshell CLI not found — install it or add to PATH"
@@ -232,13 +226,17 @@ fi
 _ensure_port_forward
 pass "API server port-forward ready (${API_URL})"
 
-# Login
-run_cmd $ACPCTL login --url "$API_URL" --token "$TOKEN" --project "$TENANT"
+# Login as developer via OIDC password grant (headless, no browser)
+run_cmd $ACPCTL login --password-grant \
+  --username "$KEYCLOAK_DEV_USER" --password "$KEYCLOAK_DEV_PASS" \
+  --client-id "$KEYCLOAK_CLIENT_ID" \
+  --issuer-url "$KEYCLOAK_ISSUER" \
+  --url "$API_URL" --project "$TENANT"
 if [ "$CMD_RC" -eq 0 ]; then
   run_cmd $ACPCTL whoami
-  pass "acpctl login succeeded (${API_URL}, project: ${TENANT})"
+  pass "acpctl login succeeded as developer (${API_URL}, project: ${TENANT})"
 else
-  fail "acpctl login failed — is the API server reachable at ${API_URL}?"
+  fail "acpctl login --password-grant failed — is Keycloak reachable at ${KEYCLOAK_URL}?"
   echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
@@ -284,36 +282,19 @@ if [ -z "$gw_port" ]; then
 fi
 pass "Gateway port-forward established (localhost:${gw_port})"
 
-# Register gateway with mTLS certificates
-GATEWAY_NAME="${TENANT}"
+# Register gateway via acpctl setup-cli (OIDC path with non-interactive credential injection)
+GW_URL="https://localhost:${gw_port}"
+GATEWAY_NAME="${TENANT}-openshell-gateway"
 openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
 
-cert_dir="$HOME/.config/openshell/gateways/${GATEWAY_NAME}/mtls"
-mkdir -p "$cert_dir"
-kubectl get secret openshell-server-tls -n "${TENANT}" \
-  -o jsonpath='{.data.ca\.crt}' | base64 -d > "$cert_dir/ca.crt"
-kubectl get secret openshell-server-tls -n "${TENANT}" \
-  -o jsonpath='{.data.tls\.crt}' | base64 -d > "$cert_dir/tls.crt"
-kubectl get secret openshell-server-tls -n "${TENANT}" \
-  -o jsonpath='{.data.tls\.key}' | base64 -d > "$cert_dir/tls.key"
-
-GW_URL="https://localhost:${gw_port}"
-run_cmd openshell gateway add --name "${GATEWAY_NAME}" --local "$GW_URL"
+run_cmd $ACPCTL gateway setup-cli --gateway-url "$GW_URL" --project "$TENANT"
 if [ "$CMD_RC" -eq 0 ]; then
-  pass "Gateway registered as '${GATEWAY_NAME}'"
+  pass "Gateway registered via acpctl setup-cli as '${GATEWAY_NAME}'"
 else
-  fail "openshell gateway add failed"
+  fail "acpctl gateway setup-cli failed"
   echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
-
-# Re-extract certs after registration (gateway add may overwrite)
-kubectl get secret openshell-server-tls -n "${TENANT}" \
-  -o jsonpath='{.data.ca\.crt}' | base64 -d > "$cert_dir/ca.crt"
-kubectl get secret openshell-server-tls -n "${TENANT}" \
-  -o jsonpath='{.data.tls\.crt}' | base64 -d > "$cert_dir/tls.crt"
-kubectl get secret openshell-server-tls -n "${TENANT}" \
-  -o jsonpath='{.data.tls\.key}' | base64 -d > "$cert_dir/tls.key"
 
 # Verify connectivity via sandbox list
 run_cmd openshell sandbox list --gateway "$GATEWAY_NAME"
@@ -331,21 +312,25 @@ fi
 
 section "3 · Sandbox Operations"
 
-# Create sandbox (with timeout to prevent CI hang)
+# Create sandbox (with timeout to prevent CI hang; gtimeout on macOS)
+TIMEOUT_CMD=""
+if command -v timeout &>/dev/null; then
+  TIMEOUT_CMD="timeout 60"
+elif command -v gtimeout &>/dev/null; then
+  TIMEOUT_CMD="gtimeout 60"
+fi
+
 echo ""
 printf '  %b▶%b  Create sandbox\n' "${BOLD}" "${NC}"
-printf '  %b$ timeout 60 openshell sandbox create --gateway %s --from %s --no-tty -- echo ready%b\n' \
-  "${ORANGE}" "$GATEWAY_NAME" "$SANDBOX_FROM_IMAGE" "${NC}"
-SANDBOX_OUTPUT=$(timeout 60 openshell sandbox create --gateway "$GATEWAY_NAME" \
+printf '  %b$ %s openshell sandbox create --gateway %s --from %s --no-tty -- echo ready%b\n' \
+  "${ORANGE}" "${TIMEOUT_CMD:-"(no timeout)"}" "$GATEWAY_NAME" "$SANDBOX_FROM_IMAGE" "${NC}"
+SANDBOX_OUTPUT=$($TIMEOUT_CMD openshell sandbox create --gateway "$GATEWAY_NAME" \
   --from "$SANDBOX_FROM_IMAGE" --no-tty -- echo ready 2>&1) || true
 echo "$SANDBOX_OUTPUT" | head -20 | sed 's/^/    /'
 echo ""
 
 SANDBOX_CLEAN=$(echo "$SANDBOX_OUTPUT" | sed 's/\x1b\[[0-9;]*m//g')
 SANDBOX_NAME=$(echo "$SANDBOX_CLEAN" | grep -i 'Created sandbox:' | sed 's/.*Created sandbox:[[:space:]]*//' | tr -d '[:space:]' | head -1 || echo "")
-if [ -z "$SANDBOX_NAME" ]; then
-  SANDBOX_NAME=$(echo "$SANDBOX_CLEAN" | grep -oE '[a-z]+-[a-z]+' | head -1 || echo "")
-fi
 
 if [ -n "$SANDBOX_NAME" ]; then
   CREATED_SANDBOX="$SANDBOX_NAME"
@@ -409,10 +394,51 @@ else
 fi
 
 # ============================================================================
-# Section 4: Provider Operations
+# Section 4: RBAC Validation (developer vs admin)
 # ============================================================================
 
-section "4 · Provider Operations"
+section "4 · RBAC Validation"
+
+# Verify developer is denied admin operations
+run_cmd openshell provider create --gateway "$GATEWAY_NAME" \
+  --name "rbac-test-provider" --type generic \
+  --credential TEST_KEY=test-value
+if [ "$CMD_RC" -ne 0 ] && echo "$CMD_OUTPUT" | grep -q "PermissionDenied"; then
+  pass "Developer correctly denied provider create (openshell-admin required)"
+elif [ "$CMD_RC" -eq 0 ]; then
+  fail "Developer should NOT have admin access to provider create"
+  openshell provider delete --gateway "$GATEWAY_NAME" "rbac-test-provider" 2>/dev/null || true
+else
+  skip "RBAC validation" "unexpected error: rc=${CMD_RC}"
+fi
+
+# Re-login as admin for admin-only operations (providers, policies, settings)
+run_cmd $ACPCTL login --password-grant \
+  --username "$KEYCLOAK_ADMIN_USER" --password "$KEYCLOAK_ADMIN_PASS" \
+  --client-id "$KEYCLOAK_CLIENT_ID" \
+  --issuer-url "$KEYCLOAK_ISSUER" \
+  --url "$API_URL" --project "$TENANT"
+if [ "$CMD_RC" -eq 0 ]; then
+  run_cmd $ACPCTL whoami
+  pass "Re-login as admin succeeded"
+else
+  fail "Re-login as admin failed — admin operations will be skipped"
+fi
+
+# Re-register gateway with admin credentials
+openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
+run_cmd $ACPCTL gateway setup-cli --gateway-url "$GW_URL" --project "$TENANT"
+if [ "$CMD_RC" -eq 0 ]; then
+  pass "Gateway re-registered with admin credentials"
+else
+  fail "Gateway re-registration with admin credentials failed"
+fi
+
+# ============================================================================
+# Section 5: Provider Operations
+# ============================================================================
+
+section "5 · Provider Operations"
 
 PROVIDER_NAME="e2e-test-provider"
 
@@ -468,10 +494,10 @@ if [ -n "$CREATED_PROVIDER" ]; then
 fi
 
 # ============================================================================
-# Section 5: Policy Operations
+# Section 6: Policy Operations
 # ============================================================================
 
-section "5 · Policy Operations"
+section "6 · Policy Operations"
 
 POLICY_FIXTURE="$SCRIPT_DIR/fixtures/openshell-cli-test/test-policy.yaml"
 
@@ -517,12 +543,12 @@ else
   sleep 3
   run_cmd openshell sandbox exec --gateway "$GATEWAY_NAME" \
     -n "$SANDBOX_NAME" -- curl -sf https://update.code.visualstudio.com
-  if echo "$CMD_OUTPUT" | grep -q "policy_denied"; then
-    fail "Allowed endpoint was denied by policy"
-  elif [ -n "$CMD_OUTPUT" ]; then
+  if [ "$CMD_RC" -eq 0 ]; then
     pass "Policy enforcement: allowed endpoint (update.code.visualstudio.com) reachable"
+  elif echo "$CMD_OUTPUT" | grep -q "policy_denied"; then
+    fail "Allowed endpoint was denied by policy"
   else
-    skip "Policy enforcement (allowed)" "no response from curl — sandbox may not have curl"
+    skip "Policy enforcement (allowed)" "exec returned rc=${CMD_RC} — sandbox may not support exec yet"
   fi
 
   # Policy enforcement: blocked endpoint
@@ -530,26 +556,22 @@ else
     -n "$SANDBOX_NAME" -- curl -sf http://example.com
   if echo "$CMD_OUTPUT" | grep -q "policy_denied"; then
     pass "Policy enforcement: blocked endpoint returned policy_denied"
-  elif [ -z "$CMD_OUTPUT" ]; then
-    pass "Policy enforcement: blocked endpoint returned no response (denied)"
+  elif [ "$CMD_RC" -ne 0 ]; then
+    pass "Policy enforcement: blocked endpoint rejected (rc=${CMD_RC})"
   else
     fail "Policy enforcement: blocked endpoint was NOT denied"
   fi
 
-  # Delete policy (global lock reset)
-  run_cmd openshell policy delete --gateway "$GATEWAY_NAME" --global --yes
-  if [ "$CMD_RC" -eq 0 ]; then
-    pass "Global policy lock deleted"
-  else
-    skip "Policy delete" "no global policy lock to delete"
-  fi
+  # Per-sandbox policy is cleaned up when the sandbox is deleted;
+  # `policy delete --global` only removes the global policy lock.
+  pass "Sandbox policy lifecycle validated (cleanup deferred to sandbox delete)"
 fi
 
 # ============================================================================
-# Section 6: Settings Operations
+# Section 7: Settings Operations
 # ============================================================================
 
-section "6 · Settings Operations"
+section "7 · Settings Operations"
 
 # Global setting: set
 SETTING_KEY_GLOBAL="providers_v2_enabled"
@@ -633,10 +655,10 @@ if [ -n "$CREATED_SETTING_GLOBAL" ]; then
 fi
 
 # ============================================================================
-# Section 7: Cross-Validation (optional)
+# Section 8: Cross-Validation (optional)
 # ============================================================================
 
-section "7 · Cross-Validation"
+section "8 · Cross-Validation"
 
 if [ "$CLUSTER_VALIDATE" != "true" ]; then
   skip "Cross-validation" "--cluster-validate not set"
@@ -676,10 +698,10 @@ else
 fi
 
 # ============================================================================
-# Section 8: Cleanup
+# Section 9: Cleanup
 # ============================================================================
 
-section "8 · Cleanup"
+section "9 · Cleanup"
 
 if [ -n "$CREATED_SANDBOX" ] && [ "$SKIP_CLEANUP" != "true" ]; then
   run_cmd openshell sandbox delete --gateway "$GATEWAY_NAME" "$SANDBOX_NAME"

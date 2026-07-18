@@ -247,12 +247,27 @@ jobs:
         fuser -k 13592/tcp 2>/dev/null || true
         fuser -k 18592/tcp 2>/dev/null || true
 
-        TEST_TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d) \
+        kubectl port-forward -n ambient-code svc/keycloak-service 18592:11880 &
+        sleep 3
+
+        # Wait for tenant-c gateway to be ready
+        for i in $(seq 1 60); do
+          if kubectl get secret openshell-server-tls -n tenant-c &>/dev/null; then
+            echo "openshell-server-tls secret ready in tenant-c"
+            break
+          fi
+          echo "Waiting for openshell-server-tls secret in tenant-c... ($i/60)"
+          sleep 5
+        done
+        kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=openshell-gateway \
+          -n tenant-c --timeout=120s || echo "Warning: tenant-c gateway pod not ready after 120s"
+
+        KEYCLOAK_URL=http://localhost:18592 \
         OPENSHELL_RUNNER_IMAGE=localhost/acp_runner_openshell:kind-preloaded \
         bash tests/e2e/openshell-cli-e2e.sh || {
           echo "OpenShell CLI E2E failed - showing debugging information..."
-          kubectl get pods -n tenant-a -o wide 2>&1 || true
-          kubectl logs -n tenant-a -l app.kubernetes.io/instance=openshell-gateway --tail=50 2>&1 || true
+          kubectl get pods -n tenant-c -o wide 2>&1 || true
+          kubectl logs -n tenant-c -l app.kubernetes.io/instance=openshell-gateway --tail=50 2>&1 || true
           kubectl logs -n ambient-code -l app=ambient-control-plane --tail=50 2>&1 || true
           exit 1
         }
