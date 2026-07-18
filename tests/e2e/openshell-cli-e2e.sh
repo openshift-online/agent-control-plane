@@ -129,6 +129,14 @@ _provision_gw_certs() {
     -o jsonpath='{.data.tls\.key}' | base64 -d > "$mtls_dir/tls.key"
 }
 
+# Restart port-forward and re-register gateway to recover from stale connections.
+_refresh_gateway() {
+  start_gw_portforward
+  openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
+  _provision_gw_certs
+  $ACPCTL gateway setup-cli --gateway-url "$GW_URL" --project "$TENANT" >/dev/null 2>&1 || true
+}
+
 # Run a command with visibility: print it, execute, capture + display output.
 # Sets CMD_OUTPUT and CMD_RC for callers to inspect.
 CMD_OUTPUT=""
@@ -552,6 +560,7 @@ fi
 # ============================================================================
 
 section "5 · Provider Operations"
+_refresh_gateway
 
 PROVIDER_NAME="e2e-test-provider"
 
@@ -611,6 +620,7 @@ fi
 # ============================================================================
 
 section "6 · Policy Operations"
+_refresh_gateway
 
 POLICY_FIXTURE="$SCRIPT_DIR/fixtures/openshell-cli-test/test-policy.yaml"
 
@@ -685,6 +695,7 @@ fi
 # ============================================================================
 
 section "7 · Settings Operations"
+_refresh_gateway
 
 # Global setting: set
 SETTING_KEY_GLOBAL="providers_v2_enabled"
@@ -815,6 +826,7 @@ fi
 # ============================================================================
 
 section "9 · Cleanup"
+_refresh_gateway
 
 if [ -n "$CREATED_SANDBOX" ] && [ "$SKIP_CLEANUP" != "true" ]; then
   run_cmd openshell sandbox delete --gateway "$GATEWAY_NAME" "$SANDBOX_NAME"
