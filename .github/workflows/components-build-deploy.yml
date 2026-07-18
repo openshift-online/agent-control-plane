@@ -272,7 +272,7 @@ jobs:
 
   test-local-dev:
     needs: [build-matrix, build-amd64]
-    if: github.event_name == 'pull_request' && !failure() && !cancelled()
+    if: github.event_name == 'pull_request'
     uses: ./.github/workflows/test-local-dev.yml
     with:
       image-tag: pr-${{ github.event.pull_request.number }}
