@@ -131,7 +131,6 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[36m'
-ORANGE='\033[38;5;214m'
 DIM='\033[2m'
 BOLD='\033[1m'
 NC='\033[0m'
@@ -151,6 +150,18 @@ section() {
   sep
   printf '%b━━  %s%b\n' "${CYAN}" "$*" "${NC}"
   sep
+}
+
+results() {
+  echo ""
+  sep
+  if [ "$FAILED" -gt 0 ]; then
+    printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"
+  else
+    printf '%b  %d passed ✓%b\n' "${GREEN}" "$PASSED" "${NC}"
+  fi
+  sep
+  echo ""
 }
 
 should_run_test() {
@@ -251,7 +262,7 @@ if [ -n "$ACPCTL" ]; then
   pass "acpctl found: $ACPCTL"
 else
   fail "acpctl not found — run 'make build-cli'"
-  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
+  results
   exit 1
 fi
 
@@ -266,7 +277,7 @@ if $ACPCTL login --url "$API_URL" --token "$TOKEN" --project "$TENANT" >/dev/nul
   pass "acpctl login succeeded (${API_URL}, project: ${TENANT})"
 else
   fail "acpctl login failed — is the API server reachable at ${API_URL}?"
-  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
+  results
   exit 1
 fi
 
@@ -363,7 +374,7 @@ if [ -n "$PROJECT_ID" ]; then
   pass "Project '${TENANT}' exists (id: ${PROJECT_ID})"
 else
   fail "Project '${TENANT}' not found — was 'make kind-up' run with OPENSHELL_USE_GATEWAY=true?"
-  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
+  results
   exit 1
 fi
 
@@ -381,7 +392,7 @@ if [ -n "$AGENT_ID" ]; then
   pass "Agent 'test-agent-mock-llm' exists (id: ${AGENT_ID})"
 else
   fail "Agent 'test-agent-mock-llm' not found in project '${TENANT}'"
-  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
+  results
   exit 1
 fi
 
@@ -945,7 +956,7 @@ PERM_SESSION_ID=""
 # used below needs a local port-forward to the gateway's gRPC endpoint.
 if ! _ensure_gateway_port_forward; then
   fail "Gateway port-forward could not be established — openshell CLI missing or gateway unreachable"
-  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
+  results
   exit 1
 fi
 
@@ -1170,15 +1181,7 @@ section "Cleanup"
 
 cleanup
 
-echo ""
-sep
-if [ "$FAILED" -gt 0 ]; then
-  printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"
-else
-  printf '%b  %d passed ✓%b\n' "${GREEN}" "$PASSED" "${NC}"
-fi
-sep
-echo ""
+results
 
 if [ "$FAILED" -gt 0 ]; then
   exit 1
