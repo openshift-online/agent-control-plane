@@ -279,23 +279,42 @@ kubectl wait --for=condition=ready pod -l "$GW_POD_LABELS" \
   }
 pass "Gateway pod ready in ${TENANT}"
 
-# Wait for cert-manager to issue TLS — openshell-ca-tls only exists after cert-manager
-# finishes (certgen creates server/client secrets first, then the reconciler deletes them
-# and cert-manager re-issues under its own CA).
-printf '  %b▶%b  Waiting for cert-manager TLS secrets in %s...\n' "${BOLD}" "${NC}" "$TENANT"
+# Wait for cert-manager Certificates to be Ready — certgen creates initial secrets, then
+# the reconciler deletes them and cert-manager re-issues under its own CA. The gateway pod
+# loaded certgen certs at startup; Kubernetes volume propagation can take up to 60s, so
+# restart the pod to ensure it loads the final cert-manager certs.
+printf '  %b▶%b  Waiting for cert-manager certificates in %s...\n' "${BOLD}" "${NC}" "$TENANT"
 for _i in $(seq 1 60); do
-  kubectl get secret openshell-ca-tls openshell-server-tls openshell-client-tls \
-    -n "$TENANT" &>/dev/null && break
+  _ready=$(kubectl get certificate -n "$TENANT" \
+    -o jsonpath='{range .items[*]}{.status.conditions[?(@.type=="Ready")].status}{" "}{end}' 2>/dev/null || true)
+  _count=$(echo "$_ready" | tr ' ' '\n' | grep -c "True" 2>/dev/null || echo "0")
+  [ "$_count" -ge 3 ] && break
   sleep 3
 done
-if kubectl get secret openshell-ca-tls -n "$TENANT" &>/dev/null; then
-  pass "TLS secrets ready in ${TENANT} (cert-manager CA present)"
+if [ "$_count" -ge 3 ]; then
+  pass "cert-manager certificates Ready in ${TENANT} (${_count} certs)"
 else
-  fail "TLS secrets not found in ${TENANT} after 180s"
+  fail "cert-manager certificates not Ready in ${TENANT} after 180s (${_count}/3)"
+  kubectl get certificate -n "$TENANT" 2>&1 | sed 's/^/    /' || true
   kubectl get secrets -n "$TENANT" 2>&1 | sed 's/^/    /' || true
   echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
+
+# Restart gateway pod so it loads cert-manager certs at startup (avoids depending on
+# volume propagation and file watcher timing).
+kubectl delete pod -l "$GW_POD_LABELS" -n "$TENANT" --wait=false
+for _i in $(seq 1 60); do
+  kubectl get pod -l "$GW_POD_LABELS" -n "$TENANT" --no-headers 2>/dev/null | grep -q "Running" && break
+  sleep 3
+done
+kubectl wait --for=condition=ready pod -l "$GW_POD_LABELS" \
+  -n "$TENANT" --timeout=120s 2>/dev/null || {
+    fail "Gateway pod not ready after cert-manager restart"
+    echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
+    exit 1
+  }
+pass "Gateway pod restarted with cert-manager TLS"
 
 # Login as developer via OIDC password grant (headless, no browser)
 run_cmd $ACPCTL login --password-grant \
