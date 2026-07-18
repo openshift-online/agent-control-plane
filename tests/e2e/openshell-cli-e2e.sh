@@ -115,6 +115,20 @@ start_gw_portforward() {
   GW_URL="https://localhost:${gw_port}"
 }
 
+# Provision TLS certs for the openshell CLI from cluster secrets.
+# In --gateway-url mode with OIDC credentials, acpctl does not fetch the CA
+# cert, so the openshell CLI cannot verify the gateway's server cert.
+_provision_gw_certs() {
+  local mtls_dir="$HOME/.config/openshell/gateways/${GATEWAY_NAME}/mtls"
+  mkdir -p "$mtls_dir"
+  kubectl get secret openshell-ca-tls -n "$TENANT" \
+    -o jsonpath='{.data.ca\.crt}' | base64 -d > "$mtls_dir/ca.crt"
+  kubectl get secret openshell-client-tls -n "$TENANT" \
+    -o jsonpath='{.data.tls\.crt}' | base64 -d > "$mtls_dir/tls.crt"
+  kubectl get secret openshell-client-tls -n "$TENANT" \
+    -o jsonpath='{.data.tls\.key}' | base64 -d > "$mtls_dir/tls.key"
+}
+
 # Run a command with visibility: print it, execute, capture + display output.
 # Sets CMD_OUTPUT and CMD_RC for callers to inspect.
 CMD_OUTPUT=""
@@ -373,22 +387,12 @@ pass "Gateway port-forward established (localhost:${gw_port})"
 GATEWAY_NAME="${TENANT}-openshell-gateway"
 openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
 
-_gw_setup_ok=false
-for _attempt in $(seq 1 12); do
-  run_cmd $ACPCTL gateway setup-cli --gateway-url "$GW_URL" --project "$TENANT"
-  if [ "$CMD_RC" -eq 0 ]; then
-    _gw_setup_ok=true
-    break
-  fi
-  printf '    gateway setup-cli attempt %d/12 failed, retrying in 5s...\n' "$_attempt"
-  sleep 5
-  start_gw_portforward
-  openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
-done
-if $_gw_setup_ok; then
+_provision_gw_certs
+run_cmd $ACPCTL gateway setup-cli --gateway-url "$GW_URL" --project "$TENANT"
+if [ "$CMD_RC" -eq 0 ]; then
   pass "Gateway registered via acpctl setup-cli as '${GATEWAY_NAME}'"
 else
-  fail "acpctl gateway setup-cli failed after 12 attempts"
+  fail "acpctl gateway setup-cli failed"
   echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
   exit 1
 fi
@@ -447,6 +451,7 @@ run_cmd $ACPCTL login --password-grant \
   --url "$API_URL" --project "$TENANT"
 start_gw_portforward
 openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
+_provision_gw_certs
 run_cmd $ACPCTL gateway setup-cli --gateway-url "$GW_URL" --project "$TENANT"
 
 # List sandboxes
@@ -534,6 +539,7 @@ fi
 
 # Re-register gateway with admin credentials
 openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
+_provision_gw_certs
 run_cmd $ACPCTL gateway setup-cli --gateway-url "$GW_URL" --project "$TENANT"
 if [ "$CMD_RC" -eq 0 ]; then
   pass "Gateway re-registered with admin credentials"
