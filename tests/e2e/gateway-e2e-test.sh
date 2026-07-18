@@ -1,25 +1,15 @@
 #!/usr/bin/env bash
-# E2E test: full gateway agent flow
+# E2E test: OpenShell gateway provisioning and lifecycle
 #
-# Validates the golden path:
-#   acpctl apply -k  ->  acpctl start  ->  sandbox provisioned  ->  session Running
-#   ->  runner starts inside sandbox  ->  mock LLM responds  ->  messages verified
-#
-# Uses test-agent-mock-llm which points ANTHROPIC_BASE_URL at a mock LLM server,
-# so no real LLM API key is required. Validates the full platform plumbing from
-# session creation through sandbox provisioning and LLM response delivery.
+# Tests gateway creation, sandbox provisioning, session lifecycle,
+# credential injection, and multi-tenant isolation.
 #
 # Prerequisites:
-#   - kind-up with OPENSHELL_USE_GATEWAY=true (default)
-#   - acpctl built (make build-cli)
+#   - Kind cluster with ACP deployed (make kind-up)
 #   - TEST_TOKEN set or tests/cypress/.env.test present
 #
 # Usage:
-#   ./tests/e2e/gateway-e2e-test.sh [--skip-cleanup] [--test PATTERN] [API_URL]
-#   API_URL defaults to http://localhost:13000
-#   --skip-cleanup  Retain created sessions for manual inspection
-#   --test NAME     Run only the test matching NAME (short underscore name)
-#                   Available: long_running, short_running, repo_payload, network_policy
+#   ./tests/e2e/gateway-e2e-test.sh [--test PATTERN] [--skip-cleanup]
 
 set -euo pipefail
 
@@ -57,7 +47,7 @@ elif [ -n "${1:-}" ]; then
 else
   API_URL="http://localhost:${PF_PORT}"
 fi
-trap 'kill "${PF_PID}" 2>/dev/null || true; kill "${GW_PF_PID}" 2>/dev/null || true' EXIT
+trap cleanup EXIT INT TERM
 
 _ensure_port_forward() {
   local port
@@ -148,6 +138,7 @@ NC='\033[0m'
 PASSED=0
 FAILED=0
 CREATED_SESSION_ID=""
+CREATED_SESSIONS=()
 
 pass() { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
 fail() { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
@@ -179,6 +170,39 @@ _cleanup_sandboxes() {
     echo "  Cleaned up sandboxes on gateway ${TENANT}" || true
 }
 
+cleanup() {
+  # Idempotent — safe to call from trap and explicitly
+  if [ "${_CLEANUP_DONE:-false}" = "true" ]; then return 0; fi
+  _CLEANUP_DONE=true
+
+  if [ "$SKIP_CLEANUP" = "true" ]; then
+    echo -e "  ${YELLOW}Skipping cleanup (--skip-cleanup)${NC}"
+    for _sid in "${CREATED_SESSIONS[@]}"; do
+      [ -z "$_sid" ] && continue
+      _pod="session-$(echo "${_sid:0:40}" | tr '[:upper:]' '[:lower:]')"
+      _phase=$(kubectl get pod "$_pod" -n "$TENANT" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+      if [ -n "$_phase" ]; then
+        echo -e "  Retained session ${_sid}  pod=${_pod}  phase=${_phase}"
+      else
+        echo -e "  ${YELLOW}Session ${_sid} has no sandbox pod (${_pod} not found)${NC}"
+      fi
+    done
+  else
+    # Delete tracked sessions in reverse order, tolerating failures
+    local i
+    for (( i=${#CREATED_SESSIONS[@]}-1; i>=0; i-- )); do
+      local sid="${CREATED_SESSIONS[$i]}"
+      [ -z "$sid" ] && continue
+      _delete_session "$sid"
+    done
+    _cleanup_sandboxes
+  fi
+
+  # Kill port-forward processes
+  kill "${PF_PID}" 2>/dev/null || true
+  kill "${GW_PF_PID}" 2>/dev/null || true
+}
+
 api() {
   local method="$1" path="$2"
   shift 2
@@ -205,6 +229,10 @@ find_acpctl() {
   echo ""
 }
 
+# ============================================================================
+# Section 1: Prerequisites
+# ============================================================================
+
 section "1. Prerequisites"
 require_token
 
@@ -217,6 +245,10 @@ else
   exit 1
 fi
 
+# ============================================================================
+# Section 2: Login acpctl
+# ============================================================================
+
 section "2. Login acpctl"
 
 if $ACPCTL login --url "$API_URL" --token "$TOKEN" --project "$TENANT" >/dev/null 2>&1 && \
@@ -227,6 +259,10 @@ else
   echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
   exit 1
 fi
+
+# ============================================================================
+# Section 3: Gateway deployment via acpctl apply
+# ============================================================================
 
 section "3. Gateway deployment via acpctl apply"
 
@@ -303,6 +339,10 @@ if [ "$E2E_GW_CLEANUP" = "true" ]; then
   fi
 fi
 
+# ============================================================================
+# Section 4: Verify tenant project exists
+# ============================================================================
+
 section "4. Verify tenant project exists"
 
 PROJECT_RESP=$(api GET "/api/ambient/v1/projects?size=50" || echo "")
@@ -316,6 +356,10 @@ else
   echo -e "\n${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}\n"
   exit 1
 fi
+
+# ============================================================================
+# Section 5: Verify agent exists
+# ============================================================================
 
 section "5. Verify agent exists"
 
@@ -333,6 +377,10 @@ fi
 
 ## repo-clone-workspace agent lookup removed — section 12 is skipped until
 ## CI has a real or mock Vertex provider.
+
+# ============================================================================
+# Section 6: Apply sandbox policies
+# ============================================================================
 
 section "6. Apply sandbox policies"
 
@@ -352,6 +400,10 @@ if $ACPCTL apply -f "$REPO_ROOT/examples/base/policies/locked-down.yaml" \
 else
   fail "Could not apply locked-down policy to ${TENANT}"
 fi
+
+# ============================================================================
+# Section 7: Verify provider and credential
+# ============================================================================
 
 section "7. Verify provider and credential"
 
@@ -374,6 +426,10 @@ if [ -n "$CRED_NAME" ]; then
 else
   skip "Vertex credential" "not configured (non-fatal)"
 fi
+
+# ============================================================================
+# Section 8: OpenShell gateway healthy
+# ============================================================================
 
 section "8. OpenShell gateway healthy"
 
@@ -408,6 +464,10 @@ if command -v openshell &>/dev/null; then
 fi
 
 if should_run_test "long_running"; then
+# ============================================================================
+# Section 9: Start agent session (long-running)
+# ============================================================================
+
 section "9. Start agent session (long-running) [long_running]"
 
 START_RESP=$(api POST "/api/ambient/v1/projects/${PROJECT_ID}/agents/${AGENT_ID}/start" \
@@ -417,11 +477,16 @@ CREATED_SESSION_ID=$(echo "$START_RESP" \
   | jq -r '.session.id // empty' 2>/dev/null || echo "")
 
 if [ -n "$CREATED_SESSION_ID" ]; then
+  CREATED_SESSIONS+=("$CREATED_SESSION_ID")
   pass "Session started (id: ${CREATED_SESSION_ID})"
 else
   fail "Failed to start session for agent 'test-agent-mock-llm'"
   echo "  Response: $(echo "$START_RESP" | head -c 200)"
 fi
+
+# ============================================================================
+# Section 10: Session state verification
+# ============================================================================
 
 section "10. Session state verification"
 
@@ -458,6 +523,10 @@ if [ -n "$CREATED_SESSION_ID" ]; then
 else
   skip "Session state verification" "session not created"
 fi
+
+# ============================================================================
+# Section 11: Sandbox configuration verification
+# ============================================================================
 
 section "11. Sandbox configuration verification"
 
@@ -587,6 +656,10 @@ else
   fail "Sandbox configuration verification — session not created"
 fi
 
+# ============================================================================
+# Section 11: Long-running session — LLM response and sandbox persistence
+# ============================================================================
+
 section "11. Long-running session: LLM response and sandbox persistence"
 
 if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; then
@@ -690,11 +763,13 @@ else
   skip "Long-running session verification" "session not running or not created"
 fi
 
-_delete_session "$CREATED_SESSION_ID"
-_cleanup_sandboxes
 fi # end long_running
 
 if should_run_test "short_running"; then
+# ============================================================================
+# Section 12: Short-running session lifecycle (stop_on_run_finished)
+# ============================================================================
+
 section "12. Short-running session lifecycle (stop_on_run_finished) [short_running]"
 
 # Start a new session with stop_on_run_finished=true in the request body.
@@ -710,6 +785,7 @@ SHORT_SESSION_ID=$(echo "$SHORT_START_RESP" \
   | jq -r '.session.id // empty' 2>/dev/null || echo "")
 
 if [ -n "$SHORT_SESSION_ID" ]; then
+  CREATED_SESSIONS+=("$SHORT_SESSION_ID")
   pass "Short-running session started (id: ${SHORT_SESSION_ID})"
 
   # Verify the flag was persisted on the session
@@ -783,11 +859,13 @@ else
   echo "  Response: $(echo "$SHORT_START_RESP" | head -c 200)"
 fi
 
-_delete_session "$SHORT_SESSION_ID"
-_cleanup_sandboxes
 fi # end short_running
 
 if should_run_test "repo_payload"; then
+# ============================================================================
+# Section 13: Repository payload verification
+# ============================================================================
+
 section "13. Repository payload verification [repo_payload]"
 
 REPO_SESSION_ID=""
@@ -795,6 +873,10 @@ skip "Repo payload verification" "vertex provider not available in CI"
 fi # end repo_payload
 
 if should_run_test "network_policy"; then
+# ============================================================================
+# Section 14: Network policy enforcement
+# ============================================================================
+
 section "14. Network policy enforcement [network_policy]"
 
 LOCKED_SESSION_ID=""
@@ -854,6 +936,7 @@ if [ -n "$LOCKED_AGENT_ID" ]; then
     | jq -r '.session.id // empty' 2>/dev/null || echo "")
 
   if [ -n "$LOCKED_SESSION_ID" ]; then
+    CREATED_SESSIONS+=("$LOCKED_SESSION_ID")
     pass "Locked-down session started (id: ${LOCKED_SESSION_ID})"
 
     LOCKED_SBX_NAME="session-$(echo "${LOCKED_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
@@ -916,9 +999,6 @@ else
   fail "Agent 'network-test-locked-down' not found after apply"
 fi
 
-_delete_session "$LOCKED_SESSION_ID"
-_cleanup_sandboxes
-
 # Brief gateway readiness check — cleanup may coincide with a reconciler restart
 for _i in $(seq 1 15); do
   _gw_ready=$(kubectl get pod openshell-gateway-0 -n "$TENANT" \
@@ -945,6 +1025,7 @@ if [ -n "$PERM_AGENT_ID" ]; then
     | jq -r '.session.id // empty' 2>/dev/null || echo "")
 
   if [ -n "$PERM_SESSION_ID" ]; then
+    CREATED_SESSIONS+=("$PERM_SESSION_ID")
     pass "Permissive session started (id: ${PERM_SESSION_ID})"
 
     PERM_SBX_NAME="session-$(echo "${PERM_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
@@ -1008,32 +1089,15 @@ else
   fail "Agent 'network-test-permissive' not found after apply"
 fi
 
-_delete_session "$PERM_SESSION_ID"
-_cleanup_sandboxes
 fi # end network_policy
+
+# ============================================================================
+# Cleanup
+# ============================================================================
 
 section "Cleanup"
 
-if [ "$SKIP_CLEANUP" = "true" ]; then
-  echo -e "  ${YELLOW}Skipping cleanup (--skip-cleanup)${NC}"
-  for _sid in "$CREATED_SESSION_ID" "$REPO_SESSION_ID" "${SHORT_SESSION_ID:-}" "$LOCKED_SESSION_ID" "${PERM_SESSION_ID:-}"; do
-    [ -z "$_sid" ] && continue
-    _pod="session-$(echo "${_sid:0:40}" | tr '[:upper:]' '[:lower:]')"
-    _phase=$(kubectl get pod "$_pod" -n "$TENANT" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
-    if [ -n "$_phase" ]; then
-      echo -e "  Retained session ${_sid}  pod=${_pod}  phase=${_phase}"
-    else
-      echo -e "  ${YELLOW}Session ${_sid} has no sandbox pod (${_pod} not found)${NC}"
-    fi
-  done
-else
-  for _sid in "$CREATED_SESSION_ID" "$REPO_SESSION_ID" "${SHORT_SESSION_ID:-}" "$LOCKED_SESSION_ID" "${PERM_SESSION_ID:-}"; do
-    [ -z "$_sid" ] && continue
-    api DELETE "/api/ambient/v1/sessions/${_sid}" >/dev/null 2>&1 && \
-      echo "  Deleted session ${_sid}" || \
-      echo "  Could not delete session ${_sid} (non-fatal)"
-  done
-fi
+cleanup
 
 echo ""
 echo -e "${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}"

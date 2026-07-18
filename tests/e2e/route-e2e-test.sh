@@ -56,12 +56,19 @@ fi
 
 ACPCTL="$ACPCTL --insecure-skip-tls-verify"
 
-PASS=0
-FAIL=0
-TOTAL=0
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BOLD='\033[1m'
+NC='\033[0m'
 
-pass() { PASS=$((PASS+1)); TOTAL=$((TOTAL+1)); echo "  ✓ $1"; }
-fail() { FAIL=$((FAIL+1)); TOTAL=$((TOTAL+1)); echo "  ✗ $1"; }
+PASSED=0
+FAILED=0
+
+pass() { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
+fail() { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
+skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
+section() { echo ""; echo -e "${BOLD}$1${NC}"; }
 
 cleanup() {
   if [ "$SKIP_CLEANUP" = "true" ]; then
@@ -105,9 +112,11 @@ YAML
 
 TENANT_NS=$($ACPCTL get project "$TENANT" -o json 2>/dev/null | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "$TENANT")
 
-# ── Test 1: Route creation ──────────────────────────────────────────────────
-echo ""
-echo "--- Test 1: Route creation ---"
+# ============================================================================
+# Section 1: Route Creation
+# ============================================================================
+
+section "1. Route Creation"
 
 $ACPCTL apply -f - <<YAML
 kind: Gateway
@@ -150,9 +159,11 @@ else
   fail "Expected 3600s timeout annotation, got: $TIMEOUT_ANN"
 fi
 
-# ── Test 2: Route address populated ─────────────────────────────────────────
-echo ""
-echo "--- Test 2: Route address populated ---"
+# ============================================================================
+# Section 2: Route Address Populated
+# ============================================================================
+
+section "2. Route Address Populated"
 
 ROUTE_ADDR=""
 for i in $(seq 1 20); do
@@ -184,9 +195,11 @@ else
   fail "ROUTE column missing from table output"
 fi
 
-# ── Test 3: setup-cli uses route address ────────────────────────────────────
-echo ""
-echo "--- Test 3: setup-cli via route ---"
+# ============================================================================
+# Section 3: setup-cli Via Route
+# ============================================================================
+
+section "3. setup-cli Via Route"
 
 SETUP_OUTPUT=$($ACPCTL gateway setup-cli $GW_NAME --project "$TENANT" --print 2>/dev/null || true)
 if echo "$SETUP_OUTPUT" | grep -q "$ROUTE_ADDR"; then
@@ -195,9 +208,11 @@ else
   fail "setup-cli --print missing route address"
 fi
 
-# ── Test 4: Route removal ──────────────────────────────────────────────────
-echo ""
-echo "--- Test 4: Route removal ---"
+# ============================================================================
+# Section 4: Route Removal
+# ============================================================================
+
+section "4. Route Removal"
 
 # Patch gateway to remove route
 $ACPCTL apply -f - <<YAML
@@ -231,9 +246,8 @@ else
   fail "routeAddress still set: $CLEARED_ADDR"
 fi
 
-# ── Summary ─────────────────────────────────────────────────────────────────
 echo ""
-echo "=== Results: $PASS/$TOTAL passed, $FAIL failed ==="
-if [ "$FAIL" -gt 0 ]; then
+echo -e "${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}"
+if [ "$FAILED" -gt 0 ]; then
   exit 1
 fi

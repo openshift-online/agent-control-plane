@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-10
 **Status:** Design
-**Related:** `openshell-sandbox-provisioning.spec.md` — gateway sandbox provisioning; `agent-sandbox-config.spec.md` — agent/provider/policy schema; [PR #318](https://github.com/openshift-online/agent-control-plane/pull/318) — sandbox policy support
+**Related:** `openshell-sandbox-provisioning.spec.md` — gateway sandbox provisioning; `agent-sandbox-config.spec.md` — agent/provider/policy schema; [PR #318](https://github.com/openshift-online/agent-control-plane/pull/318) — sandbox policy support; [PR #390](https://github.com/openshift-online/agent-control-plane/pull/390) — OpenShell CLI e2e test (reference implementation for test style)
 **Skill:** `skills/build/full-stack-pipeline/` — wave-based implementation pipeline
 
 ---
@@ -346,6 +346,123 @@ The `test-agent-mock-llm` agent references this policy via `sandbox_policy: mock
 - GIVEN a session running `test-agent-mock-llm` with the `mock-llm-permissive` policy
 - WHEN the Claude Code process attempts to reach an endpoint not listed in the network policy (e.g., `api.anthropic.com:443`)
 - THEN the request SHALL be blocked by the OpenShell sandbox network policy
+
+---
+
+## E2E Test Shell Script Style
+
+All e2e test scripts in `tests/e2e/` SHALL follow the human-readable style established by `openshell-cli-e2e.sh` ([PR #390](https://github.com/openshift-online/agent-control-plane/pull/390)). This style prioritizes scan-readable terminal output and consistent structure across all test scripts. Existing tests SHOULD be migrated to this style when they are next modified.
+
+### Requirement: Unified Output Helpers
+
+Every e2e test script SHALL define and use the following output helpers:
+
+```bash
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+PASSED=0
+FAILED=0
+
+pass() { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
+fail() { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
+skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
+section() { echo ""; echo -e "${BOLD}$1${NC}"; }
+```
+
+Scripts SHALL NOT use bracket-style tags (`[PASS]`, `[FAIL]`, `[SKIP]`). The `✓`/`✗`/`⊘` markers are the canonical format.
+
+Pass/fail messages SHALL be human-readable prose describing what succeeded or failed — not terse status codes or raw command names. For example, `pass "Sandbox reached READY phase within 120s"` rather than `pass "sandbox_ready"`.
+
+The script SHALL print a summary line at exit:
+
+```bash
+echo -e "${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}"
+```
+
+#### Scenario: Output format is consistent across tests
+
+- GIVEN any e2e test script in `tests/e2e/`
+- WHEN the script runs
+- THEN each assertion SHALL produce output matching `  ✓ <description>`, `  ✗ <description>`, or `  ⊘ <description> (skipped: <reason>)`
+- AND the final line SHALL be `Results: N passed, M failed`
+
+### Requirement: Section Structure
+
+Each e2e test script SHALL organize its assertions into numbered sections using banner comments and the `section()` helper. Sections SHALL use full-width separator comments in the source:
+
+```bash
+# ============================================================================
+# Section N: Descriptive Title
+# ============================================================================
+
+section "N. Descriptive Title"
+```
+
+Section numbers SHALL be sequential starting at 1. Section titles SHALL be descriptive — naming the capability being tested, not the implementation detail. For example, `"3. Sandbox operations"` rather than `"3. Create and list sandboxes"`.
+
+#### Scenario: Sections are numbered and titled
+
+- GIVEN an e2e test script
+- WHEN reading the source
+- THEN each logical group of assertions SHALL be preceded by a `# ====...` banner and a `section()` call with a matching numbered title
+
+### Requirement: Centralized Cleanup
+
+Every e2e test script SHALL register a single cleanup function via `trap ... EXIT INT TERM` and track all created resources in top-level variables. The cleanup function SHALL delete resources in reverse creation order and tolerate already-deleted resources (non-fatal delete failures).
+
+Scripts SHALL NOT scatter cleanup calls inline between test sections. Instead, the cleanup function SHALL reference the resource-tracking variables and clean up everything at exit.
+
+A `--skip-cleanup` flag SHALL be supported to retain resources for manual inspection. When active, cleanup SHALL print the retained resources but not delete them.
+
+```bash
+CREATED_SANDBOX=""
+CREATED_PROVIDER=""
+
+cleanup() {
+  if [ "$SKIP_CLEANUP" = "true" ]; then
+    echo -e "  ${YELLOW}Skipping cleanup (--skip-cleanup)${NC}"
+    [ -n "$CREATED_SANDBOX" ] && echo "  Retained sandbox: ${CREATED_SANDBOX}"
+    return
+  fi
+  # Delete in reverse order, tolerate failures
+  [ -n "$CREATED_SANDBOX" ] && openshell sandbox delete ... 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+```
+
+#### Scenario: Resources are cleaned up on exit
+
+- GIVEN an e2e test creates resources (sessions, sandboxes, providers)
+- WHEN the test exits (success, failure, or signal)
+- THEN the cleanup trap SHALL delete all tracked resources
+- AND deletion failures SHALL NOT cause the trap to abort
+
+### Requirement: Script Header
+
+Each e2e test script SHALL begin with a descriptive header block documenting the test's purpose, prerequisites, and usage:
+
+```bash
+#!/usr/bin/env bash
+# E2E test: <short description of what this test validates>
+#
+# <2-3 sentences explaining the golden path or scope>
+#
+# Prerequisites:
+#   - <each prerequisite on its own line>
+#
+# Usage:
+#   ./<script-name> [--skip-cleanup] [other flags] [positional args]
+```
+
+#### Scenario: Test is self-documenting
+
+- GIVEN a developer opens an e2e test script
+- WHEN they read the header
+- THEN they SHALL understand what the test validates, what prerequisites are needed, and how to run it
 
 ---
 

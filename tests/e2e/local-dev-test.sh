@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Local Developer Experience Test Suite
 # Tests the complete local development workflow for Agent Control Plane
@@ -28,8 +28,8 @@ SKIP_SETUP=false
 CLEANUP=false
 VERBOSE=false
 CI_MODE=false
-FAILED_TESTS=0
-PASSED_TESTS=0
+FAILED=0
+PASSED=0
 KNOWN_FAILURES=0
 
 # Get test URL for a service via port-forwarding (kind uses localhost)
@@ -76,40 +76,29 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Logging functions
+# Canonical output helpers
+pass() { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
+fail() { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
+skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
+section() { echo ""; echo -e "${BOLD}$1${NC}"; }
+
+# Informational helpers (not test results)
 log_info() {
     echo -e "${BLUE}ℹ${NC} $*"
 }
 
-log_success() {
-    echo -e "${GREEN}✓${NC} $*"
-}
-
-log_error() {
-    echo -e "${RED}✗${NC} $*"
-}
-
 log_warning() {
-    echo -e "${YELLOW}⚠${NC} $*"
-}
-
-log_section() {
-    echo ""
-    echo -e "${BOLD}═══════════════════════════════════════════${NC}"
-    echo -e "${BOLD}  $*${NC}"
-    echo -e "${BOLD}═══════════════════════════════════════════${NC}"
+    echo -e "  ${YELLOW}⊘${NC} $*"
 }
 
 # Test assertion functions
 assert_command_exists() {
     local cmd=$1
     if command -v "$cmd" >/dev/null 2>&1; then
-        log_success "Command '$cmd' is installed"
-        ((PASSED_TESTS++))
+        pass "Command '$cmd' is installed"
         return 0
     else
-        log_error "Command '$cmd' is NOT installed"
-        ((FAILED_TESTS++))
+        fail "Command '$cmd' is NOT installed"
         return 1
     fi
 }
@@ -120,14 +109,12 @@ assert_equals() {
     local description=$3
 
     if [ "$expected" = "$actual" ]; then
-        log_success "$description"
-        ((PASSED_TESTS++))
+        pass "$description"
         return 0
     else
-        log_error "$description"
-        log_error "  Expected: $expected"
-        log_error "  Actual: $actual"
-        ((FAILED_TESTS++))
+        fail "$description"
+        echo -e "  ${RED}✗${NC}   Expected: $expected"
+        echo -e "  ${RED}✗${NC}   Actual: $actual"
         return 1
     fi
 }
@@ -138,14 +125,12 @@ assert_contains() {
     local description=$3
 
     if echo "$haystack" | grep -q "$needle"; then
-        log_success "$description"
-        ((PASSED_TESTS++))
+        pass "$description"
         return 0
     else
-        log_error "$description"
-        log_error "  Expected to contain: $needle"
-        log_error "  Actual: $haystack"
-        ((FAILED_TESTS++))
+        fail "$description"
+        echo -e "  ${RED}✗${NC}   Expected to contain: $needle"
+        echo -e "  ${RED}✗${NC}   Actual: $haystack"
         return 1
     fi
 }
@@ -158,16 +143,14 @@ assert_http_ok() {
 
     while [ $retry -lt $max_retries ]; do
         if curl -sf "$url" >/dev/null 2>&1; then
-            log_success "$description"
-            ((PASSED_TESTS++))
+            pass "$description"
             return 0
         fi
         ((retry++))
         [ $retry -lt $max_retries ] && sleep 2
     done
 
-    log_error "$description (after $max_retries retries)"
-    ((FAILED_TESTS++))
+    fail "$description (after $max_retries retries)"
     return 1
 }
 
@@ -176,19 +159,21 @@ assert_pod_running() {
     local description=$2
 
     if kubectl get pods -n "$NAMESPACE" -l "$label" 2>/dev/null | grep -q "Running"; then
-        log_success "$description"
-        ((PASSED_TESTS++))
+        pass "$description"
         return 0
     else
-        log_error "$description"
-        ((FAILED_TESTS++))
+        fail "$description"
         return 1
     fi
 }
 
 # Test: Prerequisites
 test_prerequisites() {
-    log_section "Test 1: Prerequisites"
+    # ============================================================================
+    # Section 1: Prerequisites
+    # ============================================================================
+
+    section "1. Prerequisites"
 
     assert_command_exists "make"
     assert_command_exists "kubectl"
@@ -207,7 +192,11 @@ test_prerequisites() {
 
 # Test: Makefile Help
 test_makefile_help() {
-    log_section "Test 2: Makefile Help Command"
+    # ============================================================================
+    # Section 2: Makefile Help Command
+    # ============================================================================
+
+    section "2. Makefile Help Command"
 
     local help_output
     help_output=$(make help 2>&1)
@@ -220,26 +209,32 @@ test_makefile_help() {
 
 # Test: Kind Status Check
 test_kind_status() {
-    log_section "Test 3: Kind Status"
+    # ============================================================================
+    # Section 3: Kind Status
+    # ============================================================================
+
+    section "3. Kind Status"
 
     if kind get clusters 2>/dev/null | grep -q .; then
-        log_success "Kind cluster is running"
-        ((PASSED_TESTS++))
+        pass "Kind cluster is running"
 
         # Check kind version
         local version
         version=$(kind version 2>/dev/null || echo "unknown")
         log_info "Kind version: $version"
     else
-        log_error "No Kind cluster is running"
-        ((FAILED_TESTS++))
+        fail "No Kind cluster is running"
         return 1
     fi
 }
 
 # Test: Kubernetes Context
 test_kubernetes_context() {
-    log_section "Test 4: Kubernetes Context"
+    # ============================================================================
+    # Section 4: Kubernetes Context
+    # ============================================================================
+
+    section "4. Kubernetes Context"
 
     local context
     context=$(kubectl config current-context 2>/dev/null || echo "none")
@@ -248,31 +243,35 @@ test_kubernetes_context() {
 
     # Test kubectl connectivity
     if kubectl cluster-info >/dev/null 2>&1; then
-        log_success "kubectl can connect to cluster"
-        ((PASSED_TESTS++))
+        pass "kubectl can connect to cluster"
     else
-        log_error "kubectl cannot connect to cluster"
-        ((FAILED_TESTS++))
+        fail "kubectl cannot connect to cluster"
     fi
 }
 
 # Test: Namespace Exists
 test_namespace_exists() {
-    log_section "Test 5: Namespace Existence"
+    # ============================================================================
+    # Section 5: Namespace Existence
+    # ============================================================================
+
+    section "5. Namespace Existence"
 
     if kubectl get namespace "$NAMESPACE" >/dev/null 2>&1; then
-        log_success "Namespace '$NAMESPACE' exists"
-        ((PASSED_TESTS++))
+        pass "Namespace '$NAMESPACE' exists"
     else
-        log_error "Namespace '$NAMESPACE' does NOT exist"
-        ((FAILED_TESTS++))
+        fail "Namespace '$NAMESPACE' does NOT exist"
         return 1
     fi
 }
 
 # Test: Pods Running
 test_pods_running() {
-    log_section "Test 6: Pod Status"
+    # ============================================================================
+    # Section 6: Pod Status
+    # ============================================================================
+
+    section "6. Pod Status"
 
     assert_pod_running "app=ambient-api-server" "Backend pod is running"
     assert_pod_running "app=ambient-ui" "Frontend pod is running"
@@ -283,8 +282,7 @@ test_pods_running() {
     not_ready=$(kubectl get pods -n "$NAMESPACE" --field-selector=status.phase!=Running 2>/dev/null | grep -v "NAME" | wc -l)
 
     if [ "$not_ready" -eq 0 ]; then
-        log_success "All pods are in Running state"
-        ((PASSED_TESTS++))
+        pass "All pods are in Running state"
     else
         log_warning "$not_ready pod(s) are not running"
     fi
@@ -292,128 +290,137 @@ test_pods_running() {
 
 # Test: Services Exist
 test_services_exist() {
-    log_section "Test 7: Services"
+    # ============================================================================
+    # Section 7: Services
+    # ============================================================================
+
+    section "7. Services"
 
     local services=("ambient-api-server" "ambient-ui-service")
 
     for svc in "${services[@]}"; do
         if kubectl get svc "$svc" -n "$NAMESPACE" >/dev/null 2>&1; then
-            log_success "Service '$svc' exists"
-            ((PASSED_TESTS++))
+            pass "Service '$svc' exists"
         else
-            log_error "Service '$svc' does NOT exist"
-            ((FAILED_TESTS++))
+            fail "Service '$svc' does NOT exist"
         fi
     done
 }
 
 # Test: Backend Health Endpoint
 test_backend_health() {
-    log_section "Test 8: Backend Health Endpoint"
+    # ============================================================================
+    # Section 8: Backend Health Endpoint
+    # ============================================================================
+
+    section "8. Backend Health Endpoint"
 
     # Check backend health via pod readiness (kubectl wait already validates the
     # readiness probe which hits /health). Verify pod is ready as a proxy.
     if kubectl get pods -n "$NAMESPACE" -l app=ambient-api-server -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q "True"; then
-        log_success "Backend health endpoint responds (pod readiness probe passes)"
-        ((PASSED_TESTS++))
+        pass "Backend health endpoint responds (pod readiness probe passes)"
     else
-        log_error "Backend pod is not ready (health endpoint may not be responding)"
-        ((FAILED_TESTS++))
+        fail "Backend pod is not ready (health endpoint may not be responding)"
     fi
 }
 
 # Test: Frontend Accessibility
 test_frontend_accessibility() {
-    log_section "Test 9: Frontend Accessibility"
+    # ============================================================================
+    # Section 9: Frontend Accessibility
+    # ============================================================================
+
+    section "9. Frontend Accessibility"
 
     # Check frontend health via pod readiness
     if kubectl get pods -n "$NAMESPACE" -l app=ambient-ui -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q "True"; then
-        log_success "Frontend is accessible (pod readiness probe passes)"
-        ((PASSED_TESTS++))
+        pass "Frontend is accessible (pod readiness probe passes)"
     else
-        log_error "Frontend pod is not ready"
-        ((FAILED_TESTS++))
+        fail "Frontend pod is not ready"
     fi
 }
 
 # Test: RBAC Configuration
 test_rbac() {
-    log_section "Test 10: RBAC Configuration"
+    # ============================================================================
+    # Section 10: RBAC Configuration
+    # ============================================================================
+
+    section "10. RBAC Configuration"
 
     local roles=("ambient-project-admin" "ambient-project-edit" "ambient-project-view")
 
     for role in "${roles[@]}"; do
         if kubectl get clusterrole "$role" >/dev/null 2>&1; then
-            log_success "ClusterRole '$role' exists"
-            ((PASSED_TESTS++))
+            pass "ClusterRole '$role' exists"
         else
-            log_error "ClusterRole '$role' does NOT exist"
-            ((FAILED_TESTS++))
+            fail "ClusterRole '$role' does NOT exist"
         fi
     done
 }
 
 # Test: Development Workflow - Build Command
 test_build_command() {
-    log_section "Test 11: Build Commands (Dry Run)"
+    # ============================================================================
+    # Section 11: Build Commands (Dry Run)
+    # ============================================================================
+
+    section "11. Build Commands (Dry Run)"
 
     if make -n build-api-server >/dev/null 2>&1; then
-        log_success "make build-api-server syntax is valid"
-        ((PASSED_TESTS++))
+        pass "make build-api-server syntax is valid"
     else
-        log_error "make build-api-server has syntax errors"
-        ((FAILED_TESTS++))
+        fail "make build-api-server has syntax errors"
     fi
 
     if make -n build-ambient-ui >/dev/null 2>&1; then
-        log_success "make build-ambient-ui syntax is valid"
-        ((PASSED_TESTS++))
+        pass "make build-ambient-ui syntax is valid"
     else
-        log_error "make build-ambient-ui has syntax errors"
-        ((FAILED_TESTS++))
+        fail "make build-ambient-ui has syntax errors"
     fi
 
     if make -n build-control-plane >/dev/null 2>&1; then
-        log_success "make build-control-plane syntax is valid"
-        ((PASSED_TESTS++))
+        pass "make build-control-plane syntax is valid"
     else
-        log_error "make build-control-plane has syntax errors"
-        ((FAILED_TESTS++))
+        fail "make build-control-plane has syntax errors"
     fi
 }
 
 # Test: Benchmark Harness Syntax
 test_benchmark_syntax() {
-    log_section "Test 12: Benchmark Harness Syntax"
+    # ============================================================================
+    # Section 12: Benchmark Harness Syntax
+    # ============================================================================
+
+    section "12. Benchmark Harness Syntax"
 
     if bash -n scripts/benchmarks/component-bench.sh 2>/dev/null; then
-        log_success "component-bench.sh syntax is valid"
-        ((PASSED_TESTS++))
+        pass "component-bench.sh syntax is valid"
     else
-        log_error "component-bench.sh has syntax errors"
-        ((FAILED_TESTS++))
+        fail "component-bench.sh has syntax errors"
     fi
 
     if make -n benchmark >/dev/null 2>&1; then
-        log_success "make benchmark syntax is valid"
-        ((PASSED_TESTS++))
+        pass "make benchmark syntax is valid"
     else
-        log_error "make benchmark has syntax errors"
-        ((FAILED_TESTS++))
+        fail "make benchmark has syntax errors"
     fi
 }
 
 # Test: Logging Commands
 test_logging_commands() {
-    log_section "Test 13: Logging Commands"
+    # ============================================================================
+    # Section 13: Logging Commands
+    # ============================================================================
+
+    section "13. Logging Commands"
 
     # Test that we can get logs from each component
     local components=("ambient-api-server" "ambient-ui" "ambient-control-plane")
 
     for component in "${components[@]}"; do
         if kubectl logs -n "$NAMESPACE" -l "app=$component" --tail=1 >/dev/null 2>&1; then
-            log_success "Can retrieve logs from $component"
-            ((PASSED_TESTS++))
+            pass "Can retrieve logs from $component"
         else
             log_warning "Cannot retrieve logs from $component (pod may not be running)"
         fi
@@ -422,19 +429,21 @@ test_logging_commands() {
 
 # Test: Storage Configuration
 test_storage() {
-    log_section "Test 14: Storage Configuration"
+    # ============================================================================
+    # Section 14: Storage Configuration
+    # ============================================================================
+
+    section "14. Storage Configuration"
 
     # Check if workspace PVC exists
     if kubectl get pvc workspace-pvc -n "$NAMESPACE" >/dev/null 2>&1; then
-        log_success "Workspace PVC exists"
-        ((PASSED_TESTS++))
+        pass "Workspace PVC exists"
 
         # Check PVC status
         local status
         status=$(kubectl get pvc workspace-pvc -n "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null)
         if [ "$status" = "Bound" ]; then
-            log_success "Workspace PVC is bound"
-            ((PASSED_TESTS++))
+            pass "Workspace PVC is bound"
         else
             log_warning "Workspace PVC status: $status"
         fi
@@ -445,7 +454,11 @@ test_storage() {
 
 # Test: Resource Limits
 test_resource_limits() {
-    log_section "Test 15: Resource Configuration"
+    # ============================================================================
+    # Section 15: Resource Configuration
+    # ============================================================================
+
+    section "15. Resource Configuration"
 
     # Check if deployments have resource requests/limits
     local deployments=("ambient-api-server" "ambient-ui" "ambient-control-plane")
@@ -455,8 +468,7 @@ test_resource_limits() {
         resources=$(kubectl get deployment "$deployment" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].resources}' 2>/dev/null || echo "{}")
 
         if [ "$resources" != "{}" ]; then
-            log_success "Deployment '$deployment' has resource configuration"
-            ((PASSED_TESTS++))
+            pass "Deployment '$deployment' has resource configuration"
         else
             log_info "Deployment '$deployment' has no resource limits (OK for dev)"
         fi
@@ -465,7 +477,11 @@ test_resource_limits() {
 
 # Test: Make local-status
 test_make_status() {
-    log_section "Test 16: make local-status Command"
+    # ============================================================================
+    # Section 16: make local-status Command
+    # ============================================================================
+
+    section "16. make local-status Command"
 
     local status_output
     # Pass CONTAINER_ENGINE so kind get clusters uses the correct provider
@@ -483,34 +499,40 @@ test_make_status() {
 
 # Test: Security - Test User Permissions
 test_security_local_dev_user() {
-    log_section "Test 17: Security - Test User Permissions"
+    # ============================================================================
+    # Section 17: Security - Test User Permissions
+    # ============================================================================
+
+    section "17. Security - Test User Permissions"
 
     log_info "Verifying test-user service account exists..."
 
     # Kind creates a test-user service account with a pre-generated token
     if kubectl get serviceaccount test-user -n "$NAMESPACE" >/dev/null 2>&1; then
-        log_success "test-user service account exists"
-        ((PASSED_TESTS++))
+        pass "test-user service account exists"
     else
         log_warning "test-user service account does not exist (may not be set up yet)"
         # Not a hard failure — kind-up creates this but test may run before setup completes
-        ((PASSED_TESTS++))
+        PASSED=$((PASSED + 1))
         return
     fi
 
     # Check that the test-user token secret exists
     if kubectl get secret test-user-token -n "$NAMESPACE" >/dev/null 2>&1; then
-        log_success "test-user-token secret exists"
-        ((PASSED_TESTS++))
+        pass "test-user-token secret exists"
     else
         log_warning "test-user-token secret does not exist"
-        ((PASSED_TESTS++))
+        PASSED=$((PASSED + 1))
     fi
 }
 
 # Test: Security - Production Namespace Rejection
 test_security_prod_namespace_rejection() {
-    log_section "Test 18: Security - Production Namespace Rejection"
+    # ============================================================================
+    # Section 18: Security - Production Namespace Rejection
+    # ============================================================================
+
+    section "18. Security - Production Namespace Rejection"
 
     log_info "Testing that dev mode rejects production-like namespaces..."
 
@@ -525,13 +547,12 @@ test_security_prod_namespace_rejection() {
 
     # Test 1: Verify namespace does not contain 'prod'
     if echo "$NAMESPACE" | grep -qi "prod"; then
-        log_error "Namespace contains 'prod' - this would be REJECTED by middleware (GOOD)"
-        log_error "Current namespace: $NAMESPACE"
+        echo -e "  ${RED}✗${NC} Namespace contains 'prod' - this would be REJECTED by middleware (GOOD)"
+        echo -e "  ${RED}✗${NC} Current namespace: $NAMESPACE"
         log_info "Dev mode should NEVER run in production namespaces"
-        ((PASSED_TESTS++))  # This is correct behavior - we want it to fail
+        PASSED=$((PASSED + 1))  # This is correct behavior - we want it to fail
     else
-        log_success "Namespace does not contain 'prod' (safe for dev mode)"
-        ((PASSED_TESTS++))
+        pass "Namespace does not contain 'prod' (safe for dev mode)"
     fi
 
     # Test 2: Document the protection mechanism
@@ -542,7 +563,11 @@ test_security_prod_namespace_rejection() {
 
 # Test: Security - Mock Token Detection in Logs
 test_security_mock_token_logging() {
-    log_section "Test 19: Security - Mock Token Detection"
+    # ============================================================================
+    # Section 19: Security - Mock Token Detection
+    # ============================================================================
+
+    section "19. Security - Mock Token Detection"
 
     log_info "Verifying backend logs show dev mode activation..."
 
@@ -565,33 +590,28 @@ test_security_mock_token_logging() {
 
     # Test 1: Check for dev mode detection logs
     if echo "$logs" | grep -q "Local dev mode detected\|Dev mode detected\|local dev environment"; then
-        log_success "Backend logs show dev mode activation"
-        ((PASSED_TESTS++))
+        pass "Backend logs show dev mode activation"
     else
         log_info "Backend logs do not show dev mode activation yet (may need API call to trigger)"
     fi
 
     # Test 2: Verify logs do NOT contain the actual mock token value
     if echo "$logs" | grep -q "mock-token-for-local-dev"; then
-        log_error "Backend logs contain mock token value (SECURITY ISSUE - tokens should be redacted)"
-        ((FAILED_TESTS++))
+        fail "Backend logs contain mock token value (SECURITY ISSUE - tokens should be redacted)"
     else
-        log_success "Backend logs do NOT contain mock token value (correct - tokens are redacted)"
-        ((PASSED_TESTS++))
+        pass "Backend logs do NOT contain mock token value (correct - tokens are redacted)"
     fi
 
     # Test 3: Check for service account usage logging
     if echo "$logs" | grep -q "using.*service account\|K8sClient\|DynamicClient"; then
-        log_success "Backend logs reference service account usage"
-        ((PASSED_TESTS++))
+        pass "Backend logs reference service account usage"
     else
         log_info "Backend logs do not show service account usage (may need API call to trigger)"
     fi
 
     # Test 4: Verify environment validation logs
     if echo "$logs" | grep -q "Local dev environment validated\|env=local\|env=development"; then
-        log_success "Backend logs show environment validation"
-        ((PASSED_TESTS++))
+        pass "Backend logs show environment validation"
     else
         log_info "Backend logs do not show environment validation yet"
     fi
@@ -599,7 +619,11 @@ test_security_mock_token_logging() {
 
 # Test: Security - Token Redaction
 test_security_token_redaction() {
-    log_section "Test 20: Security - Token Redaction in Logs"
+    # ============================================================================
+    # Section 20: Security - Token Redaction in Logs
+    # ============================================================================
+
+    section "20. Security - Token Redaction in Logs"
 
     log_info "Verifying tokens are properly redacted in logs..."
 
@@ -622,61 +646,59 @@ test_security_token_redaction() {
 
     # Test 1: Logs should use tokenLen= instead of showing token
     if echo "$logs" | grep -q "tokenLen=\|token (len="; then
-        log_success "Logs use token length instead of token value (correct redaction)"
-        ((PASSED_TESTS++))
+        pass "Logs use token length instead of token value (correct redaction)"
     else
         log_info "Token length logging not found (may need authenticated requests)"
     fi
 
     # Test 2: Should NOT contain Bearer tokens
     if echo "$logs" | grep -qE "Bearer [A-Za-z0-9._-]{20,}"; then
-        log_error "Logs contain Bearer tokens (SECURITY ISSUE)"
-        ((FAILED_TESTS++))
+        fail "Logs contain Bearer tokens (SECURITY ISSUE)"
     else
-        log_success "Logs do NOT contain Bearer tokens (correct)"
-        ((PASSED_TESTS++))
+        pass "Logs do NOT contain Bearer tokens (correct)"
     fi
 
     # Test 3: Should NOT contain base64-encoded credentials
     if echo "$logs" | grep -qE "[A-Za-z0-9+/]{40,}={0,2}"; then
         log_warning "Logs may contain base64-encoded data (verify not credentials)"
     else
-        log_success "Logs do not contain long base64 strings"
-        ((PASSED_TESTS++))
+        pass "Logs do not contain long base64 strings"
     fi
 }
 
 # Test: CRITICAL - Test User Token
 test_critical_token_minting() {
-    log_section "Test 21: CRITICAL - Test User Token"
+    # ============================================================================
+    # Section 21: CRITICAL - Test User Token
+    # ============================================================================
+
+    section "21. CRITICAL - Test User Token"
 
     # Kind setup creates a test-user ServiceAccount with a pre-generated token
     # stored in a secret. Validate that this exists.
 
     # Step 1: test-user ServiceAccount must exist
     if kubectl get serviceaccount test-user -n "$NAMESPACE" >/dev/null 2>&1; then
-        log_success "Step 1/2: test-user ServiceAccount exists"
-        ((PASSED_TESTS++))
+        pass "Step 1/2: test-user ServiceAccount exists"
     else
         log_warning "Step 1/2: test-user ServiceAccount does not exist (kind-up may not have completed)"
         if [ "$CI_MODE" = true ]; then
             ((KNOWN_FAILURES++))
         else
-            ((FAILED_TESTS++))
+            FAILED=$((FAILED + 1))
         fi
         return 1
     fi
 
     # Step 2: test-user-token secret must exist
     if kubectl get secret test-user-token -n "$NAMESPACE" >/dev/null 2>&1; then
-        log_success "Step 2/2: test-user-token secret exists"
-        ((PASSED_TESTS++))
+        pass "Step 2/2: test-user-token secret exists"
     else
         log_warning "Step 2/2: test-user-token secret does not exist"
         if [ "$CI_MODE" = true ]; then
             ((KNOWN_FAILURES++))
         else
-            ((FAILED_TESTS++))
+            FAILED=$((FAILED + 1))
         fi
         return 1
     fi
@@ -684,7 +706,11 @@ test_critical_token_minting() {
 
 # Test: Production Manifest Safety - No Dev Mode Variables
 test_production_manifest_safety() {
-    log_section "Test 22: Production Manifest Safety"
+    # ============================================================================
+    # Section 22: Production Manifest Safety
+    # ============================================================================
+
+    section "22. Production Manifest Safety"
 
     log_info "Verifying production manifests do NOT contain dev mode variables..."
 
@@ -705,24 +731,20 @@ test_production_manifest_safety() {
 
         # Check for DISABLE_AUTH
         if grep -q "DISABLE_AUTH" "$manifest" 2>/dev/null; then
-            log_error "Production manifest contains DISABLE_AUTH: $manifest"
-            log_error "  This would enable dev mode in production (CRITICAL SECURITY ISSUE)"
-            ((FAILED_TESTS++))
+            fail "Production manifest contains DISABLE_AUTH: $manifest"
+            echo -e "  ${RED}✗${NC}   This would enable dev mode in production (CRITICAL SECURITY ISSUE)"
             found_issues=true
         else
-            log_success "Production manifest clean (no DISABLE_AUTH): $manifest"
-            ((PASSED_TESTS++))
+            pass "Production manifest clean (no DISABLE_AUTH): $manifest"
         fi
 
         # Check for ENVIRONMENT=local or development
         if grep -qE "ENVIRONMENT.*[\"']?(local|development)[\"']?" "$manifest" 2>/dev/null; then
-            log_error "Production manifest sets ENVIRONMENT=local/development: $manifest"
-            log_error "  This would enable dev mode in production (CRITICAL SECURITY ISSUE)"
-            ((FAILED_TESTS++))
+            fail "Production manifest sets ENVIRONMENT=local/development: $manifest"
+            echo -e "  ${RED}✗${NC}   This would enable dev mode in production (CRITICAL SECURITY ISSUE)"
             found_issues=true
         else
-            log_success "Production manifest clean (no ENVIRONMENT=local): $manifest"
-            ((PASSED_TESTS++))
+            pass "Production manifest clean (no ENVIRONMENT=local): $manifest"
         fi
     done
 
@@ -735,7 +757,7 @@ test_production_manifest_safety() {
 
 # Main test execution
 main() {
-    log_section "Agent Control Plane - Local Developer Experience Tests"
+    section "Agent Control Plane - Local Developer Experience Tests"
     log_info "Starting test suite at $(date)"
     log_info "Test configuration:"
     log_info "  Namespace: $NAMESPACE"
@@ -775,22 +797,18 @@ main() {
     test_critical_token_minting
 
     # Summary
-    log_section "Test Summary"
     echo ""
-    echo -e "${BOLD}Results:${NC}"
-    echo -e "  ${GREEN}Passed:${NC} $PASSED_TESTS"
-    echo -e "  ${RED}Failed:${NC} $FAILED_TESTS"
+    echo -e "${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}"
     if [ $KNOWN_FAILURES -gt 0 ]; then
         echo -e "  ${YELLOW}Known TODOs:${NC} $KNOWN_FAILURES"
     fi
-    echo -e "  ${BOLD}Total:${NC}  $((PASSED_TESTS + FAILED_TESTS + KNOWN_FAILURES))"
     echo ""
 
     if [ "$CI_MODE" = true ]; then
         # In CI mode, known failures are acceptable
-        local unexpected_failures=$FAILED_TESTS
+        local unexpected_failures=$FAILED
         if [ $unexpected_failures -eq 0 ]; then
-            echo -e "${GREEN}${BOLD}✓ All tests passed (excluding $KNOWN_FAILURES known TODOs)!${NC}"
+            echo -e "${GREEN}${BOLD}All tests passed (excluding $KNOWN_FAILURES known TODOs)!${NC}"
             echo ""
             log_info "CI validation successful!"
             if [ $KNOWN_FAILURES -gt 0 ]; then
@@ -798,29 +816,29 @@ main() {
             fi
             exit 0
         else
-            echo -e "${RED}${BOLD}✗ $unexpected_failures unexpected test failures${NC}"
+            echo -e "${RED}${BOLD}$unexpected_failures unexpected test failures${NC}"
             echo ""
-            log_error "CI validation failed"
+            fail "CI validation failed"
             exit 1
         fi
     else
         # In normal mode, any failure is an issue
-        if [ $FAILED_TESTS -eq 0 ]; then
-            echo -e "${GREEN}${BOLD}✓ All tests passed!${NC}"
+        if [ $FAILED -eq 0 ]; then
+            echo -e "${GREEN}${BOLD}All tests passed!${NC}"
             echo ""
             log_info "Your local development environment is ready!"
             log_info "Access the application:"
-            log_info "  • Frontend: $(get_test_url 30030)"
-            log_info "  • Backend:  $(get_test_url 30080)"
+            log_info "  Frontend: $(get_test_url 30030)"
+            log_info "  Backend:  $(get_test_url 30080)"
             echo ""
             if [ $KNOWN_FAILURES -gt 0 ]; then
                 log_warning "Note: $KNOWN_FAILURES known TODOs tracked for future implementation"
             fi
             exit 0
         else
-            echo -e "${RED}${BOLD}✗ Some tests failed${NC}"
+            echo -e "${RED}${BOLD}Some tests failed${NC}"
             echo ""
-            log_error "Your local development environment has issues"
+            log_info "Your local development environment has issues"
             log_info "Run 'make local-troubleshoot' for more details"
             echo ""
             exit 1
