@@ -10,6 +10,7 @@ filesystem_policy:
     - /etc
     - /app
     - /var/log
+    - /runner
   read_write:
     - /sandbox
     - /tmp

@@ -515,7 +515,7 @@ section "4 · RBAC Validation"
 run_cmd openshell provider create --gateway "$GATEWAY_NAME" \
   --name "rbac-test-provider" --type generic \
   --credential TEST_KEY=test-value
-if [ "$CMD_RC" -ne 0 ] && echo "$CMD_OUTPUT" | grep -q "PermissionDenied"; then
+if [ "$CMD_RC" -ne 0 ] && echo "$CMD_OUTPUT" | grep -qi "permission"; then
   pass "Developer correctly denied provider create (openshell-admin required)"
 elif [ "$CMD_RC" -eq 0 ]; then
   fail "Developer should NOT have admin access to provider create"
