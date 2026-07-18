@@ -88,7 +88,7 @@ log_info() {
 }
 
 log_warning() {
-    echo -e "  ${YELLOW}⊘${NC} $*"
+    echo -e "  ${YELLOW}⚠${NC} $*"
 }
 
 # Test assertion functions
@@ -818,7 +818,6 @@ main() {
         else
             echo -e "${RED}${BOLD}$unexpected_failures unexpected test failures${NC}"
             echo ""
-            fail "CI validation failed"
             exit 1
         fi
     else

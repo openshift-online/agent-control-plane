@@ -16,11 +16,10 @@ NC='\033[0m'
 
 PASSED=0
 FAILED=0
-SKIPPED=0
 
 pass() { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
 fail() { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
-skip() { echo -e "  ${YELLOW}⊘${NC} $1"; SKIPPED=$((SKIPPED + 1)); }
+skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped${2:+: $2})"; }
 section() { echo ""; echo -e "${BOLD}$1${NC}"; }
 
 finish() {
