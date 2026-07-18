@@ -313,6 +313,8 @@ spec:
       - /sandbox
       - /tmp
       - /dev/null
+      - /dev/pts
+      - /dev/shm
       - /workspace
   landlock:
     compatibility: best_effort

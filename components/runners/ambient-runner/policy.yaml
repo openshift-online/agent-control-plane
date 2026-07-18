@@ -22,6 +22,8 @@ filesystem_policy:
     - /sandbox
     - /tmp
     - /dev/null
+    - /dev/pts
+    - /dev/shm
     - /sandbox/.runner/logs
     - /workspace
 
