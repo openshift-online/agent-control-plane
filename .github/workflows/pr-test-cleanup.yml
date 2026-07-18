@@ -1,0 +1,41 @@
+name: PR Test — Stage Cleanup
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+concurrency:
+  group: pr-test-stage-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  teardown:
+    name: Teardown Stage Environment
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install oc CLI
+        uses: redhat-actions/openshift-tools-installer@144527c7d98999f2652264c048c7a9bd103f8a82 # v1.13.1
+        with:
+          oc: "4"
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.STAGE_KUBECONFIG }}" > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Teardown PR namespace
+        run: |
+          NAMESPACE="pr-${{ github.event.pull_request.number }}"
+          if oc get namespace "$NAMESPACE" &>/dev/null 2>&1; then
+            bash components/pr-test/teardown-openshift.sh "$NAMESPACE"
+          else
+            echo "Namespace $NAMESPACE does not exist, nothing to tear down"
+          fi

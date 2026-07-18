@@ -27,6 +27,7 @@ Valid resource types:
   agent           Create an agent
   role            Create a role
   role-binding    Create a role binding
+  cluster         Register a cluster
 `,
 	Args: cobra.MinimumNArgs(1),
 	RunE: run,
@@ -56,6 +57,9 @@ var createArgs struct {
 	bindSessionID string
 	bindCredID    string
 	scopeID       string
+	apiServerURL  string
+	role          string
+	credentialID  string
 }
 
 func init() {
@@ -82,6 +86,9 @@ func init() {
 	Cmd.Flags().StringVar(&createArgs.bindSessionID, "session-id-fk", "", "Session FK for role-binding")
 	Cmd.Flags().StringVar(&createArgs.bindCredID, "credential-id-fk", "", "Credential FK for role-binding")
 	Cmd.Flags().StringVar(&createArgs.scopeID, "scope-id", "", "Scope target ID for role-binding (shorthand for --{scope}-id-fk)")
+	Cmd.Flags().StringVar(&createArgs.apiServerURL, "api-server-url", "", "Cluster API server URL")
+	Cmd.Flags().StringVar(&createArgs.role, "role", "", "Cluster role (gateway, workload, hybrid)")
+	Cmd.Flags().StringVar(&createArgs.credentialID, "credential-id", "", "Credential ID for cluster")
 }
 
 func run(cmd *cobra.Command, cmdArgs []string) error {
@@ -113,8 +120,10 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return createRole(cmd, ctx, client)
 	case "role-binding", "rolebinding", "rb":
 		return createRoleBinding(cmd, ctx, client)
+	case "cluster", "cl":
+		return createCluster(cmd, ctx, client)
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-agent, agent, role, role-binding", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-agent, agent, role, role-binding, cluster", cmdArgs[0])
 	}
 }
 
@@ -350,4 +359,42 @@ func createRoleBinding(cmd *cobra.Command, ctx context.Context, client *sdkclien
 	}
 
 	return printCreated(cmd, "role-binding", created.ID, created)
+}
+
+func createCluster(cmd *cobra.Command, ctx context.Context, client *sdkclient.Client) error {
+	warnUnusedFlags(cmd, "prompt", "repo-url", "model", "max-tokens", "temperature", "timeout", "display-name", "project", "agent-id", "owner-user-id", "permissions", "user-id", "role-id", "scope", "project-fk", "agent-id-fk", "session-id-fk", "credential-id-fk", "scope-id")
+
+	if createArgs.name == "" {
+		return fmt.Errorf("--name is required")
+	}
+	if createArgs.apiServerURL == "" {
+		return fmt.Errorf("--api-server-url is required")
+	}
+	if createArgs.role == "" {
+		return fmt.Errorf("--role is required (gateway, workload, hybrid)")
+	}
+
+	builder := sdktypes.NewClusterBuilder().
+		Name(createArgs.name).
+		APIServerURL(createArgs.apiServerURL).
+		Role(createArgs.role)
+
+	if createArgs.description != "" {
+		builder = builder.Description(createArgs.description)
+	}
+	if createArgs.credentialID != "" {
+		builder = builder.CredentialID(createArgs.credentialID)
+	}
+
+	cluster, err := builder.Build()
+	if err != nil {
+		return fmt.Errorf("build cluster: %w", err)
+	}
+
+	created, err := client.Clusters().Create(ctx, cluster)
+	if err != nil {
+		return fmt.Errorf("create cluster: %w", err)
+	}
+
+	return printCreated(cmd, "cluster", created.ID, created)
 }

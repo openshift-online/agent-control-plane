@@ -21,13 +21,13 @@ import (
 
 var Cmd = &cobra.Command{
 	Use:   "apply",
-	Short: "Apply declarative Project, Agent, Credential, Policy, RoleBinding, and Gateway manifests",
-	Long: `Apply Projects, Agents, Credentials, Policies, RoleBindings, and Gateways from YAML files or a Kustomize directory.
+	Short: "Apply declarative Project, Agent, Credential, Policy, RoleBinding, Gateway, and Cluster manifests",
+	Long: `Apply Projects, Agents, Credentials, Policies, RoleBindings, Gateways, and Clusters from YAML files or a Kustomize directory.
 
 Mirrors kubectl apply semantics: resources are created if they do not exist,
 or patched if they do. Output reports created / configured / unchanged per resource.
 
-Supported kinds: Project, Agent, Credential, Policy, RoleBinding, Gateway
+Supported kinds: Project, Agent, Credential, Policy, RoleBinding, Gateway, Cluster
 
 File format (one or more documents separated by ---):
 
@@ -183,6 +183,8 @@ func run(cmd *cobra.Command, _ []string) error {
 				}
 			}
 			result, err = applyGateway(ctx, gwClient, doc)
+		case "cluster":
+			result, err = applyCluster(ctx, client, doc)
 		default:
 			fmt.Fprintf(cmd.ErrOrStderr(), "warning: unknown kind %q — skipping\n", doc.Kind)
 			continue
@@ -995,6 +997,85 @@ func routeFromResource(doc kustomize.Resource) *sdktypes.GatewayRoute {
 		route.Host = v
 	}
 	return route
+}
+
+func applyCluster(ctx context.Context, client *sdkclient.Client, doc kustomize.Resource) (applyResult, error) {
+	existing, err := client.Clusters().List(ctx, &sdktypes.ListOptions{
+		Search: fmt.Sprintf("name = '%s'", doc.Name),
+		Size:   1,
+	})
+	if err != nil {
+		return applyResult{}, fmt.Errorf("listing clusters: %w", err)
+	}
+	if existing != nil && len(existing.Items) > 0 {
+		cl := existing.Items[0]
+		patch := buildClusterPatch(cl, doc)
+		if len(patch) == 0 {
+			return applyResult{Kind: "Cluster", Name: doc.Name, Status: "unchanged"}, nil
+		}
+		if _, err = client.Clusters().Update(ctx, cl.ID, patch); err != nil {
+			return applyResult{}, err
+		}
+		return applyResult{Kind: "Cluster", Name: doc.Name, Status: "configured"}, nil
+	}
+
+	builder := sdktypes.NewClusterBuilder().
+		Name(doc.Name).
+		APIServerURL(doc.APIServerURL).
+		Role(doc.Role)
+	if doc.Description != "" {
+		builder = builder.Description(doc.Description)
+	}
+	if doc.CredentialID != "" {
+		builder = builder.CredentialID(doc.CredentialID)
+	}
+	if len(doc.Labels) > 0 {
+		builder = builder.Labels(marshalStringMap(doc.Labels))
+	}
+	if len(doc.Annotations) > 0 {
+		builder = builder.Annotations(marshalStringMap(doc.Annotations))
+	}
+	cl, buildErr := builder.Build()
+	if buildErr != nil {
+		return applyResult{}, buildErr
+	}
+	if _, createErr := client.Clusters().Create(ctx, cl); createErr != nil {
+		return applyResult{}, createErr
+	}
+	return applyResult{Kind: "Cluster", Name: doc.Name, Status: "created"}, nil
+}
+
+func buildClusterPatch(existing sdktypes.Cluster, doc kustomize.Resource) map[string]any {
+	patch := sdktypes.NewClusterPatchBuilder()
+	changed := false
+	if doc.APIServerURL != "" && doc.APIServerURL != existing.APIServerURL {
+		patch = patch.APIServerURL(doc.APIServerURL)
+		changed = true
+	}
+	if doc.Role != "" && doc.Role != existing.Role {
+		patch = patch.Role(doc.Role)
+		changed = true
+	}
+	if doc.Description != "" && doc.Description != existing.Description {
+		patch = patch.Description(doc.Description)
+		changed = true
+	}
+	if doc.CredentialID != "" && doc.CredentialID != existing.CredentialID {
+		patch = patch.CredentialID(doc.CredentialID)
+		changed = true
+	}
+	if len(doc.Labels) > 0 && marshalStringMap(doc.Labels) != existing.Labels {
+		patch = patch.Labels(marshalStringMap(doc.Labels))
+		changed = true
+	}
+	if len(doc.Annotations) > 0 && marshalStringMap(doc.Annotations) != existing.Annotations {
+		patch = patch.Annotations(marshalStringMap(doc.Annotations))
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return patch.Build()
 }
 
 func stringSliceEqual(a, b []string) bool {
