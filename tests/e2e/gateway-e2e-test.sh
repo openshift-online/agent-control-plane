@@ -131,6 +131,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[36m'
+ORANGE='\033[38;5;214m'
 DIM='\033[2m'
 BOLD='\033[1m'
 NC='\033[0m'
@@ -139,11 +140,24 @@ PASSED=0
 FAILED=0
 CREATED_SESSION_ID=""
 CREATED_SESSIONS=()
+CMD_OUTPUT=""
+CMD_RC=0
 
 sep()     { printf '%b%s%b\n' "${DIM}" "──────────────────────────────────────────────────" "${NC}"; }
 pass()    { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
 fail()    { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
 skip()    { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
+
+run_cmd() {
+  CMD_RC=0
+  echo ""
+  printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "$*" "${NC}"
+  CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+  if [ -n "$CMD_OUTPUT" ]; then
+    echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
+  fi
+  echo ""
+}
 
 section() {
   echo ""
@@ -272,8 +286,11 @@ fi
 
 section "2. Login acpctl"
 
-if $ACPCTL login --url "$API_URL" --token "$TOKEN" --project "$TENANT" >/dev/null 2>&1 && \
-   $ACPCTL whoami >/dev/null 2>&1; then
+run_cmd $ACPCTL login --url "$API_URL" --token "$TOKEN" --project "$TENANT"
+if [ "$CMD_RC" -eq 0 ]; then
+  run_cmd $ACPCTL whoami
+fi
+if [ "$CMD_RC" -eq 0 ]; then
   pass "acpctl login succeeded (${API_URL}, project: ${TENANT})"
 else
   fail "acpctl login failed — is the API server reachable at ${API_URL}?"
@@ -306,7 +323,8 @@ if [ -n "$_db_pod" ]; then
     >/dev/null 2>&1 || true
 fi
 
-if $ACPCTL apply -k "$E2E_GW_FIXTURE" --project "$E2E_GW_PROJECT" >/dev/null 2>&1; then
+run_cmd $ACPCTL apply -k "$E2E_GW_FIXTURE" --project "$E2E_GW_PROJECT"
+if [ "$CMD_RC" -eq 0 ]; then
   pass "acpctl apply -k fixtures/gateway-apply succeeded"
 else
   fail "acpctl apply -k fixtures/gateway-apply failed"
@@ -318,8 +336,9 @@ if [ "$E2E_GW_CLEANUP" = "true" ]; then
   # StatefulSet to appear, checking every 5s.
   GW_DEPLOYED=false
   for i in $(seq 1 24); do
-    GW_STS=$(kubectl get statefulset openshell-gateway -n "$E2E_GW_PROJECT" \
-      -o jsonpath='{.metadata.name}' 2>/dev/null || echo "")
+    run_cmd kubectl get statefulset openshell-gateway -n "$E2E_GW_PROJECT" \
+      -o jsonpath='{.metadata.name}'
+    GW_STS="${CMD_OUTPUT:-}"
     if [ "$GW_STS" = "openshell-gateway" ]; then
       GW_DEPLOYED=true
       break
@@ -335,8 +354,9 @@ if [ "$E2E_GW_CLEANUP" = "true" ]; then
   fi
 
   # Verify the certgen job ran (creates TLS secrets the session reconciler needs)
-  CERTGEN_JOB=$(kubectl get job openshell-gateway-certgen -n "$E2E_GW_PROJECT" \
-    -o jsonpath='{.metadata.name}' 2>/dev/null || echo "")
+  run_cmd kubectl get job openshell-gateway-certgen -n "$E2E_GW_PROJECT" \
+    -o jsonpath='{.metadata.name}'
+  CERTGEN_JOB="${CMD_OUTPUT:-}"
   if [ "$CERTGEN_JOB" = "openshell-gateway-certgen" ]; then
     pass "Certgen job created in namespace '${E2E_GW_PROJECT}'"
   else
@@ -344,8 +364,9 @@ if [ "$E2E_GW_CLEANUP" = "true" ]; then
   fi
 
   # Verify TLS secrets were created (needed for session provisioning)
-  SERVER_TLS=$(kubectl get secret openshell-server-tls -n "$E2E_GW_PROJECT" \
-    -o jsonpath='{.metadata.name}' 2>/dev/null || echo "")
+  run_cmd kubectl get secret openshell-server-tls -n "$E2E_GW_PROJECT" \
+    -o jsonpath='{.metadata.name}'
+  SERVER_TLS="${CMD_OUTPUT:-}"
   if [ "$SERVER_TLS" = "openshell-server-tls" ]; then
     pass "TLS secret openshell-server-tls created"
   else
@@ -353,7 +374,8 @@ if [ "$E2E_GW_CLEANUP" = "true" ]; then
   fi
 
   # Cleanup: delete the test project (namespace will be deprovisioned by project reconciler)
-  if $ACPCTL delete project "$E2E_GW_PROJECT" --yes >/dev/null 2>&1; then
+  run_cmd $ACPCTL delete project "$E2E_GW_PROJECT" --yes
+  if [ "$CMD_RC" -eq 0 ]; then
     echo "  Cleaned up project '${E2E_GW_PROJECT}'"
   else
     echo "  Could not delete project '${E2E_GW_PROJECT}' (non-fatal)"
@@ -408,15 +430,17 @@ section "6. Apply sandbox policies"
 # Policies must exist before any session starts — agents reference them by
 # name (sandbox_policy: permissive) and the control plane will fail the
 # session if the policy is not found.
-if $ACPCTL apply -f "$REPO_ROOT/examples/base/policies/permissive.yaml" \
-  --project "$TENANT" >/dev/null 2>&1; then
+run_cmd $ACPCTL apply -f "$REPO_ROOT/examples/base/policies/permissive.yaml" \
+  --project "$TENANT"
+if [ "$CMD_RC" -eq 0 ]; then
   pass "Permissive policy applied to ${TENANT}"
 else
   fail "Could not apply permissive policy to ${TENANT}"
 fi
 
-if $ACPCTL apply -f "$REPO_ROOT/examples/base/policies/locked-down.yaml" \
-  --project "$TENANT" >/dev/null 2>&1; then
+run_cmd $ACPCTL apply -f "$REPO_ROOT/examples/base/policies/locked-down.yaml" \
+  --project "$TENANT"
+if [ "$CMD_RC" -eq 0 ]; then
   pass "Locked-down policy applied to ${TENANT}"
 else
   fail "Could not apply locked-down policy to ${TENANT}"
@@ -454,9 +478,9 @@ fi
 
 section "8. OpenShell gateway healthy"
 
-GW_READY=$(kubectl get statefulset openshell-gateway -n "$TENANT" \
-  -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
-GW_READY="${GW_READY:-0}"
+run_cmd kubectl get statefulset openshell-gateway -n "$TENANT" \
+  -o jsonpath='{.status.readyReplicas}'
+GW_READY="${CMD_OUTPUT:-0}"
 
 if [ "${GW_READY}" -ge 1 ]; then
   pass "openshell-gateway in ${TENANT} ready (replicas: ${GW_READY})"
@@ -464,9 +488,10 @@ else
   fail "openshell-gateway in ${TENANT} not ready (readyReplicas=${GW_READY})"
 fi
 
-CONTROLLER_READY=$(kubectl get deployment agent-sandbox-controller \
+run_cmd kubectl get deployment agent-sandbox-controller \
   -n agent-sandbox-system \
-  -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+  -o jsonpath='{.status.readyReplicas}'
+CONTROLLER_READY="${CMD_OUTPUT:-0}"
 
 if [ "${CONTROLLER_READY:-0}" -ge 1 ]; then
   pass "agent-sandbox controller ready"
@@ -530,8 +555,8 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fail "Session project mismatch: expected ${PROJECT_ID}, got ${SESSION_PROJECT}"
   fi
 
-  SANDBOX_COUNT=$(kubectl get sandboxes -n "$TENANT" \
-    --no-headers 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+  run_cmd kubectl get sandboxes -n "$TENANT" --no-headers
+  SANDBOX_COUNT=$(echo "$CMD_OUTPUT" | grep -c . 2>/dev/null || echo "0")
   if [ "${SANDBOX_COUNT}" -ge 1 ]; then
     pass "Sandbox resource created in namespace '${TENANT}' (${SANDBOX_COUNT})"
   else
@@ -589,8 +614,8 @@ if [ -n "$CREATED_SESSION_ID" ]; then
       # Poll briefly for the file to appear.
       PAYLOAD_READY=false
       for j in $(seq 1 10); do
-        PAYLOAD_CONTENT=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
-          cat /sandbox/CLAUDE.md 2>/dev/null || echo "")
+        run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- cat /sandbox/CLAUDE.md
+        PAYLOAD_CONTENT="${CMD_OUTPUT:-}"
         if echo "$PAYLOAD_CONTENT" | grep -q "mock LLM"; then
           PAYLOAD_READY=true
           break
@@ -609,8 +634,9 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fi
 
     # 10b. Agent environment variable passed through to sandbox
-    ENV_VAL=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
-      printenv CLAUDE_CODE_ATTRIBUTION_HEADER 2>/dev/null || echo "")
+    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+      printenv CLAUDE_CODE_ATTRIBUTION_HEADER
+    ENV_VAL="${CMD_OUTPUT:-}"
     if [ "$ENV_VAL" = "0" ]; then
       pass "Agent env var CLAUDE_CODE_ATTRIBUTION_HEADER passed through to sandbox"
     else
@@ -618,8 +644,9 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fi
 
     # 10c. MCP config env var patterns preserved (not auto-expanded)
-    MCP_CONTENT=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
-      cat /sandbox/.mcp.json 2>/dev/null || echo "")
+    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+      cat /sandbox/.mcp.json
+    MCP_CONTENT="${CMD_OUTPUT:-}"
     if [ -n "$MCP_CONTENT" ]; then
       # Check that any ${...} patterns in the config were NOT replaced with
       # empty strings or resolved values — they should survive as literals.
@@ -635,8 +662,9 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fi
 
     # 10d. Claude settings baked into image match source
-    SETTINGS_ACTUAL=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
-      cat /sandbox/.claude/settings.json 2>/dev/null || echo "")
+    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+      cat /sandbox/.claude/settings.json
+    SETTINGS_ACTUAL="${CMD_OUTPUT:-}"
     SETTINGS_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/claude-settings.json" 2>/dev/null || echo "")
     if [ -n "$SETTINGS_ACTUAL" ] && [ "$SETTINGS_ACTUAL" = "$SETTINGS_EXPECTED" ]; then
       pass "Claude settings.json matches source in image"
@@ -647,8 +675,9 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fi
 
     # 10e. Claude settings.local.json baked into image matches source
-    SETTINGS_LOCAL_ACTUAL=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
-      cat /sandbox/.claude/settings.local.json 2>/dev/null || echo "")
+    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+      cat /sandbox/.claude/settings.local.json
+    SETTINGS_LOCAL_ACTUAL="${CMD_OUTPUT:-}"
     SETTINGS_LOCAL_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/claude-settings-local.json" 2>/dev/null || echo "")
     if [ -n "$SETTINGS_LOCAL_ACTUAL" ] && [ "$SETTINGS_LOCAL_ACTUAL" = "$SETTINGS_LOCAL_EXPECTED" ]; then
       pass "Claude settings.local.json matches source in image"
@@ -659,8 +688,9 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fi
 
     # 10f. Sandbox network policy present at /etc/openshell/policy.yaml
-    POLICY_ACTUAL=$(kubectl exec -n "$TENANT" "$SBX_NAME" -- \
-      cat /etc/openshell/policy.yaml 2>/dev/null || echo "")
+    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+      cat /etc/openshell/policy.yaml
+    POLICY_ACTUAL="${CMD_OUTPUT:-}"
     POLICY_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/policy.yaml" 2>/dev/null || echo "")
     if [ -n "$POLICY_ACTUAL" ] && [ "$POLICY_ACTUAL" = "$POLICY_EXPECTED" ]; then
       pass "Sandbox policy.yaml matches source in image"
@@ -693,7 +723,8 @@ if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; the
   MSG_COUNT=0
   LLM_RESPONSE_FOUND=0
   for i in $(seq 1 90); do
-    MESSAGES_OUTPUT=$($ACPCTL session messages "$CREATED_SESSION_ID" -o json 2>/dev/null || echo "[]")
+    run_cmd $ACPCTL session messages "$CREATED_SESSION_ID" -o json
+    MESSAGES_OUTPUT="${CMD_OUTPUT:-[]}"
     MSG_COUNT=$(echo "$MESSAGES_OUTPUT" | jq 'length' 2>/dev/null || echo "0")
     LLM_RESPONSE_FOUND=$(echo "$MESSAGES_OUTPUT" \
       | jq -r '[.[] | select(.event_type == "assistant" or .event_type == "TEXT_MESSAGE_CONTENT" or .event_type == "MESSAGES_SNAPSHOT")] | length' 2>/dev/null || echo "0")
@@ -857,7 +888,8 @@ if [ -n "$SHORT_SESSION_ID" ]; then
   # Wait for LLM response (same polling as long-running)
   SHORT_LLM_FOUND=0
   for i in $(seq 1 90); do
-    SHORT_MESSAGES=$($ACPCTL session messages "$SHORT_SESSION_ID" -o json 2>/dev/null || echo "[]")
+    run_cmd $ACPCTL session messages "$SHORT_SESSION_ID" -o json
+    SHORT_MESSAGES="${CMD_OUTPUT:-[]}"
     SHORT_LLM_FOUND=$(echo "$SHORT_MESSAGES" \
       | jq -r '[.[] | select(.event_type == "assistant" or .event_type == "TEXT_MESSAGE_CONTENT" or .event_type == "MESSAGES_SNAPSHOT")] | length' 2>/dev/null || echo "0")
     if [ "${SHORT_LLM_FOUND}" -gt 0 ]; then
@@ -988,10 +1020,13 @@ fi
 # Policies were already applied in section 6; only the test-specific agents
 # need to be created here.
 
-$ACPCTL apply -k "$SCRIPT_DIR/fixtures/network-policy-test" \
-  --project "$TENANT" >/dev/null 2>&1 && \
-  pass "Network test agents applied to ${TENANT}" || \
+run_cmd $ACPCTL apply -k "$SCRIPT_DIR/fixtures/network-policy-test" \
+  --project "$TENANT"
+if [ "$CMD_RC" -eq 0 ]; then
+  pass "Network test agents applied to ${TENANT}"
+else
   fail "Could not apply network test agents"
+fi
 
 # Look up the locked-down agent
 AGENTS_RESP=$(api GET "/api/ambient/v1/projects/${PROJECT_ID}/agents?size=50" || echo "")
@@ -1043,11 +1078,12 @@ if [ -n "$LOCKED_AGENT_ID" ]; then
       # (HTTPS would fail at the CONNECT tunnel level with no response body.)
       # FIXME: switch to `openshell sandbox exec` when it is fixed upstream.
       if [ "$LOCKED_SESSION_RUNNING" = "true" ]; then
-        LOCKED_CURL_OUTPUT=$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        run_cmd ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
           -o LogLevel=ERROR \
           -o "ProxyCommand=openshell ssh-proxy --gateway-name $TENANT --name $LOCKED_SBX_NAME" \
           "user@$LOCKED_SBX_NAME" \
-          'curl http://update.code.visualstudio.com 2>/dev/null' 2>/dev/null) || true
+          'curl http://update.code.visualstudio.com 2>/dev/null'
+        LOCKED_CURL_OUTPUT="${CMD_OUTPUT:-}"
 
         if echo "$LOCKED_CURL_OUTPUT" | grep -q "policy_denied"; then
           pass "Locked-down policy denied outbound network access (policy_denied)"
@@ -1137,11 +1173,12 @@ if [ -n "$PERM_AGENT_ID" ]; then
       # appears, the proxy blocked it; any other response means it got through.
       # FIXME: switch to `openshell sandbox exec` when it is fixed upstream.
       if [ "$PERM_SESSION_RUNNING" = "true" ]; then
-        PERM_CURL_OUTPUT=$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        run_cmd ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
           -o LogLevel=ERROR \
           -o "ProxyCommand=openshell ssh-proxy --gateway-name $TENANT --name $PERM_SBX_NAME" \
           "user@$PERM_SBX_NAME" \
-          'curl https://update.code.visualstudio.com 2>/dev/null' 2>/dev/null) || true
+          'curl https://update.code.visualstudio.com 2>/dev/null'
+        PERM_CURL_OUTPUT="${CMD_OUTPUT:-}"
 
         if echo "$PERM_CURL_OUTPUT" | grep -q "policy_denied"; then
           fail "Permissive policy denied update.code.visualstudio.com (policy_denied)"

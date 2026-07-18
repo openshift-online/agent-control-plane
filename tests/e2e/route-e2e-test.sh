@@ -60,6 +60,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BOLD='\033[1m'
+ORANGE='\033[38;5;214m'
 NC='\033[0m'
 
 PASSED=0
@@ -70,14 +71,27 @@ fail() { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
 skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
 section() { echo ""; echo -e "${BOLD}$1${NC}"; }
 
+CMD_OUTPUT=""
+CMD_RC=0
+run_cmd() {
+  CMD_RC=0
+  echo ""
+  printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "$*" "${NC}"
+  CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+  if [ -n "$CMD_OUTPUT" ]; then
+    echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
+  fi
+  echo ""
+}
+
 cleanup() {
   if [ "$SKIP_CLEANUP" = "true" ]; then
     echo "Skipping cleanup (--skip-cleanup)"
     return
   fi
   echo "Cleaning up..."
-  $ACPCTL delete gateway $GW_NAME 2>/dev/null || true
-  $ACPCTL delete project "$TENANT" -y 2>/dev/null || true
+  run_cmd $ACPCTL delete gateway $GW_NAME
+  run_cmd $ACPCTL delete project "$TENANT" -y
 }
 trap cleanup EXIT
 
@@ -87,10 +101,14 @@ echo ""
 
 # Setup: create project and gateway with route
 echo "--- Setup ---"
-$ACPCTL config set api_url "$API_URL"
+run_cmd $ACPCTL config set api_url "$API_URL"
 
 # Get token from Keycloak via password grant (curl bypasses TLS issues with self-signed certs)
-KC_ROUTE_HOST=$(oc get route keycloak -n "$NAMESPACE" -o jsonpath='{.spec.host}' 2>/dev/null || true)
+run_cmd oc get route keycloak -n "$NAMESPACE" -o jsonpath='{.spec.host}'
+KC_ROUTE_HOST=""
+if [ "$CMD_RC" -eq 0 ]; then
+  KC_ROUTE_HOST="${CMD_OUTPUT:-}"
+fi
 if [ -n "$KC_ROUTE_HOST" ] && [ -z "${AMBIENT_TOKEN:-}" ]; then
   AMBIENT_TOKEN=$(curl -sk -X POST "https://${KC_ROUTE_HOST}/realms/ambient-code/protocol/openid-connect/token" \
     -d "grant_type=password" \
@@ -105,12 +123,22 @@ if [ -n "$KC_ROUTE_HOST" ] && [ -z "${AMBIENT_TOKEN:-}" ]; then
   fi
 fi
 
-$ACPCTL apply -f - <<YAML
+echo ""
+printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "acpctl apply -f - <<YAML (Project: $TENANT)" "${NC}"
+CMD_RC=0
+CMD_OUTPUT=$($ACPCTL apply -f - <<YAML 2>&1
 kind: Project
 name: $TENANT
 YAML
+) || CMD_RC=$?
+if [ -n "$CMD_OUTPUT" ]; then
+  echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
+fi
+echo ""
 
-TENANT_NS=$($ACPCTL get project "$TENANT" -o json 2>/dev/null | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "$TENANT")
+run_cmd $ACPCTL get project "$TENANT" -o json
+TENANT_NS=$(echo "$CMD_OUTPUT" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+TENANT_NS="${TENANT_NS:-$TENANT}"
 
 # ============================================================================
 # Section 1: Route Creation
@@ -118,7 +146,10 @@ TENANT_NS=$($ACPCTL get project "$TENANT" -o json 2>/dev/null | grep -o '"id":"[
 
 section "1. Route Creation"
 
-$ACPCTL apply -f - <<YAML
+echo ""
+printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "acpctl apply -f - <<YAML (Gateway: $GW_NAME, route: {})" "${NC}"
+CMD_RC=0
+CMD_OUTPUT=$($ACPCTL apply -f - <<YAML 2>&1
 kind: Gateway
 name: $GW_NAME
 project: $TENANT
@@ -126,11 +157,17 @@ server_dns_names:
   - openshell-gateway.NAMESPACE_PLACEHOLDER.svc.cluster.local
 route: {}
 YAML
+) || CMD_RC=$?
+if [ -n "$CMD_OUTPUT" ]; then
+  echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
+fi
+echo ""
 
 # Wait for route to appear
 ROUTE_FOUND=false
 for i in $(seq 1 30); do
-  if oc get route openshell-gateway -n "$TENANT_NS" &>/dev/null; then
+  run_cmd oc get route openshell-gateway -n "$TENANT_NS"
+  if [ "$CMD_RC" -eq 0 ]; then
     ROUTE_FOUND=true
     break
   fi
@@ -144,7 +181,8 @@ else
 fi
 
 # Verify TLS termination
-TLS_TERM=$(oc get route openshell-gateway -n "$TENANT_NS" -o jsonpath='{.spec.tls.termination}' 2>/dev/null || true)
+run_cmd oc get route openshell-gateway -n "$TENANT_NS" -o jsonpath='{.spec.tls.termination}'
+TLS_TERM="${CMD_OUTPUT:-}"
 if [ "$TLS_TERM" = "reencrypt" ]; then
   pass "Route has reencrypt TLS termination"
 else
@@ -152,7 +190,8 @@ else
 fi
 
 # Verify timeout annotation
-TIMEOUT_ANN=$(oc get route openshell-gateway -n "$TENANT_NS" -o jsonpath='{.metadata.annotations.haproxy\.router\.openshift\.io/timeout}' 2>/dev/null || true)
+run_cmd oc get route openshell-gateway -n "$TENANT_NS" -o jsonpath='{.metadata.annotations.haproxy\.router\.openshift\.io/timeout}'
+TIMEOUT_ANN="${CMD_OUTPUT:-}"
 if [ "$TIMEOUT_ANN" = "3600s" ]; then
   pass "Route has 3600s timeout annotation"
 else
@@ -167,7 +206,8 @@ section "2. Route Address Populated"
 
 ROUTE_ADDR=""
 for i in $(seq 1 20); do
-  ROUTE_ADDR=$($ACPCTL get gateway $GW_NAME --project "$TENANT" -o json 2>/dev/null | grep -o '"route_address": *"[^"]*"' | cut -d'"' -f4 || true)
+  run_cmd $ACPCTL get gateway $GW_NAME --project "$TENANT" -o json
+  ROUTE_ADDR=$(echo "$CMD_OUTPUT" | grep -o '"route_address": *"[^"]*"' | cut -d'"' -f4 || true)
   if [ -n "$ROUTE_ADDR" ]; then
     break
   fi
@@ -188,7 +228,8 @@ else
 fi
 
 # Verify ROUTE column in table output
-ROUTE_COL=$($ACPCTL get gateways --project "$TENANT" 2>/dev/null | grep "$GW_NAME" | grep -o 'https://[^ ]*' || true)
+run_cmd $ACPCTL get gateways --project "$TENANT"
+ROUTE_COL=$(echo "$CMD_OUTPUT" | grep "$GW_NAME" | grep -o 'https://[^ ]*' || true)
 if [ -n "$ROUTE_COL" ]; then
   pass "ROUTE column shows address in table output"
 else
@@ -201,7 +242,8 @@ fi
 
 section "3. setup-cli Via Route"
 
-SETUP_OUTPUT=$($ACPCTL gateway setup-cli $GW_NAME --project "$TENANT" --print 2>/dev/null || true)
+run_cmd $ACPCTL gateway setup-cli $GW_NAME --project "$TENANT" --print
+SETUP_OUTPUT="${CMD_OUTPUT:-}"
 if echo "$SETUP_OUTPUT" | grep -q "$ROUTE_ADDR"; then
   pass "setup-cli --print includes route address"
 else
@@ -215,17 +257,26 @@ fi
 section "4. Route Removal"
 
 # Patch gateway to remove route
-$ACPCTL apply -f - <<YAML
+echo ""
+printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "acpctl apply -f - <<YAML (Gateway: $GW_NAME, no route)" "${NC}"
+CMD_RC=0
+CMD_OUTPUT=$($ACPCTL apply -f - <<YAML 2>&1
 kind: Gateway
 name: $GW_NAME
 project: $TENANT
 server_dns_names:
   - openshell-gateway.NAMESPACE_PLACEHOLDER.svc.cluster.local
 YAML
+) || CMD_RC=$?
+if [ -n "$CMD_OUTPUT" ]; then
+  echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
+fi
+echo ""
 
 ROUTE_DELETED=false
 for i in $(seq 1 20); do
-  if ! oc get route openshell-gateway -n "$TENANT_NS" &>/dev/null; then
+  run_cmd oc get route openshell-gateway -n "$TENANT_NS"
+  if [ "$CMD_RC" -ne 0 ]; then
     ROUTE_DELETED=true
     break
   fi
@@ -239,7 +290,8 @@ else
 fi
 
 # Verify routeAddress cleared
-CLEARED_ADDR=$($ACPCTL get gateway $GW_NAME --project "$TENANT" -o json 2>/dev/null | grep -o '"route_address": *"[^"]*"' | cut -d'"' -f4 || true)
+run_cmd $ACPCTL get gateway $GW_NAME --project "$TENANT" -o json
+CLEARED_ADDR=$(echo "$CMD_OUTPUT" | grep -o '"route_address": *"[^"]*"' | cut -d'"' -f4 || true)
 if [ -z "$CLEARED_ADDR" ]; then
   pass "routeAddress cleared after route removal"
 else

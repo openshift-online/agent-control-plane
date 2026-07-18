@@ -355,7 +355,7 @@ The `test-agent-mock-llm` agent references this policy via `sandbox_policy: mock
 
 ## E2E Test Shell Script Style
 
-All e2e test scripts in `tests/e2e/` SHALL follow the human-readable style established by `openshell-cli-e2e.sh` ([PR #390](https://github.com/openshift-online/agent-control-plane/pull/390)). This style prioritizes scan-readable terminal output and consistent structure across all test scripts. Existing tests SHOULD be migrated to this style when they are next modified.
+All e2e test scripts in `tests/e2e/` SHALL follow the human-readable style established by `openshell-cli-e2e.sh` ([PR #390](https://github.com/openshift-online/agent-control-plane/pull/390)). This style prioritizes scan-readable terminal output and consistent structure across all test scripts. All existing tests have been migrated to this style. New tests MUST adopt it from the start.
 
 ### Requirement: Unified Output Helpers
 
@@ -393,6 +393,50 @@ echo -e "${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${
 - WHEN the script runs
 - THEN each assertion SHALL produce output matching `  ✓ <description>`, `  ✗ <description>`, or `  ⊘ <description> (skipped: <reason>)`
 - AND the final line SHALL be `Results: N passed, M failed`
+
+### Requirement: Command Visibility with run_cmd
+
+Every e2e test script SHALL define and use a `run_cmd` helper function that prints the command being executed and its output. This makes test runs self-documenting — when a test fails, the operator can see exactly which commands ran and what they returned without re-running with debug flags.
+
+```bash
+ORANGE='\033[38;5;214m'
+
+CMD_OUTPUT=""
+CMD_RC=0
+run_cmd() {
+  CMD_RC=0
+  echo ""
+  printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "$*" "${NC}"
+  CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+  if [ -n "$CMD_OUTPUT" ]; then
+    echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
+  fi
+  echo ""
+}
+```
+
+Scripts SHALL use `run_cmd` for all `kubectl`, `acpctl`, `openshell`, `oc`, and `ssh` commands. Commands whose output was previously suppressed with `>/dev/null 2>&1` SHALL be converted to use `run_cmd` so their output is visible during test runs.
+
+After calling `run_cmd`, scripts access results via:
+- `CMD_RC` — the command's exit code (0 on success)
+- `CMD_OUTPUT` — the command's combined stdout+stderr output
+
+Scripts SHALL NOT use `run_cmd` for internal helper functions (e.g., the `api()` wrapper) that have their own output handling. `run_cmd` is for direct CLI invocations.
+
+#### Scenario: Commands are visible in test output
+
+- GIVEN any e2e test script in `tests/e2e/`
+- WHEN a `kubectl`, `acpctl`, or `openshell` command is executed
+- THEN the command SHALL be printed with `▶  $ <command>` formatting
+- AND up to 20 lines of command output SHALL be displayed, indented
+
+#### Scenario: Command output is captured for assertions
+
+- GIVEN a test uses `run_cmd kubectl get pod -o jsonpath='{.status.phase}'`
+- WHEN the command completes
+- THEN `CMD_OUTPUT` SHALL contain the command's output
+- AND `CMD_RC` SHALL contain the exit code
+- AND the test SHALL use these variables for pass/fail assertions
 
 ### Requirement: Section Structure
 

@@ -43,6 +43,21 @@ fail() { echo -e "  ${RED}✗${NC} $1${2:+: $2}"; FAILED=$((FAILED + 1)); }
 skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped${2:+: $2})"; }
 section() { echo ""; echo -e "${BOLD}$1${NC}"; }
 
+ORANGE='\033[38;5;214m'
+
+CMD_OUTPUT=""
+CMD_RC=0
+run_cmd() {
+  CMD_RC=0
+  echo ""
+  printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "$*" "${NC}"
+  CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+  if [ -n "$CMD_OUTPUT" ]; then
+    echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
+  fi
+  echo ""
+}
+
 HTTP_STATUS=""
 HTTP_BODY=""
 
@@ -370,7 +385,8 @@ fi
 
 section "10. Scheduler health check"
 
-SCHEDULER_LOGS=$(kubectl logs -n "$NS" -l app=ambient-api-server --tail=50 2>/dev/null | grep -c "scheduled-session-scheduler" || true)
+run_cmd kubectl logs -n "$NS" -l app=ambient-api-server --tail=50
+SCHEDULER_LOGS=$(echo "${CMD_OUTPUT:-}" | grep -c "scheduled-session-scheduler" || true)
 if [[ "$SCHEDULER_LOGS" -ge 1 ]]; then
   pass "Scheduler advisory lock cycling in API server logs"
 else

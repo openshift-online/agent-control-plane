@@ -82,6 +82,21 @@ fail() { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
 skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
 section() { echo ""; echo -e "${BOLD}$1${NC}"; }
 
+ORANGE='\033[38;5;214m'
+
+CMD_OUTPUT=""
+CMD_RC=0
+run_cmd() {
+  CMD_RC=0
+  echo ""
+  printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "$*" "${NC}"
+  CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+  if [ -n "$CMD_OUTPUT" ]; then
+    echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
+  fi
+  echo ""
+}
+
 # Informational helpers (not test results)
 log_info() {
     echo -e "${BLUE}ℹ${NC} $*"
@@ -158,7 +173,8 @@ assert_pod_running() {
     local label=$1
     local description=$2
 
-    if kubectl get pods -n "$NAMESPACE" -l "$label" 2>/dev/null | grep -q "Running"; then
+    run_cmd kubectl get pods -n "$NAMESPACE" -l "$label"
+    if echo "$CMD_OUTPUT" | grep -q "Running"; then
         pass "$description"
         return 0
     else
@@ -215,12 +231,13 @@ test_kind_status() {
 
     section "3. Kind Status"
 
-    if kind get clusters 2>/dev/null | grep -q .; then
+    run_cmd kind get clusters
+    if echo "$CMD_OUTPUT" | grep -q . && [ "$CMD_RC" -eq 0 ]; then
         pass "Kind cluster is running"
 
         # Check kind version
-        local version
-        version=$(kind version 2>/dev/null || echo "unknown")
+        run_cmd kind version
+        local version="${CMD_OUTPUT:-unknown}"
         log_info "Kind version: $version"
     else
         fail "No Kind cluster is running"
@@ -237,12 +254,14 @@ test_kubernetes_context() {
     section "4. Kubernetes Context"
 
     local context
-    context=$(kubectl config current-context 2>/dev/null || echo "none")
+    run_cmd kubectl config current-context
+    context="${CMD_OUTPUT:-none}"
 
     assert_contains "$context" "kind-" "kubectl context is set to a kind cluster"
 
     # Test kubectl connectivity
-    if kubectl cluster-info >/dev/null 2>&1; then
+    run_cmd kubectl cluster-info
+    if [ "$CMD_RC" -eq 0 ]; then
         pass "kubectl can connect to cluster"
     else
         fail "kubectl cannot connect to cluster"
@@ -257,7 +276,8 @@ test_namespace_exists() {
 
     section "5. Namespace Existence"
 
-    if kubectl get namespace "$NAMESPACE" >/dev/null 2>&1; then
+    run_cmd kubectl get namespace "$NAMESPACE"
+    if [ "$CMD_RC" -eq 0 ]; then
         pass "Namespace '$NAMESPACE' exists"
     else
         fail "Namespace '$NAMESPACE' does NOT exist"
@@ -278,8 +298,9 @@ test_pods_running() {
     assert_pod_running "app=ambient-control-plane" "Control plane pod is running"
 
     # Check pod readiness
+    run_cmd kubectl get pods -n "$NAMESPACE" --field-selector=status.phase!=Running
     local not_ready
-    not_ready=$(kubectl get pods -n "$NAMESPACE" --field-selector=status.phase!=Running 2>/dev/null | grep -v "NAME" | wc -l)
+    not_ready=$(echo "$CMD_OUTPUT" | grep -v "NAME" | wc -l)
 
     if [ "$not_ready" -eq 0 ]; then
         pass "All pods are in Running state"
@@ -299,7 +320,8 @@ test_services_exist() {
     local services=("ambient-api-server" "ambient-ui-service")
 
     for svc in "${services[@]}"; do
-        if kubectl get svc "$svc" -n "$NAMESPACE" >/dev/null 2>&1; then
+        run_cmd kubectl get svc "$svc" -n "$NAMESPACE"
+        if [ "$CMD_RC" -eq 0 ]; then
             pass "Service '$svc' exists"
         else
             fail "Service '$svc' does NOT exist"
@@ -317,7 +339,8 @@ test_backend_health() {
 
     # Check backend health via pod readiness (kubectl wait already validates the
     # readiness probe which hits /health). Verify pod is ready as a proxy.
-    if kubectl get pods -n "$NAMESPACE" -l app=ambient-api-server -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q "True"; then
+    run_cmd kubectl get pods -n "$NAMESPACE" -l app=ambient-api-server -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}'
+    if echo "$CMD_OUTPUT" | grep -q "True"; then
         pass "Backend health endpoint responds (pod readiness probe passes)"
     else
         fail "Backend pod is not ready (health endpoint may not be responding)"
@@ -333,7 +356,8 @@ test_frontend_accessibility() {
     section "9. Frontend Accessibility"
 
     # Check frontend health via pod readiness
-    if kubectl get pods -n "$NAMESPACE" -l app=ambient-ui -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | grep -q "True"; then
+    run_cmd kubectl get pods -n "$NAMESPACE" -l app=ambient-ui -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}'
+    if echo "$CMD_OUTPUT" | grep -q "True"; then
         pass "Frontend is accessible (pod readiness probe passes)"
     else
         fail "Frontend pod is not ready"
@@ -351,7 +375,8 @@ test_rbac() {
     local roles=("ambient-project-admin" "ambient-project-edit" "ambient-project-view")
 
     for role in "${roles[@]}"; do
-        if kubectl get clusterrole "$role" >/dev/null 2>&1; then
+        run_cmd kubectl get clusterrole "$role"
+        if [ "$CMD_RC" -eq 0 ]; then
             pass "ClusterRole '$role' exists"
         else
             fail "ClusterRole '$role' does NOT exist"
@@ -367,19 +392,22 @@ test_build_command() {
 
     section "11. Build Commands (Dry Run)"
 
-    if make -n build-api-server >/dev/null 2>&1; then
+    run_cmd make -n build-api-server
+    if [ "$CMD_RC" -eq 0 ]; then
         pass "make build-api-server syntax is valid"
     else
         fail "make build-api-server has syntax errors"
     fi
 
-    if make -n build-ambient-ui >/dev/null 2>&1; then
+    run_cmd make -n build-ambient-ui
+    if [ "$CMD_RC" -eq 0 ]; then
         pass "make build-ambient-ui syntax is valid"
     else
         fail "make build-ambient-ui has syntax errors"
     fi
 
-    if make -n build-control-plane >/dev/null 2>&1; then
+    run_cmd make -n build-control-plane
+    if [ "$CMD_RC" -eq 0 ]; then
         pass "make build-control-plane syntax is valid"
     else
         fail "make build-control-plane has syntax errors"
@@ -394,13 +422,15 @@ test_benchmark_syntax() {
 
     section "12. Benchmark Harness Syntax"
 
-    if bash -n scripts/benchmarks/component-bench.sh 2>/dev/null; then
+    run_cmd bash -n scripts/benchmarks/component-bench.sh
+    if [ "$CMD_RC" -eq 0 ]; then
         pass "component-bench.sh syntax is valid"
     else
         fail "component-bench.sh has syntax errors"
     fi
 
-    if make -n benchmark >/dev/null 2>&1; then
+    run_cmd make -n benchmark
+    if [ "$CMD_RC" -eq 0 ]; then
         pass "make benchmark syntax is valid"
     else
         fail "make benchmark has syntax errors"
@@ -419,7 +449,8 @@ test_logging_commands() {
     local components=("ambient-api-server" "ambient-ui" "ambient-control-plane")
 
     for component in "${components[@]}"; do
-        if kubectl logs -n "$NAMESPACE" -l "app=$component" --tail=1 >/dev/null 2>&1; then
+        run_cmd kubectl logs -n "$NAMESPACE" -l "app=$component" --tail=1
+        if [ "$CMD_RC" -eq 0 ]; then
             pass "Can retrieve logs from $component"
         else
             log_warning "Cannot retrieve logs from $component (pod may not be running)"
@@ -436,12 +467,13 @@ test_storage() {
     section "14. Storage Configuration"
 
     # Check if workspace PVC exists
-    if kubectl get pvc workspace-pvc -n "$NAMESPACE" >/dev/null 2>&1; then
+    run_cmd kubectl get pvc workspace-pvc -n "$NAMESPACE"
+    if [ "$CMD_RC" -eq 0 ]; then
         pass "Workspace PVC exists"
 
         # Check PVC status
-        local status
-        status=$(kubectl get pvc workspace-pvc -n "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null)
+        run_cmd kubectl get pvc workspace-pvc -n "$NAMESPACE" -o jsonpath='{.status.phase}'
+        local status="${CMD_OUTPUT:-}"
         if [ "$status" = "Bound" ]; then
             pass "Workspace PVC is bound"
         else
@@ -464,8 +496,8 @@ test_resource_limits() {
     local deployments=("ambient-api-server" "ambient-ui" "ambient-control-plane")
 
     for deployment in "${deployments[@]}"; do
-        local resources
-        resources=$(kubectl get deployment "$deployment" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].resources}' 2>/dev/null || echo "{}")
+        run_cmd kubectl get deployment "$deployment" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].resources}'
+        local resources="${CMD_OUTPUT:-{}}"
 
         if [ "$resources" != "{}" ]; then
             pass "Deployment '$deployment' has resource configuration"
@@ -508,7 +540,8 @@ test_security_local_dev_user() {
     log_info "Verifying test-user service account exists..."
 
     # Kind creates a test-user service account with a pre-generated token
-    if kubectl get serviceaccount test-user -n "$NAMESPACE" >/dev/null 2>&1; then
+    run_cmd kubectl get serviceaccount test-user -n "$NAMESPACE"
+    if [ "$CMD_RC" -eq 0 ]; then
         pass "test-user service account exists"
     else
         log_warning "test-user service account does not exist (may not be set up yet)"
@@ -518,7 +551,8 @@ test_security_local_dev_user() {
     fi
 
     # Check that the test-user token secret exists
-    if kubectl get secret test-user-token -n "$NAMESPACE" >/dev/null 2>&1; then
+    run_cmd kubectl get secret test-user-token -n "$NAMESPACE"
+    if [ "$CMD_RC" -eq 0 ]; then
         pass "test-user-token secret exists"
     else
         log_warning "test-user-token secret does not exist"
@@ -538,7 +572,8 @@ test_security_prod_namespace_rejection() {
 
     # Test 1: Check backend middleware has protection
     local backend_pod
-    backend_pod=$(kubectl get pods -n "$NAMESPACE" -l app=ambient-api-server -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    run_cmd kubectl get pods -n "$NAMESPACE" -l app=ambient-api-server -o jsonpath='{.items[0].metadata.name}'
+    backend_pod="${CMD_OUTPUT:-}"
 
     if [ -z "$backend_pod" ]; then
         log_warning "Backend pod not found, skipping namespace rejection test"
@@ -572,7 +607,8 @@ test_security_mock_token_logging() {
     log_info "Verifying backend logs show dev mode activation..."
 
     local backend_pod
-    backend_pod=$(kubectl get pods -n "$NAMESPACE" -l app=ambient-api-server -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    run_cmd kubectl get pods -n "$NAMESPACE" -l app=ambient-api-server -o jsonpath='{.items[0].metadata.name}'
+    backend_pod="${CMD_OUTPUT:-}"
 
     if [ -z "$backend_pod" ]; then
         log_warning "Backend pod not found, skipping log test"
@@ -581,7 +617,8 @@ test_security_mock_token_logging() {
 
     # Get recent backend logs
     local logs
-    logs=$(kubectl logs -n "$NAMESPACE" "$backend_pod" --tail=100 2>/dev/null || echo "")
+    run_cmd kubectl logs -n "$NAMESPACE" "$backend_pod" --tail=100
+    logs="${CMD_OUTPUT:-}"
 
     if [ -z "$logs" ]; then
         log_warning "Could not retrieve backend logs"
@@ -628,7 +665,8 @@ test_security_token_redaction() {
     log_info "Verifying tokens are properly redacted in logs..."
 
     local backend_pod
-    backend_pod=$(kubectl get pods -n "$NAMESPACE" -l app=ambient-api-server -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    run_cmd kubectl get pods -n "$NAMESPACE" -l app=ambient-api-server -o jsonpath='{.items[0].metadata.name}'
+    backend_pod="${CMD_OUTPUT:-}"
 
     if [ -z "$backend_pod" ]; then
         log_warning "Backend pod not found, skipping token redaction test"
@@ -637,7 +675,8 @@ test_security_token_redaction() {
 
     # Get all backend logs
     local logs
-    logs=$(kubectl logs -n "$NAMESPACE" "$backend_pod" --tail=500 2>/dev/null || echo "")
+    run_cmd kubectl logs -n "$NAMESPACE" "$backend_pod" --tail=500
+    logs="${CMD_OUTPUT:-}"
 
     if [ -z "$logs" ]; then
         log_warning "Could not retrieve backend logs"
@@ -678,7 +717,8 @@ test_critical_token_minting() {
     # stored in a secret. Validate that this exists.
 
     # Step 1: test-user ServiceAccount must exist
-    if kubectl get serviceaccount test-user -n "$NAMESPACE" >/dev/null 2>&1; then
+    run_cmd kubectl get serviceaccount test-user -n "$NAMESPACE"
+    if [ "$CMD_RC" -eq 0 ]; then
         pass "Step 1/2: test-user ServiceAccount exists"
     else
         log_warning "Step 1/2: test-user ServiceAccount does not exist (kind-up may not have completed)"
@@ -691,7 +731,8 @@ test_critical_token_minting() {
     fi
 
     # Step 2: test-user-token secret must exist
-    if kubectl get secret test-user-token -n "$NAMESPACE" >/dev/null 2>&1; then
+    run_cmd kubectl get secret test-user-token -n "$NAMESPACE"
+    if [ "$CMD_RC" -eq 0 ]; then
         pass "Step 2/2: test-user-token secret exists"
     else
         log_warning "Step 2/2: test-user-token secret does not exist"

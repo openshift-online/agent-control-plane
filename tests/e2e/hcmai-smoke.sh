@@ -98,6 +98,19 @@ step_silent() {
   echo
 }
 
+CMD_OUTPUT=""
+CMD_RC=0
+run_cmd() {
+  CMD_RC=0
+  echo ""
+  printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "$*" "${NC}"
+  CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+  if [ -n "$CMD_OUTPUT" ]; then
+    echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
+  fi
+  echo ""
+}
+
 json_field() {
   local json="$1" field="$2"
   echo "$json" | python3 -c "
@@ -235,19 +248,14 @@ announce "1 · Authenticate"
 
 AUTH_MODE="oidc"
 
-sep
-bold "▶  Login via client_credentials"
-printf "${ORANGE}   $ acpctl login --client-credentials --client-id %s --issuer-url %s${NC}\n" "${OIDC_CLIENT_ID}" "${OIDC_ISSUER_URL}"
-"$ACPCTL" login \
+run_cmd "$ACPCTL" login \
   --client-credentials \
   --client-id "${OIDC_CLIENT_ID}" \
   --client-secret "${OIDC_CLIENT_SECRET}" \
   --issuer-url "${OIDC_ISSUER_URL}" \
   --url "${API_URL}" \
   --project "${PROJECT_NAME}" \
-  --insecure-skip-tls-verify \
-  >/dev/null 2>&1
-echo
+  --insecure-skip-tls-verify
 
 AUTH_BEARER=$(jq -r '.access_token' ~/.config/ambient/config.json 2>/dev/null || echo "")
 if [[ -n "${AUTH_BEARER}" && "${AUTH_BEARER}" != "null" ]]; then
@@ -290,7 +298,8 @@ print(items[0]['id'] if items else '')
     die "project ${PROJECT_NAME} not found"
   fi
 else
-  PROJECT_JSON=$("$ACPCTL" create project --name "${PROJECT_NAME}" --description "hcmai smoke test ${RUN_ID}" -o json 2>/dev/null || echo "")
+  run_cmd "$ACPCTL" create project --name "${PROJECT_NAME}" --description "hcmai smoke test ${RUN_ID}" -o json
+  PROJECT_JSON="$CMD_OUTPUT"
   PROJECT_ID=$(json_field "${PROJECT_JSON}" "id")
 
   if [[ -n "${PROJECT_ID}" && "${PROJECT_ID}" != "" ]]; then
@@ -300,7 +309,7 @@ else
   fi
 fi
 
-"$ACPCTL" project "${PROJECT_NAME}" >/dev/null 2>&1 || true
+run_cmd "$ACPCTL" project "${PROJECT_NAME}"
 
 step "Confirm project context" "$ACPCTL" project current
 
@@ -349,21 +358,23 @@ EOF
 
 ensure_token
 
-sep
-bold "▶  Apply provider manifest"
-printf "${ORANGE}   $ acpctl apply -f provider-vertex.yaml${NC}\n"
-SMOKE_VERTEX_SA_KEY="${VERTEX_SA_KEY}" \
-  "$ACPCTL" apply -f "${MANIFEST_DIR}/provider-vertex.yaml" --project "${PROJECT_NAME}" 2>/dev/null && \
-  pass "provider '${PROVIDER_NAME}' applied" || \
-  fail "provider '${PROVIDER_NAME}' apply failed"
+export SMOKE_VERTEX_SA_KEY="${VERTEX_SA_KEY}"
 
-sep
-bold "▶  Apply credential manifest"
-printf "${ORANGE}   $ acpctl apply -f credential-vertex.yaml${NC}\n"
-SMOKE_VERTEX_SA_KEY="${VERTEX_SA_KEY}" \
-  "$ACPCTL" apply -f "${MANIFEST_DIR}/credential-vertex.yaml" --project "${PROJECT_NAME}" 2>/dev/null && \
-  pass "credential '${CREDENTIAL_NAME}' applied" || \
+run_cmd "$ACPCTL" apply -f "${MANIFEST_DIR}/provider-vertex.yaml" --project "${PROJECT_NAME}"
+if [[ $CMD_RC -eq 0 ]]; then
+  pass "provider '${PROVIDER_NAME}' applied"
+else
+  fail "provider '${PROVIDER_NAME}' apply failed"
+fi
+
+run_cmd "$ACPCTL" apply -f "${MANIFEST_DIR}/credential-vertex.yaml" --project "${PROJECT_NAME}"
+if [[ $CMD_RC -eq 0 ]]; then
+  pass "credential '${CREDENTIAL_NAME}' applied"
+else
   fail "credential '${CREDENTIAL_NAME}' apply failed"
+fi
+
+unset SMOKE_VERTEX_SA_KEY
 
 rm -rf "${MANIFEST_DIR}"
 
@@ -377,7 +388,8 @@ else
 fi
 
 ensure_token
-CREDS_RESP=$("$ACPCTL" credential list -o json 2>/dev/null || echo "")
+run_cmd "$ACPCTL" credential list -o json
+CREDS_RESP="$CMD_OUTPUT"
 FOUND_CREDENTIAL=$(echo "$CREDS_RESP" \
   | python3 -c "
 import sys, json
@@ -403,18 +415,18 @@ echo
 announce "4 · Create Agent"
 
 ensure_token
-AGENT_JSON=$(
-  "$ACPCTL" agent create \
-    --name "${AGENT_NAME}" \
-    --prompt "You are a concise test assistant. Answer questions directly and briefly." \
-    -o json 2>/dev/null || echo ""
-)
+run_cmd "$ACPCTL" agent create \
+  --name "${AGENT_NAME}" \
+  --prompt "You are a concise test assistant. Answer questions directly and briefly." \
+  -o json
+AGENT_JSON="$CMD_OUTPUT"
 AGENT_ID=$(json_field "${AGENT_JSON}" "id")
 
 if [[ -n "${AGENT_ID}" && "${AGENT_ID}" != "" ]]; then
   pass "agent created: ${AGENT_NAME} (${AGENT_ID})"
 else
-  EXISTING_AGENTS=$("$ACPCTL" get agents -o json 2>/dev/null || echo "")
+  run_cmd "$ACPCTL" get agents -o json
+  EXISTING_AGENTS="$CMD_OUTPUT"
   AGENT_ID=$(echo "$EXISTING_AGENTS" \
     | python3 -c "
 import sys, json
@@ -462,17 +474,12 @@ announce "5 · Create Session"
 
 ensure_token
 
-sep
-bold "▶  Create session"
-printf "${ORANGE}   $ acpctl create session --name llm-smoke-${RUN_ID} --agent-id ${AGENT_ID}${NC}\n"
-
-SESSION_JSON=$(
-  "$ACPCTL" create session \
-    --name "llm-smoke-${RUN_ID}" \
-    --agent-id "${AGENT_ID}" \
-    --prompt "You are a concise test assistant. Answer questions directly and briefly." \
-    -o json 2>/dev/null || echo ""
-)
+run_cmd "$ACPCTL" create session \
+  --name "llm-smoke-${RUN_ID}" \
+  --agent-id "${AGENT_ID}" \
+  --prompt "You are a concise test assistant. Answer questions directly and briefly." \
+  -o json
+SESSION_JSON="$CMD_OUTPUT"
 
 CREATED_SESSION_ID=$(json_field "${SESSION_JSON}" "id")
 if [[ -z "${CREATED_SESSION_ID}" || "${CREATED_SESSION_ID}" == "" ]]; then
@@ -566,13 +573,8 @@ announce "8 · Send Question & Stream LLM Response"
 
 USER_MESSAGE="What is 2+2? Reply with only the number, nothing else."
 
-sep
-bold "▶  Sending user message"
-printf "${ORANGE}   $ acpctl session send %s \"%s\"${NC}\n" "${CREATED_SESSION_ID}" "${USER_MESSAGE}"
-
 ensure_token
-"$ACPCTL" session send "${CREATED_SESSION_ID}" "${USER_MESSAGE}" 2>/dev/null || true
-echo
+run_cmd "$ACPCTL" session send "${CREATED_SESSION_ID}" "${USER_MESSAGE}"
 
 bold "▶  Waiting for LLM response (stream running in background)..."
 

@@ -22,6 +22,21 @@ fail() { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
 skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped${2:+: $2})"; }
 section() { echo ""; echo -e "${BOLD}$1${NC}"; }
 
+ORANGE='\033[38;5;214m'
+
+CMD_OUTPUT=""
+CMD_RC=0
+run_cmd() {
+  CMD_RC=0
+  echo ""
+  printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "$*" "${NC}"
+  CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+  if [ -n "$CMD_OUTPUT" ]; then
+    echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
+  fi
+  echo ""
+}
+
 finish() {
   echo ""
   echo -e "${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}"
@@ -223,8 +238,12 @@ pass "jq is installed"
 command -v kubectl >/dev/null 2>&1 || die "kubectl is installed"
 pass "kubectl is installed"
 
-kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 || die "Kind namespace exists: $NAMESPACE"
-pass "Kind namespace exists: $NAMESPACE"
+run_cmd kubectl get namespace "$NAMESPACE"
+if [ "$CMD_RC" -eq 0 ]; then
+  pass "Kind namespace exists: $NAMESPACE"
+else
+  die "Kind namespace exists: $NAMESPACE"
+fi
 
 ACPCTL="$(find_acpctl)"
 if [ -n "$ACPCTL" ]; then
@@ -271,13 +290,15 @@ ensure_backend_port_forward "Kind backend port-forward is healthy before inspect
 
 run_doc_block "catalog-inspection" 'agent list --project vteam-product-swarm'
 
-if "$ACPCTL" get project "$PROJECT_ID" >/dev/null 2>&1; then
+run_cmd "$ACPCTL" get project "$PROJECT_ID"
+if [ "$CMD_RC" -eq 0 ]; then
   pass "Project exists: $PROJECT_ID"
 else
   fail "Project exists: $PROJECT_ID"
 fi
 
-AGENTS_JSON="$("$ACPCTL" agent list --project "$PROJECT_ID" -o json 2>&1 || true)"
+run_cmd "$ACPCTL" agent list --project "$PROJECT_ID" -o json
+AGENTS_JSON="${CMD_OUTPUT:-}"
 for agent in stella amber parker ryan steve terry; do
   if json_name_exists "$AGENTS_JSON" "$agent"; then
     pass "Agent exists: $agent"
@@ -286,7 +307,8 @@ for agent in stella amber parker ryan steve terry; do
   fi
 done
 
-PROVIDERS_JSON="$("$ACPCTL" provider list --project "$PROJECT_ID" -o json 2>&1 || true)"
+run_cmd "$ACPCTL" provider list --project "$PROJECT_ID" -o json
+PROVIDERS_JSON="${CMD_OUTPUT:-}"
 for provider in vertex github jira; do
   if json_name_exists "$PROVIDERS_JSON" "$provider"; then
     pass "Provider exists: $provider"

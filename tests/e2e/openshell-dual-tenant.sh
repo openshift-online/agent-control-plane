@@ -88,6 +88,21 @@ api_delete() {
     -H "Authorization: Bearer ${TOKEN}" "${API_URL}${1}" 2>/dev/null || true
 }
 
+ORANGE='\033[38;5;214m'
+
+CMD_OUTPUT=""
+CMD_RC=0
+run_cmd() {
+  CMD_RC=0
+  echo ""
+  printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "$*" "${NC}"
+  CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+  if [ -n "$CMD_OUTPUT" ]; then
+    echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
+  fi
+  echo ""
+}
+
 require_token() {
   if [ -z "$TOKEN" ]; then
     echo -e "${RED}Error:${NC} TEST_TOKEN not set. Run 'make kind-up OPENSHELL_USE_GATEWAY=true' first."
@@ -103,9 +118,9 @@ require_token() {
 section "1. OpenShell gateway deployments"
 
 for TENANT in "${TENANTS[@]}"; do
-  GW_READY=$(kubectl get statefulset openshell-gateway -n "$TENANT" \
-    -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
-  GW_READY="${GW_READY:-0}"
+  run_cmd kubectl get statefulset openshell-gateway -n "$TENANT" \
+    -o jsonpath='{.status.readyReplicas}'
+  GW_READY="${CMD_OUTPUT:-0}"
   if [ "${GW_READY}" -ge 1 ]; then
     pass "openshell-gateway in $TENANT is ready (replicas: $GW_READY)"
   else
@@ -119,16 +134,18 @@ done
 
 section "2. Agent Sandbox CRD and controller"
 
-CONTROLLER_READY=$(kubectl get deployment agent-sandbox-controller \
+run_cmd kubectl get deployment agent-sandbox-controller \
   -n agent-sandbox-system \
-  -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
-if [ "${CONTROLLER_READY:-0}" -ge 1 ]; then
+  -o jsonpath='{.status.readyReplicas}'
+CONTROLLER_READY="${CMD_OUTPUT:-0}"
+if [ "${CONTROLLER_READY}" -ge 1 ]; then
   pass "agent-sandbox controller is ready"
 else
-  fail "agent-sandbox controller is not ready (readyReplicas=${CONTROLLER_READY:-0})"
+  fail "agent-sandbox controller is not ready (readyReplicas=${CONTROLLER_READY})"
 fi
 
-if kubectl get crd sandboxes.agents.x-k8s.io >/dev/null 2>&1; then
+run_cmd kubectl get crd sandboxes.agents.x-k8s.io
+if [ "$CMD_RC" -eq 0 ]; then
   pass "AgentSandbox CRD exists (sandboxes.agents.x-k8s.io)"
 else
   fail "AgentSandbox CRD not found"
@@ -227,16 +244,17 @@ else
   sleep 5
 
   for TENANT in "${TENANTS[@]}"; do
-    SANDBOX_COUNT=$(kubectl get sandboxes -n "$TENANT" \
-      --no-headers 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+    run_cmd kubectl get sandboxes -n "$TENANT" --no-headers
+    SANDBOX_COUNT=$(echo "$CMD_OUTPUT" | grep -c . 2>/dev/null || echo "0")
     if [ "${SANDBOX_COUNT}" -ge 1 ]; then
       pass "Sandbox resource created in namespace '$TENANT' ($SANDBOX_COUNT sandbox(s))"
     else
       # The gateway may buffer the request or not expose it as a K8s CR depending
       # on gateway mode — downgrade to informational if gateways are healthy.
-      GATEWAY_HEALTHY=$(kubectl get statefulset openshell-gateway -n "$TENANT" \
-        -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
-      if [ "${GATEWAY_HEALTHY:-0}" -ge 1 ]; then
+      run_cmd kubectl get statefulset openshell-gateway -n "$TENANT" \
+        -o jsonpath='{.status.readyReplicas}'
+      GATEWAY_HEALTHY="${CMD_OUTPUT:-0}"
+      if [ "${GATEWAY_HEALTHY}" -ge 1 ]; then
         skip "Sandbox CR in '$TENANT'" "gateway is healthy; sandbox may be internal to gateway"
       else
         fail "No sandbox resource in '$TENANT' and gateway is not ready"
@@ -435,9 +453,13 @@ fi
 section "Cleanup"
 
 for SESSION_ID in "${CREATED_SESSION_IDS[@]}"; do
-  api_delete "/api/ambient/v1/sessions/${SESSION_ID}" >/dev/null && \
-    echo "  Deleted session $SESSION_ID" || \
+  run_cmd curl -sf --max-time 10 -X DELETE \
+    -H "Authorization: Bearer ${TOKEN}" "${API_URL}/api/ambient/v1/sessions/${SESSION_ID}"
+  if [ "$CMD_RC" -eq 0 ]; then
+    echo "  Deleted session $SESSION_ID"
+  else
     echo "  Could not delete session $SESSION_ID (non-fatal)"
+  fi
 done
 
 # ============================================================================

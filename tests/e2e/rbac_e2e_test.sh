@@ -27,11 +27,25 @@ RED='\033[0;31m'
 YELLOW='\033[0;33m'
 BOLD='\033[1m'
 NC='\033[0m'
+ORANGE='\033[38;5;214m'
 
 pass() { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
 fail() { echo -e "  ${RED}✗${NC} $1${2:+: $2}"; FAILED=$((FAILED + 1)); }
 skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped${2:+: $2})"; }
 section() { echo ""; echo -e "${BOLD}$1${NC}"; }
+
+CMD_OUTPUT=""
+CMD_RC=0
+run_cmd() {
+  CMD_RC=0
+  echo ""
+  printf '  %b▶%b  %b$ %s%b\n' "${BOLD}" "${NC}" "${ORANGE}" "$*" "${NC}"
+  CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+  if [ -n "$CMD_OUTPUT" ]; then
+    echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
+  fi
+  echo ""
+}
 
 HTTP_STATUS=""
 HTTP_BODY=""
@@ -117,11 +131,12 @@ assert_list_count() {
 KC_ADMIN_TOKEN=""
 
 get_admin_token() {
-  KC_ADMIN_TOKEN=$(curl -s --max-time 10 -X POST "${KC_URL}/realms/master/protocol/openid-connect/token" \
+  run_cmd curl -s --max-time 10 -X POST "${KC_URL}/realms/master/protocol/openid-connect/token" \
     -d "client_id=admin-cli" \
     -d "grant_type=password" \
     -d "username=${KC_ADMIN_USER}" \
-    -d "password=${KC_ADMIN_PASS}" 2>/dev/null | jq -r '.access_token // empty')
+    -d "password=${KC_ADMIN_PASS}"
+  KC_ADMIN_TOKEN=$(echo "$CMD_OUTPUT" | jq -r '.access_token // empty')
   if [[ -z "$KC_ADMIN_TOKEN" || "$KC_ADMIN_TOKEN" == "null" ]]; then
     echo "ERROR: Failed to get Keycloak admin token from ${KC_URL}"
     return 1
@@ -131,38 +146,38 @@ get_admin_token() {
 KC_CLIENT_SECRET=""
 
 get_client_secret() {
-  local clients
-  clients=$(curl -s -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
-    "${KC_URL}/admin/realms/${KC_REALM}/clients?clientId=${KC_CLIENT_ID}")
+  run_cmd curl -s -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
+    "${KC_URL}/admin/realms/${KC_REALM}/clients?clientId=${KC_CLIENT_ID}"
+  local clients="${CMD_OUTPUT:-}"
   local client_uuid
   client_uuid=$(echo "$clients" | jq -r '.[0].id // empty' 2>/dev/null)
   if [[ -z "$client_uuid" ]]; then
     echo "WARN: Could not find client ${KC_CLIENT_ID} (response: $(echo "$clients" | head -c 120)), trying without secret"
     return
   fi
-  local secret_resp
-  secret_resp=$(curl -s -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
-    "${KC_URL}/admin/realms/${KC_REALM}/clients/${client_uuid}/client-secret")
-  KC_CLIENT_SECRET=$(echo "$secret_resp" | jq -r '.value // empty')
+  run_cmd curl -s -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
+    "${KC_URL}/admin/realms/${KC_REALM}/clients/${client_uuid}/client-secret"
+  KC_CLIENT_SECRET=$(echo "$CMD_OUTPUT" | jq -r '.value // empty')
 }
 
 create_keycloak_user() {
   local username="$1" password="$2" email="$3"
   local firstname="${4:-Test}" lastname="${5:-User}"
-  curl -s -o /dev/null -X POST \
+  run_cmd curl -s -X POST \
     -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
     -H "Content-Type: application/json" \
     "${KC_URL}/admin/realms/${KC_REALM}/users" \
-    -d "{\"username\":\"${username}\",\"email\":\"${email}\",\"firstName\":\"${firstname}\",\"lastName\":\"${lastname}\",\"emailVerified\":true,\"enabled\":true,\"requiredActions\":[],\"credentials\":[{\"type\":\"password\",\"value\":\"${password}\",\"temporary\":false}]}" 2>/dev/null || true
+    -d "{\"username\":\"${username}\",\"email\":\"${email}\",\"firstName\":\"${firstname}\",\"lastName\":\"${lastname}\",\"emailVerified\":true,\"enabled\":true,\"requiredActions\":[],\"credentials\":[{\"type\":\"password\",\"value\":\"${password}\",\"temporary\":false}]}"
 }
 
 delete_keycloak_user() {
   local username="$1"
+  run_cmd curl -s -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
+    "${KC_URL}/admin/realms/${KC_REALM}/users?username=${username}&exact=true"
   local kc_uid
-  kc_uid=$(curl -s -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
-    "${KC_URL}/admin/realms/${KC_REALM}/users?username=${username}&exact=true" | jq -r '.[0].id // empty')
+  kc_uid=$(echo "$CMD_OUTPUT" | jq -r '.[0].id // empty')
   if [[ -n "$kc_uid" ]]; then
-    curl -s -o /dev/null -X DELETE \
+    run_cmd curl -s -X DELETE \
       -H "Authorization: Bearer $KC_ADMIN_TOKEN" \
       "${KC_URL}/admin/realms/${KC_REALM}/users/${kc_uid}"
   fi
@@ -286,12 +301,13 @@ OIDC_CLIENT_SECRET_CP="e2e-secret-do-not-use-in-prod"
 # 0.5a. Align Keycloak KC_HOSTNAME with the external URL so signing keys
 #        match between internal and external access paths.
 KC_WANT_HOSTNAME="${KC_URL}"
-KC_CUR_HOSTNAME=$(kubectl get deployment keycloak -n "$NS" \
-  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="KC_HOSTNAME")].value}' 2>/dev/null || true)
+run_cmd kubectl get deployment keycloak -n "$NS" \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="KC_HOSTNAME")].value}'
+KC_CUR_HOSTNAME="${CMD_OUTPUT:-}"
 if [[ "$KC_CUR_HOSTNAME" != "$KC_WANT_HOSTNAME" ]]; then
   echo "  Patching Keycloak hostname: $KC_CUR_HOSTNAME → $KC_WANT_HOSTNAME"
-  kubectl set env deployment/keycloak -n "$NS" KC_HOSTNAME="$KC_WANT_HOSTNAME" >/dev/null 2>&1
-  kubectl rollout status deployment/keycloak -n "$NS" --timeout=120s >/dev/null 2>&1 || true
+  run_cmd kubectl set env deployment/keycloak -n "$NS" KC_HOSTNAME="$KC_WANT_HOSTNAME"
+  run_cmd kubectl rollout status deployment/keycloak -n "$NS" --timeout=120s
   # Re-establish Keycloak port-forward after rollout
   if [[ "$KC_URL" == *"localhost"* ]]; then
     KC_PORT=$(echo "$KC_URL" | sed -n 's|.*localhost:\([0-9]*\).*|\1|p' | head -1)
@@ -328,16 +344,17 @@ if [[ -z "$KC_JWKS" || "$KC_JWKS" == "null" ]]; then
   echo "FATAL: Cannot fetch Keycloak JWKS from ${KC_URL}/realms/${KC_REALM}/protocol/openid-connect/certs"
   exit 1
 fi
-kubectl create configmap ambient-api-server-auth \
+KC_CM_YAML=$(kubectl create configmap ambient-api-server-auth \
   --from-literal="jwks.json=${KC_JWKS}" \
   --from-literal="acl.yml=" \
-  -n "$NS" --dry-run=client -o yaml | kubectl apply -f -
+  -n "$NS" --dry-run=client -o yaml 2>&1)
+run_cmd kubectl apply -f - <<< "$KC_CM_YAML"
 echo "  Updated ambient-api-server-auth ConfigMap with Keycloak JWKS"
 
 # 2. Patch ambient-api-server secret to include OIDC client credentials.
 #    The control plane reads clientId / clientSecret from this secret to
 #    authenticate to the API server via OIDC client_credentials grant.
-kubectl patch secret ambient-api-server -n "$NS" -p \
+run_cmd kubectl patch secret ambient-api-server -n "$NS" -p \
   "{\"stringData\":{\"clientId\":\"${OIDC_CLIENT_ID_CP}\",\"clientSecret\":\"${OIDC_CLIENT_SECRET_CP}\"}}"
 echo "  Patched ambient-api-server secret with OIDC client credentials"
 
@@ -346,7 +363,7 @@ echo "  Patched ambient-api-server secret with OIDC client credentials"
 #    - JWK_CERT_URL            (Keycloak JWKS for the production env fallback)
 #    - GRPC_SERVICE_ACCOUNT    (so the pre-auth interceptor tags OIDC SAs as CallerTypeService)
 #    - command args            (--enable-jwt=true --enable-authz=true)
-kubectl patch deployment/ambient-api-server -n "$NS" --type=json -p "$(cat <<'EOF'
+API_PATCH_JSON=$(cat <<'EOF'
 [
   {"op":"replace","path":"/spec/template/spec/containers/0/command","value":[
     "/usr/local/bin/ambient-api-server","serve",
@@ -378,8 +395,9 @@ kubectl patch deployment/ambient-api-server -n "$NS" --type=json -p "$(cat <<'EO
   ]}
 ]
 EOF
-)"
-kubectl set env deployment/ambient-api-server -n "$NS" \
+)
+run_cmd kubectl patch deployment/ambient-api-server -n "$NS" --type=json -p "$API_PATCH_JSON"
+run_cmd kubectl set env deployment/ambient-api-server -n "$NS" \
   AMBIENT_ENV=production \
   JWK_CERT_URL="$KC_JWKS_URL" \
   GRPC_SERVICE_ACCOUNT="service-account-${OIDC_CLIENT_ID_CP}"
@@ -387,9 +405,10 @@ echo "  Patched API server deployment (JWT + authz enabled, production env)"
 
 # 4. Wait for API server rollout FIRST — it must be healthy before CP starts
 echo "  Waiting for API server rollout..."
-if ! kubectl rollout status deployment/ambient-api-server -n "$NS" --timeout=120s; then
+run_cmd kubectl rollout status deployment/ambient-api-server -n "$NS" --timeout=120s
+if [ "$CMD_RC" -ne 0 ]; then
   echo "FATAL: API server rollout failed"
-  kubectl describe deployment/ambient-api-server -n "$NS" | tail -20
+  run_cmd kubectl describe deployment/ambient-api-server -n "$NS"
   exit 1
 fi
 
@@ -426,10 +445,11 @@ fi
 
 # 7. Verify API server accepts Keycloak JWTs (smoke test with client_credentials token)
 echo "  Verifying API server JWT auth..."
-VERIFY_TOKEN=$(curl -sf -X POST "${KC_URL}/realms/${KC_REALM}/protocol/openid-connect/token" \
+run_cmd curl -s -X POST "${KC_URL}/realms/${KC_REALM}/protocol/openid-connect/token" \
   -d "client_id=${OIDC_CLIENT_ID_CP}" \
   -d "client_secret=${OIDC_CLIENT_SECRET_CP}" \
-  -d "grant_type=client_credentials" | jq -r '.access_token // empty')
+  -d "grant_type=client_credentials"
+VERIFY_TOKEN=$(echo "$CMD_OUTPUT" | jq -r '.access_token // empty')
 if [[ -z "$VERIFY_TOKEN" ]]; then
   echo "FATAL: Cannot get OIDC token from Keycloak for ${OIDC_CLIENT_ID_CP}"
   exit 1
@@ -448,31 +468,33 @@ done
 if [[ "$JWT_VERIFIED" != "true" ]]; then
   echo "FATAL: API server not accepting Keycloak JWTs after 30s (last status=$VERIFY_STATUS)"
   echo "  API server logs:"
-  kubectl logs -n "$NS" deploy/ambient-api-server -c api-server --tail=30 2>/dev/null || true
+  run_cmd kubectl logs -n "$NS" deploy/ambient-api-server -c api-server --tail=30
   exit 1
 fi
 
 # 8. NOW patch and restart the control plane (API server is verified healthy)
-kubectl set env deployment/ambient-control-plane -n "$NS" \
+run_cmd kubectl set env deployment/ambient-control-plane -n "$NS" \
   OIDC_CLIENT_ID="$OIDC_CLIENT_ID_CP" \
   OIDC_CLIENT_SECRET="$OIDC_CLIENT_SECRET_CP" \
   OIDC_TOKEN_URL="$KC_TOKEN_URL"
 # Always restart CP to get fresh gRPC watch streams (set env is a no-op
 # if values unchanged, which means no rollout and stale streams persist)
-kubectl rollout restart deployment/ambient-control-plane -n "$NS" 2>/dev/null || true
+run_cmd kubectl rollout restart deployment/ambient-control-plane -n "$NS"
 echo "  Patched and restarted control plane"
 echo "  Waiting for control plane rollout..."
-if ! kubectl rollout status deployment/ambient-control-plane -n "$NS" --timeout=120s; then
+run_cmd kubectl rollout status deployment/ambient-control-plane -n "$NS" --timeout=120s
+if [ "$CMD_RC" -ne 0 ]; then
   echo "FATAL: Control plane rollout failed"
-  kubectl describe deployment/ambient-control-plane -n "$NS" | tail -20
+  run_cmd kubectl describe deployment/ambient-control-plane -n "$NS"
   exit 1
 fi
 
 # 9. Verify control plane pod is healthy
 CP_READY=false
 for attempt in $(seq 1 10); do
-  CP_STATUS=$(kubectl get pods -n "$NS" -l app=ambient-control-plane \
-    -o jsonpath='{.items[0].status.containerStatuses[0].ready}' 2>/dev/null || true)
+  run_cmd kubectl get pods -n "$NS" -l app=ambient-control-plane \
+    -o jsonpath='{.items[0].status.containerStatuses[0].ready}'
+  CP_STATUS="${CMD_OUTPUT:-}"
   if [[ "$CP_STATUS" == "true" ]]; then
     echo "  Control plane is ready (attempt $attempt)"
     CP_READY=true
@@ -483,7 +505,7 @@ done
 if [[ "$CP_READY" != "true" ]]; then
   echo "WARNING: Control plane pod not ready after 20s — sessions may stay Pending"
   echo "  Control plane logs:"
-  kubectl logs -n "$NS" deploy/ambient-control-plane --tail=20 2>/dev/null || true
+  run_cmd kubectl logs -n "$NS" deploy/ambient-control-plane --tail=20
 fi
 
 # 10. Wait for the CP's gRPC watch streams to be established.
@@ -491,7 +513,8 @@ fi
 #     server (~10s lag). Sessions created in that gap are missed.
 CP_STREAMS=false
 for attempt in $(seq 1 20); do
-  if kubectl logs -n "$NS" deploy/ambient-control-plane --tail=50 2>/dev/null | grep -q "session watch stream established"; then
+  run_cmd kubectl logs -n "$NS" deploy/ambient-control-plane --tail=50
+  if echo "$CMD_OUTPUT" | grep -q "session watch stream established"; then
     CP_STREAMS=true
     break
   fi
@@ -1518,16 +1541,17 @@ section "24. Platform Viewer Cannot Escalate to Admin"
 # Grant User C platform:viewer (via direct DB insert since we need a global binding)
 # We can't grant global from a non-admin, so we use the seed-admin pattern via kubectl
 VIEWER_GLOBAL_BIND=""
-DB_POD_NAME=$(kubectl get pods -n "$NS" -l app=ambient-api-server,component=database -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+run_cmd kubectl get pods -n "$NS" -l app=ambient-api-server,component=database -o jsonpath='{.items[0].metadata.name}'
+DB_POD_NAME="${CMD_OUTPUT:-}"
 if [[ -z "$DB_POD_NAME" ]]; then
   fail "Phase 24 setup" "DB pod not found — cannot seed platform:viewer binding; skipping viewer escalation tests"
 else
-  kubectl exec -n "$NS" "$DB_POD_NAME" -- psql -U ambient -d ambient_api_server -t -A -c "
+  run_cmd kubectl exec -n "$NS" "$DB_POD_NAME" -- psql -U ambient -d ambient_api_server -t -A -c "
     INSERT INTO role_bindings (id, role_id, scope, user_id, created_at, updated_at)
     SELECT '$(date +%s)viewerbind', r.id, 'global', 'rbac-user-c', NOW(), NOW()
     FROM roles r WHERE r.name = 'platform:viewer' AND r.deleted_at IS NULL
     ON CONFLICT DO NOTHING;
-  " 2>/dev/null >/dev/null
+  "
 
   # Refresh token for User C
   TOKEN_C=$(get_token "rbac-user-c" "testpass")
@@ -1549,23 +1573,24 @@ section "25. Delete Hierarchy -- owner cannot delete higher-privilege bindings"
 
 # Seed a platform:admin binding scoped to proj-alpha via direct DB insert.
 # No user can grant platform:admin on a project via the API, so we seed it.
-DB_POD=$(kubectl get pods -n "$NS" -l app=ambient-api-server,component=database -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+run_cmd kubectl get pods -n "$NS" -l app=ambient-api-server,component=database -o jsonpath='{.items[0].metadata.name}'
+DB_POD="${CMD_OUTPUT:-}"
 F5_BIND_ID="f5_test_admin_bind"
 if [[ -n "$DB_POD" ]]; then
-  kubectl exec -n "$NS" "$DB_POD" -- psql -U ambient -d ambient_api_server -qc "
+  run_cmd kubectl exec -n "$NS" "$DB_POD" -- psql -U ambient -d ambient_api_server -qc "
     INSERT INTO role_bindings (id, role_id, scope, project_id, user_id, created_at, updated_at)
     SELECT '${F5_BIND_ID}', r.id, 'project', 'rbac-proj-alpha', 'rbac-admin-ghost', NOW(), NOW()
     FROM roles r WHERE r.name = 'platform:admin' AND r.deleted_at IS NULL
     ON CONFLICT DO NOTHING;
-  " 2>/dev/null || true
+  "
 
   # User A (project:owner level 1) tries to delete platform:admin's binding (level 0) → must fail
   api DELETE "/role_bindings/${F5_BIND_ID}" "$TOKEN_A"
   assert_status "403" "$HTTP_STATUS" "F5: project:owner cannot delete platform:admin binding"
 
   # Clean up
-  kubectl exec -n "$NS" "$DB_POD" -- psql -U ambient -d ambient_api_server -qc \
-    "DELETE FROM role_bindings WHERE id = '${F5_BIND_ID}';" 2>/dev/null || true
+  run_cmd kubectl exec -n "$NS" "$DB_POD" -- psql -U ambient -d ambient_api_server -qc \
+    "DELETE FROM role_bindings WHERE id = '${F5_BIND_ID}';"
 else
   skip "F5: DB pod not found"
 fi
