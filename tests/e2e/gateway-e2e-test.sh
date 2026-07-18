@@ -798,6 +798,14 @@ if should_run_test "short_running"; then
 
 section "13. Short-running session lifecycle (stop_on_run_finished) [short_running]"
 
+# The start handler returns an existing active session for the same agent
+# instead of creating a new one. Delete the long-running session first so a
+# fresh session is created with stop_on_run_finished=true.
+if [ -n "${CREATED_SESSION_ID:-}" ]; then
+  api DELETE "/api/ambient/v1/sessions/${CREATED_SESSION_ID}" >/dev/null 2>&1 || true
+  sleep 2
+fi
+
 # Start a new session with stop_on_run_finished=true in the request body.
 # The flag must be set at creation time so the sandbox is provisioned with the
 # STOP_ON_RUN_FINISHED env var — PATCHing after start is too late because the
