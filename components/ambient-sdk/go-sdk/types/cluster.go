@@ -143,3 +143,11 @@ func (b *ClusterPatchBuilder) Role(v string) *ClusterPatchBuilder {
 func (b *ClusterPatchBuilder) Build() map[string]any {
 	return b.patch
 }
+
+type ClusterStatusResponse struct {
+	Capacity        string     `json:"capacity,omitempty"`
+	ID              string     `json:"id,omitempty"`
+	LastHeartbeatAt *time.Time `json:"last_heartbeat_at,omitempty"`
+	Status          string     `json:"status,omitempty"`
+	StatusMessage   string     `json:"status_message,omitempty"`
+}

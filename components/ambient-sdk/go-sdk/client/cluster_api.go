@@ -66,6 +66,22 @@ func (a *ClusterAPI) Delete(ctx context.Context, id string) error {
 	return a.client.do(ctx, http.MethodDelete, "/clusters/"+url.PathEscape(id), nil, http.StatusNoContent, nil)
 }
 
+func (a *ClusterAPI) Heartbeat(ctx context.Context, id string) (*types.ClusterStatusResponse, error) {
+	var result types.ClusterStatusResponse
+	if err := a.client.do(ctx, http.MethodPost, "/clusters/"+url.PathEscape(id)+"/heartbeat", nil, http.StatusOK, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (a *ClusterAPI) Status(ctx context.Context, id string) (*types.ClusterStatusResponse, error) {
+	var result types.ClusterStatusResponse
+	if err := a.client.do(ctx, http.MethodGet, "/clusters/"+url.PathEscape(id)+"/status", nil, http.StatusOK, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 func (a *ClusterAPI) ListAll(ctx context.Context, opts *types.ListOptions) *Iterator[types.Cluster] {
 	return NewIterator(func(page int) (*types.ClusterList, error) {
 		o := *opts
