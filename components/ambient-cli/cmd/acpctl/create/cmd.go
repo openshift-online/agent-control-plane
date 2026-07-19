@@ -3,7 +3,7 @@ package create
 
 import (
 	"context"
-"errors"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -58,17 +58,17 @@ var createArgs struct {
 	bindCredID    string
 	scopeID       string
 
-	gwImage          string
-	gwServerDns      string
-	gwConfig         string
-	gwLabels         string
-	gwAnnotations    string
-	gwOidcIssuer     string
-	gwOidcAudience   string
-	gwOidcJwksTtl    int
-	gwOidcRolesClaim string
-	gwOidcAdminRole  string
-	gwOidcUserRole   string
+	gwImage           string
+	gwServerDns       string
+	gwConfig          string
+	gwLabels          string
+	gwAnnotations     string
+	gwOidcIssuer      string
+	gwOidcAudience    string
+	gwOidcJwksTtl     int
+	gwOidcRolesClaim  string
+	gwOidcAdminRole   string
+	gwOidcUserRole    string
 	gwOidcScopesClaim string
 	gwRouteHost       string
 }
