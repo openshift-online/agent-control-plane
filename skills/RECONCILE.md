@@ -50,19 +50,19 @@ skills/
 
 ## Reconciliation State
 
-**Last analyzed**: 2026-07-08 (provider/gateway RBAC fix)
+**Last analyzed**: 2026-07-18 (cluster health + placement)
 **Spec corpus**: 29 specs across 4 domains
-**Codebase commit**: f564e59e (fix/hcmais-ui-sso-redirect-patch branch)
+**Codebase commit**: adce8a5c (feat/openshift-e2e-installer-clean branch)
 
 ### Coverage Summary
 
 | Domain | Specs | Requirements | Present | Partial | Missing | Coverage |
 |--------|-------|-------------|---------|---------|---------|----------|
-| Platform | 12 | 121 | 116 | 1 | 4 | 95.9% |
+| Platform | 12 | 124 | 119 | 1 | 4 | 96.0% |
 | Security | 6 | 55 | 47 | 3 | 5 | 85.5% |
 | UI | 7 | 70 | 62 | 6 | 2 | 88.6% |
 | CLI | 1 | 13 | 13 | 0 | 0 | 100% |
-| **TOTAL** | **29** | **259** | **238** | **10** | **11** | **91.9%** |
+| **TOTAL** | **29** | **262** | **241** | **10** | **11** | **92.0%** |
 
 ### Spec Dependency Order
 
@@ -143,6 +143,9 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | P11 | agent-sandbox-config | Git repo payload clone + SSH delivery | CP | **done** | major | `cloneRepo()` via go-git, `tarDirectory()` streams tar excluding `.git`, `writeRepoPayloadViaSSH()` extracts via SSH. `convertPayloads()` dispatches content vs repo. 5min timeout for repo payloads. |
 | P12 | agent-sandbox-config | Payload mutual exclusivity validation | CP | partial | minor | `convertPayloads()` warns and skips payloads with both `content` and `repo_url`. API-level OpenAPI `oneOf` validation not yet enforced. |
 | P13 | gateway-provisioning | failSession condition format for UI visibility | CP+FE | **done** | major | Conditions now include `status: "False"`, `reason: "SetupFailed"`, `message: <detail>`. `SandboxFailure` added to UI `CONDITION_TITLES` map. Users now see clone/upload failures in session detail. |
+| P28 | data-model | SDK status/heartbeat methods (Go, Python, TypeScript) | SDK | **done** | critical | Generator extended: `status` and `heartbeat` added to `knownActions`, `ResponseSchema` support for action return types. All 3 SDKs generated with `ClusterStatusResponse` type and `Status()`/`Heartbeat()` methods. |
+| P29 | control-plane | ClusterHealthSyncer periodic health checker | CP | **done** | critical | `cluster_health_syncer.go` polls cluster heartbeat endpoint on configurable interval (default 30s). Wired into `main.go` with error channel pattern. Config: `CLUSTER_HEALTH_INTERVAL`. |
+| P30 | control-plane | PlacementStrategy interface + RoundRobinPlacement | CP | **done** | critical | `internal/placement/strategy.go` with `PlacementStrategy` interface, `PlacementRequest`/`PlacementDecision` types, `RoundRobinPlacement` default. Filters by role, status, labels, heartbeat threshold. Config: `PLACEMENT_HEARTBEAT_THRESHOLD`. |
 
 ### UI Gaps
 
@@ -188,6 +191,8 @@ Gaps grouped by execution wave. Each wave gates the next.
 | ~~12~~ | ~~CP~~ | ~~4~~ | ~~P12, P14, P16, P17~~ | ✅ Completed 2026-07-08 |
 | ~~13~~ | ~~Examples + Manifests~~ | ~~4~~ | ~~P18, P19, P20, P21~~ | ✅ Completed 2026-07-08 |
 | ~~14~~ | ~~BE (RBAC)~~ | ~~2~~ | ~~S13, S14~~ | ✅ Completed 2026-07-08 |
+| ~~15~~ | ~~SDK~~ | ~~1~~ | ~~P28~~ | ✅ Completed 2026-07-18 |
+| ~~16~~ | ~~CP~~ | ~~2~~ | ~~P29, P30~~ | ✅ Completed 2026-07-18 |
 
 **Partials** (S9, S10, S11, P1, P9) are low-severity and can be addressed opportunistically.
 
@@ -242,3 +247,4 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-08 | (pending) | Wave 12 executed: P12, P14, P16, P17 | 89.6% | GatewayReconciler created (polling pattern, 30s ticker). ConfigMap-based provisioning eliminated. Manifests and validation consumed by new reconciler. `go build ./...` clean. |
 | 2026-07-08 | (pending) | Wave 13 executed: P18, P19, P20, P21 | 91.1% | Gateway overlay examples added. Failure handling with annotation-based status tracking. platform-config.yaml removed from kind and hcmais-dev overlays. ProjectReconciler ordering verified as already enforced. |
 | 2026-07-08 | (pending) | Wave 14 executed: S13, S14 | 91.9% | Provider/Gateway RBAC fix: added ResourceProvider/ResourceGateway to permissions.go, isListEndpoint allowlist, role permissions migration (202607080001). Provider handler hardened: SQL injection fix (TSLEqual), ApplyListFilter, input validation (validIDPattern), CheckEditorTier on writes. Tests added. |
+| 2026-07-18 | (pending) | Waves 15-16 executed: P28, P29, P30 | 92.0% | SDK generator extended for action response schemas (`status`/`heartbeat` knownActions, `ResponseSchema` types). ClusterHealthSyncer reconciler (30s polling, heartbeat probing). PlacementStrategy interface + RoundRobinPlacement (role filtering, label matching, heartbeat threshold). |

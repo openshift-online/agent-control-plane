@@ -199,6 +199,58 @@ func parseSpec(specPath string) (*Spec, error) {
 		resources = append(resources, *resource)
 	}
 
+	resourceNames := make(map[string]bool, len(resources))
+	for _, r := range resources {
+		resourceNames[r.Name] = true
+		resourceNames[r.Name+"List"] = true
+	}
+
+	for i := range resources {
+		var crossImports []CrossResourceImport
+		seen := make(map[string]bool)
+		for _, a := range resources[i].Actions {
+			if a.ReturnType == "" || a.ReturnType == resources[i].Name {
+				continue
+			}
+			hasLocal := false
+			for _, rs := range resources[i].ResponseSchemas {
+				if rs.Name == a.ReturnType {
+					hasLocal = true
+					break
+				}
+			}
+			if hasLocal {
+				continue
+			}
+			if seen[a.ReturnType] {
+				continue
+			}
+			seen[a.ReturnType] = true
+			modName := resolveModuleName(a.ReturnType, resources)
+			if modName != "" {
+				crossImports = append(crossImports, CrossResourceImport{
+					TypeName:   a.ReturnType,
+					ModuleName: modName,
+				})
+			}
+		}
+		resources[i].CrossResourceImports = crossImports
+
+		resolvedTypes := make(map[string]bool)
+		resolvedTypes[resources[i].Name] = true
+		for _, rs := range resources[i].ResponseSchemas {
+			resolvedTypes[rs.Name] = true
+		}
+		for _, ci := range crossImports {
+			resolvedTypes[ci.TypeName] = true
+		}
+		for j := range resources[i].Actions {
+			if resources[i].Actions[j].ReturnType != "" && !resolvedTypes[resources[i].Actions[j].ReturnType] {
+				resources[i].Actions[j].ReturnType = ""
+			}
+		}
+	}
+
 	sort.Slice(resources, func(i, j int) bool {
 		return resources[i].Name < resources[j].Name
 	})
@@ -258,6 +310,8 @@ func extractResource(name, pathSegment string, doc *subSpecDoc) (*Resource, erro
 	parentPath := inferParentPath(pathSegment)
 	isSubResource := parentPath != ""
 
+	responseSchemas := extractActionResponseSchemas(actions, doc, name)
+
 	return &Resource{
 		Name:              name,
 		Plural:            resourcePlural(name),
@@ -271,6 +325,7 @@ func extractResource(name, pathSegment string, doc *subSpecDoc) (*Resource, erro
 		HasPatch:          hasPatch,
 		HasStatusPatch:    hasStatusPatch,
 		Actions:           actions,
+		ResponseSchemas:   responseSchemas,
 		IsSubResource:     isSubResource,
 	}, nil
 }
@@ -522,7 +577,7 @@ func checkHasDelete(paths map[string]interface{}, pathSegment string) bool {
 func detectActions(paths map[string]interface{}, pathSegment string, resourceName string) []Action {
 	basePath := extractBasePath(paths)
 	fullCollection := basePath + "/" + pathSegment
-	knownActions := []string{"start", "stop", "suspend", "resume", "trigger", "runs", "sync", "refresh"}
+	knownActions := []string{"start", "stop", "suspend", "resume", "trigger", "runs", "sync", "refresh", "status", "heartbeat"}
 	var found []Action
 	for _, action := range knownActions {
 		for path, val := range paths {
@@ -597,11 +652,7 @@ func extractActionReturnType(opMap map[string]interface{}, resourceName string) 
 			return ""
 		}
 		parts := strings.Split(ref, "/")
-		refName := parts[len(parts)-1]
-		if refName == resourceName {
-			return resourceName
-		}
-		return ""
+		return parts[len(parts)-1]
 	}
 	return ""
 }
@@ -620,4 +671,91 @@ func isObjectReferenceField(name string) bool {
 
 func isDateTimeField(f Field) bool {
 	return f.Format == "date-time" && strings.Contains(f.GoType, "time.Time")
+}
+
+func extractActionResponseSchemas(actions []Action, doc *subSpecDoc, resourceName string) []ResponseSchema {
+	seen := map[string]bool{}
+	var schemas []ResponseSchema
+	for _, a := range actions {
+		if a.ReturnType == "" || a.ReturnType == resourceName {
+			continue
+		}
+		if seen[a.ReturnType] {
+			continue
+		}
+		seen[a.ReturnType] = true
+
+		schemaVal, ok := doc.Components.Schemas[a.ReturnType]
+		if !ok {
+			continue
+		}
+		schemaMap, ok := schemaVal.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		fields := extractFlatSchemaFields(schemaMap)
+		schemas = append(schemas, ResponseSchema{
+			Name:   a.ReturnType,
+			Fields: fields,
+		})
+	}
+	return schemas
+}
+
+func resolveModuleName(typeName string, resources []Resource) string {
+	for _, r := range resources {
+		if r.Name == typeName || r.Name+"List" == typeName {
+			return toSnakeCase(r.Name)
+		}
+		for _, rs := range r.ResponseSchemas {
+			if rs.Name == typeName {
+				return toSnakeCase(r.Name)
+			}
+		}
+	}
+	return ""
+}
+
+func extractFlatSchemaFields(schemaMap map[string]interface{}) []Field {
+	props, ok := schemaMap["properties"]
+	if !ok {
+		return nil
+	}
+	propsMap, ok := props.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	var fields []Field
+	for propName, propVal := range propsMap {
+		propMap, ok := propVal.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		propType, _ := propMap["type"].(string)
+		propFormat, _ := propMap["format"].(string)
+		nullable, _ := propMap["nullable"].(bool)
+
+		f := Field{
+			Name:       propName,
+			GoName:     toGoName(propName),
+			PythonName: propName,
+			TSName:     toCamelCase(propName),
+			Type:       propType,
+			Format:     propFormat,
+			GoType:     toGoType(propType, propFormat, nullable),
+			PythonType: toPythonType(propType, propFormat, nullable),
+			TSType:     toTSType(propType, propFormat),
+			Required:   false,
+			Nullable:   nullable,
+			JSONTag:    jsonTag(propName, false),
+		}
+		fields = append(fields, f)
+	}
+
+	sort.Slice(fields, func(i, j int) bool {
+		return fields[i].Name < fields[j].Name
+	})
+	return fields
 }

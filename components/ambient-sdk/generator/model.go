@@ -18,14 +18,26 @@ type Resource struct {
 	HasDelete         bool
 	HasPatch          bool
 	HasStatusPatch    bool
-	Actions           []Action
-	IsSubResource     bool
+	Actions              []Action
+	ResponseSchemas      []ResponseSchema
+	CrossResourceImports []CrossResourceImport
+	IsSubResource        bool
 }
 
 type Action struct {
 	Name       string
 	Method     string
 	ReturnType string
+}
+
+type ResponseSchema struct {
+	Name   string
+	Fields []Field
+}
+
+type CrossResourceImport struct {
+	TypeName   string
+	ModuleName string
 }
 
 type Field struct {

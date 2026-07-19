@@ -75,6 +75,8 @@ type ControlPlaneConfig struct {
 	MLflowAsyncTraceLoggingQueue    string
 	MLflowAutologExcludeFlavors     string
 	MLflowGenAIAutologIntegrations  string
+	ClusterHealthIntervalSeconds    int
+	PlacementHeartbeatThresholdSecs int
 }
 
 func Load() (*ControlPlaneConfig, error) {
@@ -144,6 +146,8 @@ func Load() (*ControlPlaneConfig, error) {
 		MLflowAsyncTraceLoggingQueue:    os.Getenv("MLFLOW_ASYNC_TRACE_LOGGING_MAX_QUEUE_SIZE"),
 		MLflowAutologExcludeFlavors:     os.Getenv("MLFLOW_AUTOLOG_EXCLUDE_FLAVORS"),
 		MLflowGenAIAutologIntegrations:  os.Getenv("MLFLOW_GENAI_AUTOLOG_INTEGRATIONS"),
+		ClusterHealthIntervalSeconds:    envOrDefaultInt("CLUSTER_HEALTH_INTERVAL", 30),
+		PlacementHeartbeatThresholdSecs: envOrDefaultInt("PLACEMENT_HEARTBEAT_THRESHOLD", 120),
 	}
 
 	if cfg.MCPAPIServerURL == "" {
