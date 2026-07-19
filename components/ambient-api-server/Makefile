@@ -31,16 +31,24 @@ run-no-auth: binary
 	./$(BINARY_NAME) migrate
 	./$(BINARY_NAME) serve --enable-authz=false --enable-jwt=false
 
+.PHONY: ensure-secrets
+ensure-secrets:
+	@if [ ! -f secrets/db.password ]; then \
+		mkdir -p secrets; \
+		echo "postgres" > secrets/db.password; \
+		echo "Created default db.password file"; \
+	fi
+
 .PHONY: test
-test: install
+test: install ensure-secrets
 	DOCKER_HOST=$(DOCKER_HOST) TESTCONTAINERS_RYUK_DISABLED=true AMBIENT_ENV=integration_testing go test -p 1 -v ./...
 
 .PHONY: test-integration
-test-integration: install
+test-integration: install ensure-secrets
 	DOCKER_HOST=$(DOCKER_HOST) TESTCONTAINERS_RYUK_DISABLED=true AMBIENT_ENV=integration_testing go test -p 1 -v ./test/integration/...
 
 .PHONY: test-rbac
-test-rbac: install
+test-rbac: install ensure-secrets
 	DOCKER_HOST=$(DOCKER_HOST) TESTCONTAINERS_RYUK_DISABLED=true AMBIENT_ENV=integration_testing ENABLE_AUTHZ=true go test -p 1 -v -run TestGRPCRBAC ./test/integration/...
 
 .PHONY: proto
@@ -90,17 +98,12 @@ db/login:
 	$(CONTAINER_ENGINE) exec -it ambient-api-server-postgres psql -U postgres -d ambient_api_server
 
 .PHONY: migrate
-migrate: binary
+migrate: binary ensure-secrets
 	@if ! $(CONTAINER_ENGINE) ps --filter name=ambient-api-server-postgres --format "{{.Names}}" | grep -q ambient-api-server-postgres; then \
 		echo "Database container not running, starting it..."; \
 		$(MAKE) db/setup; \
 		echo "Waiting for database to be ready..."; \
 		sleep 5; \
-	fi
-	@if [ ! -f secrets/db.password ]; then \
-		mkdir -p secrets; \
-		echo "postgres" > secrets/db.password; \
-		echo "Created default db.password file"; \
 	fi
 	./$(BINARY_NAME) migrate
 
