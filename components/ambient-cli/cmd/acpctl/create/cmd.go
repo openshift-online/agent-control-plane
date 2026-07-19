@@ -73,9 +73,9 @@ var createArgs struct {
 	gwOidcScopesClaim string
 	gwRouteHost       string
 
-	apiServerURL  string
-	role          string
-	credentialID  string
+	apiServerURL string
+	role         string
+	credentialID string
 }
 
 func init() {
