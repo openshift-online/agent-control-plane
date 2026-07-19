@@ -135,10 +135,16 @@ If using Vertex, set `USE_VERTEX=1` in the operator ConfigMap (see Step 4).
 
 ### Scripted (preferred for ephemeral/PR namespaces)
 
-`components/pr-test/install.sh` encapsulates Steps 2–6 into a single script. It copies secrets from the source namespace, deploys via a temp-dir kustomize overlay (no git working tree mutations), patches configmaps, and waits for rollouts:
+`components/pr-test/install-openshift.sh` deploys a self-contained ACP stack (namespace, secrets, Keycloak, PostgreSQL, API server, control plane, UI, Routes, RBAC) into a single namespace:
 
 ```bash
-bash components/pr-test/install.sh <namespace> <image-tag>
+bash components/pr-test/install-openshift.sh <namespace> [image-sha]
+```
+
+For dev-mode deployments without SSO:
+
+```bash
+bash components/pr-test/install-standard.sh <pr-number>
 ```
 
 ### Production deploy (`make deploy`)

@@ -2,9 +2,9 @@
 name: ambient-pr-test
 description: >-
   Deploy a PR's images (api-server, control-plane, runner) to any OpenShift
-  namespace for integration testing.  Works on both standard OpenShift clusters
-  and MPP managed clusters.  Auto-detects the environment and chooses the
-  right script.
+  namespace for integration testing.  Supports full SSO deployments
+  (install-openshift.sh) and lightweight dev-mode deployments
+  (install-standard.sh).
 ---
 
 # Ambient PR Test Skill
@@ -23,26 +23,17 @@ Optional modifiers:
 
 ---
 
-## Environment Detection
+## Deployment Modes
 
-```bash
-if oc api-resources --api-group=tenant.paas.redhat.com 2>/dev/null  < /dev/null |  grep -q TenantNamespace; then
-  echo "MPP"    # use provision.sh + install.sh
-else
-  echo "Standard"  # use install-standard.sh
-fi
-```
-
-| | Standard OpenShift | MPP |
-|--|-------------------|-----|
-| Namespace | Pre-existing | Created via TenantNamespace CR |
-| Script | `install-standard.sh` | `provision.sh` + `install.sh` |
-| Auth | Development (no JWT) | Production (RH SSO JWT) |
-| Secrets | Auto-generated | Copied from runtime-int |
+| | Full SSO (`install-openshift.sh`) | Dev Mode (`install-standard.sh`) |
+|--|----------------------------------|----------------------------------|
+| Auth | Keycloak OIDC | Development (no JWT) |
+| Secrets | Auto-generated, stored in `pr-test-credentials` | Auto-generated |
+| Components | PostgreSQL, Keycloak, API server, control plane, UI | PostgreSQL, API server, control plane |
 
 ---
 
-## Standard OpenShift
+## Standard OpenShift (Dev Mode)
 
 For any cluster where you have `oc` access and an existing namespace.
 
@@ -88,19 +79,6 @@ oc delete clusterrole,clusterrolebinding "ambient-control-plane-${NAMESPACE}" --
 ```
 
 ---
-
-## MPP Workflow
-
-For MPP clusters (`dev-spoke-aws-us-east-1`).  See `components/pr-test/MPP-ENVIRONMENT.md`.
-
-```bash
-PR_NUMBER=1005; ID="pr-${PR_NUMBER}"
-bash components/pr-test/build.sh "https://github.com/ambient-code/platform/pull/${PR_NUMBER}"
-bash components/pr-test/provision.sh create "$ID"
-bash components/pr-test/install.sh "ambient-code--${ID}" "pr-${PR_NUMBER}"
-# teardown:
-bash components/pr-test/provision.sh destroy "$ID"
-```
 
 ---
 
