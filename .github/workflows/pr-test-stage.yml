@@ -7,6 +7,10 @@ on:
         description: 'Image tag prefix (e.g. pr-123)'
         required: true
         type: string
+      pr-number:
+        description: 'PR number (extracted from image-tag if not provided)'
+        required: false
+        type: string
     secrets:
       STAGE_KUBECONFIG:
         required: true
@@ -26,7 +30,7 @@ concurrency:
 env:
   REGISTRY: quay.io/ambient_code
   IMAGE_TAG: ${{ inputs.image-tag && format('{0}-amd64', inputs.image-tag) || format('pr-{0}-amd64', inputs.pr-number) }}
-  PR_NUMBER: ${{ inputs.image-tag && github.event.pull_request.number || inputs.pr-number }}
+  PR_NUMBER: ${{ inputs.pr-number }}
 
 jobs:
   deploy:
@@ -202,8 +206,8 @@ jobs:
 
           Then authenticate:
           \`\`\`bash
-          acpctl login --password-grant \\\\
-            --username developer --password <from-above> \\\\
+          acpctl login --use-auth-code \\\\
+            --client-id ambient-cli \\\\
             --issuer-url ${DEPLOY_KC_URL}/realms/ambient-code \\\\
             --url ${DEPLOY_API_URL} --insecure-skip-tls-verify
           \`\`\`
