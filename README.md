@@ -51,7 +51,7 @@ ACP organizes work around a few core concepts:
 
 ### OpenShell as a Service
 
-ACP provides self-service OpenShell gateway provisioning — users request a gateway through the CLI and the control plane handles the full lifecycle on Kubernetes. This turns OpenShell into a managed service where platform teams configure the infrastructure once and users get isolated sandbox environments on demand.
+ACP can also provide self-service OpenShell gateway provisioning — users request a gateway through the CLI and the control plane handles the full lifecycle on Kubernetes. This turns OpenShell into a managed service where platform teams configure the infrastructure once and users get isolated sandbox environments on demand.
 
 **How it works:**
 
