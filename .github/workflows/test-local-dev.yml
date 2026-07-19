@@ -225,8 +225,8 @@ jobs:
           sleep 5
         done
 
-        # Wait for gateway pod to be ready
-        kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=openshell-gateway \
+        # Wait for gateway StatefulSet pod to be ready (not the certgen Job pod)
+        kubectl wait --for=condition=ready pod/openshell-gateway-0 \
           -n tenant-a --timeout=120s || echo "Warning: gateway pod not ready after 120s"
 
         PF_DIR=/tmp/ambient-code ./scripts/setup-gateway-cli.sh tenant-a

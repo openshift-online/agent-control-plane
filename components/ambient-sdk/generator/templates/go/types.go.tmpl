@@ -103,3 +103,10 @@ func (b *{{.Resource.Name}}StatusPatchBuilder) Build() map[string]any {
 	return b.patch
 }
 {{end}}
+{{- range .Resource.ResponseSchemas}}
+type {{.Name}} struct {
+{{- range .Fields}}
+	{{.GoName}} {{.GoType}} {{.JSONTag}}
+{{- end}}
+}
+{{end}}

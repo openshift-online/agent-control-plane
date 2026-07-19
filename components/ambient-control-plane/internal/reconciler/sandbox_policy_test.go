@@ -7,6 +7,118 @@ import (
 	sandboxpb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/sandbox/v1"
 )
 
+func TestParsePolicySpec(t *testing.T) {
+	tests := []struct {
+		name    string
+		spec    string
+		wantErr bool
+		check   func(t *testing.T, p *sandboxpb.SandboxPolicy)
+	}{
+		{
+			name: "filesystem_policy key populates Filesystem field",
+			spec: `{"version":1,"filesystem_policy":{"include_workdir":true,"read_only":["/usr","/bin"],"read_write":["/workspace"]}}`,
+			check: func(t *testing.T, p *sandboxpb.SandboxPolicy) {
+				if p.Version != 1 {
+					t.Errorf("Version = %d, want 1", p.Version)
+				}
+				if p.Filesystem == nil {
+					t.Fatal("Filesystem is nil — filesystem_policy key was not mapped")
+				}
+				if !p.Filesystem.IncludeWorkdir {
+					t.Error("IncludeWorkdir = false, want true")
+				}
+				if len(p.Filesystem.ReadOnly) != 2 {
+					t.Errorf("ReadOnly count = %d, want 2", len(p.Filesystem.ReadOnly))
+				}
+				if len(p.Filesystem.ReadWrite) != 1 || p.Filesystem.ReadWrite[0] != "/workspace" {
+					t.Errorf("ReadWrite = %v, want [/workspace]", p.Filesystem.ReadWrite)
+				}
+			},
+		},
+		{
+			name: "no filesystem_policy key leaves Filesystem nil",
+			spec: `{"version":2,"landlock":{"compatibility":"best_effort"}}`,
+			check: func(t *testing.T, p *sandboxpb.SandboxPolicy) {
+				if p.Version != 2 {
+					t.Errorf("Version = %d, want 2", p.Version)
+				}
+				if p.Filesystem != nil {
+					t.Errorf("Filesystem = %v, want nil", p.Filesystem)
+				}
+				if p.Landlock == nil || p.Landlock.Compatibility != "best_effort" {
+					t.Errorf("Landlock not parsed correctly: %v", p.Landlock)
+				}
+			},
+		},
+		{
+			name: "network_policies parsed",
+			spec: `{"version":1,"filesystem_policy":{"read_only":["/usr"]},"network_policies":{"web":{"name":"web","endpoints":[{"host":"example.com","port":443}]}}}`,
+			check: func(t *testing.T, p *sandboxpb.SandboxPolicy) {
+				if p.Filesystem == nil {
+					t.Fatal("Filesystem is nil")
+				}
+				if len(p.NetworkPolicies) != 1 {
+					t.Fatalf("NetworkPolicies count = %d, want 1", len(p.NetworkPolicies))
+				}
+				rule := p.NetworkPolicies["web"]
+				if rule == nil || rule.Name != "web" {
+					t.Errorf("expected network policy 'web', got %v", rule)
+				}
+			},
+		},
+		{
+			name: "process policy parsed",
+			spec: `{"version":1,"process":{"run_as_user":"sandbox","run_as_group":"sandbox"}}`,
+			check: func(t *testing.T, p *sandboxpb.SandboxPolicy) {
+				if p.Process == nil {
+					t.Fatal("Process is nil")
+				}
+				if p.Process.RunAsUser != "sandbox" {
+					t.Errorf("RunAsUser = %q, want sandbox", p.Process.RunAsUser)
+				}
+				if p.Process.RunAsGroup != "sandbox" {
+					t.Errorf("RunAsGroup = %q, want sandbox", p.Process.RunAsGroup)
+				}
+			},
+		},
+		{
+			name:    "invalid JSON returns error",
+			spec:    "not-json{{{",
+			wantErr: true,
+		},
+		{
+			name: "empty filesystem_policy object",
+			spec: `{"version":1,"filesystem_policy":{}}`,
+			check: func(t *testing.T, p *sandboxpb.SandboxPolicy) {
+				if p.Filesystem == nil {
+					t.Fatal("Filesystem is nil for empty filesystem_policy object")
+				}
+				if len(p.Filesystem.ReadOnly) != 0 {
+					t.Errorf("ReadOnly = %v, want empty", p.Filesystem.ReadOnly)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			policy, err := parsePolicySpec(tt.spec)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.check != nil {
+				tt.check(t, policy)
+			}
+		})
+	}
+}
+
 func TestPlatformMergeOperations(t *testing.T) {
 	ops := platformMergeOperations("pr-42")
 	if len(ops) != 2 {

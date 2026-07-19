@@ -7,7 +7,7 @@ export { AmbientClient } from './client';
 export type { AmbientClientConfig, ListOptions, RequestOptions, ObjectReference, ListMeta, APIError } from './base';
 export { AmbientAPIError, buildQueryString } from './base';
 {{range .Spec.Resources}}
-export type { {{.Name}}, {{.Name}}List, {{.Name}}CreateRequest, {{.Name}}PatchRequest{{if .HasStatusPatch}}, {{.Name}}StatusPatchRequest{{end}} } from './{{.Name | snakeCase}}';
+export type { {{.Name}}, {{.Name}}List, {{.Name}}CreateRequest, {{.Name}}PatchRequest{{if .HasStatusPatch}}, {{.Name}}StatusPatchRequest{{end}}{{range .ResponseSchemas}}, {{.Name}}{{end}} } from './{{.Name | snakeCase}}';
 export { {{.Name}}Builder, {{.Name}}PatchBuilder{{if .HasStatusPatch}}, {{.Name}}StatusPatchBuilder{{end}} } from './{{.Name | snakeCase}}';
 export { {{.Name}}API } from './{{.Name | snakeCase}}_api';
 {{end}}

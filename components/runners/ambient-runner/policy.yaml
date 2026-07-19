@@ -5,7 +5,7 @@ version: 1
 
 # --- Sandbox setup configuration (queried once at startup) ---
 
-filesystem:
+filesystem_policy:
   include_workdir: true
   read_only:
     - /usr
@@ -17,11 +17,15 @@ filesystem:
     - /runner
     - /etc
     - /var/log
+    - /var/run/secrets
   read_write:
     - /sandbox
     - /tmp
     - /dev/null
+    - /dev/pts
+    - /dev/shm
     - /sandbox/.runner/logs
+    - /workspace
 
 landlock:
   compatibility: best_effort

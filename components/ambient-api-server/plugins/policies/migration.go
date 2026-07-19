@@ -41,7 +41,7 @@ func migration() *gormigrate.Migration {
 }
 
 // renameFilesystemPolicyKey renames the "filesystem_policy" key to "filesystem"
-// inside existing JSONB spec blobs to align with the proto field name.
+// inside existing JSONB spec blobs. Superseded by restoreFilesystemPolicyKey.
 func renameFilesystemPolicyKey() *gormigrate.Migration {
 	return &gormigrate.Migration{
 		ID: "202607080100",
@@ -62,6 +62,34 @@ func renameFilesystemPolicyKey() *gormigrate.Migration {
 				    updated_at = now()
 				WHERE spec IS NOT NULL
 				  AND spec ? 'filesystem'
+				  AND deleted_at IS NULL
+			`).Error
+		},
+	}
+}
+
+// restoreFilesystemPolicyKey renames the "filesystem" key back to
+// "filesystem_policy" to match the upstream openshell schema.
+func restoreFilesystemPolicyKey() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202607170100",
+		Migrate: func(tx *gorm.DB) error {
+			return tx.Exec(`
+				UPDATE policies
+				SET spec = (spec - 'filesystem') || jsonb_build_object('filesystem_policy', spec->'filesystem'),
+				    updated_at = now()
+				WHERE spec IS NOT NULL
+				  AND spec ? 'filesystem'
+				  AND deleted_at IS NULL
+			`).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return tx.Exec(`
+				UPDATE policies
+				SET spec = (spec - 'filesystem_policy') || jsonb_build_object('filesystem', spec->'filesystem_policy'),
+				    updated_at = now()
+				WHERE spec IS NOT NULL
+				  AND spec ? 'filesystem_policy'
 				  AND deleted_at IS NULL
 			`).Error
 		},

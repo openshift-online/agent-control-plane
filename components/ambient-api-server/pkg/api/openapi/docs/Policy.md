@@ -12,7 +12,7 @@ Name | Type | Description | Notes
 **ProjectId** | **string** | The project this policy belongs to | 
 **Name** | **string** | Human-readable identifier; unique within the project | 
 **Namespace** | Pointer to **string** | Source namespace where this policy was declared | [optional] 
-**Spec** | Pointer to **map[string]interface{}** | Full policy specification (network_policies, filesystem, process, landlock) | [optional] 
+**Spec** | Pointer to **map[string]interface{}** | Full policy specification (network_policies, filesystem_policy, process, landlock) | [optional] 
 **Labels** | Pointer to **string** |  | [optional] 
 **Annotations** | Pointer to **string** |  | [optional] 
 

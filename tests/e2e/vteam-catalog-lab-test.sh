@@ -16,16 +16,15 @@ NC='\033[0m'
 
 PASSED=0
 FAILED=0
-SKIPPED=0
 
 pass() { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
 fail() { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
-skip() { echo -e "  ${YELLOW}⊘${NC} $1"; SKIPPED=$((SKIPPED + 1)); }
+skip() { echo -e "  ${YELLOW}⊘${NC} $1 (skipped${2:+: $2})"; }
 section() { echo ""; echo -e "${BOLD}$1${NC}"; }
 
 finish() {
   echo ""
-  echo -e "${BOLD}Results:${NC} ${GREEN}${PASSED} passed${NC}, ${YELLOW}${SKIPPED} skipped${NC}, ${RED}${FAILED} failed${NC}"
+  echo -e "${BOLD}Results: ${GREEN}${PASSED} passed${NC}, ${RED}${FAILED} failed${NC}"
   if [ "$FAILED" -gt 0 ]; then
     exit 1
   fi
@@ -182,6 +181,10 @@ ensure_backend_port_forward() {
   fi
 }
 
+# ============================================================================
+# Section 1: Lab markdown quality gate
+# ============================================================================
+
 section "1. Lab markdown quality gate"
 
 [ -f "$LAB_DOC_ABS" ] || die "Lab doc exists: $LAB_DOC"
@@ -208,6 +211,10 @@ assert_doc_has 'provider list --project vteam-product-swarm' "Lab lists vTeam pr
 assert_doc_has 'agent start stella' "Lab includes Stella start command"
 assert_doc_has 'agent sessions stella --project vteam-product-swarm' "Lab includes Stella session inspection"
 
+# ============================================================================
+# Section 2: Prerequisites
+# ============================================================================
+
 section "2. Prerequisites"
 
 command -v jq >/dev/null 2>&1 || die "jq is installed"
@@ -228,19 +235,35 @@ else
   die "acpctl found"
 fi
 
+# ============================================================================
+# Section 3: Execute port-forward from markdown
+# ============================================================================
+
 section "3. Execute port-forward from markdown"
 
 run_doc_block "kind-port-forward-background" '/tmp/acp-kind-port-forward.log'
 
 ensure_backend_port_forward "Kind backend port-forward is healthy"
 
+# ============================================================================
+# Section 4: Execute login from markdown
+# ============================================================================
+
 section "4. Execute login from markdown"
 
 run_doc_block "kind-acpctl-login" 'make kind-acpctl-login'
 
+# ============================================================================
+# Section 5: Execute catalog apply from markdown
+# ============================================================================
+
 section "5. Execute catalog apply from markdown"
 
 run_doc_block_with_retry 3 "catalog-apply" "examples/vteam-catalog/product-swarm"
+
+# ============================================================================
+# Section 6: Verify ACP records from markdown commands
+# ============================================================================
 
 section "6. Verify ACP records from markdown commands"
 
@@ -271,6 +294,10 @@ for provider in vertex github jira; do
     fail "Provider exists: $provider"
   fi
 done
+
+# ============================================================================
+# Section 7: Optional Stella session
+# ============================================================================
 
 section "7. Optional Stella session"
 

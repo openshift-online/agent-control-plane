@@ -291,6 +291,13 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	}()
 	log.Info().Msg("application reconciler enabled")
 
+	clusterHealthSyncer := reconciler.NewClusterHealthSyncer(factory, time.Duration(cfg.ClusterHealthIntervalSeconds)*time.Second, log.Logger)
+	clusterHealthErrCh := make(chan error, 1)
+	go func() {
+		clusterHealthErrCh <- clusterHealthSyncer.Run(ctx)
+	}()
+	log.Info().Msg("cluster health syncer enabled")
+
 	select {
 	case tsErr := <-tsErrCh:
 		if tsErr != nil {
@@ -308,6 +315,8 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 			return fmt.Errorf("gateway provisioning: %w", gwErr)
 		}
 		return <-infErrCh
+	case clusterHealthErr := <-clusterHealthErrCh:
+		return fmt.Errorf("cluster health syncer: %w", clusterHealthErr)
 	}
 }
 

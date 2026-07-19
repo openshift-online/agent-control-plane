@@ -34,7 +34,7 @@ type Policy struct {
 	Name string `json:"name"`
 	// Source namespace where this policy was declared
 	Namespace *string `json:"namespace,omitempty"`
-	// Full policy specification (network_policies, filesystem, process, landlock)
+	// Full policy specification (network_policies, filesystem_policy, process, landlock)
 	Spec        map[string]interface{} `json:"spec,omitempty"`
 	Labels      *string                `json:"labels,omitempty"`
 	Annotations *string                `json:"annotations,omitempty"`

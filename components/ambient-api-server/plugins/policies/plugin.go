@@ -86,4 +86,5 @@ func init() {
 
 	db.RegisterMigration(migration())
 	db.RegisterMigration(renameFilesystemPolicyKey())
+	db.RegisterMigration(restoreFilesystemPolicyKey())
 }

@@ -44,6 +44,7 @@ Valid resource types:
   credentials         (aliases: credential, cred)
   applications        (aliases: application, app, apps)
   gateways            (aliases: gateway, gw)
+  clusters            (aliases: cluster, cl)
 `,
 	Args:    cobra.RangeArgs(1, 2),
 	RunE:    run,
@@ -161,8 +162,10 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 			}
 		}
 		return getGateways(ctx, gwClient, printer, name)
+	case "clusters":
+		return getClusters(ctx, client, printer, name)
 	default:
-		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-agents, project-settings, users, agents, providers, policies, roles, role-bindings, credentials, gateways", cmdArgs[0])
+		return fmt.Errorf("unknown resource type: %s\nValid types: sessions, projects, project-agents, project-settings, users, agents, providers, policies, roles, role-bindings, credentials, gateways, clusters", cmdArgs[0])
 	}
 }
 
@@ -194,6 +197,8 @@ func normalizeResource(r string) string {
 		return "applications"
 	case "gateway", "gateways", "gw":
 		return "gateways"
+	case "cluster", "clusters", "cl":
+		return "clusters"
 	default:
 		return r
 	}
@@ -1029,6 +1034,49 @@ func printGatewayConnectionInfo(w io.Writer, gw *sdktypes.Gateway) {
 	} else {
 		fmt.Fprintf(w, "  acpctl gateway setup-cli %s --kubectl\n", gw.Name)
 	}
+}
+
+func getClusters(ctx context.Context, client *sdkclient.Client, printer *output.Printer, name string) error {
+	if name != "" {
+		cluster, err := client.Clusters().Get(ctx, name)
+		if err != nil {
+			return fmt.Errorf("get cluster %q: %w", name, err)
+		}
+		if printer.Format() == output.FormatJSON {
+			return printer.PrintJSON(cluster)
+		}
+		return printClusterTable(printer, []sdktypes.Cluster{*cluster})
+	}
+	opts := sdktypes.NewListOptions().Size(args.limit).Build()
+	list, err := client.Clusters().List(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("list clusters: %w", err)
+	}
+	if printer.Format() == output.FormatJSON {
+		return printer.PrintJSON(list)
+	}
+	return printClusterTable(printer, list.Items)
+}
+
+func printClusterTable(printer *output.Printer, clusters []sdktypes.Cluster) error {
+	columns := []output.Column{
+		{Name: "ID", Width: 27},
+		{Name: "NAME", Width: 24},
+		{Name: "ROLE", Width: 10},
+		{Name: "API SERVER", Width: 40},
+		{Name: "STATUS", Width: 12},
+		{Name: "AGE", Width: 10},
+	}
+	table := output.NewTable(printer.Writer(), columns)
+	table.WriteHeaders()
+	for _, c := range clusters {
+		age := ""
+		if c.CreatedAt != nil {
+			age = output.FormatAge(time.Since(*c.CreatedAt))
+		}
+		table.WriteRow(c.ID, c.Name, c.Role, c.APIServerURL, c.Status, age)
+	}
+	return nil
 }
 
 func sessionChanged(old, current sdktypes.Session) bool {

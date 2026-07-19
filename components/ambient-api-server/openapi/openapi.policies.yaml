@@ -236,7 +236,7 @@ components:
             spec:
               type: object
               additionalProperties: true
-              description: Full policy specification (network_policies, filesystem, process, landlock)
+              description: Full policy specification (network_policies, filesystem_policy, process, landlock)
             labels:
               type: string
             annotations:

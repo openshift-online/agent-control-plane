@@ -84,3 +84,10 @@ export class {{.Resource.Name}}StatusPatchBuilder {
   }
 }
 {{end}}
+{{- range .Resource.ResponseSchemas}}
+export type {{.Name}} = {
+{{- range .Fields}}
+  {{.Name}}: {{.TSType}};
+{{- end}}
+};
+{{end}}

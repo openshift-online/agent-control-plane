@@ -353,7 +353,7 @@ func TestReadProviderSecretCredentials(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestResolveAgentSandboxPolicy(t *testing.T) {
-	validSpec := `{"version":1,"filesystem":{"includeWorkdir":true}}`
+	validSpec := `{"version":1,"filesystem_policy":{"include_workdir":true,"read_only":["/usr"],"read_write":["/workspace"]}}`
 
 	tests := []struct {
 		name       string
@@ -449,6 +449,20 @@ func TestResolveAgentSandboxPolicy(t *testing.T) {
 			}
 			if tt.wantPolicy && policy.Version != 1 {
 				t.Errorf("expected policy version 1, got %d", policy.Version)
+			}
+			if tt.wantPolicy && policy.Filesystem == nil {
+				t.Fatal("expected Filesystem to be populated from filesystem_policy key")
+			}
+			if tt.wantPolicy && policy.Filesystem != nil {
+				if !policy.Filesystem.IncludeWorkdir {
+					t.Error("expected Filesystem.IncludeWorkdir to be true")
+				}
+				if len(policy.Filesystem.ReadOnly) != 1 || policy.Filesystem.ReadOnly[0] != "/usr" {
+					t.Errorf("expected Filesystem.ReadOnly=[/usr], got %v", policy.Filesystem.ReadOnly)
+				}
+				if len(policy.Filesystem.ReadWrite) != 1 || policy.Filesystem.ReadWrite[0] != "/workspace" {
+					t.Errorf("expected Filesystem.ReadWrite=[/workspace], got %v", policy.Filesystem.ReadWrite)
+				}
 			}
 		})
 	}
