@@ -124,7 +124,14 @@ func init() {
 func run(cmd *cobra.Command, cmdArgs []string) error {
 	resource := strings.ToLower(cmdArgs[0])
 
-	client, err := connection.NewClientFromConfig()
+	var client *sdkclient.Client
+	var err error
+
+	if resource == "project" || resource == "proj" {
+		client, err = newProjectScopedClient()
+	} else {
+		client, err = connection.NewClientFromConfig()
+	}
 	if err != nil {
 		return err
 	}
@@ -157,6 +164,24 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	default:
 		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-agent, agent, role, role-binding, gateway, cluster", cmdArgs[0])
 	}
+}
+
+func newProjectScopedClient() (*sdkclient.Client, error) {
+	factory, err := connection.NewClientFactory()
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+
+	project := cfg.GetProject()
+	if project == "" {
+		project = "_"
+	}
+	return factory.ForProject(project)
 }
 
 func warnUnusedFlags(cmd *cobra.Command, names ...string) {
