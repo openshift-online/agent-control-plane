@@ -142,60 +142,65 @@ fi
 
 log "Creating secrets"
 
-DB_PASS=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")
-SESSION_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
-KC_CLIENT_SECRET="acp-$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")"
-OIDC_CLIENT_SECRET="cp-$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")"
-ENCRYPTION_KEY=$(openssl rand -base64 32 2>/dev/null || python3 -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())")
+EXISTING_DB_PASS=$($CLI get secret ambient-api-server-db -n "$NAMESPACE" \
+  -o jsonpath='{.data.db\.password}' 2>/dev/null | base64 -d 2>/dev/null || true)
+EXISTING_KC_SECRET=$($CLI get secret sso-credentials -n "$NAMESPACE" \
+  -o jsonpath='{.data.SSO_CLIENT_SECRET}' 2>/dev/null | base64 -d 2>/dev/null || true)
+EXISTING_OIDC_SECRET=$($CLI get secret ambient-control-plane-oidc -n "$NAMESPACE" \
+  -o jsonpath='{.data.client-secret}' 2>/dev/null | base64 -d 2>/dev/null || true)
+EXISTING_ENCRYPTION_KEY=$($CLI get secret credential-encryption-key -n "$NAMESPACE" \
+  -o jsonpath='{.data.keyring}' 2>/dev/null | base64 -d 2>/dev/null || true)
+EXISTING_ENCRYPTION_VER=$($CLI get secret credential-encryption-key -n "$NAMESPACE" \
+  -o jsonpath='{.data.version}' 2>/dev/null | base64 -d 2>/dev/null || true)
+EXISTING_SESSION_SECRET=$($CLI get secret sso-credentials -n "$NAMESPACE" \
+  -o jsonpath='{.data.SESSION_SECRET}' 2>/dev/null | base64 -d 2>/dev/null || true)
 
-if ! $CLI get secret ambient-api-server-db -n "$NAMESPACE" &>/dev/null; then
-  $CLI create secret generic ambient-api-server-db -n "$NAMESPACE" \
-    --from-literal=db.host=ambient-api-server-db \
-    --from-literal=db.port=5432 \
-    --from-literal=db.user=ambient \
-    --from-literal="db.password=$DB_PASS" \
-    --from-literal=db.name=ambient_api_server \
-    --from-literal=db.ca_cert=""
-  ok "Created ambient-api-server-db secret"
+DB_PASS="${EXISTING_DB_PASS:-$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")}"
+SESSION_SECRET="${EXISTING_SESSION_SECRET:-$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")}"
+KC_CLIENT_SECRET="${EXISTING_KC_SECRET:-acp-$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")}"
+OIDC_CLIENT_SECRET="${EXISTING_OIDC_SECRET:-cp-$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")}"
+if [[ -n "$EXISTING_ENCRYPTION_KEY" ]]; then
+  ENCRYPTION_KEYRING="$EXISTING_ENCRYPTION_KEY"
+  ENCRYPTION_VER="$EXISTING_ENCRYPTION_VER"
 else
-  ok "Secret exists: ambient-api-server-db"
+  RAW_KEY="$(openssl rand -base64 32 2>/dev/null || python3 -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())")"
+  ENCRYPTION_KEYRING="{\"1\":\"$RAW_KEY\"}"
+  ENCRYPTION_VER="1"
 fi
 
-if ! $CLI get secret ambient-api-server -n "$NAMESPACE" &>/dev/null; then
-  $CLI create secret generic ambient-api-server -n "$NAMESPACE" \
-    --from-literal=clientId=ambient-control-plane \
-    --from-literal=clientSecret="$OIDC_CLIENT_SECRET"
-  ok "Created ambient-api-server secret"
-else
-  ok "Secret exists: ambient-api-server"
-fi
+$CLI create secret generic ambient-api-server-db -n "$NAMESPACE" \
+  --from-literal=db.host=ambient-api-server-db \
+  --from-literal=db.port=5432 \
+  --from-literal=db.user=ambient \
+  --from-literal="db.password=$DB_PASS" \
+  --from-literal=db.name=ambient_api_server \
+  --from-literal=db.ca_cert="" \
+  --dry-run=client -o yaml | $CLI apply -f -
+ok "Reconciled ambient-api-server-db secret"
 
-if ! $CLI get secret ambient-control-plane-oidc -n "$NAMESPACE" &>/dev/null; then
-  $CLI create secret generic ambient-control-plane-oidc -n "$NAMESPACE" \
-    --from-literal=client-id=ambient-control-plane \
-    --from-literal=client-secret="$OIDC_CLIENT_SECRET"
-  ok "Created ambient-control-plane-oidc secret"
-else
-  ok "Secret exists: ambient-control-plane-oidc"
-fi
+$CLI create secret generic ambient-api-server -n "$NAMESPACE" \
+  --from-literal=clientId=ambient-control-plane \
+  --from-literal=clientSecret="$OIDC_CLIENT_SECRET" \
+  --dry-run=client -o yaml | $CLI apply -f -
+ok "Reconciled ambient-api-server secret"
 
-if ! $CLI get secret credential-encryption-key -n "$NAMESPACE" &>/dev/null; then
-  $CLI create secret generic credential-encryption-key -n "$NAMESPACE" \
-    --from-literal=keyring="{\"1\":\"$ENCRYPTION_KEY\"}" \
-    --from-literal=version=1
-  ok "Created credential-encryption-key secret"
-else
-  ok "Secret exists: credential-encryption-key"
-fi
+$CLI create secret generic ambient-control-plane-oidc -n "$NAMESPACE" \
+  --from-literal=client-id=ambient-control-plane \
+  --from-literal=client-secret="$OIDC_CLIENT_SECRET" \
+  --dry-run=client -o yaml | $CLI apply -f -
+ok "Reconciled ambient-control-plane-oidc secret"
+
+$CLI create secret generic credential-encryption-key -n "$NAMESPACE" \
+  --from-literal=keyring="$ENCRYPTION_KEYRING" \
+  --from-literal=version="$ENCRYPTION_VER" \
+  --dry-run=client -o yaml | $CLI apply -f -
+ok "Reconciled credential-encryption-key secret"
 
 if [[ "$USE_VERTEX" == "1" ]]; then
-  if ! $CLI get secret ambient-vertex -n "$NAMESPACE" &>/dev/null; then
-    $CLI create secret generic ambient-vertex -n "$NAMESPACE" \
-      --from-file="$VERTEX_KEY_FILENAME=$VERTEX_SA_KEY_FILE"
-    ok "Created ambient-vertex secret"
-  else
-    ok "Secret exists: ambient-vertex"
-  fi
+  $CLI create secret generic ambient-vertex -n "$NAMESPACE" \
+    --from-file="$VERTEX_KEY_FILENAME=$VERTEX_SA_KEY_FILE" \
+    --dry-run=client -o yaml | $CLI apply -f -
+  ok "Reconciled ambient-vertex secret"
 fi
 
 # ── ServiceAccount + RBAC ────────────────────────────────────────────────────
@@ -621,19 +626,16 @@ SSO_ISSUER_URL="${KEYCLOAK_REALM_URL}"
 SSO_FRONTEND_ISSUER_URL="${KEYCLOAK_REALM_URL}"
 SSO_REDIRECT_URI="https://${UI_ROUTE_HOST:-ambient-ui-${NAMESPACE}.${CLUSTER_DOMAIN:-apps.local}}/api/auth/sso/callback"
 
-if ! $CLI get secret sso-credentials -n "$NAMESPACE" &>/dev/null; then
-  $CLI create secret generic sso-credentials -n "$NAMESPACE" \
-    --from-literal=SSO_ISSUER_URL="$SSO_ISSUER_URL" \
-    --from-literal=SSO_FRONTEND_ISSUER_URL="$SSO_FRONTEND_ISSUER_URL" \
-    --from-literal=SSO_CLIENT_ID=ambient-frontend \
-    --from-literal=SSO_CLIENT_SECRET="$KC_CLIENT_SECRET" \
-    --from-literal=SSO_AUDIENCE=ambient-frontend \
-    --from-literal=SESSION_SECRET="$SESSION_SECRET" \
-    --from-literal=SSO_REDIRECT_URI="$SSO_REDIRECT_URI"
-  ok "Created sso-credentials secret"
-else
-  ok "Secret exists: sso-credentials"
-fi
+$CLI create secret generic sso-credentials -n "$NAMESPACE" \
+  --from-literal=SSO_ISSUER_URL="$SSO_ISSUER_URL" \
+  --from-literal=SSO_FRONTEND_ISSUER_URL="$SSO_FRONTEND_ISSUER_URL" \
+  --from-literal=SSO_CLIENT_ID=ambient-frontend \
+  --from-literal=SSO_CLIENT_SECRET="$KC_CLIENT_SECRET" \
+  --from-literal=SSO_AUDIENCE=ambient-frontend \
+  --from-literal=SESSION_SECRET="$SESSION_SECRET" \
+  --from-literal=SSO_REDIRECT_URI="$SSO_REDIRECT_URI" \
+  --dry-run=client -o yaml | $CLI apply -f -
+ok "Reconciled sso-credentials secret"
 
 # ── Auth ConfigMap (JWKS from Keycloak) ──────────────────────────────────────
 
