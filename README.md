@@ -49,6 +49,40 @@ ACP organizes work around a few core concepts:
 - **CLI and SDK**: `acpctl` CLI and generated SDKs (Go, Python, TypeScript) for automation
 - **MCP Integration**: Model Context Protocol server exposing platform resources as tools, deployed as sidecar or public endpoint
 
+### OpenShell as a Service
+
+ACP provides self-service OpenShell gateway provisioning — users request a gateway through the CLI and the control plane handles the full lifecycle on Kubernetes. This turns OpenShell into a managed service where platform teams configure the infrastructure once and users get isolated sandbox environments on demand.
+
+**How it works:**
+
+1. A platform admin creates a namespace on the cluster (e.g., `oc new-project tenant-c`)
+2. A user creates a project in ACP and requests a gateway:
+   ```bash
+   acpctl create project --name my-project
+   acpctl create gateway --project my-project
+   ```
+3. The control plane reconciles and provisions:
+   - An OpenShell gateway pod in the project namespace
+   - cert-manager certificates for gateway TLS
+   - A GRPCRoute with BackendTLSPolicy for end-to-end encryption from the edge to the gateway
+4. The user retrieves gateway connection details and registers it with their local OpenShell CLI:
+   ```bash
+   acpctl get gateway --project my-project
+   acpctl gateway setup-cli --project my-project --print
+   ```
+5. OIDC authentication gates access — users log in through the configured identity provider
+6. Users create and manage sandboxes through the gateway:
+   ```bash
+   openshell sandbox create
+   openshell sandbox list
+   ```
+
+Each sandbox runs as an isolated pod on the cluster, with credentials managed through OpenShell providers.
+
+**POC on OpenShift:**
+
+This flow has been validated on OpenShift Local (CRC). The [gateway lifecycle demo script](components/ambient-cli/demo-gateway-lifecycle.sh) walks through the full provisioning flow in a split-pane tmux session — platform admin actions on top, user actions on the bottom. See [Setup for OpenShift Local](#setup-for-openshift-local-crc) for prerequisites.
+
 ## Getting Started
 
 **Try it locally** — spin up ACP in a Kind cluster and run agents on your machine:
