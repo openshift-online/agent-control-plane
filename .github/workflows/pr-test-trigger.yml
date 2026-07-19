@@ -109,6 +109,7 @@ jobs:
     with:
       image-tag: "pr-${{ needs.gate.outputs.pr-number }}"
       pr-number: "${{ needs.gate.outputs.pr-number }}"
+      head-sha: ${{ needs.gate.outputs.head-sha }}
     secrets:
       STAGE_KUBECONFIG: ${{ secrets.STAGE_KUBECONFIG }}
       VERTEX_SA_KEY: ${{ secrets.VERTEX_SA_KEY }}

@@ -224,7 +224,7 @@ AMBIENT_TOKEN=${TOKEN}
 export AMBIENT_REQUEST_TIMEOUT=30
 
 show_cmd "$ACPCTL login --token \$TOKEN --url ${API_URL} --insecure-skip-tls-verify"
-"$ACPCTL" login --token "${TOKEN}" --url "${API_URL}" --insecure-skip-tls-verify >/dev/null 2>&1 || true
+"$ACPCTL" login --token "${TOKEN}" --url "${API_URL}" --insecure-skip-tls-verify 2>&1 || true
 
 show_cmd "$ACPCTL whoami"
 WHOAMI=$("$ACPCTL" whoami 2>&1 || true)
@@ -247,17 +247,25 @@ RUN_ID=$(date +%s | tail -c5)
 PROJECT_NAME="e2e-smoke-${RUN_ID}"
 
 show_cmd "$ACPCTL create project --name ${PROJECT_NAME} --description 'e2e smoke test'"
-PROJECT_JSON=$("$ACPCTL" create project \
-  --name "${PROJECT_NAME}" \
-  --description "e2e smoke test" \
-  -o json 2>/dev/null || true)
-
-PROJECT_ID=$(json_field "$PROJECT_JSON" "id")
+PROJECT_JSON=
+PROJECT_ID=
+for _attempt in $(seq 1 6); do
+  PROJECT_JSON=$("$ACPCTL" create project \
+    --name "${PROJECT_NAME}" \
+    --description "e2e smoke test" \
+    -o json 2>&1 || true)
+  PROJECT_ID=$(json_field "$PROJECT_JSON" "id")
+  if [[ -n "$PROJECT_ID" && "$PROJECT_ID" != "" ]]; then
+    break
+  fi
+  dim "    attempt ${_attempt}/6 failed, retrying in 10s... (${PROJECT_JSON:0:200})"
+  sleep 10
+done
 
 if [[ -n "$PROJECT_ID" && "$PROJECT_ID" != "" ]]; then
   pass "Project created: $PROJECT_ID"
 else
-  fail_test "Project creation failed (response: ${PROJECT_JSON:0:200})"
+  fail_test "Project creation failed after 6 attempts (response: ${PROJECT_JSON:0:200})"
   echo ""
   bold "Results: $PASS passed, $FAIL failed"
   exit 1
@@ -265,13 +273,13 @@ fi
 
 echo ""
 show_cmd "$ACPCTL project ${PROJECT_NAME}"
-"$ACPCTL" project "${PROJECT_NAME}" >/dev/null 2>&1 || true
+"$ACPCTL" project "${PROJECT_NAME}" 2>&1 || true
 
 show_cmd "$ACPCTL create session --name smoke-test-${RUN_ID} --project ${PROJECT_NAME}"
 SESSION_JSON=$("$ACPCTL" create session \
   --name "smoke-test-${RUN_ID}" \
   --project "${PROJECT_NAME}" \
-  -o json 2>/dev/null || true)
+  -o json 2>&1 || true)
 
 SESSION_ID=$(json_field "$SESSION_JSON" "id")
 
@@ -293,7 +301,7 @@ LAST_PHASE=""
 SESSION_RUNNING=false
 
 while [[ $(date +%s) -lt $DEADLINE ]]; do
-  PHASE=$("$ACPCTL" get session "${SESSION_ID}" -o json 2>/dev/null | \
+  PHASE=$("$ACPCTL" get session "${SESSION_ID}" -o json 2>&1 | \
     python3 -c "import json,sys; print(json.load(sys.stdin).get('phase',''))" 2>/dev/null || true)
 
   if [[ "$PHASE" != "$LAST_PHASE" ]]; then
@@ -334,6 +342,7 @@ if [[ "$SESSION_RUNNING" == "true" ]]; then
 
   show_cmd "$ACPCTL session send ${SESSION_ID} '${PROMPT_TEXT}'"
   SEND_OUTPUT=$("$ACPCTL" session send "${SESSION_ID}" "${PROMPT_TEXT}" 2>&1 || true)
+  dim "    ${SEND_OUTPUT}"
 
   if echo "$SEND_OUTPUT" | grep -qi "sent\|seq"; then
     pass "Message sent to session"
@@ -349,7 +358,7 @@ if [[ "$SESSION_RUNNING" == "true" ]]; then
   LLM_RESPONDED=false
 
   while [[ $(date +%s) -lt $MSG_DEADLINE ]]; do
-    MESSAGES=$("$ACPCTL" session messages "${SESSION_ID}" -o json 2>/dev/null || true)
+    MESSAGES=$("$ACPCTL" session messages "${SESSION_ID}" -o json 2>&1 || true)
 
     HAS_RESPONSE=$(echo "$MESSAGES" | python3 -c "
 import json, sys
@@ -420,17 +429,17 @@ echo ""
 
 if [[ "$SKIP_CLEANUP" != "1" && -n "$SESSION_ID" ]]; then
   show_cmd "$ACPCTL stop ${SESSION_ID}"
-  "$ACPCTL" stop "${SESSION_ID}" >/dev/null 2>&1 || true
+  "$ACPCTL" stop "${SESSION_ID}" 2>&1 || true
   dim "  Session stopped"
 
   sleep 3
 
   show_cmd "$ACPCTL delete session ${SESSION_ID} -y"
-  "$ACPCTL" delete session "${SESSION_ID}" -y >/dev/null 2>&1 || true
+  "$ACPCTL" delete session "${SESSION_ID}" -y 2>&1 || true
   dim "  Session deleted"
 
   show_cmd "$ACPCTL delete project ${PROJECT_NAME} -y"
-  "$ACPCTL" delete project "${PROJECT_NAME}" -y >/dev/null 2>&1 || true
+  "$ACPCTL" delete project "${PROJECT_NAME}" -y 2>&1 || true
   dim "  Project deleted"
 
   pass "Test resources cleaned up"

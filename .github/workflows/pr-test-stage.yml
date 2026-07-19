@@ -11,6 +11,10 @@ on:
         description: 'PR number (extracted from image-tag if not provided)'
         required: false
         type: string
+      head-sha:
+        description: 'PR head commit SHA for checkout (defaults to default branch)'
+        required: false
+        type: string
     secrets:
       STAGE_KUBECONFIG:
         required: true
@@ -48,6 +52,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.head-sha || github.sha }}
+          persist-credentials: false
 
       - name: Install oc CLI
         uses: redhat-actions/openshift-tools-installer@144527c7d98999f2652264c048c7a9bd103f8a82 # v1.13.1
@@ -113,6 +120,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.head-sha || github.sha }}
+          persist-credentials: false
 
       - name: Install oc CLI
         uses: redhat-actions/openshift-tools-installer@144527c7d98999f2652264c048c7a9bd103f8a82 # v1.13.1
