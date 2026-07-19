@@ -7,17 +7,17 @@ import (
 )
 
 type Resource struct {
-	Name              string
-	Plural            string
-	PathSegment       string
-	ParentPath        string
-	Fields            []Field
-	RequiredFields    []string
-	PatchFields       []Field
-	StatusPatchFields []Field
-	HasDelete         bool
-	HasPatch          bool
-	HasStatusPatch    bool
+	Name                 string
+	Plural               string
+	PathSegment          string
+	ParentPath           string
+	Fields               []Field
+	RequiredFields       []string
+	PatchFields          []Field
+	StatusPatchFields    []Field
+	HasDelete            bool
+	HasPatch             bool
+	HasStatusPatch       bool
 	Actions              []Action
 	ResponseSchemas      []ResponseSchema
 	CrossResourceImports []CrossResourceImport
