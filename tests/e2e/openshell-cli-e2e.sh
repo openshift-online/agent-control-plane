@@ -53,7 +53,6 @@ KEYCLOAK_ADMIN_PASS="${KEYCLOAK_ADMIN_PASS:-admin}"
 
 # API URL
 PF_PID=""
-GW_PF_PID=""
 PF_PORT=18768
 if [ -n "${API_URL:-}" ] && [ "${API_URL}" != "http://localhost:" ]; then
   :
@@ -94,47 +93,11 @@ section() {
   sep
 }
 
-# Start (or restart) the port-forward to the gateway gRPC port.
-# Sets gw_port and GW_PF_PID; updates GW_URL. Kills any prior port-forward first.
-start_gw_portforward() {
-  kill "${GW_PF_PID}" 2>/dev/null || true
-  local _gw_log
-  _gw_log=$(mktemp)
-  kubectl port-forward -n "${TENANT}" statefulset/openshell-gateway ":8080" \
-    >"$_gw_log" 2>&1 &
-  GW_PF_PID=$!
-  gw_port=""
-  for _i in $(seq 1 30); do
-    if [ -s "$_gw_log" ]; then
-      gw_port=$(grep -oE 'Forwarding from 127\.0\.0\.1:[0-9]+' "$_gw_log" | grep -oE '[0-9]+$' | head -1)
-      [ -n "$gw_port" ] && break
-    fi
-    sleep 0.2
-  done
-  rm -f "$_gw_log"
-  GW_URL="https://localhost:${gw_port}"
-}
-
-# Provision TLS certs for the openshell CLI from cluster secrets.
-# In --gateway-url mode with OIDC credentials, acpctl does not fetch the CA
-# cert, so the openshell CLI cannot verify the gateway's server cert.
-_provision_gw_certs() {
-  local mtls_dir="$HOME/.config/openshell/gateways/${GATEWAY_NAME}/mtls"
-  mkdir -p "$mtls_dir"
-  kubectl get secret openshell-ca-tls -n "$TENANT" \
-    -o jsonpath='{.data.ca\.crt}' | base64 -d > "$mtls_dir/ca.crt"
-  kubectl get secret openshell-client-tls -n "$TENANT" \
-    -o jsonpath='{.data.tls\.crt}' | base64 -d > "$mtls_dir/tls.crt"
-  kubectl get secret openshell-client-tls -n "$TENANT" \
-    -o jsonpath='{.data.tls\.key}' | base64 -d > "$mtls_dir/tls.key"
-}
-
-# Restart port-forward and re-register gateway to recover from stale connections.
+# Re-register gateway via --kubectl to recover from stale port-forward connections.
+# --kubectl starts its own port-forward and fetches TLS certs from the cluster.
 _refresh_gateway() {
-  start_gw_portforward
   openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
-  _provision_gw_certs
-  $ACPCTL gateway setup-cli --gateway-url "$GW_URL" --project "$TENANT" >/dev/null 2>&1 || true
+  $ACPCTL gateway setup-cli --kubectl --project "$TENANT" >/dev/null 2>&1 || true
 }
 
 # Run a command with visibility: print it, execute, capture + display output.
@@ -165,7 +128,6 @@ cleanup() {
       echo -e "  Retained provider: ${CREATED_PROVIDER}"
     fi
     kill "${PF_PID}" 2>/dev/null || true
-    kill "${GW_PF_PID}" 2>/dev/null || true
     return
   fi
 
@@ -199,7 +161,6 @@ cleanup() {
   fi
 
   kill "${PF_PID}" 2>/dev/null || true
-  kill "${GW_PF_PID}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
@@ -383,20 +344,11 @@ if [ "${GW_READY}" -lt 1 ]; then
 fi
 pass "openshell-gateway StatefulSet ready in ${TENANT}"
 
-# Port-forward to gateway gRPC port
-start_gw_portforward
-
-if [ -z "$gw_port" ]; then
-  fail "Could not establish port-forward to gateway gRPC endpoint"
-  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
-  exit 1
-fi
-pass "Gateway port-forward established (localhost:${gw_port})"
+# Register gateway via --kubectl (starts port-forward + fetches TLS certs)
 GATEWAY_NAME="${TENANT}-openshell-gateway"
 openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
 
-_provision_gw_certs
-run_cmd $ACPCTL gateway setup-cli --gateway-url "$GW_URL" --project "$TENANT"
+run_cmd $ACPCTL gateway setup-cli --kubectl --project "$TENANT"
 if [ "$CMD_RC" -eq 0 ]; then
   pass "Gateway registered via acpctl setup-cli as '${GATEWAY_NAME}'"
 else
@@ -457,10 +409,8 @@ run_cmd $ACPCTL login --password-grant \
   --client-id "$KEYCLOAK_CLIENT_ID" \
   --issuer-url "$KEYCLOAK_ISSUER" \
   --url "$API_URL" --project "$TENANT"
-start_gw_portforward
 openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
-_provision_gw_certs
-run_cmd $ACPCTL gateway setup-cli --gateway-url "$GW_URL" --project "$TENANT"
+run_cmd $ACPCTL gateway setup-cli --kubectl --project "$TENANT"
 
 # List sandboxes
 run_cmd openshell sandbox list --gateway "$GATEWAY_NAME"
@@ -547,8 +497,7 @@ fi
 
 # Re-register gateway with admin credentials
 openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
-_provision_gw_certs
-run_cmd $ACPCTL gateway setup-cli --gateway-url "$GW_URL" --project "$TENANT"
+run_cmd $ACPCTL gateway setup-cli --kubectl --project "$TENANT"
 if [ "$CMD_RC" -eq 0 ]; then
   pass "Gateway re-registered with admin credentials"
 else
