@@ -52,7 +52,7 @@ Kubernetes (StatefulSet, Service, RBAC, certgen Job, NetworkPolicy)
 
 A Gateway resource carries an optional `cluster_id` FK that targets a specific registered Cluster. When `cluster_id` is null, the gateway is deployed on the local cluster (backward compatible). When set, the GatewayReconciler obtains the target cluster's `KubeClient` from the `ClusterClientPool` and deploys gateway K8s resources on that cluster.
 
-This enables dedicated gateway clusters — clusters with `role=gateway` that host nothing but OpenShell gateways, while session workloads run on separate `role=workload` clusters. The GatewayReconciler is responsible for:
+This enables dedicated gateway clusters — clusters with `role=gateway` that host nothing but OpenShell gateways, while session sandboxes run on separate `role=sandbox` clusters. The GatewayReconciler is responsible for:
 
 1. Deploying gateway K8s resources (StatefulSet, Service, RBAC, certgen Job) on the target cluster
 2. Creating an externally reachable endpoint (LoadBalancer Service or Ingress/Route) when the gateway serves workloads on a different cluster
@@ -586,7 +586,7 @@ When a Gateway is deployed on a cluster different from where sessions run, the G
 #### Scenario: Gateway on dedicated gateway cluster
 
 - GIVEN a Gateway resource with `cluster_id` set to a `role=gateway` cluster
-- AND sessions will run on `role=workload` clusters
+- AND sessions will run on `role=sandbox` clusters
 - WHEN the GatewayReconciler reconciles the Gateway
 - THEN it SHALL deploy gateway K8s resources on the target cluster using the `ClusterClientPool`
 - AND it SHALL create a `LoadBalancer` Service (or Ingress/Route, depending on cluster capabilities) exposing the gateway's gRPC port externally

@@ -87,7 +87,7 @@ func init() {
 	Cmd.Flags().StringVar(&createArgs.bindCredID, "credential-id-fk", "", "Credential FK for role-binding")
 	Cmd.Flags().StringVar(&createArgs.scopeID, "scope-id", "", "Scope target ID for role-binding (shorthand for --{scope}-id-fk)")
 	Cmd.Flags().StringVar(&createArgs.apiServerURL, "api-server-url", "", "Cluster API server URL")
-	Cmd.Flags().StringVar(&createArgs.role, "role", "", "Cluster role (gateway, workload, hybrid)")
+	Cmd.Flags().StringVar(&createArgs.role, "role", "", "Cluster role (gateway, sandbox)")
 	Cmd.Flags().StringVar(&createArgs.credentialID, "credential-id", "", "Credential ID for cluster")
 }
 
@@ -371,7 +371,7 @@ func createCluster(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 		return fmt.Errorf("--api-server-url is required")
 	}
 	if createArgs.role == "" {
-		return fmt.Errorf("--role is required (gateway, workload, hybrid)")
+		return fmt.Errorf("--role is required (gateway, sandbox)")
 	}
 
 	builder := sdktypes.NewClusterBuilder().

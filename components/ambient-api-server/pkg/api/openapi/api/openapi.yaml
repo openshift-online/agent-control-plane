@@ -8283,8 +8283,7 @@ components:
             description: Cluster scheduling role
             enum:
             - gateway
-            - workload
-            - hybrid
+            - sandbox
             type: string
           status:
             description: Health status (server-managed)
@@ -8403,8 +8402,7 @@ components:
         role:
           enum:
           - gateway
-          - workload
-          - hybrid
+          - sandbox
           type: string
         labels:
           type: string

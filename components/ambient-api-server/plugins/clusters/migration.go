@@ -16,7 +16,7 @@ func migration() *gormigrate.Migration {
 		Description     *string
 		ApiServerUrl    string  `gorm:"not null"`
 		CredentialId    *string `gorm:"index"`
-		Role            string  `gorm:"not null;default:'hybrid'"`
+		Role            string  `gorm:"not null;default:'sandbox'"`
 		Status          string  `gorm:"not null;default:'Unknown'"`
 		StatusMessage   *string
 		Labels          *string `gorm:"type:jsonb"`
@@ -31,7 +31,10 @@ func migration() *gormigrate.Migration {
 			if err := tx.AutoMigrate(&Cluster{}); err != nil {
 				return err
 			}
-			return tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_clusters_name ON clusters (name) WHERE deleted_at IS NULL").Error
+			if err := tx.Exec("DROP INDEX IF EXISTS idx_clusters_name").Error; err != nil {
+				return err
+			}
+			return tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_clusters_name_url_role ON clusters (name, api_server_url, role) WHERE deleted_at IS NULL").Error
 		},
 		Rollback: func(tx *gorm.DB) error {
 			return tx.Migrator().DropTable(&Cluster{})

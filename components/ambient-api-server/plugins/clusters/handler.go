@@ -79,7 +79,7 @@ func (h *clusterHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			}
 			if patch.Role != nil {
 				if !validRoles[*patch.Role] {
-					return nil, errors.Validation("invalid cluster role: must be gateway, workload, or hybrid")
+					return nil, errors.Validation("invalid cluster role: must be gateway or sandbox")
 				}
 				found.Role = *patch.Role
 			}

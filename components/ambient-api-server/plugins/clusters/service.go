@@ -18,9 +18,8 @@ var (
 )
 
 var validRoles = map[string]bool{
-	"gateway":  true,
-	"workload": true,
-	"hybrid":   true,
+	"gateway": true,
+	"sandbox": true,
 }
 
 type ClusterService interface {
@@ -83,7 +82,7 @@ func (s *sqlClusterService) Get(ctx context.Context, id string) (*Cluster, *erro
 
 func (s *sqlClusterService) Create(ctx context.Context, cluster *Cluster) (*Cluster, *errors.ServiceError) {
 	if !validRoles[cluster.Role] {
-		return nil, errors.Validation("invalid cluster role: must be gateway, workload, or hybrid")
+		return nil, errors.Validation("invalid cluster role: must be gateway or sandbox")
 	}
 
 	cluster.Status = "Unknown"

@@ -235,8 +235,7 @@ components:
               type: string
               enum:
                 - gateway
-                - workload
-                - hybrid
+                - sandbox
               description: Cluster scheduling role
             status:
               type: string
@@ -291,8 +290,7 @@ components:
           type: string
           enum:
             - gateway
-            - workload
-            - hybrid
+            - sandbox
         labels:
           type: string
         annotations:

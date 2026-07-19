@@ -15,7 +15,7 @@ func TestConvertCluster(t *testing.T) {
 		Description:  &desc,
 		ApiServerUrl: "https://k8s.example.com:6443",
 		CredentialId: &credID,
-		Role:         "hybrid",
+		Role:         "sandbox",
 	}
 
 	result := ConvertCluster(c)
@@ -31,8 +31,8 @@ func TestConvertCluster(t *testing.T) {
 	if *result.CredentialId != "cred-123" {
 		t.Errorf("expected credential_id, got %v", result.CredentialId)
 	}
-	if result.Role != "hybrid" {
-		t.Errorf("expected role hybrid, got %s", result.Role)
+	if result.Role != "sandbox" {
+		t.Errorf("expected role sandbox, got %s", result.Role)
 	}
 }
 

@@ -61,7 +61,7 @@ func TestCreateCluster(t *testing.T) {
 	c, err := svc.Create(context.Background(), &Cluster{
 		Name:         "test-cluster",
 		ApiServerUrl: "https://k8s.example.com:6443",
-		Role:         "hybrid",
+		Role:         "sandbox",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -72,8 +72,8 @@ func TestCreateCluster(t *testing.T) {
 	if c.Status != "Unknown" {
 		t.Errorf("expected status Unknown, got %s", c.Status)
 	}
-	if c.Role != "hybrid" {
-		t.Errorf("expected role hybrid, got %s", c.Role)
+	if c.Role != "sandbox" {
+		t.Errorf("expected role sandbox, got %s", c.Role)
 	}
 }
 
@@ -123,7 +123,7 @@ func TestDeleteCluster(t *testing.T) {
 	created, _ := svc.Create(context.Background(), &Cluster{
 		Name:         "delete-test",
 		ApiServerUrl: "https://k8s.example.com:6443",
-		Role:         "workload",
+		Role:         "sandbox",
 	})
 
 	err := svc.Delete(context.Background(), created.ID)
@@ -144,7 +144,7 @@ func TestDeleteClusterBlockedByActiveSessions(t *testing.T) {
 	created, _ := svc.Create(context.Background(), &Cluster{
 		Name:         "busy-cluster",
 		ApiServerUrl: "https://k8s.example.com:6443",
-		Role:         "hybrid",
+		Role:         "sandbox",
 	})
 
 	err := svc.Delete(context.Background(), created.ID)
@@ -163,7 +163,7 @@ func TestReplaceCluster(t *testing.T) {
 	created, _ := svc.Create(context.Background(), &Cluster{
 		Name:         "update-test",
 		ApiServerUrl: "https://k8s.example.com:6443",
-		Role:         "hybrid",
+		Role:         "sandbox",
 	})
 
 	created.Role = "gateway"
@@ -180,7 +180,7 @@ func TestAllClusters(t *testing.T) {
 	svc, _ := newTestService(nil)
 
 	if _, err := svc.Create(context.Background(), &Cluster{
-		Name: "c1", ApiServerUrl: "https://a:6443", Role: "hybrid",
+		Name: "c1", ApiServerUrl: "https://a:6443", Role: "sandbox",
 	}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

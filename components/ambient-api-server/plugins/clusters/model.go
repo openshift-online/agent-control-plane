@@ -13,7 +13,7 @@ type Cluster struct {
 	Description     *string    `json:"description"`
 	ApiServerUrl    string     `json:"api_server_url"    gorm:"not null"`
 	CredentialId    *string    `json:"credential_id"     gorm:"index"`
-	Role            string     `json:"role"              gorm:"not null;default:'hybrid'"`
+	Role            string     `json:"role"              gorm:"not null;default:'sandbox'"`
 	Status          string     `json:"status"            gorm:"not null;default:'Unknown'"`
 	StatusMessage   *string    `json:"status_message"`
 	Labels          *string    `json:"labels"            gorm:"type:jsonb"`
@@ -36,6 +36,10 @@ func (l ClusterList) Index() ClusterIndex {
 func (d *Cluster) BeforeCreate(tx *gorm.DB) error {
 	d.ID = api.NewID()
 	return nil
+}
+
+func (Cluster) TableName() string {
+	return "clusters"
 }
 
 type ClusterPatchRequest struct {

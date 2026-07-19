@@ -2,7 +2,8 @@
 
 **Date:** 2026-03-20
 **Status:** Active
-**Last Updated:** 2026-07-13 — added `Cluster` as a first-class API Kind for multi-cluster scheduling; added `cluster_id` FK to Session, Gateway, and Application; introduced `ClusterRole` enum (`gateway`, `workload`, `hybrid`) and `PlacementStrategy` interface with round-robin default; added `gateway_cluster_id` to Session for cross-cluster gateway→workload routing; updated ER diagram, RBAC, CLI, and API reference
+**Last Updated:** 2026-07-19 — changed `ClusterRole` enum from `gateway|workload|hybrid` to `gateway|sandbox`; removed `hybrid` — a cluster serving both roles is inserted as two rows; replaced name-only unique index with compound unique on `(name, api_server_url, role)`; renamed `workload`→`sandbox` throughout PlacementStrategy and CLI
+**Previous:** 2026-07-13 — added `Cluster` as a first-class API Kind for multi-cluster scheduling; added `cluster_id` FK to Session, Gateway, and Application; introduced `ClusterRole` enum; added `gateway_cluster_id` to Session for cross-cluster gateway→sandbox routing; updated ER diagram, RBAC, CLI, and API reference
 **Previous:** 2026-07-08 — added `Policy` as supported kind in `acpctl apply` and Application sync; added `sandbox_policy`, `sandbox_template`, `entrypoint` to Agent apply fields; documented implementation gaps in acpctl apply resource struct
 **Previous:** 2026-07-03 — added Agent sandbox fields (entrypoint, providers, payloads, environment, sandbox_template, sandbox_policy) for OpenShell gateway integration; split SessionMessage from new SessionEvent (comprehensive AG-UI event stream with compression); added Events API endpoints, gRPC protocol, storage model, compression strategy, migration plan
 **Previous:** 2026-06-03 — added Application (GitOps continuous sync for agent fleets); addressed review feedback: credential_id FK for remote auth, RoleBinding escalation rules, prune safety, health status semantics, gitops role grantability, sync engine kind filtering
@@ -25,7 +26,7 @@ The Ambient API server provides a coordination layer for orchestrating fleets of
 - **RoleBinding** — binds a Role to a subject (user or project) at a given scope. Ownership and access for all Kinds is expressed through RoleBindings. The subject and scope are each represented as typed nullable FKs — exactly one FK is non-null, determined by `scope`.
 - **Application** — a GitOps binding that continuously syncs agent fleet definitions from a git repository to an Ambient instance. The Ambient equivalent of an Argo CD Application.
 - **Gateway** — a project-scoped declaration that an OpenShell gateway should be deployed on a specific cluster (or the local cluster by default). Specifies the gateway image, TLS DNS names, and TOML configuration. Applied via `acpctl apply -k` and reconciled by the GatewayReconciler into Kubernetes resources (StatefulSet, Service, RBAC, certgen Job). See [gateway-provisioning.spec.md](./gateway-provisioning.spec.md).
-- **Cluster** — a global registration of a Kubernetes cluster endpoint. Each cluster has a `role` (`gateway`, `workload`, or `hybrid`) that determines what can be scheduled on it. The control plane maintains a `KubeClient` pool keyed by cluster ID and dispatches reconciliation to the appropriate cluster. Cluster credentials are stored as a write-only `kubeconfig` field (encrypted at rest, same storage pattern as Credential tokens).
+- **Cluster** — a global registration of a Kubernetes cluster endpoint. Each cluster has a `role` (`gateway` or `sandbox`) that determines what can be scheduled on it. A single physical cluster that serves both roles is registered as two rows in the `clusters` table — one with `role=gateway` and one with `role=sandbox`. The table enforces a compound unique constraint on `(name, api_server_url, role)`. The control plane maintains a `KubeClient` pool keyed by cluster ID and dispatches reconciliation to the appropriate cluster. Cluster credentials are stored as a write-only `kubeconfig` field (encrypted at rest, same storage pattern as Credential tokens).
 
 The stable address of an agent is `{project_name}/{agent_name}`. It holds the inbox and links to the active session.
 
@@ -124,7 +125,7 @@ erDiagram
         string  name "human-readable display name"
         string  project_id FK "nullable — direct project context (no agent)"
         string  agent_id FK "nullable — set when started via agent ignite"
-        string  cluster_id FK "nullable — workload cluster; null = local; set by PlacementStrategy"
+        string  cluster_id FK "nullable — sandbox cluster; null = local; set by PlacementStrategy"
         string  gateway_cluster_id FK "nullable — gateway cluster; null = same as cluster_id"
         string  parent_session_id FK "nullable — source session for clones"
         string  source_scheduled_session_id "nullable — FK to ScheduledSession that triggered this"
@@ -353,10 +354,9 @@ Each cluster declares a `role` that determines what can be scheduled on it:
  < /dev/null |  Role | Gateways | Sessions | Description |
 |------|----------|----------|-------------|
 | `gateway` | Yes | No | Dedicated gateway infrastructure. Hosts only OpenShell gateways. Sessions are never placed here. |
-| `workload` | No | Yes | Dedicated workload cluster. Hosts only session pods. Gateways are never deployed here. |
-| `hybrid` | Yes | Yes | Hosts both gateways and sessions. Default for backward-compatible single-cluster deployments. |
+| `sandbox` | No | Yes | Dedicated sandbox cluster. Hosts only session pods. Gateways are never deployed here. |
 
-The local cluster (where the control plane runs) is implicitly registered as `hybrid` with a well-known sentinel ID (`_local`). When `cluster_id` is null on any resource, it resolves to the local cluster. This preserves full backward compatibility — existing single-cluster deployments require zero changes.
+The local cluster (where the control plane runs) is implicitly registered as two rows — one `gateway` and one `sandbox` — with well-known sentinel IDs (`_local_gateway`, `_local_sandbox`). When `cluster_id` is null on any resource, it resolves to the local cluster. This preserves full backward compatibility — existing single-cluster deployments require zero changes.
 
 ### Field Reference
 
@@ -366,7 +366,7 @@ The local cluster (where the control plane runs) is implicitly registered as `hy
 | `description` | Nullable. Free-text purpose description (e.g., "US-East gateway cluster"). |
 | `api_server_url` | Kubernetes API server endpoint URL. Used for display and health checks; the actual connection uses `kubeconfig`. |
 | `kubeconfig` | Write-only. Serialized kubeconfig for this cluster. Stored encrypted at rest using the same encryption mechanism as `Credential.token`. Never returned by standard read endpoints. Contains server URL, client certificate/key or bearer token, and CA data. |
-| `role` | Cluster scheduling role: `gateway`, `workload`, or `hybrid`. |
+| `role` | Cluster scheduling role: `gateway` or `sandbox`. A physical cluster serving both roles is registered as two separate rows. |
 | `status` | Computed by the ClusterHealthSyncer: `Ready` (API server reachable, auth valid), `NotReady` (unreachable or auth failed), `Unknown` (never checked). |
 | `status_message` | Nullable. Human-readable detail about current status (e.g., "connection refused", "certificate expired"). |
 | `labels` | Queryable key/value tags. Used by PlacementStrategy selectors (e.g., `region=us-east`, `tier=dedicated`, `gpu=true`). |
@@ -387,8 +387,8 @@ When sessions run on a different cluster than their gateway, the control plane m
 
 | Topology | Gateway Endpoint |
 |----------|-----------------|
-| Same cluster (gateway + workload on one cluster) | `<service>.<namespace>.svc.cluster.local:<port>` |
-| Different clusters (gateway on cluster A, workload on cluster B) | `<gateway-ingress-url>:<port>` (via Ingress, Route, or LoadBalancer on the gateway cluster) |
+| Same cluster (gateway + sandbox on one cluster) | `<service>.<namespace>.svc.cluster.local:<port>` |
+| Different clusters (gateway on cluster A, sandbox on cluster B) | `<gateway-ingress-url>:<port>` (via Ingress, Route, or LoadBalancer on the gateway cluster) |
 
 When a Gateway resource has `cluster_id` set, the GatewayReconciler SHALL also create an externally reachable Service (LoadBalancer or Ingress/Route) so that workload clusters can reach the gateway. The external endpoint URL is stored in the Gateway's `annotations` (`ambient-code.io/gateway-external-url`) by the GatewayReconciler after the Service is provisioned.
 
@@ -417,7 +417,7 @@ type PlacementRequest struct {
 }
 
 type PlacementDecision struct {
-    ClusterID        string  // workload cluster for the session pod
+    ClusterID        string  // sandbox cluster for the session pod
     GatewayClusterID string  // gateway cluster; may differ from ClusterID
 }
 ```
@@ -426,9 +426,9 @@ type PlacementDecision struct {
 
 The default implementation round-robins across clusters matching the required role:
 
-1. **Gateway cluster selection**: Find all clusters with `role=gateway` or `role=hybrid` and `status=Ready`. If a specific Gateway is associated with the project, use its `cluster_id`. Otherwise, round-robin across eligible gateway clusters.
+1. **Gateway cluster selection**: Find all clusters with `role=gateway` and `status=Ready`. If a specific Gateway is associated with the project, use its `cluster_id`. Otherwise, round-robin across eligible gateway clusters.
 
-2. **Workload cluster selection**: Find all clusters with `role=workload` or `role=hybrid` and `status=Ready`. Round-robin across eligible clusters, excluding clusters with `role=gateway` (gateway-only clusters never receive sessions).
+2. **Sandbox cluster selection**: Find all clusters with `role=sandbox` and `status=Ready`. Round-robin across eligible clusters.
 
 3. **Label-based filtering**: If the Agent or Project carries placement labels (e.g., `placement/cluster-selector: gpu=true`), filter the eligible cluster set by matching labels before round-robin.
 
@@ -447,7 +447,7 @@ annotations:
 
 When `session-affinity: colocated` is set, the PlacementStrategy SHALL place sessions on the same cluster as the gateway (`Session.cluster_id = Session.gateway_cluster_id`). This is the default for backward compatibility — sessions and gateways on the same cluster require no cross-cluster networking.
 
-When `session-affinity: any` is set (or the annotation is absent on a multi-cluster deployment), the PlacementStrategy is free to place sessions on any eligible workload cluster.
+When `session-affinity: any` is set (or the annotation is absent on a multi-cluster deployment), the PlacementStrategy is free to place sessions on any eligible sandbox cluster.
 
 ### Configuration
 
@@ -1251,7 +1251,7 @@ The `acpctl` CLI mirrors the API 1-for-1. Every REST operation has a correspondi
 | `Project` | `name`, `description`, `prompt`, `labels`, `annotations` |
 | `Agent` | `name`, `prompt`, `providers`, `payloads`, `environment`, `entrypoint`, `sandbox_policy`, `sandbox_template`, `labels`, `annotations`, `inbox` (seed messages) |
 | `Credential` | `name`, `description`, `provider`, `token` (env var reference), `url`, `email`, `labels`, `annotations` — global resource; use `credential bind` to grant project access |
-| `Cluster` | `name`, `description`, `api_server_url`, `kubeconfig` (env var reference), `role`, `labels`, `annotations` — global resource; requires `platform:admin` |
+| `Cluster` | `name`, `description`, `api_server_url`, `kubeconfig` (env var reference), `role` (`gateway`\|`sandbox`), `labels`, `annotations` — global resource; requires `platform:admin`; compound unique on `(name, api_server_url, role)` |
 | `Gateway` | `name`, `project`, `cluster`, `image`, `serverDnsNames`, `config`, `labels`, `annotations` — project-scoped; declares an OpenShell gateway deployment in the project namespace |
 | `Policy` | `name`, `spec`, `labels`, `annotations` — project-scoped; declares a sandbox policy containing upstream OpenShell `SandboxPolicy` JSON. Referenced by agents via `sandbox_policy` field. See [agent-sandbox-config.spec.md](./agent-sandbox-config.spec.md) § Policy Declarations |
 

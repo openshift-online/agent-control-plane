@@ -23,7 +23,7 @@ func TestClusterCreate(t *testing.T) {
 	clusterInput := map[string]interface{}{
 		"name":           "integration-cluster-1",
 		"api_server_url": "https://k8s.example.com:6443",
-		"role":           "hybrid",
+		"role":           "sandbox",
 	}
 
 	body, _ := json.Marshal(clusterInput)
@@ -41,7 +41,7 @@ func TestClusterCreate(t *testing.T) {
 	Expect(result["id"]).NotTo(BeEmpty())
 	Expect(result["kind"]).To(Equal("Cluster"))
 	Expect(result["name"]).To(Equal("integration-cluster-1"))
-	Expect(result["role"]).To(Equal("hybrid"))
+	Expect(result["role"]).To(Equal("sandbox"))
 	Expect(result["status"]).To(Equal("Unknown"))
 }
 

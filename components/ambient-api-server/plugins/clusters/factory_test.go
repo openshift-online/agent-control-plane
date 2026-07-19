@@ -14,7 +14,7 @@ func newCluster(id string) (*clusters.Cluster, error) {
 	c := &clusters.Cluster{
 		Name:         fmt.Sprintf("test-cluster-%s", id),
 		ApiServerUrl: fmt.Sprintf("https://k8s-%s.example.com:6443", id),
-		Role:         "hybrid",
+		Role:         "sandbox",
 	}
 
 	created, err := clusterService.Create(context.Background(), c)

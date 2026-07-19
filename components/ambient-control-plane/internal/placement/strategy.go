@@ -34,7 +34,7 @@ type RoundRobinPlacement struct {
 	logger             zerolog.Logger
 	mu                 sync.Mutex
 	gatewayIndex       int
-	workloadIndex      int
+	sandboxIndex       int
 }
 
 func NewRoundRobinPlacement(client *sdkclient.Client, heartbeatThreshold time.Duration, logger zerolog.Logger) *RoundRobinPlacement {
@@ -55,15 +55,15 @@ func (p *RoundRobinPlacement) PlaceSession(ctx context.Context, req PlacementReq
 		return PlacementDecision{}, fmt.Errorf("no eligible clusters available for placement")
 	}
 
-	gatewayClusters := filterByRole(clusters, "gateway", "hybrid")
-	workloadClusters := filterByRole(clusters, "workload", "hybrid")
+	gatewayClusters := filterByRole(clusters, "gateway")
+	sandboxClusters := filterByRole(clusters, "sandbox")
 
 	if len(req.Labels) > 0 {
-		workloadClusters = filterByLabels(workloadClusters, req.Labels)
+		sandboxClusters = filterByLabels(sandboxClusters, req.Labels)
 	}
 
-	if len(workloadClusters) == 0 {
-		return PlacementDecision{}, fmt.Errorf("no eligible workload clusters match placement constraints")
+	if len(sandboxClusters) == 0 {
+		return PlacementDecision{}, fmt.Errorf("no eligible sandbox clusters match placement constraints")
 	}
 
 	p.mu.Lock()
@@ -75,11 +75,11 @@ func (p *RoundRobinPlacement) PlaceSession(ctx context.Context, req PlacementReq
 		p.gatewayIndex++
 	}
 
-	workloadCluster := workloadClusters[p.workloadIndex%len(workloadClusters)]
-	p.workloadIndex++
+	sandboxCluster := sandboxClusters[p.sandboxIndex%len(sandboxClusters)]
+	p.sandboxIndex++
 
 	decision := PlacementDecision{
-		ClusterID:        workloadCluster.ID,
+		ClusterID:        sandboxCluster.ID,
 		GatewayClusterID: gatewayClusterID,
 	}
 
