@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
 	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
@@ -530,31 +531,42 @@ func setupOpenshellKubectl(w io.Writer, gw *sdktypes.Gateway, cfg *config.Config
 
 	fmt.Fprintf(w, "Starting kubectl port-forward to %s/openshell-gateway...\n", namespace)
 	pfCmd := exec.Command("kubectl", "port-forward", "-n", namespace, "svc/openshell-gateway", "0:8080")
-	pfOut, err := pfCmd.StdoutPipe()
+
+	// Write kubectl output to a temp file instead of a pipe so the
+	// port-forward survives after this process exits. A pipe would
+	// deliver SIGPIPE to kubectl on its next log write once the reader
+	// (this process) exits.
+	pfLog, err := os.CreateTemp("", "acpctl-pf-*.log")
 	if err != nil {
-		return fmt.Errorf("port-forward stdout pipe: %w", err)
+		return fmt.Errorf("create port-forward log: %w", err)
 	}
-	pfCmd.Stderr = pfCmd.Stdout
+	pfLogPath := pfLog.Name()
+	pfCmd.Stdout = pfLog
+	pfCmd.Stderr = pfLog
 	if err := pfCmd.Start(); err != nil {
+		_ = pfLog.Close()
+		_ = os.Remove(pfLogPath)
 		return fmt.Errorf("start port-forward: %w", err)
 	}
 
-	scanner := bufio.NewScanner(pfOut)
 	var localPort string
-	for scanner.Scan() {
-		line := scanner.Text()
-		if idx := strings.Index(line, "Forwarding from 127.0.0.1:"); idx >= 0 {
-			rest := line[idx+len("Forwarding from 127.0.0.1:"):]
+	for range 60 {
+		time.Sleep(100 * time.Millisecond)
+		data, _ := os.ReadFile(pfLogPath)
+		if idx := strings.Index(string(data), "Forwarding from 127.0.0.1:"); idx >= 0 {
+			rest := string(data)[idx+len("Forwarding from 127.0.0.1:"):]
 			if endIdx := strings.Index(rest, " "); endIdx > 0 {
 				localPort = rest[:endIdx]
 			}
 			break
 		}
 	}
+	_ = pfLog.Close()
 	if localPort == "" {
 		if pfCmd.Process != nil {
 			_ = pfCmd.Process.Kill()
 		}
+		_ = os.Remove(pfLogPath)
 		return fmt.Errorf("could not determine local port from kubectl port-forward")
 	}
 
