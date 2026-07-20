@@ -38,12 +38,12 @@ type Gateway struct {
 	ServerDnsNames []string `json:"server_dns_names"`
 	// OpenShell gateway TOML configuration
 	Config *string `json:"config,omitempty"`
-	// Key-value labels applied to the gateway
-	Labels *map[string]string `json:"labels,omitempty"`
-	// Key-value annotations applied to the gateway
-	Annotations *map[string]string `json:"annotations,omitempty"`
-	Oidc        *GatewayOidc       `json:"oidc,omitempty"`
-	Route       *GatewayRoute      `json:"route,omitempty"`
+	// JSON-encoded key-value labels applied to the gateway
+	Labels *string `json:"labels,omitempty"`
+	// JSON-encoded key-value annotations applied to the gateway
+	Annotations *string       `json:"annotations,omitempty"`
+	Oidc        *GatewayOidc  `json:"oidc,omitempty"`
+	Route       *GatewayRoute `json:"route,omitempty"`
 	// Externally reachable address assigned by the OpenShift Route (set by control plane)
 	RouteAddress *string `json:"route_address,omitempty"`
 }
@@ -367,9 +367,9 @@ func (o *Gateway) SetConfig(v string) {
 }
 
 // GetLabels returns the Labels field value if set, zero value otherwise.
-func (o *Gateway) GetLabels() map[string]string {
+func (o *Gateway) GetLabels() string {
 	if o == nil || IsNil(o.Labels) {
-		var ret map[string]string
+		var ret string
 		return ret
 	}
 	return *o.Labels
@@ -377,7 +377,7 @@ func (o *Gateway) GetLabels() map[string]string {
 
 // GetLabelsOk returns a tuple with the Labels field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *Gateway) GetLabelsOk() (*map[string]string, bool) {
+func (o *Gateway) GetLabelsOk() (*string, bool) {
 	if o == nil || IsNil(o.Labels) {
 		return nil, false
 	}
@@ -393,15 +393,15 @@ func (o *Gateway) HasLabels() bool {
 	return false
 }
 
-// SetLabels gets a reference to the given map[string]string and assigns it to the Labels field.
-func (o *Gateway) SetLabels(v map[string]string) {
+// SetLabels gets a reference to the given string and assigns it to the Labels field.
+func (o *Gateway) SetLabels(v string) {
 	o.Labels = &v
 }
 
 // GetAnnotations returns the Annotations field value if set, zero value otherwise.
-func (o *Gateway) GetAnnotations() map[string]string {
+func (o *Gateway) GetAnnotations() string {
 	if o == nil || IsNil(o.Annotations) {
-		var ret map[string]string
+		var ret string
 		return ret
 	}
 	return *o.Annotations
@@ -409,7 +409,7 @@ func (o *Gateway) GetAnnotations() map[string]string {
 
 // GetAnnotationsOk returns a tuple with the Annotations field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *Gateway) GetAnnotationsOk() (*map[string]string, bool) {
+func (o *Gateway) GetAnnotationsOk() (*string, bool) {
 	if o == nil || IsNil(o.Annotations) {
 		return nil, false
 	}
@@ -425,8 +425,8 @@ func (o *Gateway) HasAnnotations() bool {
 	return false
 }
 
-// SetAnnotations gets a reference to the given map[string]string and assigns it to the Annotations field.
-func (o *Gateway) SetAnnotations(v map[string]string) {
+// SetAnnotations gets a reference to the given string and assigns it to the Annotations field.
+func (o *Gateway) SetAnnotations(v string) {
 	o.Annotations = &v
 }
 

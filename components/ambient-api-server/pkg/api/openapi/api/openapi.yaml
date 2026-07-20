@@ -8108,15 +8108,11 @@ components:
             description: OpenShell gateway TOML configuration
             type: string
           labels:
-            additionalProperties:
-              type: string
-            description: Key-value labels applied to the gateway
-            type: object
+            description: JSON-encoded key-value labels applied to the gateway
+            type: string
           annotations:
-            additionalProperties:
-              type: string
-            description: Key-value annotations applied to the gateway
-            type: object
+            description: JSON-encoded key-value annotations applied to the gateway
+            type: string
           oidc:
             $ref: "#/components/schemas/GatewayOidc"
           route:
@@ -8138,8 +8134,7 @@ components:
         - server_dns_names
         - server_dns_names
         created_at: 2000-01-23T04:56:07.000+00:00
-        annotations:
-          key: annotations
+        annotations: annotations
         oidc:
           scopes_claim: scopes_claim
           user_role: user_role
@@ -8149,8 +8144,7 @@ components:
           roles_claim: roles_claim
           issuer: issuer
         route_address: route_address
-        labels:
-          key: labels
+        labels: labels
         route:
           host: host
         updated_at: 2000-01-23T04:56:07.000+00:00
@@ -8180,8 +8174,7 @@ components:
           - server_dns_names
           - server_dns_names
           created_at: 2000-01-23T04:56:07.000+00:00
-          annotations:
-            key: annotations
+          annotations: annotations
           oidc:
             scopes_claim: scopes_claim
             user_role: user_role
@@ -8191,8 +8184,7 @@ components:
             roles_claim: roles_claim
             issuer: issuer
           route_address: route_address
-          labels:
-            key: labels
+          labels: labels
           route:
             host: host
           updated_at: 2000-01-23T04:56:07.000+00:00
@@ -8207,8 +8199,7 @@ components:
           - server_dns_names
           - server_dns_names
           created_at: 2000-01-23T04:56:07.000+00:00
-          annotations:
-            key: annotations
+          annotations: annotations
           oidc:
             scopes_claim: scopes_claim
             user_role: user_role
@@ -8218,8 +8209,7 @@ components:
             roles_claim: roles_claim
             issuer: issuer
           route_address: route_address
-          labels:
-            key: labels
+          labels: labels
           route:
             host: host
           updated_at: 2000-01-23T04:56:07.000+00:00
@@ -8237,8 +8227,7 @@ components:
         - server_dns_names
         - server_dns_names
         name: name
-        annotations:
-          key: annotations
+        annotations: annotations
         config: config
         oidc:
           scopes_claim: scopes_claim
@@ -8249,8 +8238,7 @@ components:
           roles_claim: roles_claim
           issuer: issuer
         route_address: route_address
-        labels:
-          key: labels
+        labels: labels
       properties:
         name:
           type: string
@@ -8263,13 +8251,9 @@ components:
         config:
           type: string
         labels:
-          additionalProperties:
-            type: string
-          type: object
+          type: string
         annotations:
-          additionalProperties:
-            type: string
-          type: object
+          type: string
         oidc:
           $ref: "#/components/schemas/GatewayOidc"
         route:

@@ -3,6 +3,7 @@ package create
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -124,14 +125,7 @@ func init() {
 func run(cmd *cobra.Command, cmdArgs []string) error {
 	resource := strings.ToLower(cmdArgs[0])
 
-	var client *sdkclient.Client
-	var err error
-
-	if resource == "project" || resource == "proj" {
-		client, err = newProjectScopedClient()
-	} else {
-		client, err = connection.NewClientFromConfig()
-	}
+	client, err := connection.NewClientFromConfig()
 	if err != nil {
 		return err
 	}
@@ -164,24 +158,6 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 	default:
 		return fmt.Errorf("unknown resource type: %s\nValid types: session, project, project-agent, agent, role, role-binding, gateway, cluster", cmdArgs[0])
 	}
-}
-
-func newProjectScopedClient() (*sdkclient.Client, error) {
-	factory, err := connection.NewClientFactory()
-	if err != nil {
-		return nil, err
-	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, err
-	}
-
-	project := cfg.GetProject()
-	if project == "" {
-		project = "_"
-	}
-	return factory.ForProject(project)
 }
 
 func warnUnusedFlags(cmd *cobra.Command, names ...string) {
@@ -464,14 +440,16 @@ func createGateway(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 		if parseErr != nil {
 			return fmt.Errorf("invalid --labels: %w", parseErr)
 		}
-		gw.Labels = parsed
+		raw, _ := json.Marshal(parsed)
+		gw.Labels = string(raw)
 	}
 	if cmd.Flags().Changed("annotations") {
 		parsed, parseErr := parseKeyValuePairs(createArgs.gwAnnotations)
 		if parseErr != nil {
 			return fmt.Errorf("invalid --annotations: %w", parseErr)
 		}
-		gw.Annotations = parsed
+		raw, _ := json.Marshal(parsed)
+		gw.Annotations = string(raw)
 	}
 
 	var oidc *sdktypes.GatewayOidc

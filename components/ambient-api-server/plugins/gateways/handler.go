@@ -178,20 +178,10 @@ func (h gatewayHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				found.Config = patch.Config
 			}
 			if patch.Labels != nil {
-				raw, merr := json.Marshal(patch.Labels)
-				if merr != nil {
-					return nil, errors.GeneralError("failed to marshal labels: %v", merr)
-				}
-				s := string(raw)
-				found.Labels = &s
+				found.Labels = patch.Labels
 			}
 			if patch.Annotations != nil {
-				raw, merr := json.Marshal(patch.Annotations)
-				if merr != nil {
-					return nil, errors.GeneralError("failed to marshal annotations: %v", merr)
-				}
-				s := string(raw)
-				found.Annotations = &s
+				found.Annotations = patch.Annotations
 			}
 			if patch.Oidc != nil {
 				raw, merr := json.Marshal(patch.Oidc)

@@ -8,8 +8,8 @@ Name | Type | Description | Notes
 **Image** | Pointer to **string** |  | [optional] 
 **ServerDnsNames** | Pointer to **[]string** |  | [optional] 
 **Config** | Pointer to **string** |  | [optional] 
-**Labels** | Pointer to **map[string]string** |  | [optional] 
-**Annotations** | Pointer to **map[string]string** |  | [optional] 
+**Labels** | Pointer to **string** |  | [optional] 
+**Annotations** | Pointer to **string** |  | [optional] 
 **Oidc** | Pointer to [**GatewayOidc**](GatewayOidc.md) |  | [optional] 
 **Route** | Pointer to [**GatewayRoute**](GatewayRoute.md) |  | [optional] 
 **RouteAddress** | Pointer to **string** | Externally reachable address assigned by the OpenShift Route (set by control plane) | [optional] 
@@ -135,20 +135,20 @@ HasConfig returns a boolean if a field has been set.
 
 ### GetLabels
 
-`func (o *GatewayPatchRequest) GetLabels() map[string]string`
+`func (o *GatewayPatchRequest) GetLabels() string`
 
 GetLabels returns the Labels field if non-nil, zero value otherwise.
 
 ### GetLabelsOk
 
-`func (o *GatewayPatchRequest) GetLabelsOk() (*map[string]string, bool)`
+`func (o *GatewayPatchRequest) GetLabelsOk() (*string, bool)`
 
 GetLabelsOk returns a tuple with the Labels field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetLabels
 
-`func (o *GatewayPatchRequest) SetLabels(v map[string]string)`
+`func (o *GatewayPatchRequest) SetLabels(v string)`
 
 SetLabels sets Labels field to given value.
 
@@ -160,20 +160,20 @@ HasLabels returns a boolean if a field has been set.
 
 ### GetAnnotations
 
-`func (o *GatewayPatchRequest) GetAnnotations() map[string]string`
+`func (o *GatewayPatchRequest) GetAnnotations() string`
 
 GetAnnotations returns the Annotations field if non-nil, zero value otherwise.
 
 ### GetAnnotationsOk
 
-`func (o *GatewayPatchRequest) GetAnnotationsOk() (*map[string]string, bool)`
+`func (o *GatewayPatchRequest) GetAnnotationsOk() (*string, bool)`
 
 GetAnnotationsOk returns a tuple with the Annotations field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetAnnotations
 
-`func (o *GatewayPatchRequest) SetAnnotations(v map[string]string)`
+`func (o *GatewayPatchRequest) SetAnnotations(v string)`
 
 SetAnnotations sets Annotations field to given value.
 

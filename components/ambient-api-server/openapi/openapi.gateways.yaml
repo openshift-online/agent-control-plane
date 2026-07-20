@@ -244,15 +244,11 @@ components:
               type: string
               description: OpenShell gateway TOML configuration
             labels:
-              type: object
-              additionalProperties:
-                type: string
-              description: Key-value labels applied to the gateway
+              type: string
+              description: JSON-encoded key-value labels applied to the gateway
             annotations:
-              type: object
-              additionalProperties:
-                type: string
-              description: Key-value annotations applied to the gateway
+              type: string
+              description: JSON-encoded key-value annotations applied to the gateway
             oidc:
               $ref: '#/components/schemas/GatewayOidc'
             route:
@@ -326,13 +322,9 @@ components:
         config:
           type: string
         labels:
-          type: object
-          additionalProperties:
-            type: string
+          type: string
         annotations:
-          type: object
-          additionalProperties:
-            type: string
+          type: string
         oidc:
           $ref: '#/components/schemas/GatewayOidc'
         route:

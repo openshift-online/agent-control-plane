@@ -350,7 +350,7 @@ A Cluster is a global registration of a Kubernetes cluster endpoint. The control
 
 Each cluster declares a `role` that determines what can be scheduled on it:
 
- < /dev/null |  Role | Gateways | Sessions | Description |
+| Role | Gateways | Sessions | Description |
 |------|----------|----------|-------------|
 | `gateway` | Yes | No | Dedicated gateway infrastructure. Hosts only OpenShell gateways. Sessions are never placed here. |
 | `workload` | No | Yes | Dedicated workload cluster. Hosts only session pods. Gateways are never deployed here. |

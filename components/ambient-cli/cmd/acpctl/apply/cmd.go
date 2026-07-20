@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"os"
 	"strings"
 
@@ -896,10 +895,10 @@ func applyGateway(ctx context.Context, client *sdkclient.Client, doc kustomize.R
 		builder = builder.Config(doc.Config)
 	}
 	if len(doc.Labels) > 0 {
-		builder = builder.Labels(doc.Labels)
+		builder = builder.Labels(marshalStringMap(doc.Labels))
 	}
 	if len(doc.Annotations) > 0 {
-		builder = builder.Annotations(doc.Annotations)
+		builder = builder.Annotations(marshalStringMap(doc.Annotations))
 	}
 	if oidc := oidcFromResource(doc); oidc != nil {
 		builder = builder.Oidc(oidc)
@@ -932,11 +931,11 @@ func buildGatewayPatch(existing sdktypes.Gateway, doc kustomize.Resource) map[st
 		patch = patch.ServerDnsNames(doc.ServerDnsNames)
 		changed = true
 	}
-	if len(doc.Labels) > 0 && !maps.Equal(doc.Labels, existing.Labels) {
+	if len(doc.Labels) > 0 && marshalStringMap(doc.Labels) != existing.Labels {
 		patch = patch.Labels(marshalStringMap(doc.Labels))
 		changed = true
 	}
-	if len(doc.Annotations) > 0 && !maps.Equal(doc.Annotations, existing.Annotations) {
+	if len(doc.Annotations) > 0 && marshalStringMap(doc.Annotations) != existing.Annotations {
 		patch = patch.Annotations(marshalStringMap(doc.Annotations))
 		changed = true
 	}

@@ -20,14 +20,14 @@ var _ MappedNullable = &GatewayPatchRequest{}
 
 // GatewayPatchRequest struct for GatewayPatchRequest
 type GatewayPatchRequest struct {
-	Name           *string            `json:"name,omitempty"`
-	Image          *string            `json:"image,omitempty"`
-	ServerDnsNames []string           `json:"server_dns_names,omitempty"`
-	Config         *string            `json:"config,omitempty"`
-	Labels         *map[string]string `json:"labels,omitempty"`
-	Annotations    *map[string]string `json:"annotations,omitempty"`
-	Oidc           *GatewayOidc       `json:"oidc,omitempty"`
-	Route          *GatewayRoute      `json:"route,omitempty"`
+	Name           *string       `json:"name,omitempty"`
+	Image          *string       `json:"image,omitempty"`
+	ServerDnsNames []string      `json:"server_dns_names,omitempty"`
+	Config         *string       `json:"config,omitempty"`
+	Labels         *string       `json:"labels,omitempty"`
+	Annotations    *string       `json:"annotations,omitempty"`
+	Oidc           *GatewayOidc  `json:"oidc,omitempty"`
+	Route          *GatewayRoute `json:"route,omitempty"`
 	// Externally reachable address assigned by the OpenShift Route (set by control plane)
 	RouteAddress *string `json:"route_address,omitempty"`
 }
@@ -178,9 +178,9 @@ func (o *GatewayPatchRequest) SetConfig(v string) {
 }
 
 // GetLabels returns the Labels field value if set, zero value otherwise.
-func (o *GatewayPatchRequest) GetLabels() map[string]string {
+func (o *GatewayPatchRequest) GetLabels() string {
 	if o == nil || IsNil(o.Labels) {
-		var ret map[string]string
+		var ret string
 		return ret
 	}
 	return *o.Labels
@@ -188,7 +188,7 @@ func (o *GatewayPatchRequest) GetLabels() map[string]string {
 
 // GetLabelsOk returns a tuple with the Labels field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *GatewayPatchRequest) GetLabelsOk() (*map[string]string, bool) {
+func (o *GatewayPatchRequest) GetLabelsOk() (*string, bool) {
 	if o == nil || IsNil(o.Labels) {
 		return nil, false
 	}
@@ -204,15 +204,15 @@ func (o *GatewayPatchRequest) HasLabels() bool {
 	return false
 }
 
-// SetLabels gets a reference to the given map[string]string and assigns it to the Labels field.
-func (o *GatewayPatchRequest) SetLabels(v map[string]string) {
+// SetLabels gets a reference to the given string and assigns it to the Labels field.
+func (o *GatewayPatchRequest) SetLabels(v string) {
 	o.Labels = &v
 }
 
 // GetAnnotations returns the Annotations field value if set, zero value otherwise.
-func (o *GatewayPatchRequest) GetAnnotations() map[string]string {
+func (o *GatewayPatchRequest) GetAnnotations() string {
 	if o == nil || IsNil(o.Annotations) {
-		var ret map[string]string
+		var ret string
 		return ret
 	}
 	return *o.Annotations
@@ -220,7 +220,7 @@ func (o *GatewayPatchRequest) GetAnnotations() map[string]string {
 
 // GetAnnotationsOk returns a tuple with the Annotations field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *GatewayPatchRequest) GetAnnotationsOk() (*map[string]string, bool) {
+func (o *GatewayPatchRequest) GetAnnotationsOk() (*string, bool) {
 	if o == nil || IsNil(o.Annotations) {
 		return nil, false
 	}
@@ -236,8 +236,8 @@ func (o *GatewayPatchRequest) HasAnnotations() bool {
 	return false
 }
 
-// SetAnnotations gets a reference to the given map[string]string and assigns it to the Annotations field.
-func (o *GatewayPatchRequest) SetAnnotations(v map[string]string) {
+// SetAnnotations gets a reference to the given string and assigns it to the Annotations field.
+func (o *GatewayPatchRequest) SetAnnotations(v string) {
 	o.Annotations = &v
 }
 

@@ -14,8 +14,8 @@ Name | Type | Description | Notes
 **Image** | Pointer to **string** | Gateway container image reference | [optional] 
 **ServerDnsNames** | **[]string** | DNS names for TLS certificate generation | 
 **Config** | Pointer to **string** | OpenShell gateway TOML configuration | [optional] 
-**Labels** | Pointer to **map[string]string** | Key-value labels applied to the gateway | [optional] 
-**Annotations** | Pointer to **map[string]string** | Key-value annotations applied to the gateway | [optional] 
+**Labels** | Pointer to **string** | JSON-encoded key-value labels applied to the gateway | [optional] 
+**Annotations** | Pointer to **string** | JSON-encoded key-value annotations applied to the gateway | [optional] 
 **Oidc** | Pointer to [**GatewayOidc**](GatewayOidc.md) |  | [optional] 
 **Route** | Pointer to [**GatewayRoute**](GatewayRoute.md) |  | [optional] 
 **RouteAddress** | Pointer to **string** | Externally reachable address assigned by the OpenShift Route (set by control plane) | [optional] [readonly] 
@@ -276,20 +276,20 @@ HasConfig returns a boolean if a field has been set.
 
 ### GetLabels
 
-`func (o *Gateway) GetLabels() map[string]string`
+`func (o *Gateway) GetLabels() string`
 
 GetLabels returns the Labels field if non-nil, zero value otherwise.
 
 ### GetLabelsOk
 
-`func (o *Gateway) GetLabelsOk() (*map[string]string, bool)`
+`func (o *Gateway) GetLabelsOk() (*string, bool)`
 
 GetLabelsOk returns a tuple with the Labels field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetLabels
 
-`func (o *Gateway) SetLabels(v map[string]string)`
+`func (o *Gateway) SetLabels(v string)`
 
 SetLabels sets Labels field to given value.
 
@@ -301,20 +301,20 @@ HasLabels returns a boolean if a field has been set.
 
 ### GetAnnotations
 
-`func (o *Gateway) GetAnnotations() map[string]string`
+`func (o *Gateway) GetAnnotations() string`
 
 GetAnnotations returns the Annotations field if non-nil, zero value otherwise.
 
 ### GetAnnotationsOk
 
-`func (o *Gateway) GetAnnotationsOk() (*map[string]string, bool)`
+`func (o *Gateway) GetAnnotationsOk() (*string, bool)`
 
 GetAnnotationsOk returns a tuple with the Annotations field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetAnnotations
 
-`func (o *Gateway) SetAnnotations(v map[string]string)`
+`func (o *Gateway) SetAnnotations(v string)`
 
 SetAnnotations sets Annotations field to given value.
 
