@@ -2,13 +2,13 @@
 
 **Date:** 2026-07-05
 **Status:** Active
-**Related:** `specs/security/rbac-enforcement.spec.md` (base RBAC model), `specs/platform/agent-sandbox-config.spec.md` (agent schema), `specs/platform/gateway-provisioning.spec.md` (API-driven gateway provisioning), `specs/platform/openshell-sandbox-provisioning.spec.md` (sandbox provisioning flow), `specs/platform/gateway-route-exposure.spec.md` (Route exposure and TLS)
+**Related:** `specs/security/rbac-enforcement.spec.md` (base RBAC model), `specs/platform/agent-sandbox-config.spec.md` (agent schema), `specs/platform/openshell-gateway.spec.md` (gateway provisioning, OIDC, route exposure, database), `specs/platform/openshell-sandbox-provisioning.spec.md` (sandbox provisioning flow)
 
 ---
 
 ## Purpose
 
-OpenShell is the default and only sandbox runtime. The platform enforces a tiered RBAC policy that constrains human users to three effective tiers: Admin, Editor, and Viewer. Agent definitions MAY be managed through both the API (full CRUD) and GitOps workflows via `acpctl apply -k` (schema defined in `agent-sandbox-config.spec.md`). Policy and provider declarations are GitOps-only by design — no API endpoints exist for them. Gateway configuration is declared as `kind: Gateway` API resources applied via `acpctl apply -k` and reconciled by the GatewayReconciler (see `gateway-provisioning.spec.md`). A user's effective ACP tier SHALL be derived from their Kubernetes RoleBindings on the tenant namespace — if a user has `view` access on the namespace, they are a viewer in ACP for that project. Standard RBAC from `rbac-enforcement.spec.md` governs all agent CRUD operations.
+OpenShell is the default and only sandbox runtime. The platform enforces a tiered RBAC policy that constrains human users to three effective tiers: Admin, Editor, and Viewer. Agent definitions MAY be managed through both the API (full CRUD) and GitOps workflows via `acpctl apply -k` (schema defined in `agent-sandbox-config.spec.md`). Policy and provider declarations are GitOps-only by design — no API endpoints exist for them. Gateway configuration is declared as `kind: Gateway` API resources applied via `acpctl apply -k` and reconciled by the GatewayReconciler (see `openshell-gateway.spec.md`). A user's effective ACP tier SHALL be derived from their Kubernetes RoleBindings on the tenant namespace — if a user has `view` access on the namespace, they are a viewer in ACP for that project. Standard RBAC from `rbac-enforcement.spec.md` governs all agent CRUD operations.
 
 ---
 
@@ -391,7 +391,7 @@ Viewer tier users SHALL be able to view session details, session message history
 
 Only Admin tier users SHALL be permitted to configure external Route exposure on a Gateway. The `route` field on a Gateway resource controls whether the gateway is exposed outside the cluster, which has security implications. Editor and Viewer tier users SHALL NOT be able to set or modify the `route` field. The `routeAddress` field (read-only, populated by the control plane) SHALL be visible to all tiers.
 
-See `gateway-route-exposure.spec.md` for the full Route provisioning specification.
+See `openshell-gateway.spec.md` for the full Route provisioning specification.
 
 #### Scenario: Admin configures route on a gateway
 

@@ -31,8 +31,7 @@ Machine-readable index for autonomous reconciliation (`/reconcile` skill).
 | `platform/runner.spec.md` | platform | PlatformBridge, GRPCSessionListener, GRPCMessageWriter | Runner, CP | data-model, control-plane |
 | `platform/mcp-server.spec.md` | platform | MCP tools (16) | MCP, CLI, SDK | data-model |
 | `platform/agent-sandbox-config.spec.md` | platform | Agent (sandbox fields), Provider, Policy | CP, BE, API | data-model |
-| `platform/gateway-provisioning.spec.md` | platform | Gateway, GatewayReconciler, SharedKustomizeLibrary | CP, CLI | control-plane, data-model |
-| `platform/gateway-route-exposure.spec.md` | platform | Gateway (route), Route | CP, CLI, SDK, BE | gateway-provisioning, data-model |
+| `platform/openshell-gateway.spec.md` | platform | Gateway, GatewayReconciler, SharedKustomizeLibrary, OIDC, GRPCRoute, Database | CP, CLI, SDK, BE | control-plane, data-model |
 | `platform/openshell-sandbox-provisioning.spec.md` | platform | Sandbox | CP | gateway-provisioning, agent-sandbox-config |
 | `platform/scheduled-session-execution.spec.md` | platform | ScheduledSession | BE, API, CP | data-model |
 | `platform/session-activity-tracking.spec.md` | platform | Session (last_activity_at) | BE, API | data-model |

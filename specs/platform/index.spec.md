@@ -24,9 +24,9 @@ Behavioral rules and versioned governance for the runner component. Inherits fro
 
 Declarative agent YAML schema for ConfigMap-based agent definitions. Covers entrypoint, providers (namespace-scoped shared resources), payloads, sandbox policies, sandbox templates, and environment variables for OpenShell Gateway-managed sandboxes.
 
-### [Gateway Provisioning](gateway-provisioning.spec.md)
+### [OpenShell Gateway](openshell-gateway.spec.md)
 
-API-driven gateway lifecycle management. Gateways are declared as `kind: Gateway` resources, applied via `acpctl apply -k`, persisted in PostgreSQL, and reconciled by the GatewayReconciler into Kubernetes gateway deployments (StatefulSet, Service, RBAC, certgen Job). Replaces the previous ConfigMap-based `platform-config` approach.
+Consolidated gateway specification covering provisioning, OIDC authentication, GRPCRoute exposure, and database provisioning. Gateways are declared as `kind: Gateway` resources, applied via `acpctl apply -k`, persisted in PostgreSQL, and reconciled by the GatewayReconciler into Kubernetes gateway deployments (StatefulSet/Deployment, Service, RBAC, certgen Job). Replaces the previous ConfigMap-based `platform-config` approach.
 
 ### [Agent Configuration Reuse via Kustomize Overlays](agent-inheritance.spec.md) *(Draft)*
 

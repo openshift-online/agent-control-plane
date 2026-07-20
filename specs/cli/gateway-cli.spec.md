@@ -4,7 +4,7 @@
 
 The `acpctl` CLI SHALL support gateway resources as a first-class resource type across `get`, `delete`, and a dedicated `gateway` subcommand tree. This provides operators with full CLI access to inspect gateway connection details and configure local openshell CLI access against provisioned gateways.
 
-**Related:** `gateway-provisioning.spec.md` — gateway resource model and reconciliation; `openshell-sandbox.spec.md` — sandbox execution via gateways
+**Related:** `openshell-gateway.spec.md` — gateway resource model, OIDC, route exposure, and reconciliation; `openshell-sandbox.spec.md` — sandbox execution via gateways
 
 ---
 

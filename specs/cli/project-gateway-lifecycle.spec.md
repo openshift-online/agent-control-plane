@@ -1,6 +1,6 @@
 # Project and Gateway Lifecycle Commands
 
-**Related:** `gateway-cli.spec.md` — gateway get/setup-cli/remove-cli commands; `../platform/gateway-provisioning.spec.md` — gateway reconciler and K8s resources; `../platform/gateway-oidc.spec.md` — OIDC configuration; `../platform/gateway-route-exposure.spec.md` — GRPCRoute provisioning; `../platform/data-model.spec.md` — Gateway and Project kind definitions
+**Related:** `gateway-cli.spec.md` — gateway get/setup-cli/remove-cli commands; `../platform/openshell-gateway.spec.md` — gateway provisioning, OIDC, route exposure, database; `../platform/data-model.spec.md` — Gateway and Project kind definitions
 
 ---
 

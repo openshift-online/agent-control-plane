@@ -24,7 +24,7 @@ The Ambient API server provides a coordination layer for orchestrating fleets of
 - **Credential** — a global secret. Stores a Personal Access Token or equivalent for an external provider (GitHub, GitLab, Jira, Google, Vertex AI, Kubeconfig). Consumed by runners at session start. Bound to Projects via RoleBindings — a single Credential can be shared across multiple Projects without duplication.
 - **RoleBinding** — binds a Role to a subject (user or project) at a given scope. Ownership and access for all Kinds is expressed through RoleBindings. The subject and scope are each represented as typed nullable FKs — exactly one FK is non-null, determined by `scope`.
 - **Application** — a GitOps binding that continuously syncs agent fleet definitions from a git repository to an Ambient instance. The Ambient equivalent of an Argo CD Application.
-- **Gateway** — a project-scoped declaration that an OpenShell gateway should be deployed on a specific cluster (or the local cluster by default). Specifies the gateway image, TLS DNS names, and TOML configuration. Applied via `acpctl apply -k` and reconciled by the GatewayReconciler into Kubernetes resources (StatefulSet, Service, RBAC, certgen Job). See [gateway-provisioning.spec.md](./gateway-provisioning.spec.md).
+- **Gateway** — a project-scoped declaration that an OpenShell gateway should be deployed on a specific cluster (or the local cluster by default). Specifies the gateway image, TLS DNS names, and TOML configuration. Applied via `acpctl apply -k` and reconciled by the GatewayReconciler into Kubernetes resources (StatefulSet, Service, RBAC, certgen Job). See [openshell-gateway.spec.md](./openshell-gateway.spec.md).
 - **Cluster** — a global registration of a Kubernetes cluster endpoint. Each cluster has a `role` (`gateway`, `workload`, or `hybrid`) that determines what can be scheduled on it. The control plane maintains a `KubeClient` pool keyed by cluster ID and dispatches reconciliation to the appropriate cluster. Cluster credentials are stored as a write-only `kubeconfig` field (encrypted at rest, same storage pattern as Credential tokens).
 
 The stable address of an agent is `{project_name}/{agent_name}`. It holds the inbox and links to the active session.
@@ -264,7 +264,7 @@ erDiagram
         jsonb  server_dns_names "DNS names for TLS certificate generation"
         string config "nullable — OpenShell gateway TOML configuration"
         jsonb  oidc "nullable — OIDC authentication config (issuer, audience, etc.)"
-        jsonb  route "nullable — route exposure config (host); see gateway-route-exposure.spec.md"
+        jsonb  route "nullable — route exposure config (host); see openshell-gateway.spec.md"
         string route_address "nullable — read-only; external address populated by control plane"
         jsonb  labels
         jsonb  annotations

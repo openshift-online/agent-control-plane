@@ -75,7 +75,7 @@ Watches Project events via gRPC informer. Creates Kubernetes namespaces for each
 
 #### `internal/reconciler/gateway_reconciler.go` — GatewayReconciler
 
-Watches Gateway resource events via gRPC informer. Reconciles `kind: Gateway` API resources into Kubernetes gateway deployments (StatefulSet, Service, RBAC, certgen Job, NetworkPolicy) in the project namespace. Replaces the previous ConfigMap-based `internal/gateway/` package. Reuses manifest templating from `internal/gateway/manifests.go` and validation from `internal/gateway/validation.go`. See [gateway-provisioning.spec.md](./gateway-provisioning.spec.md) for the full specification.
+Watches Gateway resource events via gRPC informer. Reconciles `kind: Gateway` API resources into Kubernetes gateway deployments (StatefulSet, Service, RBAC, certgen Job, NetworkPolicy) in the project namespace. Replaces the previous ConfigMap-based `internal/gateway/` package. Reuses manifest templating from `internal/gateway/manifests.go` and validation from `internal/gateway/validation.go`. See [openshell-gateway.spec.md](./openshell-gateway.spec.md) for the full specification.
 
 #### `internal/reconciler/cluster_reconciler.go` — ClusterReconciler
 
