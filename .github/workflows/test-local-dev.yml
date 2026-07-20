@@ -61,6 +61,10 @@ jobs:
       KUBECTL_VERSION: v1.31.4
       KIND_VERSION: v0.31.0
 
+    env:
+      KUBECTL_VERSION: v1.31.4
+      KIND_VERSION: v0.31.0
+
     steps:
     - name: Checkout code
       uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
