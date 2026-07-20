@@ -41,9 +41,10 @@ type Gateway struct {
 	// JSON-encoded key-value labels applied to the gateway
 	Labels *string `json:"labels,omitempty"`
 	// JSON-encoded key-value annotations applied to the gateway
-	Annotations *string       `json:"annotations,omitempty"`
-	Oidc        *GatewayOidc  `json:"oidc,omitempty"`
-	Route       *GatewayRoute `json:"route,omitempty"`
+	Annotations *string          `json:"annotations,omitempty"`
+	Oidc        *GatewayOidc     `json:"oidc,omitempty"`
+	Route       *GatewayRoute    `json:"route,omitempty"`
+	Database    *GatewayDatabase `json:"database,omitempty"`
 	// Externally reachable address assigned by the OpenShift Route (set by control plane)
 	RouteAddress *string `json:"route_address,omitempty"`
 }
@@ -494,6 +495,38 @@ func (o *Gateway) SetRoute(v GatewayRoute) {
 	o.Route = &v
 }
 
+// GetDatabase returns the Database field value if set, zero value otherwise.
+func (o *Gateway) GetDatabase() GatewayDatabase {
+	if o == nil || IsNil(o.Database) {
+		var ret GatewayDatabase
+		return ret
+	}
+	return *o.Database
+}
+
+// GetDatabaseOk returns a tuple with the Database field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Gateway) GetDatabaseOk() (*GatewayDatabase, bool) {
+	if o == nil || IsNil(o.Database) {
+		return nil, false
+	}
+	return o.Database, true
+}
+
+// HasDatabase returns a boolean if a field has been set.
+func (o *Gateway) HasDatabase() bool {
+	if o != nil && !IsNil(o.Database) {
+		return true
+	}
+
+	return false
+}
+
+// SetDatabase gets a reference to the given GatewayDatabase and assigns it to the Database field.
+func (o *Gateway) SetDatabase(v GatewayDatabase) {
+	o.Database = &v
+}
+
 // GetRouteAddress returns the RouteAddress field value if set, zero value otherwise.
 func (o *Gateway) GetRouteAddress() string {
 	if o == nil || IsNil(o.RouteAddress) {
@@ -571,6 +604,9 @@ func (o Gateway) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Route) {
 		toSerialize["route"] = o.Route
+	}
+	if !IsNil(o.Database) {
+		toSerialize["database"] = o.Database
 	}
 	if !IsNil(o.RouteAddress) {
 		toSerialize["route_address"] = o.RouteAddress

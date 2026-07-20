@@ -95,5 +95,23 @@ func ValidateGatewayConfig(config GatewayConfig) error {
 		}
 	}
 
+	if config.Database != nil {
+		switch config.Database.Type {
+		case "sqlite", "postgres":
+		case "":
+			return fmt.Errorf("database.type is required when database is specified")
+		default:
+			return fmt.Errorf("unsupported database.type %q (must be sqlite or postgres)", config.Database.Type)
+		}
+		if config.Database.ExternalSecretRef != "" {
+			return fmt.Errorf("database.external_secret_ref is reserved for future use")
+		}
+		if config.Database.Image != "" {
+			if err := ValidateImageReference(config.Database.Image); err != nil {
+				return fmt.Errorf("invalid database.image: %w", err)
+			}
+		}
+	}
+
 	return nil
 }

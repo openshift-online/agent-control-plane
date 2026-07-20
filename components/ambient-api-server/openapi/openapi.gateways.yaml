@@ -253,10 +253,37 @@ components:
               $ref: '#/components/schemas/GatewayOidc'
             route:
               $ref: '#/components/schemas/GatewayRoute'
+            database:
+              $ref: '#/components/schemas/GatewayDatabase'
             route_address:
               type: string
               readOnly: true
               description: Externally reachable address assigned by the OpenShift Route (set by control plane)
+    # NEW SCHEMA START
+    GatewayDatabase:
+    # NEW SCHEMA END
+      type: object
+      description: Database backend configuration for the gateway
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          description: "Database backend: sqlite, postgres"
+          enum:
+            - sqlite
+            - postgres
+        storage_size:
+          type: string
+          description: PVC storage request for PostgreSQL data volume (default 5Gi)
+          default: "5Gi"
+        image:
+          type: string
+          description: PostgreSQL container image (default postgres:16)
+          default: "postgres:16"
+        external_secret_ref:
+          type: string
+          description: "Reserved for future use: name of a K8s Secret with a url key"
     # NEW SCHEMA START
     GatewayRoute:
     # NEW SCHEMA END
@@ -329,6 +356,8 @@ components:
           $ref: '#/components/schemas/GatewayOidc'
         route:
           $ref: '#/components/schemas/GatewayRoute'
+        database:
+          $ref: '#/components/schemas/GatewayDatabase'
         route_address:
           type: string
           description: Externally reachable address assigned by the OpenShift Route (set by control plane)

@@ -199,6 +199,7 @@ Class | Method | HTTP request | Description
  - [CredentialTokenResponse](docs/CredentialTokenResponse.md)
  - [Error](docs/Error.md)
  - [Gateway](docs/Gateway.md)
+ - [GatewayDatabase](docs/GatewayDatabase.md)
  - [GatewayList](docs/GatewayList.md)
  - [GatewayOidc](docs/GatewayOidc.md)
  - [GatewayPatchRequest](docs/GatewayPatchRequest.md)

@@ -20,14 +20,15 @@ var _ MappedNullable = &GatewayPatchRequest{}
 
 // GatewayPatchRequest struct for GatewayPatchRequest
 type GatewayPatchRequest struct {
-	Name           *string       `json:"name,omitempty"`
-	Image          *string       `json:"image,omitempty"`
-	ServerDnsNames []string      `json:"server_dns_names,omitempty"`
-	Config         *string       `json:"config,omitempty"`
-	Labels         *string       `json:"labels,omitempty"`
-	Annotations    *string       `json:"annotations,omitempty"`
-	Oidc           *GatewayOidc  `json:"oidc,omitempty"`
-	Route          *GatewayRoute `json:"route,omitempty"`
+	Name           *string          `json:"name,omitempty"`
+	Image          *string          `json:"image,omitempty"`
+	ServerDnsNames []string         `json:"server_dns_names,omitempty"`
+	Config         *string          `json:"config,omitempty"`
+	Labels         *string          `json:"labels,omitempty"`
+	Annotations    *string          `json:"annotations,omitempty"`
+	Oidc           *GatewayOidc     `json:"oidc,omitempty"`
+	Route          *GatewayRoute    `json:"route,omitempty"`
+	Database       *GatewayDatabase `json:"database,omitempty"`
 	// Externally reachable address assigned by the OpenShift Route (set by control plane)
 	RouteAddress *string `json:"route_address,omitempty"`
 }
@@ -305,6 +306,38 @@ func (o *GatewayPatchRequest) SetRoute(v GatewayRoute) {
 	o.Route = &v
 }
 
+// GetDatabase returns the Database field value if set, zero value otherwise.
+func (o *GatewayPatchRequest) GetDatabase() GatewayDatabase {
+	if o == nil || IsNil(o.Database) {
+		var ret GatewayDatabase
+		return ret
+	}
+	return *o.Database
+}
+
+// GetDatabaseOk returns a tuple with the Database field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *GatewayPatchRequest) GetDatabaseOk() (*GatewayDatabase, bool) {
+	if o == nil || IsNil(o.Database) {
+		return nil, false
+	}
+	return o.Database, true
+}
+
+// HasDatabase returns a boolean if a field has been set.
+func (o *GatewayPatchRequest) HasDatabase() bool {
+	if o != nil && !IsNil(o.Database) {
+		return true
+	}
+
+	return false
+}
+
+// SetDatabase gets a reference to the given GatewayDatabase and assigns it to the Database field.
+func (o *GatewayPatchRequest) SetDatabase(v GatewayDatabase) {
+	o.Database = &v
+}
+
 // GetRouteAddress returns the RouteAddress field value if set, zero value otherwise.
 func (o *GatewayPatchRequest) GetRouteAddress() string {
 	if o == nil || IsNil(o.RouteAddress) {
@@ -370,6 +403,9 @@ func (o GatewayPatchRequest) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Route) {
 		toSerialize["route"] = o.Route
+	}
+	if !IsNil(o.Database) {
+		toSerialize["database"] = o.Database
 	}
 	if !IsNil(o.RouteAddress) {
 		toSerialize["route_address"] = o.RouteAddress

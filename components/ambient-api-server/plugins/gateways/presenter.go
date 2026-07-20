@@ -41,6 +41,13 @@ func ConvertGateway(gw openapi.Gateway) *Gateway {
 		}
 	}
 
+	if gw.Database != nil {
+		if raw, err := json.Marshal(gw.Database); err == nil {
+			s := string(raw)
+			c.Database = &s
+		}
+	}
+
 	c.Labels = gw.Labels
 	c.Annotations = gw.Annotations
 
@@ -87,6 +94,13 @@ func PresentGateway(gw *Gateway) openapi.Gateway {
 		var route openapi.GatewayRoute
 		if err := json.Unmarshal([]byte(*gw.Route), &route); err == nil {
 			result.Route = &route
+		}
+	}
+
+	if gw.Database != nil {
+		var db openapi.GatewayDatabase
+		if err := json.Unmarshal([]byte(*gw.Database), &db); err == nil {
+			result.Database = &db
 		}
 	}
 

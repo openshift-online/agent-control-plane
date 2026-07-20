@@ -68,6 +68,12 @@ func applyGatewayDefaults(gw *Gateway, projectID string) {
 		s := string(raw)
 		gw.Route = &s
 	}
+	if gw.Database == nil {
+		dbDefault := map[string]interface{}{"type": "sqlite"}
+		raw, _ := json.Marshal(dbDefault)
+		s := string(raw)
+		gw.Database = &s
+	}
 	if gw.Labels == nil {
 		labelsDefault := map[string]string{
 			"purpose": "openshell",
@@ -202,6 +208,16 @@ func (h gatewayHandler) Patch(w http.ResponseWriter, r *http.Request) {
 				found.Route = &s
 			} else if rawVal, exists := nullableFields["route"]; exists && string(rawVal) == "null" {
 				found.Route = nil
+			}
+			if patch.Database != nil {
+				raw, merr := json.Marshal(patch.Database)
+				if merr != nil {
+					return nil, errors.GeneralError("failed to marshal database: %v", merr)
+				}
+				s := string(raw)
+				found.Database = &s
+			} else if rawVal, exists := nullableFields["database"]; exists && string(rawVal) == "null" {
+				found.Database = nil
 			}
 			if patch.RouteAddress != nil {
 				found.RouteAddress = patch.RouteAddress

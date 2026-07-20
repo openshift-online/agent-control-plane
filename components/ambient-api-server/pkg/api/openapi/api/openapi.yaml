@@ -8117,6 +8117,8 @@ components:
             $ref: "#/components/schemas/GatewayOidc"
           route:
             $ref: "#/components/schemas/GatewayRoute"
+          database:
+            $ref: "#/components/schemas/GatewayDatabase"
           route_address:
             description: Externally reachable address assigned by the OpenShift Route
               (set by control plane)
@@ -8145,6 +8147,11 @@ components:
           issuer: issuer
         route_address: route_address
         labels: labels
+        database:
+          external_secret_ref: external_secret_ref
+          image: postgres:16
+          storage_size: 5Gi
+          type: sqlite
         route:
           host: host
         updated_at: 2000-01-23T04:56:07.000+00:00
@@ -8185,6 +8192,11 @@ components:
             issuer: issuer
           route_address: route_address
           labels: labels
+          database:
+            external_secret_ref: external_secret_ref
+            image: postgres:16
+            storage_size: 5Gi
+            type: sqlite
           route:
             host: host
           updated_at: 2000-01-23T04:56:07.000+00:00
@@ -8210,6 +8222,11 @@ components:
             issuer: issuer
           route_address: route_address
           labels: labels
+          database:
+            external_secret_ref: external_secret_ref
+            image: postgres:16
+            storage_size: 5Gi
+            type: sqlite
           route:
             host: host
           updated_at: 2000-01-23T04:56:07.000+00:00
@@ -8221,6 +8238,11 @@ components:
     GatewayPatchRequest:
       example:
         image: image
+        database:
+          external_secret_ref: external_secret_ref
+          image: postgres:16
+          storage_size: 5Gi
+          type: sqlite
         route:
           host: host
         server_dns_names:
@@ -8258,6 +8280,8 @@ components:
           $ref: "#/components/schemas/GatewayOidc"
         route:
           $ref: "#/components/schemas/GatewayRoute"
+        database:
+          $ref: "#/components/schemas/GatewayDatabase"
         route_address:
           description: Externally reachable address assigned by the OpenShift Route
             (set by control plane)
@@ -8565,6 +8589,34 @@ components:
           description: "Hostname for the OpenShift Route. If empty, OpenShift assigns\
             \ a hostname based on the cluster's default routing suffix."
           type: string
+      type: object
+    GatewayDatabase:
+      description: Database backend configuration for the gateway
+      example:
+        external_secret_ref: external_secret_ref
+        image: postgres:16
+        storage_size: 5Gi
+        type: sqlite
+      properties:
+        type:
+          description: "Database backend: sqlite, postgres"
+          enum:
+          - sqlite
+          - postgres
+          type: string
+        storage_size:
+          default: 5Gi
+          description: PVC storage request for PostgreSQL data volume (default 5Gi)
+          type: string
+        image:
+          default: postgres:16
+          description: PostgreSQL container image (default postgres:16)
+          type: string
+        external_secret_ref:
+          description: "Reserved for future use: name of a K8s Secret with a url key"
+          type: string
+      required:
+      - type
       type: object
   securitySchemes:
     Bearer:

@@ -16,6 +16,7 @@ type Gateway struct {
 	Annotations    *string `json:"annotations"       gorm:"type:jsonb"`
 	Oidc           *string `json:"oidc"              gorm:"type:jsonb"`
 	Route          *string `json:"route"             gorm:"type:jsonb"`
+	Database       *string `json:"database"          gorm:"type:jsonb"`
 	RouteAddress   *string `json:"route_address"`
 	ClusterId      *string `json:"cluster_id"        gorm:"index"`
 }

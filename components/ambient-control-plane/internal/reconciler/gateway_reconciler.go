@@ -279,6 +279,15 @@ func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient 
 		}
 	}
 
+	if gw.Database != nil {
+		gwConfig.Database = &gateway.DatabaseConfig{
+			Type:              gw.Database.Type,
+			StorageSize:       gw.Database.StorageSize,
+			Image:             gw.Database.Image,
+			ExternalSecretRef: gw.Database.ExternalSecretRef,
+		}
+	}
+
 	if err := gateway.ValidateGatewayConfig(gwConfig); err != nil {
 		r.logger.Warn().Err(err).
 			Str("gateway_name", gw.Name).
@@ -416,9 +425,9 @@ func (r *GatewayReconciler) reconcileGRPCRoute(ctx context.Context, projectClien
 		return nil
 	}
 
-	stsUID, err := r.getStatefulSetUID(ctx, namespace, routeName)
+	stsUID, err := r.getWorkloadUID(ctx, namespace, routeName)
 	if err != nil {
-		r.logger.Info().Err(err).Str("namespace", namespace).Msg("StatefulSet not yet available, creating GRPCRoute without OwnerReference (will be set on next reconcile)")
+		r.logger.Info().Err(err).Str("namespace", namespace).Msg("workload not yet available, creating GRPCRoute without OwnerReference (will be set on next reconcile)")
 		stsUID = ""
 	}
 
@@ -631,13 +640,15 @@ func (r *GatewayReconciler) readCACert(ctx context.Context, namespace string) (s
 	return string(decoded), nil
 }
 
-func (r *GatewayReconciler) getStatefulSetUID(ctx context.Context, namespace, name string) (string, error) {
-	stsGVR := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "statefulsets"}
-	sts, err := r.dynamicClient.Resource(stsGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		return "", fmt.Errorf("get statefulset %s: %w", name, err)
+func (r *GatewayReconciler) getWorkloadUID(ctx context.Context, namespace, name string) (string, error) {
+	for _, res := range []string{"deployments", "statefulsets"} {
+		gvr := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: res}
+		obj, err := r.dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err == nil {
+			return string(obj.GetUID()), nil
+		}
 	}
-	return string(sts.GetUID()), nil
+	return "", fmt.Errorf("get workload %s: not found as deployment or statefulset", name)
 }
 
 func (r *GatewayReconciler) reconcileGRPCRouteAddress(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway, hostname string) error {

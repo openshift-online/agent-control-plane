@@ -19,12 +19,20 @@ type RouteConfig struct {
 	Host string `yaml:"host" json:"host,omitempty"`
 }
 
+type DatabaseConfig struct {
+	Type              string `yaml:"type" json:"type"`
+	StorageSize       string `yaml:"storage_size" json:"storage_size,omitempty"`
+	Image             string `yaml:"image" json:"image,omitempty"`
+	ExternalSecretRef string `yaml:"external_secret_ref" json:"external_secret_ref,omitempty"`
+}
+
 type GatewayConfig struct {
-	Image          string       `yaml:"image"`
-	ServerDnsNames []string     `yaml:"serverDnsNames"`
-	Config         string       `yaml:"config"`
-	Oidc           *OidcConfig  `yaml:"oidc,omitempty"`
-	Route          *RouteConfig `yaml:"route,omitempty"`
+	Image          string          `yaml:"image"`
+	ServerDnsNames []string        `yaml:"serverDnsNames"`
+	Config         string          `yaml:"config"`
+	Oidc           *OidcConfig     `yaml:"oidc,omitempty"`
+	Route          *RouteConfig    `yaml:"route,omitempty"`
+	Database       *DatabaseConfig `yaml:"database,omitempty"`
 }
 
 type ReconcileOpts struct {

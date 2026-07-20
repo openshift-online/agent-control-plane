@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strings"
@@ -114,16 +116,31 @@ func deployGateway(
 	// Only restart pods if DNS or config changed (image changes trigger K8s rolling update automatically)
 	needsRestart := dnsNamesChanged || configTomlChanged
 
-	// Apply manifests in order: RBAC → ServiceAccount → ConfigMap → Job → Service → StatefulSet → NetworkPolicy
+	usePostgres := nsConfig.Gateway.Database != nil && nsConfig.Gateway.Database.Type == "postgres"
+
+	if usePostgres {
+		if err := reconcilePostgresResources(ctx, dynamicClient, nsConfig, defaultImage, opts); err != nil {
+			return fmt.Errorf("reconcile postgres resources: %w", err)
+		}
+		deleteWorkloadIfExists(ctx, dynamicClient, nsConfig.Name, "statefulsets", "openshell-gateway")
+	} else {
+		cleanupPostgresResources(ctx, dynamicClient, nsConfig.Name)
+		deleteWorkloadIfExists(ctx, dynamicClient, nsConfig.Name, "deployments", "openshell-gateway")
+	}
+
 	order := []string{
 		"rbac.yaml",
 		"serviceaccount.yaml",
 		"configmap.yaml",
 		"certgen-job.yaml",
 		"service.yaml",
-		"statefulset.yaml",
-		"networkpolicy.yaml",
 	}
+
+	if !usePostgres {
+		order = append(order, "statefulset.yaml")
+	}
+
+	order = append(order, "networkpolicy.yaml")
 
 	for _, filename := range order {
 		resources, ok := manifests[filename]
@@ -135,28 +152,23 @@ func deployGateway(
 		}
 
 		for _, manifest := range resources {
-			// Apply namespace and image substitutions
 			obj, err := ApplyManifestToNamespace(manifest, nsConfig.Name, nsConfig.Gateway, defaultImage)
 			if err != nil {
 				return fmt.Errorf("apply substitutions for %s: %w", filename, err)
 			}
 
-			// Apply config overrides (serverDnsNames, custom TOML)
 			if err := ApplyConfigOverrides(obj, nsConfig.Gateway); err != nil {
 				return fmt.Errorf("apply config overrides for %s: %w", filename, err)
 			}
 
-			// On OpenShift, clear fsGroup and runAsUser so the SCC assigns UIDs/GIDs
-			if opts.IsOpenShift && obj.GetKind() == "StatefulSet" {
+			if opts.IsOpenShift && (obj.GetKind() == "StatefulSet" || obj.GetKind() == "Deployment") {
 				applyOpenShiftOverrides(obj)
 			}
 
-			// Mount trusted CA bundle into gateway pod for OIDC discovery with private CAs
-			if opts.TrustedCAData != "" && obj.GetKind() == "StatefulSet" {
+			if opts.TrustedCAData != "" && (obj.GetKind() == "StatefulSet" || obj.GetKind() == "Deployment") {
 				applyTrustedCAOverrides(obj)
 			}
 
-			// Reconcile resource (update-or-create)
 			if err := reconcileResource(ctx, dynamicClient, obj, needsRestart); err != nil {
 				return fmt.Errorf("reconcile resource from %s: %w", filename, err)
 			}
@@ -169,7 +181,478 @@ func deployGateway(
 		}
 	}
 
+	if usePostgres {
+		gwDeployment := buildGatewayDeployment(nsConfig, defaultImage, opts)
+		if err := reconcileResource(ctx, dynamicClient, gwDeployment, needsRestart); err != nil {
+			return fmt.Errorf("reconcile gateway deployment: %w", err)
+		}
+	}
+
 	return nil
+}
+
+func generatePassword() (string, error) {
+	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("generate password: %w", err)
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+func reconcilePostgresResources(
+	ctx context.Context,
+	dynamicClient dynamic.Interface,
+	nsConfig NamespaceConfig,
+	defaultImage string,
+	opts ReconcileOpts,
+) error {
+	namespace := nsConfig.Name
+	dbConfig := nsConfig.Gateway.Database
+
+	storageSize := "5Gi"
+	if dbConfig.StorageSize != "" {
+		storageSize = dbConfig.StorageSize
+	}
+	pgImage := "postgres:16"
+	if dbConfig.Image != "" {
+		pgImage = dbConfig.Image
+	}
+
+	secretGVR := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "secrets"}
+	existingSecret, err := dynamicClient.Resource(secretGVR).Namespace(namespace).Get(ctx, "openshell-gateway-db", metav1.GetOptions{})
+	var password string
+	secretAlreadyExists := false
+	if err == nil {
+		data, _, _ := unstructured.NestedStringMap(existingSecret.Object, "stringData")
+		if data != nil {
+			password = data["password"]
+		}
+		if password == "" {
+			rawData, _, _ := unstructured.NestedMap(existingSecret.Object, "data")
+			if rawData != nil {
+				secretAlreadyExists = true
+			}
+		}
+	}
+
+	if password == "" && !secretAlreadyExists {
+		password, err = generatePassword()
+		if err != nil {
+			return err
+		}
+	}
+
+	if !secretAlreadyExists {
+		dbURL := fmt.Sprintf("postgres://openshell:%s@openshell-gateway-db.%s.svc.cluster.local:5432/openshell?sslmode=disable", password, namespace)
+
+		isRHEL := strings.Contains(pgImage, "rhel")
+		userKey := "POSTGRES_USER"
+		passKey := "POSTGRES_PASSWORD"
+		dbKey := "POSTGRES_DB"
+		if isRHEL {
+			userKey = "POSTGRESQL_USER"
+			passKey = "POSTGRESQL_PASSWORD"
+			dbKey = "POSTGRESQL_DATABASE"
+		}
+
+		secret := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "openshell-gateway-db",
+					"namespace": namespace,
+					"labels": map[string]interface{}{
+						"app.kubernetes.io/name":       "openshell",
+						"app.kubernetes.io/component":  "gateway-database",
+						"app.kubernetes.io/managed-by": "agent-control-plane",
+					},
+				},
+				"stringData": map[string]interface{}{
+					"password": password,
+					userKey:    "openshell",
+					passKey:    password,
+					dbKey:      "openshell",
+					"url":      dbURL,
+				},
+			},
+		}
+		if err := reconcileResource(ctx, dynamicClient, secret, false); err != nil {
+			return fmt.Errorf("reconcile db secret: %w", err)
+		}
+	}
+
+	pvc := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "PersistentVolumeClaim",
+			"metadata": map[string]interface{}{
+				"name":      "openshell-gateway-db",
+				"namespace": namespace,
+				"labels": map[string]interface{}{
+					"app.kubernetes.io/name":       "openshell",
+					"app.kubernetes.io/component":  "gateway-database",
+					"app.kubernetes.io/managed-by": "agent-control-plane",
+				},
+			},
+			"spec": map[string]interface{}{
+				"accessModes": []interface{}{"ReadWriteOnce"},
+				"resources": map[string]interface{}{
+					"requests": map[string]interface{}{
+						"storage": storageSize,
+					},
+				},
+			},
+		},
+	}
+	if err := reconcileResource(ctx, dynamicClient, pvc, false); err != nil {
+		return fmt.Errorf("reconcile db pvc: %w", err)
+	}
+
+	isRHEL := strings.Contains(pgImage, "rhel")
+	userKey := "POSTGRES_USER"
+	passKey := "POSTGRES_PASSWORD"
+	dbKey := "POSTGRES_DB"
+	dataPath := "/var/lib/postgresql/data"
+	if isRHEL {
+		userKey = "POSTGRESQL_USER"
+		passKey = "POSTGRESQL_PASSWORD"
+		dbKey = "POSTGRESQL_DATABASE"
+		dataPath = "/var/lib/pgsql/data"
+	}
+
+	dbDeployment := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]interface{}{
+				"name":      "openshell-gateway-db",
+				"namespace": namespace,
+				"labels": map[string]interface{}{
+					"app.kubernetes.io/name":       "openshell",
+					"app.kubernetes.io/component":  "gateway-database",
+					"app.kubernetes.io/managed-by": "agent-control-plane",
+				},
+			},
+			"spec": map[string]interface{}{
+				"replicas": int64(1),
+				"strategy": map[string]interface{}{"type": "Recreate"},
+				"selector": map[string]interface{}{
+					"matchLabels": map[string]interface{}{
+						"app.kubernetes.io/name":      "openshell",
+						"app.kubernetes.io/instance":  "openshell-gateway-db",
+						"app.kubernetes.io/component": "gateway-database",
+					},
+				},
+				"template": map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"labels": map[string]interface{}{
+							"app.kubernetes.io/name":       "openshell",
+							"app.kubernetes.io/instance":   "openshell-gateway-db",
+							"app.kubernetes.io/component":  "gateway-database",
+							"app.kubernetes.io/managed-by": "agent-control-plane",
+						},
+					},
+					"spec": map[string]interface{}{
+						"terminationGracePeriodSeconds": int64(10),
+						"containers": []interface{}{
+							map[string]interface{}{
+								"name":  "postgres",
+								"image": pgImage,
+								"ports": []interface{}{
+									map[string]interface{}{"containerPort": int64(5432), "protocol": "TCP"},
+								},
+								"env": []interface{}{
+									map[string]interface{}{
+										"name": userKey,
+										"valueFrom": map[string]interface{}{
+											"secretKeyRef": map[string]interface{}{"name": "openshell-gateway-db", "key": userKey},
+										},
+									},
+									map[string]interface{}{
+										"name": passKey,
+										"valueFrom": map[string]interface{}{
+											"secretKeyRef": map[string]interface{}{"name": "openshell-gateway-db", "key": passKey},
+										},
+									},
+									map[string]interface{}{
+										"name": dbKey,
+										"valueFrom": map[string]interface{}{
+											"secretKeyRef": map[string]interface{}{"name": "openshell-gateway-db", "key": dbKey},
+										},
+									},
+								},
+								"volumeMounts": []interface{}{
+									map[string]interface{}{"name": "pgdata", "mountPath": dataPath},
+								},
+								"readinessProbe": map[string]interface{}{
+									"exec":                map[string]interface{}{"command": []interface{}{"pg_isready", "-U", "openshell"}},
+									"initialDelaySeconds": int64(5),
+									"periodSeconds":       int64(5),
+								},
+								"resources": map[string]interface{}{
+									"requests": map[string]interface{}{"cpu": "100m", "memory": "256Mi"},
+									"limits":   map[string]interface{}{"cpu": "500m", "memory": "512Mi"},
+								},
+							},
+						},
+						"volumes": []interface{}{
+							map[string]interface{}{
+								"name":                  "pgdata",
+								"persistentVolumeClaim": map[string]interface{}{"claimName": "openshell-gateway-db"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if opts.IsOpenShift {
+		applyOpenShiftOverrides(dbDeployment)
+	}
+
+	if err := reconcileResource(ctx, dynamicClient, dbDeployment, false); err != nil {
+		return fmt.Errorf("reconcile db deployment: %w", err)
+	}
+
+	dbService := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Service",
+			"metadata": map[string]interface{}{
+				"name":      "openshell-gateway-db",
+				"namespace": namespace,
+				"labels": map[string]interface{}{
+					"app.kubernetes.io/name":       "openshell",
+					"app.kubernetes.io/component":  "gateway-database",
+					"app.kubernetes.io/managed-by": "agent-control-plane",
+				},
+			},
+			"spec": map[string]interface{}{
+				"type": "ClusterIP",
+				"selector": map[string]interface{}{
+					"app.kubernetes.io/instance":  "openshell-gateway-db",
+					"app.kubernetes.io/component": "gateway-database",
+				},
+				"ports": []interface{}{
+					map[string]interface{}{
+						"port":       int64(5432),
+						"targetPort": int64(5432),
+						"protocol":   "TCP",
+					},
+				},
+			},
+		},
+	}
+	if err := reconcileResource(ctx, dynamicClient, dbService, false); err != nil {
+		return fmt.Errorf("reconcile db service: %w", err)
+	}
+
+	dbNetPol := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "networking.k8s.io/v1",
+			"kind":       "NetworkPolicy",
+			"metadata": map[string]interface{}{
+				"name":      "openshell-gateway-db",
+				"namespace": namespace,
+				"labels": map[string]interface{}{
+					"app.kubernetes.io/name":       "openshell",
+					"app.kubernetes.io/component":  "gateway-database",
+					"app.kubernetes.io/managed-by": "agent-control-plane",
+				},
+			},
+			"spec": map[string]interface{}{
+				"podSelector": map[string]interface{}{
+					"matchLabels": map[string]interface{}{
+						"app.kubernetes.io/instance":  "openshell-gateway-db",
+						"app.kubernetes.io/component": "gateway-database",
+					},
+				},
+				"policyTypes": []interface{}{"Ingress"},
+				"ingress": []interface{}{
+					map[string]interface{}{
+						"from": []interface{}{
+							map[string]interface{}{
+								"podSelector": map[string]interface{}{
+									"matchLabels": map[string]interface{}{
+										"app.kubernetes.io/instance":  "openshell-gateway",
+										"app.kubernetes.io/component": "gateway",
+									},
+								},
+							},
+						},
+						"ports": []interface{}{
+							map[string]interface{}{"port": int64(5432), "protocol": "TCP"},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := reconcileResource(ctx, dynamicClient, dbNetPol, false); err != nil {
+		return fmt.Errorf("reconcile db networkpolicy: %w", err)
+	}
+
+	return nil
+}
+
+func buildGatewayDeployment(nsConfig NamespaceConfig, defaultImage string, opts ReconcileOpts) *unstructured.Unstructured {
+	namespace := nsConfig.Name
+	image := defaultImage
+	if nsConfig.Gateway.Image != "" {
+		image = nsConfig.Gateway.Image
+	}
+
+	initContainers := []interface{}{
+		map[string]interface{}{
+			"name":  "wait-for-db",
+			"image": nsConfig.Gateway.Database.Image,
+			"command": []interface{}{"sh", "-c",
+				"until pg_isready -h openshell-gateway-db -U openshell; do echo waiting for postgres; sleep 2; done",
+			},
+		},
+	}
+	if nsConfig.Gateway.Database.Image == "" {
+		initContainers[0].(map[string]interface{})["image"] = "postgres:16"
+	}
+
+	deployment := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]interface{}{
+				"name":      "openshell-gateway",
+				"namespace": namespace,
+				"labels": map[string]interface{}{
+					"app.kubernetes.io/name":       "openshell",
+					"app.kubernetes.io/component":  "gateway",
+					"app.kubernetes.io/managed-by": "agent-control-plane",
+				},
+			},
+			"spec": map[string]interface{}{
+				"replicas": int64(1),
+				"selector": map[string]interface{}{
+					"matchLabels": map[string]interface{}{
+						"app.kubernetes.io/name":     "openshell",
+						"app.kubernetes.io/instance": "openshell-gateway",
+					},
+				},
+				"template": map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"labels": map[string]interface{}{
+							"app.kubernetes.io/name":       "openshell",
+							"app.kubernetes.io/instance":   "openshell-gateway",
+							"app.kubernetes.io/component":  "gateway",
+							"app.kubernetes.io/managed-by": "agent-control-plane",
+						},
+					},
+					"spec": map[string]interface{}{
+						"terminationGracePeriodSeconds": int64(5),
+						"serviceAccountName":            "openshell-gateway",
+						"initContainers":                initContainers,
+						"containers": []interface{}{
+							map[string]interface{}{
+								"name":            "openshell-gateway",
+								"image":           image,
+								"imagePullPolicy": "IfNotPresent",
+								"securityContext": map[string]interface{}{
+									"allowPrivilegeEscalation": false,
+									"seccompProfile":           map[string]interface{}{"type": "RuntimeDefault"},
+									"capabilities":             map[string]interface{}{"drop": []interface{}{"ALL"}},
+									"runAsNonRoot":             true,
+									"readOnlyRootFilesystem":   true,
+								},
+								"args": []interface{}{"--config", "/etc/openshell/gateway.toml"},
+								"env": []interface{}{
+									map[string]interface{}{
+										"name": "OPENSHELL_DB_URL",
+										"valueFrom": map[string]interface{}{
+											"secretKeyRef": map[string]interface{}{"name": "openshell-gateway-db", "key": "url"},
+										},
+									},
+								},
+								"volumeMounts": []interface{}{
+									map[string]interface{}{"name": "gateway-config", "mountPath": "/etc/openshell", "readOnly": true},
+									map[string]interface{}{"name": "sandbox-jwt", "mountPath": "/etc/openshell-jwt", "readOnly": true},
+									map[string]interface{}{"name": "tls-cert", "mountPath": "/etc/openshell-tls/server", "readOnly": true},
+									map[string]interface{}{"name": "tls-client-ca", "mountPath": "/etc/openshell-tls/client-ca", "readOnly": true},
+									map[string]interface{}{"name": "tmp", "mountPath": "/tmp"},
+								},
+								"ports": []interface{}{
+									map[string]interface{}{"name": "grpc", "containerPort": int64(8080), "protocol": "TCP"},
+									map[string]interface{}{"name": "health", "containerPort": int64(8081), "protocol": "TCP"},
+									map[string]interface{}{"name": "metrics", "containerPort": int64(9090), "protocol": "TCP"},
+								},
+								"startupProbe": map[string]interface{}{
+									"httpGet":       map[string]interface{}{"path": "/healthz", "port": "health"},
+									"periodSeconds": int64(2), "timeoutSeconds": int64(1), "failureThreshold": int64(30),
+								},
+								"livenessProbe": map[string]interface{}{
+									"httpGet":             map[string]interface{}{"path": "/healthz", "port": "health"},
+									"initialDelaySeconds": int64(2), "periodSeconds": int64(5), "timeoutSeconds": int64(1), "failureThreshold": int64(3),
+								},
+								"readinessProbe": map[string]interface{}{
+									"httpGet":             map[string]interface{}{"path": "/readyz", "port": "health"},
+									"initialDelaySeconds": int64(1), "periodSeconds": int64(2), "timeoutSeconds": int64(1), "failureThreshold": int64(3),
+								},
+								"resources": map[string]interface{}{
+									"requests": map[string]interface{}{"cpu": "100m", "memory": "256Mi"},
+									"limits":   map[string]interface{}{"cpu": "500m", "memory": "512Mi"},
+								},
+							},
+						},
+						"volumes": []interface{}{
+							map[string]interface{}{"name": "gateway-config", "configMap": map[string]interface{}{"name": "openshell-gateway-config"}},
+							map[string]interface{}{"name": "sandbox-jwt", "secret": map[string]interface{}{"secretName": "openshell-gateway-jwt-keys", "defaultMode": int64(256)}},
+							map[string]interface{}{"name": "tls-cert", "secret": map[string]interface{}{"secretName": "openshell-server-tls"}},
+							map[string]interface{}{"name": "tls-client-ca", "secret": map[string]interface{}{"secretName": "openshell-server-tls", "items": []interface{}{map[string]interface{}{"key": "ca.crt", "path": "ca.crt"}}}},
+							map[string]interface{}{"name": "tmp", "emptyDir": map[string]interface{}{}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if opts.IsOpenShift {
+		applyOpenShiftOverrides(deployment)
+	}
+	if opts.TrustedCAData != "" {
+		applyTrustedCAOverrides(deployment)
+	}
+
+	return deployment
+}
+
+func deleteWorkloadIfExists(ctx context.Context, dynamicClient dynamic.Interface, namespace, resource, name string) {
+	gvr := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: resource}
+	_, err := dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return
+	}
+	propagation := metav1.DeletePropagationForeground
+	delErr := dynamicClient.Resource(gvr).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{PropagationPolicy: &propagation})
+	if delErr != nil && !k8serrors.IsNotFound(delErr) {
+		log.Warn().Err(delErr).Str("namespace", namespace).Str("resource", resource).Str("name", name).Msg("failed to delete old workload")
+	} else {
+		log.Info().Str("namespace", namespace).Str("resource", resource).Str("name", name).Msg("deleted old workload for database type switch")
+	}
+}
+
+func cleanupPostgresResources(ctx context.Context, dynamicClient dynamic.Interface, namespace string) {
+	resources := []struct {
+		gvr  schema.GroupVersionResource
+		name string
+	}{
+		{schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}, "openshell-gateway-db"},
+		{schema.GroupVersionResource{Group: "", Version: "v1", Resource: "services"}, "openshell-gateway-db"},
+		{schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}, "openshell-gateway-db"},
+		{schema.GroupVersionResource{Group: "", Version: "v1", Resource: "secrets"}, "openshell-gateway-db"},
+	}
+	for _, r := range resources {
+		_ = dynamicClient.Resource(r.gvr).Namespace(namespace).Delete(ctx, r.name, metav1.DeleteOptions{})
+	}
 }
 
 // serverDnsNamesChanged checks if the serverDnsNames in the ConfigMap differ from the desired list
@@ -408,10 +891,16 @@ func reconcileResource(ctx context.Context, dynamicClient dynamic.Interface, obj
 		return nil
 	}
 
-	// Resource exists, update it
-	// For StatefulSets, add restart annotation ONLY if DNS or config changed
-	// (image changes trigger K8s rolling update automatically, no annotation needed)
-	if gvk.Kind == "StatefulSet" && needsRestart {
+	if gvk.Kind == "PersistentVolumeClaim" {
+		log.Debug().
+			Str("kind", gvk.Kind).
+			Str("name", name).
+			Str("namespace", namespace).
+			Msg("PVC already exists, skipping update (PVCs are immutable)")
+		return nil
+	}
+
+	if (gvk.Kind == "StatefulSet" || gvk.Kind == "Deployment") && needsRestart {
 		annotations, _, _ := unstructured.NestedStringMap(obj.Object, "spec", "template", "metadata", "annotations")
 		if annotations == nil {
 			annotations = make(map[string]string)

@@ -73,6 +73,9 @@ var createArgs struct {
 	gwOidcUserRole    string
 	gwOidcScopesClaim string
 	gwRouteHost       string
+	gwDBType          string
+	gwDBStorageSize   string
+	gwDBImage         string
 
 	apiServerURL string
 	role         string
@@ -117,6 +120,9 @@ func init() {
 	Cmd.Flags().StringVar(&createArgs.gwOidcUserRole, "oidc-user-role", "", "Role name conferring user access")
 	Cmd.Flags().StringVar(&createArgs.gwOidcScopesClaim, "oidc-scopes-claim", "", "Dot-delimited path to scopes array in JWT")
 	Cmd.Flags().StringVar(&createArgs.gwRouteHost, "route-host", "", "Hostname for GRPCRoute exposure (empty = auto-derived)")
+	Cmd.Flags().StringVar(&createArgs.gwDBType, "db-type", "", "Database backend: sqlite (default), postgres")
+	Cmd.Flags().StringVar(&createArgs.gwDBStorageSize, "db-storage-size", "", "PostgreSQL PVC storage size (default 5Gi)")
+	Cmd.Flags().StringVar(&createArgs.gwDBImage, "db-image", "", "PostgreSQL container image (default postgres:16)")
 	Cmd.Flags().StringVar(&createArgs.apiServerURL, "api-server-url", "", "Cluster API server URL")
 	Cmd.Flags().StringVar(&createArgs.role, "role", "", "Cluster role (gateway, workload, hybrid)")
 	Cmd.Flags().StringVar(&createArgs.credentialID, "credential-id", "", "Credential ID for cluster")
@@ -488,6 +494,27 @@ func createGateway(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 	if cmd.Flags().Changed("route-host") {
 		gw.Route = &sdktypes.GatewayRoute{
 			Host: createArgs.gwRouteHost,
+		}
+	}
+
+	dbFlags := []string{"db-type", "db-storage-size", "db-image"}
+	for _, f := range dbFlags {
+		if cmd.Flags().Changed(f) {
+			if gw.Database == nil {
+				gw.Database = &sdktypes.GatewayDatabase{}
+			}
+			break
+		}
+	}
+	if gw.Database != nil {
+		if cmd.Flags().Changed("db-type") {
+			gw.Database.Type = createArgs.gwDBType
+		}
+		if cmd.Flags().Changed("db-storage-size") {
+			gw.Database.StorageSize = createArgs.gwDBStorageSize
+		}
+		if cmd.Flags().Changed("db-image") {
+			gw.Database.Image = createArgs.gwDBImage
 		}
 	}
 

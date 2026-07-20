@@ -12,6 +12,7 @@ Name | Type | Description | Notes
 **Annotations** | Pointer to **string** |  | [optional] 
 **Oidc** | Pointer to [**GatewayOidc**](GatewayOidc.md) |  | [optional] 
 **Route** | Pointer to [**GatewayRoute**](GatewayRoute.md) |  | [optional] 
+**Database** | Pointer to [**GatewayDatabase**](GatewayDatabase.md) |  | [optional] 
 **RouteAddress** | Pointer to **string** | Externally reachable address assigned by the OpenShift Route (set by control plane) | [optional] 
 
 ## Methods
@@ -232,6 +233,31 @@ SetRoute sets Route field to given value.
 `func (o *GatewayPatchRequest) HasRoute() bool`
 
 HasRoute returns a boolean if a field has been set.
+
+### GetDatabase
+
+`func (o *GatewayPatchRequest) GetDatabase() GatewayDatabase`
+
+GetDatabase returns the Database field if non-nil, zero value otherwise.
+
+### GetDatabaseOk
+
+`func (o *GatewayPatchRequest) GetDatabaseOk() (*GatewayDatabase, bool)`
+
+GetDatabaseOk returns a tuple with the Database field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetDatabase
+
+`func (o *GatewayPatchRequest) SetDatabase(v GatewayDatabase)`
+
+SetDatabase sets Database field to given value.
+
+### HasDatabase
+
+`func (o *GatewayPatchRequest) HasDatabase() bool`
+
+HasDatabase returns a boolean if a field has been set.
 
 ### GetRouteAddress
 
