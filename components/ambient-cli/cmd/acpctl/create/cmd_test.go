@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ambient-code/platform/components/ambient-cli/internal/testhelper"
+	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
 	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 )
 
@@ -104,12 +105,21 @@ func TestCreateAgent_MissingName(t *testing.T) {
 func TestCreateAgent_ProjectIDRequired(t *testing.T) {
 	srv := testhelper.NewServer(t)
 	testhelper.Configure(t, srv.URL)
+	t.Setenv("AMBIENT_PROJECT", "")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Project = ""
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
 	result := testhelper.Run(t, Cmd, "agent", "--name", "x")
 	if result.Err == nil {
 		t.Fatal("expected error for missing --project")
 	}
-	if !strings.Contains(result.Err.Error(), "--project is required") {
-		t.Errorf("expected '--project is required', got: %v", result.Err)
+	if !strings.Contains(result.Err.Error(), "no project set") {
+		t.Errorf("expected 'no project set', got: %v", result.Err)
 	}
 }
 

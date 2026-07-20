@@ -60,13 +60,13 @@ var createArgs struct {
 	scopeID       string
 
 	gwImage           string
-	gwServerDns       string
+	gwServerDNS       string
 	gwConfig          string
 	gwLabels          string
 	gwAnnotations     string
 	gwOidcIssuer      string
 	gwOidcAudience    string
-	gwOidcJwksTtl     int
+	gwOidcJwksTTL     int
 	gwOidcRolesClaim  string
 	gwOidcAdminRole   string
 	gwOidcUserRole    string
@@ -104,13 +104,13 @@ func init() {
 	Cmd.Flags().StringVar(&createArgs.scopeID, "scope-id", "", "Scope target ID for role-binding (shorthand for --{scope}-id-fk)")
 
 	Cmd.Flags().StringVar(&createArgs.gwImage, "image", "", "Gateway container image reference")
-	Cmd.Flags().StringVar(&createArgs.gwServerDns, "server-dns-names", "", "Comma-separated DNS names for TLS cert generation")
+	Cmd.Flags().StringVar(&createArgs.gwServerDNS, "server-dns-names", "", "Comma-separated DNS names for TLS cert generation")
 	Cmd.Flags().StringVar(&createArgs.gwConfig, "config", "", "OpenShell gateway TOML configuration")
 	Cmd.Flags().StringVar(&createArgs.gwLabels, "labels", "", "Key=value pairs (comma-separated)")
 	Cmd.Flags().StringVar(&createArgs.gwAnnotations, "annotations", "", "Key=value pairs (comma-separated)")
 	Cmd.Flags().StringVar(&createArgs.gwOidcIssuer, "oidc-issuer", "", "OIDC issuer URL (default: set by platform)")
 	Cmd.Flags().StringVar(&createArgs.gwOidcAudience, "oidc-audience", "", "Expected aud claim in JWT")
-	Cmd.Flags().IntVar(&createArgs.gwOidcJwksTtl, "oidc-jwks-ttl", 0, "JWKS key cache retention in seconds")
+	Cmd.Flags().IntVar(&createArgs.gwOidcJwksTTL, "oidc-jwks-ttl", 0, "JWKS key cache retention in seconds")
 	Cmd.Flags().StringVar(&createArgs.gwOidcRolesClaim, "oidc-roles-claim", "", "Dot-delimited path to roles array in JWT")
 	Cmd.Flags().StringVar(&createArgs.gwOidcAdminRole, "oidc-admin-role", "", "Role name conferring admin access")
 	Cmd.Flags().StringVar(&createArgs.gwOidcUserRole, "oidc-user-role", "", "Role name conferring user access")
@@ -429,7 +429,7 @@ func createGateway(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 		gw.Image = createArgs.gwImage
 	}
 	if cmd.Flags().Changed("server-dns-names") {
-		gw.ServerDnsNames = strings.Split(createArgs.gwServerDns, ",")
+		gw.ServerDnsNames = strings.Split(createArgs.gwServerDNS, ",")
 	}
 	if cmd.Flags().Changed("config") {
 		gw.Config = createArgs.gwConfig
@@ -465,7 +465,7 @@ func createGateway(cmd *cobra.Command, ctx context.Context, client *sdkclient.Cl
 			oidc.Audience = createArgs.gwOidcAudience
 		}
 		if cmd.Flags().Changed("oidc-jwks-ttl") {
-			oidc.JwksTtl = createArgs.gwOidcJwksTtl
+			oidc.JwksTtl = createArgs.gwOidcJwksTTL
 		}
 		if cmd.Flags().Changed("oidc-roles-claim") {
 			oidc.RolesClaim = createArgs.gwOidcRolesClaim
