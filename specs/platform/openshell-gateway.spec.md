@@ -1,11 +1,22 @@
 # OpenShell Gateway Specification
 
-**Date:** 2026-07-17
-**Status:** Design
+**Date:** 2026-07-22
+**Status:** Implementation-Verified
 **Supersedes:** Previous ConfigMap-based `platform-config` gateway provisioning design; individual `gateway-provisioning.spec.md`, `gateway-oidc.spec.md`, `gateway-route-exposure.spec.md`, `gateway-db-provisioning.spec.md` specs (now consolidated here)
 **Related:** `openshell-sandbox-provisioning.spec.md` — gateway mode usage; `control-plane.spec.md` — CP reconciliation patterns; `data-model.spec.md` — Gateway kind definition; `security/gateway-rbac-policy.spec.md` — gateway RBAC; `e2e-test-tooling.spec.md` — mock LLM and self-contained testing; `cli/gateway-cli.spec.md` — CLI gateway commands
 **Skill:** `skills/build/full-stack-pipeline/` — wave-based implementation pipeline
 **Upstream:** [OpenShell Helm Chart](https://github.com/NVIDIA/OpenShell/tree/main/deploy/helm/openshell) — gateway Helm chart, `server.externalDbSecret` pattern; [OpenShell OIDC User Authentication](https://docs.nvidia.com/openshell/latest/kubernetes/access-control#oidc-user-authentication)
+
+### Sub-Specifications
+
+This specification covers core provisioning. Domain-specific concerns are defined in dedicated sub-specs:
+
+| Sub-Spec | Scope |
+|---|---|
+| [`openshell-gateway-tls.spec.md`](./openshell-gateway-tls.spec.md) | TLS certificate management, optional mTLS modes, cert-manager, certgen, SAN management, cert rotation |
+| [`openshell-gateway-oidc.spec.md`](./openshell-gateway-oidc.spec.md) | OIDC authentication, role validation, gateway.toml injection, mTLS interaction |
+| [`openshell-gateway-routing.spec.md`](./openshell-gateway-routing.spec.md) | External connectivity: Gateway API (GRPCRoute) and NLB passthrough (ROSA/AWS), NetworkPolicy, route discovery |
+| [`openshell-gateway-database.spec.md`](./openshell-gateway-database.spec.md) | PostgreSQL provisioning, workload switching, credential security, type transitions |
 
 ---
 
@@ -15,13 +26,10 @@ The control plane SHALL provision and reconcile OpenShell gateway deployments in
 
 This replaces the previous ConfigMap-based `platform-config` approach. The ConfigMap, its watcher (`internal/gateway/config.go`), and the `initGatewayProvisioning()` startup path are eliminated.
 
-This specification covers the full gateway lifecycle:
+This specification covers core gateway provisioning. OIDC, TLS, routing, and database concerns are defined in dedicated sub-specs (see table above).
 
 - **Core Provisioning** — Gateway as API resource, GatewayReconciler, shared kustomize library, manifest templating, config validation, kustomize overlays, ConfigMap elimination, SSH payload delivery, gateway deployment resources, failure handling
-- **OIDC Authentication** — Optional per-gateway OIDC configuration, role validation, gateway.toml injection, mTLS interaction, change detection
-- **Route Exposure** — GRPCRoute via Kubernetes Gateway API, BackendTLSPolicy for TLS re-encryption, route address discovery, CLI integration
-- **Database Provisioning** — Optional PostgreSQL database alongside gateways, workload switching (StatefulSet vs Deployment), credential security, type transitions
-- **OpenShift-Specific** — SCC bindings, security context adjustments, cert-manager integration, trusted CA bundle injection
+- **OpenShift-Specific** — SCC bindings, security context adjustments
 - **Cross-Cluster** — Gateway deployment on dedicated gateway clusters, external endpoint exposure
 
 ---
@@ -899,26 +907,28 @@ When a Gateway has OIDC enabled (non-empty `oidc.issuer`), the GatewayReconciler
 
 ---
 
-### Requirement: mTLS Disabled for OIDC Gateways
+### Requirement: Optional mTLS with OIDC Gateways
 
-When OIDC is enabled on a gateway, mTLS (client certificate verification) SHALL be disabled. OIDC clients authenticate via Bearer tokens in the `Authorization` header — requiring client certificates is incompatible with OIDC authentication flows (CLI users, browser-based flows, and external service accounts do not possess gateway client certificates).
+> **CORRECTED (2026-07-22):** Previously stated "mTLS Disabled for OIDC Gateways." Verified incorrect. See [`openshell-gateway-tls.spec.md`](./openshell-gateway-tls.spec.md) for the full TLS mode table.
 
-The GatewayReconciler SHALL remove the `client_ca_path` setting from the `[openshell.gateway.tls]` section when OIDC is enabled. Server-side TLS (`cert_path`, `key_path`) SHALL remain active for transport encryption.
+When OIDC is enabled on a gateway, `client_ca_path` SHALL be **retained** in the `[openshell.gateway.tls]` section. The gateway's internal logic (`require_client_auth = has_client_ca && !has_oidc`) automatically switches from required to optional mTLS. This enables dual authentication: mTLS for sandbox supervisors, OIDC Bearer tokens for CLI users.
 
-#### Scenario: OIDC gateway has mTLS disabled
+The GatewayReconciler SHALL NOT remove `client_ca_path` when OIDC is enabled.
+
+#### Scenario: OIDC gateway retains client_ca_path (optional mTLS)
 
 - GIVEN a Gateway with OIDC enabled (non-empty `oidc.issuer`)
 - WHEN the GatewayReconciler generates the ConfigMap
-- THEN `gateway.toml` SHALL NOT contain a `client_ca_path` setting in the `[openshell.gateway.tls]` section
+- THEN `gateway.toml` SHALL contain `client_ca_path` in the `[openshell.gateway.tls]` section
 - AND `cert_path` and `key_path` SHALL remain present (server TLS preserved)
-- AND the gateway SHALL accept clients authenticating via Bearer tokens without requiring a client certificate
+- AND the gateway SHALL accept clients authenticating via Bearer tokens OR client certificates
 
-#### Scenario: Non-OIDC gateway retains mTLS
+#### Scenario: Non-OIDC gateway requires mTLS
 
 - GIVEN a Gateway with no OIDC configuration (or `oidc.issuer` is empty)
 - WHEN the GatewayReconciler generates the ConfigMap
-- THEN `gateway.toml` SHALL retain the `client_ca_path` setting in the `[openshell.gateway.tls]` section
-- AND mTLS behavior SHALL be unchanged from the current default
+- THEN `gateway.toml` SHALL retain `client_ca_path` in the `[openshell.gateway.tls]` section
+- AND mTLS SHALL be required for all clients (full mTLS mode)
 
 ---
 
@@ -1873,7 +1883,7 @@ The Kind cluster Keycloak realm SHALL be configured to support OIDC testing with
 | `database` | No | — | Database backend configuration |
 | `database.type` | Yes (when `database` set) | `sqlite` | `sqlite`, `postgres`, or future `rds` |
 | `database.storageSize` | No | `5Gi` | PVC size for PostgreSQL data. Only for `type: postgres` |
-| `database.image` | No | `postgres:16` | PostgreSQL container image. Override for RHEL-certified images |
+| `database.image` | No | `registry.redhat.io/rhel9/postgresql-16:latest` | PostgreSQL container image (RHEL default avoids Docker Hub rate limits) |
 | `database.externalSecretRef` | No | — | Name of Secret with `url` key. Skips DB provisioning. Reserved (Phase 2) |
 
 ### Control Plane Environment Variables

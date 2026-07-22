@@ -1,9 +1,10 @@
 # OpenShell CLI E2E Test Specification
 
-**Date:** 2026-07-15
-**Status:** Design
-**Related:** `openshell-sandbox-provisioning.spec.md` — gateway sandbox provisioning; `e2e-test-tooling.spec.md` — mock LLM infrastructure; [ENGPROD-10199](https://redhat.atlassian.net/browse/ENGPROD-10199) — issue
+**Date:** 2026-07-22
+**Status:** Design (Kind path) / Implementation-Verified (ROSA demo path)
+**Related:** `openshell-sandbox-provisioning.spec.md` — gateway sandbox provisioning; `e2e-test-tooling.spec.md` — mock LLM infrastructure; `openshell-gateway-oidc.spec.md` — OIDC authentication; `openshell-gateway-routing.spec.md` — NLB routing; [ENGPROD-10199](https://redhat.atlassian.net/browse/ENGPROD-10199) — issue
 **Skill:** `skills/build/full-stack-pipeline/` — wave-based implementation pipeline
+**Implementation:** `components/pr-test/e2e-openshell.sh` — ROSA demo script (11/11 pass, OIDC + NLB path)
 
 ---
 
@@ -15,9 +16,11 @@ This spec defines an e2e test script that authenticates to an ACP-managed OpenSh
 
 ### Scope
 
-- E2e test script at `tests/e2e/openshell-cli-e2e.sh` with built-in demo-style verbose output
+- E2e test script at `tests/e2e/openshell-cli-e2e.sh` with built-in demo-style verbose output (Kind path)
+- Demo smoke test at `components/pr-test/e2e-openshell.sh` (ROSA path, implementation-verified)
 - CLI-only testing: sandbox ops, provider ops, policy ops, settings ops
-- Gateway connectivity setup via mTLS certificate extraction from the `openshell-server-tls` secret
+- Gateway connectivity via OIDC authentication (ROSA) or mTLS certificate extraction (Kind)
+- NLB passthrough route discovery (ROSA) or port-forward (Kind)
 - Optional cross-validation between `openshell` CLI state and cluster state (via `--cluster-validate`)
 - Test fixtures at `tests/e2e/fixtures/openshell-cli-test/`
 
@@ -89,23 +92,46 @@ The test SHALL organize assertions into numbered sections by command category:
 - THEN it SHALL print a clear message indicating the CLI is required and exit with a non-zero code
 - AND in CI (`local-dev-simulation` pipeline), the `openshell` CLI SHALL be installed as a prerequisite step before the test runs
 
-### Requirement: Gateway Connectivity via mTLS Certificate Extraction
+### Requirement: Gateway Connectivity
 
-The test SHALL authenticate to an ACP-managed OpenShell gateway by extracting the mTLS client certificate from the `openshell-server-tls` Kubernetes secret in the tenant namespace and registering the gateway via `openshell gateway add --local`. This approach validates the direct gateway connectivity path available to a power user with cluster access.
+The test SHALL authenticate to an ACP-managed OpenShell gateway. Two authentication paths are supported:
 
-The gateway registration SHALL:
-1. Wait for the `openshell-server-tls` secret to appear in the `tenant-a` namespace (certgen job may still be running)
-2. Extract `tls.crt` and `tls.key` from the secret and write them to temporary files
-3. Set up a `kubectl port-forward` to the gateway StatefulSet
+**Path 1: OIDC Authentication (ROSA/Production)**
+
+When an OIDC-enabled gateway is deployed with an NLB-backed route:
+1. Obtain OIDC token from Keycloak via password grant (automation) or browser flow (interactive)
+2. Login to acpctl: `acpctl login --token <token> --url <api-url>`
+3. Discover gateway via `acpctl get gateways --project <tenant>`
+4. Discover NLB passthrough route (or fall back to port-forward)
+5. Write gateway metadata directly to `~/.config/openshell/gateways/<name>/metadata.json` (bypasses browser popup from `openshell gateway add`)
+6. Inject OIDC credentials via `acpctl gateway setup-cli --project <tenant> --gateway-url <url>`
+7. Verify connectivity via `OPENSHELL_GATEWAY_INSECURE=true openshell -g <name> status`
+
+> **Implementation note (verified):** The `openshell gateway add` command opens a browser for OIDC login, which is not suitable for automation. Writing `metadata.json` directly and using `acpctl gateway setup-cli` provides a non-interactive registration path. When `setup-cli` detects `alreadyRegistered=true` from existing `metadata.json`, it takes the refresh-only path (no verification, no browser).
+
+**Path 2: mTLS Certificate Extraction (Kind/CRC)**
+
+When a non-OIDC gateway is deployed:
+1. Wait for the `openshell-server-tls` secret to appear in the tenant namespace
+2. Extract `tls.crt` and `tls.key` from the secret
+3. Set up `kubectl port-forward` to the gateway
 4. Register via `openshell gateway add --name <gateway> --local https://localhost:<port> --cert <cert> --key <key> --insecure`
 5. Verify connectivity via `openshell sandbox list --gateway <gateway>`
 
-#### Scenario: Gateway registration succeeds via mTLS cert extraction
+#### Scenario: Gateway registration succeeds via OIDC (ROSA)
 
-- GIVEN an ACP-managed OpenShell gateway is running in the `tenant-a` namespace
+- GIVEN an ACP-managed OpenShell gateway with OIDC enabled
+- AND an NLB passthrough route exists for the gateway
+- WHEN the test obtains an OIDC token, writes metadata.json, and runs `acpctl gateway setup-cli`
+- THEN the openshell CLI SHALL be registered with OIDC credentials
+- AND `OPENSHELL_GATEWAY_INSECURE=true openshell -g <name> status` SHALL show Connected
+
+#### Scenario: Gateway registration succeeds via mTLS (Kind)
+
+- GIVEN an ACP-managed OpenShell gateway running without OIDC
 - AND the `openshell-server-tls` secret contains valid mTLS certificates
 - WHEN the test extracts certs and runs `openshell gateway add --local`
-- THEN the command SHALL register the gateway with the `openshell` CLI
+- THEN the CLI SHALL be registered
 - AND `openshell sandbox list --gateway <gateway>` SHALL return without error
 
 #### Scenario: Gateway TLS secret not found
@@ -430,10 +456,11 @@ The test SHALL use a lightweight image for sandbox creation — not the full ACP
 
 ### Relationship to Existing E2E Tests
 
-| Test | Focus | CLI Used |
-|---|---|---|
-| `gateway-e2e-test.sh` | ACP session lifecycle via API + `acpctl` | `acpctl` |
-| `openshell-dual-tenant.sh` | Multi-tenant provisioning, observability | `curl` (API) |
-| **`openshell-cli-e2e.sh`** (this spec) | OpenShell CLI commands against ACP gateways, with built-in demo-style verbose output | `openshell` |
+| Test | Focus | CLI Used | Environment |
+|---|---|---|---|
+| `gateway-e2e-test.sh` | ACP session lifecycle via API + `acpctl` | `acpctl` | Kind |
+| `openshell-dual-tenant.sh` | Multi-tenant provisioning, observability | `curl` (API) | Kind |
+| **`openshell-cli-e2e.sh`** (this spec) | OpenShell CLI commands against ACP gateways | `openshell` | Kind |
+| **`e2e-openshell.sh`** (implemented) | Gateway infra + OIDC + NLB route + sandbox + TUI demo | `openshell` + `acpctl` | ROSA |
 
-The tests are complementary. `gateway-e2e-test.sh` validates the ACP platform plumbing. `openshell-cli-e2e.sh` validates that a power user can use the native OpenShell CLI directly against ACP-managed gateways without going through `acpctl`. Its integrated `run_cmd()` helper produces demo-quality output directly in CI logs, eliminating the need for a separate demo script.
+The tests are complementary. `gateway-e2e-test.sh` validates the ACP platform plumbing. `openshell-cli-e2e.sh` validates comprehensive CLI operations on Kind. `e2e-openshell.sh` is the ROSA smoke test / demo script that proves the full production path (OIDC auth, NLB routing, sandbox lifecycle, interactive TUI handoff).
