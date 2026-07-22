@@ -5,6 +5,87 @@ This directory contains example Agent, Provider, Gateway, and Credential definit
 - **Starter Examples** (`base/` + `overlays/`) — individual agents scoped to simple tenant projects. Start here.
 - **vTeam Lab** (`vteam-catalog/`) — multi-agent virtual teams that demonstrate building agentic teams with coordination, specialization, and shared work.
 
+---
+
+## Easy Path: Running OpenShell on Kind
+
+Get a working OpenShell gateway with sandboxed agents in under 5 minutes.
+
+### 1. Boot the cluster
+
+```bash
+make kind-up
+```
+
+This creates a Kind cluster and deploys the full ACP stack: API server, control plane, UI, Keycloak SSO, and OpenShell gateways for all tenants. By default `OPENSHELL_USE_GATEWAY=true` and five tenants are provisioned: `tenant-a`, `tenant-b`, `tenant-c`, `vteam-product-swarm`, `codebase-maintainers`.
+
+Vertex AI credentials are auto-detected from `gcloud auth application-default login` if available.
+
+### 2. Log in
+
+```bash
+make kind-login
+```
+
+Sets your kubectl context, starts port-forwards, and logs `acpctl` in via Keycloak SSO (default: `developer`/`developer`).
+
+### 3. Check status
+
+```bash
+make kind-status
+```
+
+Shows all access URLs, port assignments, and gateway endpoints.
+
+### 4. Connect the openshell CLI to a gateway
+
+```bash
+scripts/setup-gateway-cli.sh tenant-a
+```
+
+Extracts mTLS certificates from the cluster and registers the tenant-a gateway with the `openshell` CLI. After this, you can use `openshell` commands directly against the gateway.
+
+### 5. Run something
+
+**Option A — Create a session via acpctl:**
+
+```bash
+acpctl project tenant-a
+acpctl create session --name my-test --agent-id hello-world --prompt "Say hello"
+```
+
+**Option B — Create a sandbox via the openshell CLI:**
+
+```bash
+openshell sandbox create -g tenant-a --image quay.io/ambient_code/acp_runner_openshell:latest -- bash
+```
+
+**Option C — Use the web UI:**
+
+Open `http://localhost:14080`, sign in as `developer`/`developer`, select the `tenant-a` project, and start a session with the `hello-world` agent.
+
+### What each tenant demonstrates
+
+| Tenant | Database | Auth | Purpose |
+|--------|----------|------|---------|
+| **tenant-a** | PostgreSQL | mTLS | Development. Full-featured: postgres-backed gateway, all providers, permissive sandbox policy. |
+| **tenant-b** | SQLite (default) | mTLS | Staging. Lighter footprint, fewer credentials. Good for comparing behavior. |
+| **tenant-c** | SQLite (default) | OIDC + Keycloak | OIDC demo. Browser-based login, role-based access control. |
+
+### Applying overlays manually
+
+If you want to re-apply or modify tenant configurations:
+
+```bash
+acpctl apply -k examples/overlays/tenant-a/ --project tenant-a
+acpctl apply -k examples/overlays/tenant-b/ --project tenant-b
+acpctl apply -k examples/overlays/tenant-c/ --project tenant-c
+```
+
+Each overlay applies the full declarative stack: Project, Gateway, Agents, Providers, Policies, and Credentials.
+
+---
+
 ## Prerequisites
 
 If you are using a hosted ACP environment, your administrators provide Vertex
@@ -73,26 +154,33 @@ examples/
 │   │   ├── jira-simple-whoami-with-skill-payload.yaml
 │   │   ├── pr-reviewer.yaml
 │   │   └── jira-issue-categorizer.yaml
-│   ├── gateways/            # Base gateway template
+│   ├── gateways/            # Base gateway template (reference only)
 │   │   └── openshell-gateway.yaml
-│   ├── policies/            # Sandbox policies (applied before agents)
-│   │   └── permissive.yaml
+│   ├── policies/            # Sandbox policies (applied alongside agents)
+│   │   ├── permissive.yaml
+│   │   ├── locked-down.yaml
+│   │   └── mock-llm-permissive.yaml
 │   └── providers/           # Boilerplate provider integrations (shared by all tenants)
 │       ├── vertex.yaml
 │       ├── github.yaml
-│       └── jira.yaml
+│       ├── jira.yaml
+│       └── mock-llm.yaml
 └── overlays/
-    ├── tenant-a/            # Development tenant
+    ├── tenant-a/            # Development tenant (PostgreSQL gateway)
     │   ├── project.yaml
-    │   ├── gateway.yaml     # Project-scoped gateway with tenant DNS names
+    │   ├── gateway.yaml     # Gateway with database: {type: postgres}
     │   ├── credential-vertex.yaml
     │   ├── credential-jira.yaml
+    │   ├── credential-github.yaml
+    │   └── credential-mock-llm.yaml
+    ├── tenant-b/            # Staging tenant (SQLite gateway)
+    │   ├── project.yaml
+    │   ├── gateway.yaml
+    │   ├── credential-vertex.yaml
     │   └── credential-github.yaml
-    └── tenant-b/            # Staging tenant
+    └── tenant-c/            # OIDC-authenticated tenant
         ├── project.yaml
-        ├── gateway.yaml
-        ├── credential-vertex.yaml
-        └── credential-github.yaml
+        └── gateway.yaml     # Gateway with OIDC + route config
 ```
 
 `base/` contains resources shared across all tenants: agent definitions, sandbox policies, and boilerplate provider integrations (vertex, github, jira). `overlays/` contains the tenant-specific Project, Gateway, and Credentials.
@@ -131,27 +219,39 @@ Each overlay applies the full declarative stack via a single `acpctl apply -k`:
 |------|--------|---------|
 | **Project** | `overlays/*/project.yaml` | Creates the tenant project with description, prompt, and labels |
 | **Agent** | `base/agents/*.yaml` | Shared agent definitions (hello-world, pr-reviewer, etc.) |
-| **Provider** | `base/providers/*.yaml` | Boilerplate integrations (vertex, github, jira) — shared by all tenants |
-| **Gateway** | `overlays/*/gateway.yaml` | Project-scoped OpenShell gateway with tenant-specific DNS names |
+| **Policy** | `base/policies/*.yaml` | Sandbox policies referenced by agents (`sandbox_policy: permissive`) |
+| **Provider** | `base/providers/*.yaml` | Boilerplate integrations (vertex, github, jira, mock-llm) — shared by all tenants |
+| **Gateway** | `overlays/*/gateway.yaml` | Project-scoped OpenShell gateway with tenant-specific DNS names and optional database config |
 | **Credential** | `overlays/*/credential-*.yaml` | Tenant-specific credentials with env-var token references |
 
 ### Tenants
 
-#### `tenant-a` — Development
+#### `tenant-a` — Development (PostgreSQL)
 
-Permissive sandbox mode for rapid iteration. Use this tenant for testing new prompts, provider integrations, and agent configurations.
+Full-featured development tenant with a PostgreSQL-backed gateway. The control plane provisions a Postgres Deployment, PVC, Secret, Service, and NetworkPolicy alongside the gateway. Use this tenant for testing new prompts, provider integrations, and agent configurations.
 
-**Providers configured:** `vertex`, `jira`, `github`
-**Credentials:** Vertex AI, Jira, GitHub
+**Database:** PostgreSQL (auto-provisioned)
+**Providers configured:** `vertex`, `jira`, `github`, `mock-llm`
+**Credentials:** Vertex AI, Jira, GitHub, Mock LLM
 **Gateway:** OpenShell gateway at `openshell-gateway.tenant-a.svc.cluster.local`
 
-#### `tenant-b` — Staging
+#### `tenant-b` — Staging (SQLite)
 
-Restricted sandbox policies matching production. Use this tenant to validate agent behavior and provider configs before promoting to production.
+Lighter-weight staging tenant using the default SQLite database (embedded in the gateway StatefulSet). Use this tenant to validate agent behavior and provider configs before promoting to production.
 
+**Database:** SQLite (default, no external database)
 **Providers configured:** `vertex`, `github`, `jira` (from base)
 **Credentials:** Vertex AI, GitHub (no Jira credential — agents requiring Jira will not run)
 **Gateway:** OpenShell gateway at `openshell-gateway.tenant-b.svc.cluster.local`
+
+#### `tenant-c` — OIDC Authentication
+
+Demonstrates OIDC-authenticated gateway access via Keycloak. Requires browser-based login. Role-based access control enforced by the gateway: `openshell-admin` and `openshell-user` roles.
+
+**Database:** SQLite (default)
+**Auth:** OIDC via Keycloak (`ambient-code` realm)
+**Providers configured:** `vertex`, `github`, `jira` (from base)
+**Gateway:** OpenShell gateway at `openshell-gateway.tenant-c.svc.cluster.local`
 
 ### Policies
 
@@ -347,12 +447,19 @@ acpctl apply -k examples/vteam-catalog/codebase-maintainers --project codebase-m
 
 ## Gateway
 
-Each overlay declares a project-scoped OpenShell gateway in `gateway.yaml`. The gateway is reconciled by the GatewayReconciler into Kubernetes resources (StatefulSet, Service, RBAC, certgen Job).
+Each overlay declares a project-scoped OpenShell gateway in `gateway.yaml`. The gateway is reconciled by the GatewayReconciler into Kubernetes resources (StatefulSet or Deployment, Service, RBAC, certgen Job).
 
 Key fields:
 
 - `image` — gateway container image (defaults to `OPENSHELL_GATEWAY_IMAGE` if omitted)
 - `server_dns_names` — DNS names for TLS certificate generation, scoped to the tenant namespace
 - `config` — optional TOML configuration for the gateway
+- `database` — optional database backend configuration:
+  - `type: sqlite` (default) — embedded database, gateway runs as a StatefulSet
+  - `type: postgres` — auto-provisions a PostgreSQL Deployment, PVC, Secret, Service, and NetworkPolicy; gateway runs as a Deployment with a `wait-for-db` init container
+  - `storage_size` — PVC size for PostgreSQL data (default `5Gi`)
+  - `image` — PostgreSQL container image (default `postgres:16`)
+- `oidc` — optional OIDC authentication (issuer, audience, roles)
+- `route` — optional GRPCRoute exposure via Kubernetes Gateway API
 
 The base `gateways/openshell-gateway.yaml` serves as a reference template. Each overlay declares its own gateway with the correct namespace in `server_dns_names`.

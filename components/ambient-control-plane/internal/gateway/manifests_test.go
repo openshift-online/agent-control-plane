@@ -99,7 +99,7 @@ func TestApplyConfigOverrides_OIDCDisablesMTLS(t *testing.T) {
 		}
 	}`
 
-	t.Run("OIDC enabled removes client_ca_path", func(t *testing.T) {
+	t.Run("OIDC enabled retains client_ca_path for optional mTLS", func(t *testing.T) {
 		obj := &unstructured.Unstructured{}
 		if err := obj.UnmarshalJSON([]byte(configMapJSON)); err != nil {
 			t.Fatalf("failed to unmarshal: %v", err)
@@ -122,8 +122,8 @@ func TestApplyConfigOverrides_OIDCDisablesMTLS(t *testing.T) {
 		if !strings.Contains(toml, "[openshell.gateway.oidc]") {
 			t.Error("expected OIDC section in gateway.toml")
 		}
-		if strings.Contains(toml, "client_ca_path") {
-			t.Error("expected client_ca_path to be removed when OIDC is enabled")
+		if !strings.Contains(toml, "client_ca_path") {
+			t.Error("expected client_ca_path to be retained for optional mTLS (require_client_auth = has_ca && !has_oidc)")
 		}
 		if !strings.Contains(toml, "cert_path") {
 			t.Error("expected cert_path to be preserved (server TLS)")

@@ -16,6 +16,7 @@ type Config struct {
 	RefreshToken      string `json:"refresh_token,omitempty"`
 	IssuerURL         string `json:"issuer_url,omitempty"`
 	ClientID          string `json:"client_id,omitempty"`
+	ClientSecret      string `json:"client_secret,omitempty"`
 	Project           string `json:"project,omitempty"`
 	Pager             string `json:"pager,omitempty"`            // TODO: Wire pager support into output commands (e.g. pipe through less)
 	RequestTimeout    int    `json:"request_timeout,omitempty"`  // Request timeout in seconds
@@ -130,7 +131,7 @@ func (c *Config) GetTokenWithRefresh() (string, error) {
 		return c.AccessToken, nil
 	}
 
-	newAccess, newRefresh, refreshErr := RefreshAccessToken(c.IssuerURL, c.ClientID, c.RefreshToken)
+	newAccess, newRefresh, refreshErr := RefreshAccessToken(c.IssuerURL, c.ClientID, c.ClientSecret, c.RefreshToken)
 	if refreshErr != nil {
 		return c.AccessToken, nil
 	}

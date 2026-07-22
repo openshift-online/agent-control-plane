@@ -213,7 +213,7 @@ func reconcilePostgresResources(
 	if dbConfig.StorageSize != "" {
 		storageSize = dbConfig.StorageSize
 	}
-	pgImage := "postgres:16"
+	pgImage := "registry.redhat.io/rhel9/postgresql-16:latest"
 	if dbConfig.Image != "" {
 		pgImage = dbConfig.Image
 	}
@@ -514,7 +514,7 @@ func buildGatewayDeployment(nsConfig NamespaceConfig, defaultImage string, opts 
 		},
 	}
 	if nsConfig.Gateway.Database.Image == "" {
-		initContainers[0].(map[string]interface{})["image"] = "postgres:16"
+		initContainers[0].(map[string]interface{})["image"] = "registry.redhat.io/rhel9/postgresql-16:latest"
 	}
 
 	deployment := &unstructured.Unstructured{

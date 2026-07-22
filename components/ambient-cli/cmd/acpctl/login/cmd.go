@@ -123,6 +123,7 @@ func run(cmd *cobra.Command, positional []string) error {
 		cfg.RefreshToken = tokens.RefreshToken
 		cfg.IssuerURL = args.issuerURL
 		cfg.ClientID = args.clientID
+		cfg.ClientSecret = args.clientSecret
 	case args.clientCredentials:
 		tokens, err := runClientCredentialsFlow(args.issuerURL, args.clientID, args.clientSecret)
 		if err != nil {
@@ -132,8 +133,9 @@ func run(cmd *cobra.Command, positional []string) error {
 		cfg.RefreshToken = ""
 		cfg.IssuerURL = args.issuerURL
 		cfg.ClientID = args.clientID
+		cfg.ClientSecret = args.clientSecret
 	case args.passwordGrant:
-		tokens, err := runPasswordGrantFlow(args.issuerURL, args.clientID, args.username, args.password)
+		tokens, err := runPasswordGrantFlow(args.issuerURL, args.clientID, args.clientSecret, args.username, args.password)
 		if err != nil {
 			return fmt.Errorf("password-grant login: %w", err)
 		}
@@ -141,11 +143,13 @@ func run(cmd *cobra.Command, positional []string) error {
 		cfg.RefreshToken = tokens.RefreshToken
 		cfg.IssuerURL = args.issuerURL
 		cfg.ClientID = args.clientID
+		cfg.ClientSecret = args.clientSecret
 	default:
 		accessToken = args.token
 		cfg.RefreshToken = ""
 		cfg.IssuerURL = ""
 		cfg.ClientID = ""
+		cfg.ClientSecret = ""
 	}
 
 	cfg.AccessToken = accessToken

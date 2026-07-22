@@ -267,7 +267,7 @@ func parseTokensResponse(body []byte) (*tokenResult, error) {
 	}, nil
 }
 
-func runPasswordGrantFlow(issuerURL, clientID, username, password string) (*tokenResult, error) {
+func runPasswordGrantFlow(issuerURL, clientID, clientSecret, username, password string) (*tokenResult, error) {
 	issuerURL = strings.TrimRight(issuerURL, "/")
 	tokenURL := issuerURL + "/protocol/openid-connect/token"
 
@@ -276,6 +276,9 @@ func runPasswordGrantFlow(issuerURL, clientID, username, password string) (*toke
 		"client_id":  {clientID},
 		"username":   {username},
 		"password":   {password},
+	}
+	if clientSecret != "" {
+		params.Set("client_secret", clientSecret)
 	}
 
 	httpClient := &http.Client{Timeout: 30 * time.Second}

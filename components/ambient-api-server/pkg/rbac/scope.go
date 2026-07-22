@@ -139,7 +139,7 @@ func isListEndpoint(method, path string) bool {
 	switch last {
 	case "projects", "agents", "sessions", "credentials", "roles", "role_bindings",
 		"users", "inbox", "session_messages", "scheduled-sessions", "messages",
-		"providers", "gateways", "clusters":
+		"providers", "gateways", "clusters", "policies":
 		return true
 	}
 	return false

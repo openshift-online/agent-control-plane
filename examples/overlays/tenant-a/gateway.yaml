@@ -3,6 +3,8 @@ name: openshell-gateway
 image: ghcr.io/nvidia/openshell/gateway:0.0.83
 server_dns_names:
   - openshell-gateway.tenant-a.svc.cluster.local
+database:
+  type: postgres
 labels:
   purpose: openshell
   env: dev

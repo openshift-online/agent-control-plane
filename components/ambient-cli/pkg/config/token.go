@@ -52,13 +52,16 @@ func IsTokenExpired(tokenStr string) (bool, error) {
 	return time.Now().After(expiry), nil
 }
 
-func RefreshAccessToken(issuerURL, clientID, refreshToken string) (accessToken, newRefreshToken string, err error) {
+func RefreshAccessToken(issuerURL, clientID, clientSecret, refreshToken string) (accessToken, newRefreshToken string, err error) {
 	tokenURL := strings.TrimRight(issuerURL, "/") + "/protocol/openid-connect/token"
 
 	params := url.Values{
 		"grant_type":    {"refresh_token"},
 		"client_id":     {clientID},
 		"refresh_token": {refreshToken},
+	}
+	if clientSecret != "" {
+		params.Set("client_secret", clientSecret)
 	}
 
 	httpClient := &http.Client{Timeout: 30 * time.Second}

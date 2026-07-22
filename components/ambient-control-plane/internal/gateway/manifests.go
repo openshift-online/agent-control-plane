@@ -151,17 +151,6 @@ func ApplyConfigOverrides(obj *unstructured.Unstructured, config GatewayConfig) 
 		// Flip allow_unauthenticated_users to false when OIDC is enabled
 		toml = strings.ReplaceAll(toml, "allow_unauthenticated_users = true", "allow_unauthenticated_users = false")
 
-		// Disable mTLS (client certificate verification) — OIDC clients authenticate
-		// via Bearer tokens, not client certificates.
-		lines := strings.Split(toml, "\n")
-		filtered := lines[:0]
-		for _, line := range lines {
-			if !strings.Contains(line, "client_ca_path") {
-				filtered = append(filtered, line)
-			}
-		}
-		toml = strings.Join(filtered, "\n")
-
 		// Append OIDC section if not already present in the config
 		if !strings.Contains(toml, "[openshell.gateway.oidc]") {
 			oidcSection := "\n[openshell.gateway.oidc]\n"

@@ -279,7 +279,7 @@ type oidcTokenFile struct {
 }
 
 // fetchClientTLS extracts mTLS certificates from the gateway's namespace:
-//   - ca.crt from openshell-ca-tls (root CA that signed the server cert)
+//   - ca.crt from openshell-server-tls (root CA that signed the server cert)
 //   - tls.crt/tls.key from openshell-client-tls (client identity)
 func fetchClientTLS(localName, namespace string) error {
 	if _, err := exec.LookPath("kubectl"); err != nil {
@@ -302,7 +302,7 @@ func fetchClientTLS(localName, namespace string) error {
 		name   string
 		perm   os.FileMode
 	}{
-		{"openshell-ca-tls", "ca\\.crt", "ca.crt", 0644},
+		{"openshell-server-tls", "ca\\.crt", "ca.crt", 0644},
 		{"openshell-client-tls", "tls\\.crt", "tls.crt", 0644},
 		{"openshell-client-tls", "tls\\.key", "tls.key", 0600},
 	}

@@ -124,7 +124,7 @@ func TestRefreshAccessToken_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	access, refresh, err := RefreshAccessToken(srv.URL, "test-client", "my-refresh-token")
+	access, refresh, err := RefreshAccessToken(srv.URL, "test-client", "", "my-refresh-token")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestRefreshAccessToken_ErrorResponse(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, _, err := RefreshAccessToken(srv.URL, "test-client", "bad-refresh")
+	_, _, err := RefreshAccessToken(srv.URL, "test-client", "", "bad-refresh")
 	if err == nil {
 		t.Fatal("expected error for expired refresh token")
 	}
@@ -157,7 +157,7 @@ func TestRefreshAccessToken_NoAccessToken(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, _, err := RefreshAccessToken(srv.URL, "test-client", "my-refresh")
+	_, _, err := RefreshAccessToken(srv.URL, "test-client", "", "my-refresh")
 	if err == nil {
 		t.Fatal("expected error for missing access_token")
 	}

@@ -489,7 +489,13 @@ func splitPath(path string) []string {
 }
 
 func singularize(s string) string {
-	if len(s) > 1 && s[len(s)-1] == 's' && s != "status" {
+	if s == "status" {
+		return s
+	}
+	if len(s) > 3 && s[len(s)-3:] == "ies" {
+		return s[:len(s)-3] + "y"
+	}
+	if len(s) > 1 && s[len(s)-1] == 's' {
 		return s[:len(s)-1]
 	}
 	return s

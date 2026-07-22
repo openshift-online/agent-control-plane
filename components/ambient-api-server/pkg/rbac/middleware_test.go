@@ -26,6 +26,8 @@ func TestPathToResource(t *testing.T) {
 		{"/api/ambient/v1/projects/proj-1/providers/prov-1", "provider"},
 		{"/api/ambient/v1/projects/proj-1/gateways", "gateway"},
 		{"/api/ambient/v1/projects/proj-1/gateways/gw-1", "gateway"},
+		{"/api/ambient/v1/projects/proj-1/policies", "policy"},
+		{"/api/ambient/v1/projects/proj-1/policies/pol-1", "policy"},
 		{"/foo/bar", "unknown"},
 	}
 	for _, tt := range tests {
@@ -111,9 +113,12 @@ func TestIsListEndpoint(t *testing.T) {
 		{http.MethodGet, "/api/ambient/v1/role_bindings", true},
 		{http.MethodGet, "/api/ambient/v1/projects/p1/providers", true},
 		{http.MethodGet, "/api/ambient/v1/projects/p1/gateways", true},
+		{http.MethodGet, "/api/ambient/v1/projects/p1/policies", true},
 		{http.MethodGet, "/api/ambient/v1/projects/p1/providers/prov-1", false},
 		{http.MethodGet, "/api/ambient/v1/projects/p1/gateways/gw-1", false},
+		{http.MethodGet, "/api/ambient/v1/projects/p1/policies/pol-1", false},
 		{http.MethodPost, "/api/ambient/v1/projects/p1/providers", false},
+		{http.MethodPost, "/api/ambient/v1/projects/p1/policies", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
@@ -296,6 +301,11 @@ func TestExtractRequestScope(t *testing.T) {
 		{
 			name: "project gateways list",
 			path: "/api/ambient/v1/projects/proj-1/gateways",
+			want: RequestScope{ProjectID: "proj-1"},
+		},
+		{
+			name: "project policies list",
+			path: "/api/ambient/v1/projects/proj-1/policies",
 			want: RequestScope{ProjectID: "proj-1"},
 		},
 	}

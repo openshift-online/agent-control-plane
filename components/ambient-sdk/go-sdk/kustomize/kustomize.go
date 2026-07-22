@@ -37,6 +37,7 @@ type Resource struct {
 	Config         string            `yaml:"config"`
 	Oidc           map[string]any    `yaml:"oidc,omitempty"`
 	Route          map[string]any    `yaml:"route,omitempty"`
+	Database       map[string]any    `yaml:"database,omitempty"`
 	Project        string            `yaml:"project"`
 	SandboxPolicy  string            `yaml:"sandbox_policy"`
 	Spec           map[string]any    `yaml:"spec"`
@@ -282,6 +283,12 @@ func StrategicMerge(base, patch Resource) Resource {
 	}
 	if len(patch.Oidc) > 0 {
 		base.Oidc = patch.Oidc
+	}
+	if len(patch.Database) > 0 {
+		base.Database = patch.Database
+	}
+	if len(patch.Route) > 0 {
+		base.Route = patch.Route
 	}
 	if patch.SandboxPolicy != "" {
 		base.SandboxPolicy = patch.SandboxPolicy

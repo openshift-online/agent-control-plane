@@ -906,6 +906,9 @@ func applyGateway(ctx context.Context, client *sdkclient.Client, doc kustomize.R
 	if route := routeFromResource(doc); route != nil {
 		builder = builder.Route(route)
 	}
+	if db := databaseFromResource(doc); db != nil {
+		builder = builder.Database(db)
+	}
 	gw, buildErr := builder.Build()
 	if buildErr != nil {
 		return applyResult{}, buildErr
@@ -948,6 +951,13 @@ func buildGatewayPatch(existing sdktypes.Gateway, doc kustomize.Resource) map[st
 		changed = true
 	} else if existing.Route != nil && len(doc.Route) == 0 {
 		patch = patch.Route(nil)
+		changed = true
+	}
+	if db := databaseFromResource(doc); db != nil {
+		patch = patch.Database(db)
+		changed = true
+	} else if existing.Database != nil && len(doc.Database) == 0 {
+		patch = patch.Database(nil)
 		changed = true
 	}
 	if !changed {
@@ -997,6 +1007,29 @@ func routeFromResource(doc kustomize.Resource) *sdktypes.GatewayRoute {
 		route.Host = v
 	}
 	return route
+}
+
+func databaseFromResource(doc kustomize.Resource) *sdktypes.GatewayDatabase {
+	if len(doc.Database) == 0 {
+		return nil
+	}
+	db := &sdktypes.GatewayDatabase{}
+	if v, ok := doc.Database["type"].(string); ok {
+		db.Type = v
+	}
+	if v, ok := doc.Database["storage_size"].(string); ok {
+		db.StorageSize = v
+	}
+	if v, ok := doc.Database["image"].(string); ok {
+		db.Image = v
+	}
+	if v, ok := doc.Database["external_secret_ref"].(string); ok {
+		db.ExternalSecretRef = v
+	}
+	if db.Type == "" {
+		return nil
+	}
+	return db
 }
 
 func applyCluster(ctx context.Context, client *sdkclient.Client, doc kustomize.Resource) (applyResult, error) {
