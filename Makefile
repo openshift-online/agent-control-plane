@@ -79,7 +79,7 @@ RUNNER_QUAY_TAG ?= latest
 RUNNER_PRELOAD_TAG ?= kind-preloaded
 RUNNER_PRELOAD_REF := localhost/acp_runner_openshell:$(RUNNER_PRELOAD_TAG)
 
-# kind-local overlay always references localhost/acp_* images.
+# kind overlay with LOCAL_IMAGES=true references localhost/acp_* images.
 # Podman produces this prefix natively; for Docker we tag before loading.
 KIND_IMAGE_PREFIX := localhost/
 
@@ -626,7 +626,7 @@ clean: ## Clean up Kubernetes resources
 # reload, guaranteeing a rollout even with imagePullPolicy: IfNotPresent.
 #
 # IMPORTANT: kind clusters do NOT run a container registry. Images are loaded directly
-# into the node's containerd via `ctr images import`. The kustomize kind-local overlay
+# into the node's containerd via `ctr images import`. The kustomize kind overlay
 # sets imagePullPolicy: IfNotPresent so kubelet uses the pre-loaded image instead of
 # trying to pull from a registry. If imagePullPolicy is set to Always, pods will fail
 # with ErrImagePull because there is no registry at localhost:443.
@@ -910,14 +910,15 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 		$(MAKE) --no-print-directory build-all; \
 		$(MAKE) --no-print-directory _kind-load-images; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying with locally-built images..."; \
-		kubectl apply --validate=false -k components/manifests/overlays/kind-local/; \
+		kubectl apply --validate=false -k components/manifests/overlays/kind/; \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching images to use localhost references..."; \
+		for img in acp_api_server acp_ambient_ui acp_control_plane acp_claude_runner acp_runner_openshell acp_mcp acp_credential_github acp_credential_jira acp_credential_k8s acp_credential_google; do \
+			kubectl set image deployment -n $(NAMESPACE) --all --containers="*" \
+				"quay.io/ambient_code/$$img:latest=localhost/$$img:latest" 2>/dev/null || true; \
+		done; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Restarting deployments to pick up freshly built images..."; \
 		kubectl rollout restart deployment -n $(NAMESPACE); \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Patching agent registry for local images..."; \
-		REGISTRY=$$(kubectl get configmap ambient-agent-registry -n $(NAMESPACE) -o jsonpath='{.data.agent-registry\.json}'); \
-		kubectl patch configmap ambient-agent-registry -n $(NAMESPACE) --type=merge \
-			-p "{\"data\":{\"agent-registry.json\":$$(echo "$$UPDATED" | jq -Rs .)}}"; \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Agent registry patched for local images"; \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Local images applied"; \
 	else \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying with Quay.io images..."; \
 		kubectl apply --validate=false -k components/manifests/overlays/kind/; \
@@ -1856,7 +1857,7 @@ local-stop-port-forward: ## Stop background port forwarding
 # ─── CRC (OpenShift Local) targets ───────────────────────────────────────────
 
 CRC_NAMESPACE ?= ambient-code
-CRC_OVERLAY   ?= components/manifests/overlays/openshift-local
+CRC_OVERLAY   ?= components/manifests/overlays/crc
 
 crc-up: build-cli ## Deploy the platform to CRC (OpenShift Local). LOCAL_IMAGES=true builds from source. Requires 'crc start' and 'oc login' beforehand
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Deploying to CRC (OpenShift Local)..."

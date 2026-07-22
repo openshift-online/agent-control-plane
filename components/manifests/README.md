@@ -35,10 +35,10 @@ manifests/
 │
 ├── overlays/
 │   ├── production/                        # OpenShift production (ROSA / on-prem)
-│   ├── kind/                              # Local kind cluster (Quay images)
-│   ├── kind-local/                        # Local kind cluster (locally built images)
+│   ├── kind/                              # Local kind cluster development
 │   ├── e2e/                               # Cypress E2E test environment (kind)
-│   └── local-dev/                         # CRC / OpenShift Local developer environment
+│   ├── crc/                               # CRC (OpenShift Local) development
+│   └── hcmai/                             # HCMAI ROSA cluster deployment
 │
 └── observability/                         # Grafana dashboards, OTel collector, ServiceMonitors
 ```
@@ -51,9 +51,9 @@ The base manifests assume full TLS and JWT authentication. Overlays strip these 
 |---|---|---|---|
 | `base` | enabled (HTTPS + gRPC TLS) | enabled (Red Hat SSO) | enabled |
 | `production` | enabled (OpenShift service-ca) | enabled (Red Hat SSO) | enabled |
-| `local-dev` | enabled (OpenShift service-ca) | enabled | enabled |
+| `crc` | disabled | OIDC (Keycloak) | enabled |
+| `hcmai` | enabled (OpenShift service-ca) | OIDC (Keycloak) | enabled |
 | `kind` | disabled | disabled | disabled |
-| `kind-local` | disabled | disabled | disabled |
 | `e2e` | disabled | disabled | disabled |
 
 ## Overlays
@@ -69,8 +69,8 @@ The base manifests assume full TLS and JWT authentication. Overlays strip these 
 oc apply -k overlays/production/
 ```
 
-### `kind/` — Local kind cluster (Quay images)
-- **Images**: `quay.io/ambient_code/*` pulled directly
+### `kind/` — Local kind cluster
+- **Images**: `quay.io/ambient_code/*` pulled directly (or locally built with `LOCAL_IMAGES=true`)
 - **Networking**: NodePort services
 - **Auth**: JWT disabled, no-TLS patches applied
 - **Database**: Vanilla postgres with init scripts (`components/postgresql-init-scripts`)
@@ -78,13 +78,6 @@ oc apply -k overlays/production/
 ```bash
 make kind-up
 kubectl apply -k overlays/kind/
-```
-
-### `kind-local/` — Local kind cluster (locally built images)
-Extends `kind/` — overrides image refs to locally loaded images (`imagePullPolicy: Never`).
-
-```bash
-make local-reload-api-server KIND_CLUSTER_NAME=<cluster>
 ```
 
 ### `e2e/` — Cypress E2E test environment
@@ -95,13 +88,23 @@ Cypress-compatible service configuration on top of the kind overlay.
 make test-e2e-local
 ```
 
-### `local-dev/` — OpenShift Local development
-- **Namespace**: Configurable (uses `namePrefix`)
-- **Auth**: OpenShift service-ca TLS, JWKS enabled
-- **Database**: RHEL PostgreSQL with init containers
+### `crc/` — CRC (OpenShift Local)
+- **Namespace**: `ambient-code`
+- **Auth**: Keycloak OIDC, Routes for browser access
+- **Database**: Uses external database (minio/postgresql scaled to 0)
 
 ```bash
-oc apply -k overlays/local-dev/
+make crc-up
+```
+
+### `hcmai/` — HCMAI ROSA cluster
+- **Namespace**: `ambient-api`
+- **Auth**: Keycloak OIDC with full client credentials
+- **Database**: RHEL PostgreSQL (`components/postgresql-rhel`, `components/ambient-api-server-db`)
+- **Removes**: minio, shared postgresql, LimitRange, NetworkPolicy
+
+```bash
+kustomize build overlays/hcmai | oc apply -n ambient-api -f -
 ```
 
 ## Reusable Components
@@ -112,8 +115,8 @@ Components are opt-in kustomize modules included via the `components:` block in 
 | Component | Purpose | Used by |
 |---|---|---|
 | `oauth-proxy` | Adds OpenShift OAuth proxy sidecar to frontend | `production` |
-| `postgresql-rhel` | Patches PostgreSQL to use `registry.redhat.io/rhel10/postgresql-16` | `production`, `local-dev` |
-| `ambient-api-server-db` | Same RHEL patch for the ambient-api-server's dedicated DB | `production`, `local-dev` |
+| `postgresql-rhel` | Patches PostgreSQL to use `registry.redhat.io/rhel10/postgresql-16` | `production`, `hcmai` |
+| `ambient-api-server-db` | Same RHEL patch for the ambient-api-server's dedicated DB | `production`, `hcmai` |
 | `postgresql-init-scripts` | ConfigMap + volume for DB init SQL (vanilla postgres only) | `kind`, `e2e` |
 
 ## Prerequisites for New Deployments

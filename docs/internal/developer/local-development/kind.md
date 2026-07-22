@@ -124,7 +124,7 @@ make kind-down     # Cleanup
 
 Build all components from your local source tree and deploy to kind.
 
-> **Note:** `LOCAL_IMAGES=true` requires **Podman** as the container engine. The `kind-local` overlay expects the `localhost/` image prefix that Podman uses natively.
+> **Note:** `LOCAL_IMAGES=true` requires **Podman** as the container engine. The local image workflow expects the `localhost/` image prefix that Podman uses natively.
 
 ```bash
 # Build, load, and deploy in one step (requires CONTAINER_ENGINE=podman)
@@ -134,7 +134,7 @@ make kind-up LOCAL_IMAGES=true
 make kind-up LOCAL_IMAGES=true LOCAL_VERTEX=true
 ```
 
-This builds all container images from source, loads them into the kind cluster, and deploys using the `kind-local` overlay (which sets `imagePullPolicy: IfNotPresent`).
+This builds all container images from source, loads them into the kind cluster, and deploys using the `kind` overlay with local image overrides (which sets `imagePullPolicy: IfNotPresent`).
 
 #### Iterating After Code Changes
 

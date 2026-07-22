@@ -105,7 +105,7 @@ oc create secret generic credential-encryption-key -n $NAMESPACE \
   --from-literal=version=1
 ```
 
-The hcmais overlay mounts this as `CREDENTIAL_ENCRYPTION_KEYRING` and `CREDENTIAL_ENCRYPTION_KEY_VERSION`. After first deploy, encrypt existing tokens:
+The hcmai overlay mounts this as `CREDENTIAL_ENCRYPTION_KEYRING` and `CREDENTIAL_ENCRYPTION_KEY_VERSION`. After first deploy, encrypt existing tokens:
 
 ```bash
 oc exec deploy/ambient-api-server -n $NAMESPACE -- ambient-api-server encrypt-credentials
@@ -402,11 +402,10 @@ never receives a raw JWT — only an httpOnly session cookie.
 | File | Purpose |
 |------|---------|
 | `components/manifests/base/core/ambient-ui-deployment.yaml` | Base Deployment, ServiceAccount, Service |
-| `components/manifests/overlays/kind/kustomization.yaml` | Kind overlay (Quay images, no auth) |
-| `components/manifests/overlays/kind-local/kustomization.yaml` | Kind-local overlay (localhost images) |
+| `components/manifests/overlays/kind/kustomization.yaml` | Kind overlay (Quay or local images, no auth) |
 | `components/ambient-ui/Dockerfile` | Multi-stage Docker build |
 | `.github/workflows/components-build-deploy.yml` | CI build matrix entry |
-| `components/manifests/overlays/hcmais/kustomization.yaml` | HCMAIS overlay (ambient-api namespace, Keycloak SSO) |
+| `components/manifests/overlays/hcmai/kustomization.yaml` | HCMAI overlay (ambient-api namespace, Keycloak SSO) |
 
 Production overlay files exist (`ambient-ui-oauth-patch.yaml`, etc.) but are
 disabled — they used origin-oauth-proxy which can't produce JWTs. See Auth section.
@@ -547,7 +546,7 @@ OpenShift Route with TLS edge termination, targeting the ambient-ui Service on p
 
 ## HCMAIS Environment (ambient-api namespace)
 
-The `hcmais` overlay deploys to `ambient-api` namespace on the HCMAIS ROSA cluster.
+The `hcmai` overlay deploys to `ambient-api` namespace on the HCMAI ROSA cluster.
 It includes only: ambient-api-server, ambient-api-server-db, ambient-control-plane,
 ambient-ui, and postgresql.
 
@@ -572,7 +571,7 @@ ambient-ui, and postgresql.
 
 3. **Deploy**:
    ```bash
-   kustomize build components/manifests/overlays/hcmais | oc apply -n ambient-api -f -
+   kustomize build components/manifests/overlays/hcmai | oc apply -n ambient-api -f -
    ```
 
 4. **Verify**:

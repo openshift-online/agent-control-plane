@@ -32,7 +32,7 @@ jobs:
       - name: Build all overlays
         run: |
           failed=0
-          for overlay in production e2e kind kind-local local-dev; do
+          for overlay in production e2e kind crc hcmai; do
             echo "=== $overlay ==="
             if oc kustomize "components/manifests/overlays/$overlay" > /dev/null; then
               echo "OK"
