@@ -29,14 +29,14 @@ rules:
 - apiGroups: [""]
   resources: ["configmaps"]
   verbs: ["get", "watch", "list", "create", "update", "patch", "delete"]
-# Deployments, StatefulSets (gateway provisioning)
+# Deployments, StatefulSets (gateway provisioning + cleanup)
 - apiGroups: ["apps"]
   resources: ["deployments", "statefulsets", "statefulsets/finalizers"]
-  verbs: ["create", "get", "update", "patch"]
-# NetworkPolicies (gateway isolation)
+  verbs: ["create", "get", "list", "update", "patch", "delete"]
+# NetworkPolicies (gateway isolation + session cleanup)
 - apiGroups: ["networking.k8s.io"]
   resources: ["networkpolicies"]
-  verbs: ["create", "get", "update", "patch"]
+  verbs: ["create", "get", "list", "update", "patch", "delete", "deletecollection"]
 # ClusterRoles and ClusterRoleBindings (gateway RBAC)
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["clusterroles", "clusterrolebindings"]
