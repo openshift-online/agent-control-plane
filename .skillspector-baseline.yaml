@@ -26,3 +26,22 @@ rules:
   - id: "E1"
     path: ".github/workflows/*"
     reason: "CI workflows communicating with trusted internal services"
+
+  # Vertex AI model discovery — legitimate GCP API auth in CI
+  - id: "TT3"
+    path: ".github/scripts/model-discovery.py"
+    reason: "CI job authenticates to Vertex AI via WIF/gcloud; bearer tokens in Authorization headers are expected"
+
+  - id: "PE3"
+    path: ".github/scripts/model-discovery.py"
+    reason: "CI job obtains GCP access token via gcloud for Vertex AI Model Garden API"
+
+  # Deploy skill documents credential sidecar providers and OIDC token types — not file-path credential access
+  - id: "PE3"
+    path: "skills/deploy/deploy-cluster/SKILL.md"
+    reason: "Architecture docs naming Kubeconfig provider and OIDC token types; no credential path access"
+
+  # Feedback loop uploads correction-derived prompts to GHA artifacts — review privacy scope
+  - id: "E4"
+    path: ".github/workflows/feedback-loop.yml"
+    reason: "Known: sessions.json carries Langfuse correction summaries to ambient-action; revisit data minimization and retention"

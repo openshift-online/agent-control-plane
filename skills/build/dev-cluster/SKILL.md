@@ -175,12 +175,19 @@ git fetch origin <branch_name> && git checkout <branch_name>
 
 For frontend-only changes, skip image rebuilds — run NextJS with hot-reload against the kind backend:
 
+1. Create `components/ambient-ui/.env.local` (gitignored — do not commit). Set:
+   - `OC_TOKEN` from the Kind dev fixture secret `test-user-token` in namespace `ambient-code`
+   - `BACKEND_URL=http://localhost:$KIND_FWD_BACKEND_PORT/api`
+
+   See `docs/internal/developer/local-development/kind.md` for the full setup.
+
+2. Start the dev server:
+
 ```bash
 kubectl port-forward svc/ambient-api-server $KIND_FWD_BACKEND_PORT:8080 -n ambient-code &
 cd components/ambient-ui && npm install
-TOKEN=$(kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d)
-echo "OC_TOKEN=$TOKEN\nBACKEND_URL=http://localhost:$KIND_FWD_BACKEND_PORT/api" > .env.local
 npm run dev  # http://localhost:3000
+```
 
 **When to use:**
 - Frontend-only changes (components, styles, pages, API routes)
@@ -190,7 +197,6 @@ npm run dev  # http://localhost:3000
 **When NOT to use:**
 - Backend, operator, or runner changes (those still need image rebuild + load)
 - Testing container configuration or deployment manifests
-```
 
 ## Google OAuth for Integrations
 
