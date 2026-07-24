@@ -18,3 +18,5 @@ includes: auto
 scripts:
   install: ./scripts/apm-install.sh
   update: ./scripts/apm-update.sh
+  scan-all: ./scripts/skill-scan.sh all
+  scan-unmanaged: ./scripts/skill-scan.sh unmanaged

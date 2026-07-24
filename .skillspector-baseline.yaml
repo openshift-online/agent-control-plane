@@ -1,0 +1,28 @@
+version: 1
+rules:
+  # subprocess calls in CI helper scripts — expected for tooling
+  - id: "AST4"
+    path: ".github/scripts/*"
+    reason: "CI helper scripts legitimately use subprocess for gcloud/gh/git"
+
+  # sudo in CI workflows — standard for GitHub Actions runners
+  - id: "PE2"
+    reason: "CI workflows install system packages on ephemeral runners"
+
+  # Autonomous decision making in reconcile/deploy skills — their purpose
+  - id: "EA2"
+    reason: "Reconcile and deploy skills are designed for autonomous operation"
+
+  # Unpinned MCP server versions via npx — these are test runners, not MCP servers
+  - id: "RP1"
+    reason: "npx jest/vitest/playwright are test runners, not MCP servers"
+
+  # CI workflow shell commands — not agent-controlled tool calls
+  - id: "TM*"
+    path: ".github/workflows/*"
+    reason: "CI workflow shell commands in GitHub Actions, not agent-controlled tool calls"
+
+  # External transmission in CI — workflows posting to trusted internal APIs
+  - id: "E1"
+    path: ".github/workflows/*"
+    reason: "CI workflows communicating with trusted internal services"

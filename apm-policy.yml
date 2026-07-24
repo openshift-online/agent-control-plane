@@ -1,0 +1,34 @@
+# Repo-level APM policy for agent-control-plane.
+#
+# CAVEAT (APM 0.25.0): a repo-root apm-policy.yml is NOT auto-discovered by
+# plain `apm install` -- that command only auto-discovers an *org*-level
+# policy (<org>/.github/apm-policy.yml) via the git remote. This file is
+# enforced today by scripts/apm-install.sh, which reads the intent below and
+# runs the skillspector scan itself. If/when APM ships repo-root discovery
+# (or we publish an org-level policy), drop the workaround in
+# scripts/apm-install.sh and let APM enforce this file natively.
+#
+# Keep `security.audit.on_install` and scripts/apm-install.sh's skillspector
+# step in sync.
+#
+# Scan scope: on_install only covers deployed APM content (.claude/skills,
+# .claude/commands) -- fast, since that's the agent-facing surface that
+# just got installed. Everything else agent/skill-facing (top-level skills/,
+# .claude/agents, .claude/plugins, .github/) is NOT covered on install; run
+# it explicitly:
+#   apm run scan-unmanaged   # locally authored skill content only
+#   apm run scan-all         # managed + unmanaged combined
+# All three modes deliberately exclude components/ (application source) --
+# see scripts/skill-scan.sh for why.
+name: "agent-control-plane repo policy"
+version: "0.1.0"
+enforcement: warn
+
+security:
+  audit:
+    on_install: warn        # off | warn | block
+    external:
+      - skillspector
+    scanners:
+      skillspector:
+        allow_args: false  # lock to the vetted invocation, no passthrough flags

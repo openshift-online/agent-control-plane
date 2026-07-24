@@ -9,23 +9,14 @@
 #   make apm-install
 #   # or: apm run install
 
-set -euo pipefail
-
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
-
-if [[ -f .env.local ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source .env.local
-  set +a
-fi
-
-export GITLAB_HOST="${GITLAB_HOST:-gitlab.cee.redhat.com}"
+# shellcheck source=apm-common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/apm-common.sh"
 
 if [[ -n "${GITLAB_APM_PAT:-}" ]]; then
   ./scripts/sync-ai-security-harness-skills.sh
-  exec apm install "$@"
+  apm install "$@"
+  run_skill_audit
+  exit 0
 fi
 
 cat >&2 <<'EOF'
@@ -45,3 +36,4 @@ trap 'mv apm.yml.bak apm.yml' EXIT
 sed -i.tmp '/- path: \.\/vendor\/ai-security-harness$/,/alias: ai-security-harness/{d;}' apm.yml && rm -f apm.yml.tmp
 
 apm install "$@"
+run_skill_audit

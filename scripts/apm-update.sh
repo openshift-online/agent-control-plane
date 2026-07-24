@@ -11,19 +11,8 @@
 #
 # Does not run on bare `apm update` — use this script or `apm run update`.
 
-set -euo pipefail
-
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
-
-if [[ -f .env.local ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source .env.local
-  set +a
-fi
-
-export GITLAB_HOST="${GITLAB_HOST:-gitlab.cee.redhat.com}"
+# shellcheck source=apm-common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/apm-common.sh"
 
 if [[ -n "${GITLAB_APM_PAT:-}" ]]; then
   ./scripts/sync-ai-security-harness-skills.sh --update-pin

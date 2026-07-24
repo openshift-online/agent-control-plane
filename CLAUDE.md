@@ -180,6 +180,11 @@ Configured in `.pre-commit-config.yaml`. Install: `make setup-hooks`. Run all: `
 - `tsc --noEmit` and `npm run build` are **not** in pre-commit (slow; CI gates on them)
 - Branch/push protection blocks commits and pushes to main/master/production
 
+## Skill Security Scanning
+
+Run `apm run scan-all` or `apm run scan-unmanaged`. Suppressions in
+`.skillspector-baseline.yaml`. See [README-APM.md](README-APM.md) for details.
+
 ## PR Review Gate
 
 Before running `gh pr create`, agents MUST self-review their changes:
