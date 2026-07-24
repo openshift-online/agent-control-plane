@@ -57,6 +57,9 @@ jobs:
   test-local-dev-simulation:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      KUBECTL_VERSION: v1.31.4
+      KIND_VERSION: v0.31.0
 
     steps:
     - name: Checkout code
