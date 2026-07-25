@@ -60,6 +60,10 @@ rules:
 - apiGroups: ["gateway.networking.k8s.io"]
   resources: ["gateways"]
   verbs: ["get", "list"]
+# OpenShift Routes (NLB passthrough route for gateway gRPC exposure)
+- apiGroups: ["route.openshift.io"]
+  resources: ["routes"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
 # Cluster ingress config (auto-detect base domain for Gateway API hostnames)
 - apiGroups: ["config.openshift.io"]
   resources: ["ingresses"]

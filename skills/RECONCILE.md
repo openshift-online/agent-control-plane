@@ -50,19 +50,19 @@ skills/
 
 ## Reconciliation State
 
-**Last analyzed**: 2026-07-18 (openshell-cli-e2e-test gap analysis)
-**Spec corpus**: 30 specs across 4 domains
-**Codebase commit**: 40b550a7 (squizzi/amsterdam branch)
+**Last analyzed**: 2026-07-25 (Wave 18: P44 Router NetworkPolicy + P45 NLB passthrough Route automation)
+**Spec corpus**: 30 specs + 4 sub-specs across 4 domains
+**Codebase commit**: 7719f6da (main)
 
 ### Coverage Summary
 
 | Domain | Specs | Requirements | Present | Partial | Missing | Coverage |
 |--------|-------|-------------|---------|---------|---------|----------|
-| Platform | 13 | 131 | 126 | 1 | 4 | 96.2% |
+| Platform | 13 (+4 sub) | 133 | 130 | 1 | 2 | 97.7% |
 | Security | 6 | 55 | 47 | 3 | 5 | 85.5% |
 | UI | 7 | 70 | 62 | 6 | 2 | 88.6% |
 | CLI | 1 | 13 | 13 | 0 | 0 | 100% |
-| **TOTAL** | **30** | **269** | **248** | **10** | **11** | **92.2%** |
+| **TOTAL** | **30+4** | **271** | **252** | **10** | **9** | **93.4%** |
 
 ### Spec Dependency Order
 
@@ -72,7 +72,8 @@ Reconciliation processes specs in this topological order:
 Layer 0 (roots):  data-model, identity-boundaries, standards/*
 Layer 1:          control-plane, sso-authentication, rbac-enforcement
 Layer 2:          runner, agent-sandbox-config, credential-binding, gateway-rbac-policy
-Layer 3:          openshell-gateway, credential-encryption, openshell-sandbox
+Layer 3:          openshell-gateway (+tls, +oidc, +routing, +database sub-specs),
+                  credential-encryption, openshell-sandbox
 Layer 4:          openshell-sandbox-provisioning, agent-inheritance, project-gateway-lifecycle
 Layer 5:          scheduled-session-execution, session-activity-tracking, mcp-server
 Layer 6 (leaves): architecture, annotations, views, live-preview, project-sharing,
@@ -127,15 +128,17 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | P20 | openshell-gateway | platform-config ConfigMap overlays removal | Manifests | **done** | minor | Deleted `platform-config.yaml` from `overlays/kind/` and `overlays/hcmais-dev/`. Removed references from both `kustomization.yaml` files. |
 | P31 | openshell-gateway | cert-manager TLS certificate management | CP | **done** | major | `detectCertManager()` checks for `cert-manager.io/` API group at startup. `reconcileCertManagerResources()` creates self-signed Issuer, CA Certificate, CA Issuer, server Certificate, and client Certificate. Conditional on `r.hasCertManager`. |
 | P32 | openshell-gateway | Trusted CA bundle injection | CP | **done** | major | `gateway-trusted-ca` ConfigMap copied from CP namespace to tenant namespace. `applyTrustedCAOverrides()` adds volume mount at `/etc/pki/tls/certs/ca-bundle.crt`, sets `SSL_CERT_FILE` env var. |
-| P33 | openshell-gateway | OIDC API fields and TOML injection | BE+CP | **done** | major | `GatewayOidc` struct with 7 fields (issuer, audience, jwks_ttl, roles_claim, admin_role, user_role, scopes_claim). JSONB column in DB. `ApplyConfigOverrides()` injects `[openshell.gateway.oidc]` TOML section, disables mTLS by removing `client_ca_path`. Role validation enforces both-or-neither for admin/user roles. |
+| P33 | openshell-gateway | OIDC API fields and TOML injection | BE+CP | **done** | major | `GatewayOidc` struct with 7 fields (issuer, audience, jwks_ttl, roles_claim, admin_role, user_role, scopes_claim). JSONB column in DB. `ApplyConfigOverrides()` injects `[openshell.gateway.oidc]` TOML section and retains `client_ca_path` for optional mTLS (gateway binary uses `require_client_auth = has_ca && !has_oidc`). Role validation enforces both-or-neither for admin/user roles. Corrected in PR #423: mTLS is optional, not disabled. |
 | P34 | openshell-gateway | OIDC change detection + pod restart | CP | **done** | major | `renderedConfigChanged()` diffs rendered `gateway.toml` against live ConfigMap. When changed, adds `kubectl.kubernetes.io/restartedAt` annotation to trigger rolling restart. |
 | P35 | openshell-gateway | Gateway API detection and GRPCRoute reconciliation | CP | **done** | blocker | Two-phase detection: (1) server discovery for `grpcroutes` resource, (2) networking Gateway `Accepted` condition check. `reconcileGRPCRoute()` creates/updates GRPCRoute with parent refs, hostnames, backend refs, owner references. `buildBackendTLSPolicy()` for TLS re-encryption. RBAC ClusterRole grants GRPCRoute and BackendTLSPolicy permissions. |
 | P36 | openshell-gateway | Route address discovery and API exposure | BE+CP | **done** | major | `reconcileGRPCRouteAddress()` constructs `protocol://hostname` from Gateway listener protocol. PATCHes `routeAddress` to API server. `route` (JSONB) and `route_address` (TEXT) columns in DB. CLI `gatewayAddress()` displays route address or "Not ready...". |
 | P37 | openshell-gateway | OpenShift SCC bindings | CP | **done** | major | `reconcileOpenShiftSCC()` creates RoleBinding binding `openshell-gateway-sandbox` SA to `system:openshift:scc:privileged` ClusterRole. Conditional on `r.isOpenShift` (detected via `route.openshift.io/` API group). |
 | P38 | openshell-gateway | Labels/annotations normalization to JSON string | BE+CLI | **done** | minor | PR #409: labels and annotations stored as `type: string` (JSON-encoded) instead of `type: object`. CLI `parseKeyValuePairs()` + `json.Marshal()` for create; `applyGateway` handles both string and object formats for backward compat. |
-| P39 | openshell-gateway | Gateway database provisioning (postgres/sqlite) | BE+CP | missing | major | Spec requires `database` field on Gateway (type, storageSize, image, externalSecretRef). No implementation: no DB field in model, no PostgreSQL resource provisioning (Secret, PVC, Deployment, Service), no workload type switching. |
+| P39 | openshell-gateway | Gateway database provisioning (postgres/sqlite) | BE+CP | **done** | major | PR #415: Full-stack implementation. API: `database` JSONB column, migration `202607200001`, handler defaults, presenter serialize/deserialize. SDK: `GatewayDatabase` type, `Database` kustomize field. CP: `reconcilePostgresResources()` provisions Secret (crypto/rand password), PVC, Deployment, Service, NetworkPolicy. `buildGatewayDeployment()` creates Deployment (not StatefulSet) with `OPENSHELL_DB_URL` env var and `pg_isready` init container. RHEL image auto-detection for env var naming. Validation rejects unsupported types and reserved `externalSecretRef`. Workload switching (StatefulSet↔Deployment) with cleanup. Verified on ROSA `vteam-stage` with tenant-a running postgres-backed gateway. |
 | P40 | openshell-gateway | Cross-cluster gateway exposure | CP | missing | major | Spec requires ExternalName Service for cross-cluster gRPC, external URL annotation. No implementation exists. |
-| P41 | openshell-gateway | Gateway route E2E test on CRC | Tests | missing | minor | Spec requires full E2E connectivity test (GRPCRoute → BackendTLSPolicy → gateway pod) on CRC/OpenShift. No test exists. |
+| P41 | openshell-gateway | Gateway route E2E test on CRC | Tests | missing | minor | Spec requires full E2E connectivity test (GRPCRoute → BackendTLSPolicy → gateway pod) on CRC/OpenShift. No CRC test exists. ROSA equivalent (`e2e-openshell.sh`) passes 11/11 via NLB passthrough route. |
+| P44 | openshell-gateway-routing | Router NetworkPolicy automation | CP | **done** | minor | `reconcileRouterNetworkPolicy()` in `gateway_reconciler.go` creates `openshell-gateway-allow-router` NetworkPolicy when `isOpenShift=true` and `gw.Route != nil`. Allows `openshift-ingress` namespace pods to reach gateway on ports 8080/8081. Deletes NetworkPolicy when Route is removed. |
+| P45 | openshell-gateway-routing | NLB passthrough Route management | CP | **done** | minor | `reconcileOpenShiftRoute()` in `gateway_reconciler.go` creates passthrough Route `openshell-gateway-grpc` with `router: grpc` label, `tls.termination: passthrough`, `haproxy.router.openshift.io/timeout: 3600s`. Hostname auto-derived from `baseDomain`. OwnerReference set to StatefulSet/Deployment. RBAC: `route.openshift.io/routes` added to ClusterRole. Deletes Route when `gw.Route` is removed. |
 | P42 | project-gateway-lifecycle | Server-side gateway defaults (GATEWAY_IMAGE, OIDC_ISSUER_URL) | BE | **done** | major | `applyGatewayDefaults()` reads `GATEWAY_IMAGE` and `OIDC_ISSUER_URL` from env vars. Applies image default when empty, OIDC defaults when `gw.Oidc == nil` and issuer URL is set. |
 | P43 | project-gateway-lifecycle | acpctl gateway setup-cli | CLI | **done** | major | `gateway/setup.go` implements `acpctl gateway setup-cli [name]` with OIDC token injection, mTLS cert fetching via kubectl, `--print` and `--kubectl` (port-forward) modes. |
 | P21 | control-plane | ProjectReconciler namespace lifecycle | CP | **done** | minor | Ordering already enforced: informer `initialSync` syncs `projects` before `sessions`, and `RegisterHandler` in main.go registers ProjectReconciler first. ProjectReconciler runs `ensureNamespace()` which creates namespaces before session reconcilers attempt to use them. |
@@ -214,7 +217,7 @@ Gaps grouped by execution wave. Each wave gates the next.
 
 **Partials** (S9, S10, S11, P1, P9) are low-severity and can be addressed opportunistically.
 
-**Missing** (P39, P40, P41) are new gaps from the consolidated openshell-gateway spec. P39 (database provisioning) and P40 (cross-cluster exposure) are major but not yet prioritized into a wave.
+**Missing** (P40, P41, P44, P45) are remaining gaps. P40 (cross-cluster exposure) is major but not yet prioritized. P41 (CRC E2E test), P44 (router NetworkPolicy), and P45 (NLB Route management) are minor.
 
 ---
 
@@ -270,3 +273,4 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-16 | 40b550a7 | Wave 15 executed: P28, P29 | 92.2% | openshell-cli-e2e-test spec fully implemented. E2E test script (8 sections, 37 scenarios) and tmux demo script created. Coverage up from 91.9% to 92.2%. |
 | 2026-07-18 | (pending) | Waves 15-16 executed: P28, P29, P30 | 92.0% | SDK generator extended for action response schemas (`status`/`heartbeat` knownActions, `ResponseSchema` types). ClusterHealthSyncer reconciler (30s polling, heartbeat probing). PlacementStrategy interface + RoundRobinPlacement (role filtering, label matching, heartbeat threshold). |
 | 2026-07-20 | 922dbc40 | Spec consolidation pass | 91.6% | 3 gateway specs (gateway-provisioning, gateway-oidc, gateway-route-exposure) consolidated into openshell-gateway.spec.md (45 reqs). project-gateway-lifecycle.spec.md added (6 reqs). 13 new done entries (P31-P38, P42-P43, cert-manager, OIDC, route exposure, SCC). 3 new missing gaps (P39 database provisioning, P40 cross-cluster exposure, P41 E2E test). CI: test-local-dev-simulation removed from workflows. |
+| 2026-07-25 | 7719f6da | Post-PR #415/#423 reconciliation | 92.8% | P39 (database provisioning) marked done — full-stack implementation merged in PR #415 (Secret, PVC, Deployment, Service, NetworkPolicy, workload switching, RHEL image detection). P33 description corrected: mTLS is now optional (not disabled) when OIDC is enabled (PR #423 corrected code + spec). 4 sub-specs extracted (TLS, OIDC, routing, database) — organizational; no new requirements added. 2 new minor gaps added: P44 (router NetworkPolicy automation), P45 (NLB Route management). ROSA `vteam-stage` verified: tenant-a running postgres-backed gateway with OIDC, 10+ sandbox pods, e2e-openshell.sh 11/11 pass. |
