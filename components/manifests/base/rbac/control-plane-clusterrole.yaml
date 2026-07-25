@@ -68,6 +68,10 @@ rules:
 - apiGroups: ["cert-manager.io"]
   resources: ["issuers", "certificates"]
   verbs: ["get", "list", "create", "update", "patch", "delete"]
+# PersistentVolumeClaims (gateway database storage provisioning)
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "create", "update", "patch"]
 # Sandboxes (OpenShell agent CRD)
 - apiGroups: ["agents.x-k8s.io"]
   resources: ["sandboxes", "sandboxes/status"]
