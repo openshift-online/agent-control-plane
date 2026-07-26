@@ -2,6 +2,10 @@ package tokenserver
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -45,6 +49,8 @@ func (m *mockWatchStream) Recv() (*pb.SandboxStreamEvent, error) {
 	return e, nil
 }
 
+// newTestSandboxHandler creates a handler without a private key for tests that
+// never reach the auth layer (method/name/namespace validation tests).
 func newTestSandboxHandler(gw SandboxGateway) *sandboxHandler {
 	return &sandboxHandler{
 		gateway: gw,
@@ -52,9 +58,31 @@ func newTestSandboxHandler(gw SandboxGateway) *sandboxHandler {
 	}
 }
 
-func withTestAuth(r *http.Request) *http.Request {
-	r.Header.Set("Authorization", "Bearer test-sandbox-token")
-	return r
+// newAuthTestHandler creates a handler with a fresh RSA key for tests that exercise
+// endpoints which require authentication.
+func newAuthTestHandler(t *testing.T, gw SandboxGateway) (*sandboxHandler, *rsa.PrivateKey) {
+	t.Helper()
+	// 1024-bit key is sufficient for tests; real deployments use 2048+.
+	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		t.Fatalf("generating test RSA key: %v", err)
+	}
+	return &sandboxHandler{
+		gateway:    gw,
+		privateKey: key,
+		logger:     zerolog.Nop(),
+	}, key
+}
+
+// makeBearerToken encrypts sessionID with pub using RSA-OAEP (the same scheme as the
+// real /token endpoint) and returns the base64-encoded bearer token.
+func makeBearerToken(t *testing.T, pub *rsa.PublicKey, sessionID string) string {
+	t.Helper()
+	ct, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, pub, []byte(sessionID), nil)
+	if err != nil {
+		t.Fatalf("encrypting test session ID: %v", err)
+	}
+	return base64.StdEncoding.EncodeToString(ct)
 }
 
 func makeSandboxResponse(id, name string) *pb.SandboxResponse {
@@ -70,8 +98,19 @@ func makeSandboxResponse(id, name string) *pb.SandboxResponse {
 	}
 }
 
+// Session IDs must be ≥8 chars (isValidSessionID requirement) and ≤11 chars so
+// SandboxName produces "session-<sessionID>" with no truncation.
+//
+//	sessionID "abc12345" → sandboxName "session-abc12345"
+//	sessionID "testtest" → sandboxName "session-testtest"
+//	sessionID "noxfound" → sandboxName "session-noxfound"
+//	sessionID "errtestx" → sandboxName "session-errtestx"
+//	sessionID "poltest0" → sandboxName "session-poltest0"
+//	sessionID "authtest" → sandboxName "session-authtest"
+
 func TestHandleLogs_ResolvesNameToUUID(t *testing.T) {
-	const sandboxName = "session-abc123"
+	const sessionID = "abc12345"
+	const sandboxName = "session-abc12345"
 	const sandboxUUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
 	var capturedReq *pb.WatchSandboxRequest
@@ -92,8 +131,10 @@ func TestHandleLogs_ResolvesNameToUUID(t *testing.T) {
 		},
 	}
 
-	h := newTestSandboxHandler(gw)
-	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/"+sandboxName+"/logs?namespace=tenant-a", nil))
+	h, key := newAuthTestHandler(t, gw)
+	token := makeBearerToken(t, &key.PublicKey, sessionID)
+	req := httptest.NewRequest(http.MethodGet, "/sandbox/"+sandboxName+"/logs?namespace=tenant-a", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
@@ -120,9 +161,12 @@ func TestHandleLogs_ResolvesNameToUUID(t *testing.T) {
 }
 
 func TestHandleLogs_SSEFormat(t *testing.T) {
+	const sessionID = "testtest"
+	const sandboxName = "session-testtest"
+
 	gw := &mockSandboxGateway{
 		getSandboxFn: func(context.Context, string, string) (*pb.SandboxResponse, error) {
-			return makeSandboxResponse("uuid-1", "session-test"), nil
+			return makeSandboxResponse("uuid-1", sandboxName), nil
 		},
 		watchSandboxFn: func(context.Context, string, *pb.WatchSandboxRequest) (pb.OpenShell_WatchSandboxClient, error) {
 			return &mockWatchStream{events: []*pb.SandboxStreamEvent{
@@ -130,7 +174,7 @@ func TestHandleLogs_SSEFormat(t *testing.T) {
 					TimestampMs: 1000, Source: "sandbox", Level: "INFO", Message: "hello",
 				}}},
 				{Payload: &pb.SandboxStreamEvent_Sandbox{Sandbox: &pb.Sandbox{
-					Status: &pb.SandboxStatus{Phase: pb.SandboxPhase_SANDBOX_PHASE_READY, SandboxName: "session-test"},
+					Status: &pb.SandboxStatus{Phase: pb.SandboxPhase_SANDBOX_PHASE_READY, SandboxName: sandboxName},
 				}}},
 				{Payload: &pb.SandboxStreamEvent_Event{Event: &pb.PlatformEvent{
 					TimestampMs: 2000, Source: "k8s", Type: "Normal", Reason: "Scheduled", Message: "pod scheduled",
@@ -142,8 +186,10 @@ func TestHandleLogs_SSEFormat(t *testing.T) {
 		},
 	}
 
-	h := newTestSandboxHandler(gw)
-	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/session-test/logs?namespace=ns", nil))
+	h, key := newAuthTestHandler(t, gw)
+	token := makeBearerToken(t, &key.PublicKey, sessionID)
+	req := httptest.NewRequest(http.MethodGet, "/sandbox/"+sandboxName+"/logs?namespace=ns", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
@@ -190,6 +236,9 @@ func TestHandleLogs_SSEFormat(t *testing.T) {
 }
 
 func TestHandleLogs_GetSandboxNotFound(t *testing.T) {
+	const sessionID = "noxfound"
+	const sandboxName = "session-noxfound"
+
 	gw := &mockSandboxGateway{
 		getSandboxFn: func(context.Context, string, string) (*pb.SandboxResponse, error) {
 			return &pb.SandboxResponse{Sandbox: nil}, nil
@@ -200,8 +249,10 @@ func TestHandleLogs_GetSandboxNotFound(t *testing.T) {
 		},
 	}
 
-	h := newTestSandboxHandler(gw)
-	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/nonexistent/logs?namespace=ns", nil))
+	h, key := newAuthTestHandler(t, gw)
+	token := makeBearerToken(t, &key.PublicKey, sessionID)
+	req := httptest.NewRequest(http.MethodGet, "/sandbox/"+sandboxName+"/logs?namespace=ns", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
@@ -212,6 +263,9 @@ func TestHandleLogs_GetSandboxNotFound(t *testing.T) {
 }
 
 func TestHandleLogs_GetSandboxError(t *testing.T) {
+	const sessionID = "errtestx"
+	const sandboxName = "session-errtestx"
+
 	gw := &mockSandboxGateway{
 		getSandboxFn: func(context.Context, string, string) (*pb.SandboxResponse, error) {
 			return nil, fmt.Errorf("gateway unreachable")
@@ -222,8 +276,10 @@ func TestHandleLogs_GetSandboxError(t *testing.T) {
 		},
 	}
 
-	h := newTestSandboxHandler(gw)
-	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/session-x/logs?namespace=ns", nil))
+	h, key := newAuthTestHandler(t, gw)
+	token := makeBearerToken(t, &key.PublicKey, sessionID)
+	req := httptest.NewRequest(http.MethodGet, "/sandbox/"+sandboxName+"/logs?namespace=ns", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
@@ -233,9 +289,10 @@ func TestHandleLogs_GetSandboxError(t *testing.T) {
 	}
 }
 
+// Namespace check precedes auth, so no key/token needed.
 func TestHandleLogs_MissingNamespace(t *testing.T) {
 	h := newTestSandboxHandler(&mockSandboxGateway{})
-	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/session-x/logs", nil))
+	req := httptest.NewRequest(http.MethodGet, "/sandbox/session-x/logs", nil)
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
@@ -245,6 +302,7 @@ func TestHandleLogs_MissingNamespace(t *testing.T) {
 	}
 }
 
+// Method check precedes auth, so no key/token needed.
 func TestHandleLogs_MethodNotAllowed(t *testing.T) {
 	h := newTestSandboxHandler(&mockSandboxGateway{})
 	req := httptest.NewRequest(http.MethodPost, "/sandbox/session-x/logs?namespace=ns", nil)
@@ -258,14 +316,19 @@ func TestHandleLogs_MethodNotAllowed(t *testing.T) {
 }
 
 func TestHandlePolicy_Success(t *testing.T) {
+	const sessionID = "poltest0"
+	const sandboxName = "session-poltest0"
+
 	gw := &mockSandboxGateway{
 		getSandboxFn: func(context.Context, string, string) (*pb.SandboxResponse, error) {
-			return makeSandboxResponse("uuid-1", "session-pol"), nil
+			return makeSandboxResponse("uuid-1", sandboxName), nil
 		},
 	}
 
-	h := newTestSandboxHandler(gw)
-	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/session-pol/policy?namespace=ns", nil))
+	h, key := newAuthTestHandler(t, gw)
+	token := makeBearerToken(t, &key.PublicKey, sessionID)
+	req := httptest.NewRequest(http.MethodGet, "/sandbox/"+sandboxName+"/policy?namespace=ns", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
 
 	h.handlePolicy(rr, req)
@@ -290,41 +353,46 @@ func TestHandlePolicy_Success(t *testing.T) {
 	}
 }
 
-func TestSandboxPolicy_RejectsUnauthenticated(t *testing.T) {
-	gw := &mockSandboxGateway{
-		getSandboxFn: func(context.Context, string, string) (*pb.SandboxResponse, error) {
-			t.Fatal("gateway should not be called without auth")
-			return nil, nil
-		},
-	}
-
-	h := newTestSandboxHandler(gw)
-	req := httptest.NewRequest(http.MethodGet, "/sandbox/session-x/policy?namespace=ns", nil)
-	rr := httptest.NewRecorder()
-
-	h.handlePolicy(rr, req)
-
-	if rr.Code != http.StatusUnauthorized {
-		t.Errorf("status: got %d, want %d", rr.Code, http.StatusUnauthorized)
-	}
-}
-
-func TestSandboxLogs_RejectsUnauthenticated(t *testing.T) {
-	gw := &mockSandboxGateway{
-		getSandboxFn: func(context.Context, string, string) (*pb.SandboxResponse, error) {
-			t.Fatal("gateway should not be called without auth")
-			return nil, nil
-		},
-	}
-
-	h := newTestSandboxHandler(gw)
-	req := httptest.NewRequest(http.MethodGet, "/sandbox/session-x/logs?namespace=ns", nil)
+func TestSandboxAuth_MissingToken(t *testing.T) {
+	h, _ := newAuthTestHandler(t, &mockSandboxGateway{})
+	req := httptest.NewRequest(http.MethodGet, "/sandbox/session-authtest/logs?namespace=ns", nil)
+	// No Authorization header.
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("status: got %d, want %d", rr.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestSandboxAuth_InvalidToken(t *testing.T) {
+	h, _ := newAuthTestHandler(t, &mockSandboxGateway{})
+	req := httptest.NewRequest(http.MethodGet, "/sandbox/session-authtest/logs?namespace=ns", nil)
+	req.Header.Set("Authorization", "Bearer not-valid-base64-or-rsa-ciphertext")
+	rr := httptest.NewRecorder()
+
+	h.handleLogs(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want %d", rr.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestSandboxAuth_WrongSandbox(t *testing.T) {
+	// Token is valid for "authtest" → "session-authtest", but request targets a different sandbox.
+	const sessionID = "authtest"
+	h, key := newAuthTestHandler(t, &mockSandboxGateway{})
+	token := makeBearerToken(t, &key.PublicKey, sessionID)
+
+	req := httptest.NewRequest(http.MethodGet, "/sandbox/session-other0/logs?namespace=ns", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+
+	h.handleLogs(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("status: got %d, want %d", rr.Code, http.StatusForbidden)
 	}
 }
 

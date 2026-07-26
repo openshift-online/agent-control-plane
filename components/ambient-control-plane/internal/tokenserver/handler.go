@@ -67,11 +67,15 @@ func (h *handler) handleToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) decryptSessionID(ciphertext string) (string, error) {
+	return decryptSessionID(h.privateKey, ciphertext)
+}
+
+func decryptSessionID(privateKey *rsa.PrivateKey, ciphertext string) (string, error) {
 	ciphertextBytes, err := base64.StdEncoding.DecodeString(ciphertext)
 	if err != nil {
 		return "", fmt.Errorf("base64-decoding bearer token: %w", err)
 	}
-	plaintext, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, h.privateKey, ciphertextBytes, nil)
+	plaintext, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, ciphertextBytes, nil)
 	if err != nil {
 		return "", fmt.Errorf("RSA decryption failed: %w", err)
 	}

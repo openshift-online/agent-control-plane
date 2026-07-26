@@ -23,38 +23,52 @@ type SandboxGateway interface {
 
 type sandboxHandler struct {
 	gateway    SandboxGateway
-	logger     zerolog.Logger
 	privateKey *rsa.PrivateKey
+	logger     zerolog.Logger
 }
 
-func (h *sandboxHandler) requireAuth(w http.ResponseWriter, r *http.Request) bool {
+// authenticateSandboxRequest verifies the caller's session ID via RSA-OAEP decryption
+// (same mechanism as /token) and confirms the requested sandbox name belongs to that
+// session. Returns the session ID on success, or writes an HTTP error and returns "".
+func (h *sandboxHandler) authenticateSandboxRequest(w http.ResponseWriter, r *http.Request, sandboxName string) string {
 	ciphertext, err := extractBearerToken(r)
 	if err != nil {
+		h.logger.Warn().Err(err).Msg("sandbox auth: missing or malformed Authorization header")
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return false
+		return ""
 	}
-	if h.privateKey != nil {
-		handler := &handler{privateKey: h.privateKey}
-		sessionID, decErr := handler.decryptSessionID(ciphertext)
-		if decErr != nil {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return false
-		}
-		if !isValidSessionID(sessionID) {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return false
-		}
+
+	sessionID, err := decryptSessionID(h.privateKey, ciphertext)
+	if err != nil {
+		h.logger.Warn().Err(err).Msg("sandbox auth: session ID decryption failed")
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return ""
 	}
-	return true
+
+	if !isValidSessionID(sessionID) {
+		h.logger.Warn().Str("session_id", sessionID).Msg("sandbox auth: decrypted value does not match session ID pattern")
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return ""
+	}
+
+	// Verify the requested sandbox belongs to this session.
+	expectedName := openshell.SandboxName(sessionID)
+	if sandboxName != expectedName {
+		h.logger.Warn().
+			Str("session_id", sessionID).
+			Str("requested_sandbox", sandboxName).
+			Str("expected_sandbox", expectedName).
+			Msg("sandbox auth: sandbox does not belong to caller's session")
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return ""
+	}
+
+	return sessionID
 }
 
 func (h *sandboxHandler) handlePolicy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	if !h.requireAuth(w, r) {
 		return
 	}
 
@@ -68,6 +82,10 @@ func (h *sandboxHandler) handlePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 	if namespace == "" {
 		http.Error(w, "namespace query parameter required", http.StatusBadRequest)
+		return
+	}
+
+	if h.authenticateSandboxRequest(w, r, name) == "" {
 		return
 	}
 
@@ -108,10 +126,6 @@ func (h *sandboxHandler) handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.requireAuth(w, r) {
-		return
-	}
-
 	name, namespace := parseSandboxPath(r.URL.Path, "logs")
 	if name == "" {
 		http.Error(w, "sandbox name required", http.StatusBadRequest)
@@ -122,6 +136,10 @@ func (h *sandboxHandler) handleLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	if namespace == "" {
 		http.Error(w, "namespace query parameter required", http.StatusBadRequest)
+		return
+	}
+
+	if h.authenticateSandboxRequest(w, r, name) == "" {
 		return
 	}
 
