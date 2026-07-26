@@ -50,6 +50,23 @@ kubectl apply -f https://github.com/kubernetes-sigs/agent-sandbox/releases/downl
 
 This installs the `agent-sandbox-system` namespace, the CRD, and the sandbox controller. The controller watches for Sandbox CRs and creates pods with ownerReferences — the API version in those ownerReferences must match what the gateway authenticator expects.
 
+#### Sandbox Policy Requirements
+
+Sandbox policies referenced by agents (`sandbox_policy` field) MUST include non-empty configuration sections. An empty or minimal policy (e.g., `{version: 1}` with no rules) causes the Landlock LSM to block all filesystem access, resulting in exit code 126 for any process spawned inside the sandbox.
+
+A valid sandbox policy MUST include:
+- `filesystem_policy` with `read_only` paths (e.g., `/usr`, `/lib`, `/etc`, `/opt`, `/sandbox`, `/runner`) and `read_write` paths (e.g., `/tmp`, `/var/tmp`, `/sandbox/.venv`, `/home`)
+- `landlock` compatibility mode (e.g., `mode: best_effort`)
+- `process` identity configuration (`run_as_user` and `run_as_group`, typically `sandbox`)
+- `network_policies` for required egress (inference endpoints, provider APIs, package registries)
+
+Policy L7 validation rules:
+- Endpoints with `protocol: rest` MUST include either `access` (e.g., `full`, `read-only`) or explicit `rules` — omitting both causes validation failure
+- `tls: terminate` is deprecated in current OpenShell and causes validation errors — omit it
+- `enforcement: enforce` is implied by default and can be omitted for clarity
+
+See `examples/base/policies/permissive.yaml` for a reference policy with all required sections.
+
 ### Iteration 1 Constraints
 
 This iteration is scoped to **scheduled agent runs** (single-run, short-lived sessions). The following are explicitly out of scope:
@@ -88,7 +105,7 @@ When `OPENSHELL_USE_GATEWAY` is true, the control plane SHALL create agent sandb
 - THEN the control plane SHALL look up the project by `session.ProjectID` and resolve the gateway namespace from the project's **Name** field (lowercased via `NamespaceName()`), not from `session.ProjectID` directly
 - AND it SHALL enable provider endpoint injection by setting `providers_v2_enabled=true` globally on the gateway via `UpdateConfig` (see [Providers V2 Enablement](#requirement-providers-v2-enablement))
 - AND it SHALL ensure credential providers exist via `CreateProvider` (see [Credential Mapping](#requirement-credential-mapping-to-openshell-providers))
-- AND it SHALL configure inference routing via `SetClusterInference` if an inference-capable credential is present (see [Inference Configuration](#requirement-inference-configuration-via-updateconfig))
+- AND it SHALL configure inference routing via `SetInferenceRoute` if an inference-capable credential is present (see [Inference Configuration](#requirement-inference-configuration-via-setinferenceroute))
 - AND it SHALL call `CreateSandbox` on the gateway in that namespace
 - AND the sandbox SHALL be created with the runner image, session environment variables, and attached credential providers
 - AND the session phase SHALL transition to `Running`
@@ -138,15 +155,18 @@ The control plane SHALL discover the OpenShell gateway for each project by resol
 
 ### Requirement: Sandbox Identity and Naming
 
-Each sandbox SHALL have a deterministic name derived from the session ID using the existing `safeResourceName()` helper ([kube_reconciler.go]), and SHALL carry labels that identify the owning session and project.
+Each sandbox SHALL have a deterministic name derived from the session ID using `SandboxName()` ([kube_reconciler.go]), and SHALL carry labels that identify the owning session and project.
 
-Sandbox naming follows the same `session-<safe_name>` pattern used by pods (`podName()`), services (`serviceName()`), and service accounts (`serviceAccountName()`). The `safeResourceName()` helper lowercases the ID and truncates to 40 characters. Session IDs are KSUIDs (27 base62-encoded characters, alphanumeric only), so truncation never removes significant characters and lowercasing is defensive — KSUIDs contain no hyphens or DNS-unsafe characters. If the ID format changes in the future, the 40-character truncation limit would need to be reassessed for collision risk.
+Sandbox naming is constrained by the OpenShell gateway's internal workspace prefix and the Kubernetes Sandbox CR name limit. The gateway prepends `default--` (9 characters) to the sandbox name when creating the Sandbox CR, and the resulting CR name must be a valid DNS label (max 63 characters). The effective sandbox name limit is **19 characters** — the `session-` prefix (8 chars) plus 11 characters of truncated session ID. The `SandboxName()` helper lowercases the session ID and truncates to 11 characters.
+
+The control plane must also track the full Sandbox CR name (with the `default--` prefix) for operations that target the Kubernetes resource directly (DNS config patching, pod deletion). `SandboxCRName()` returns the CR name as the gateway creates it: `default--session-<truncated_id>`.
 
 #### Scenario: Sandbox naming
 
-- GIVEN a session with KSUID `2ORepVoGXMgXQMCzlOkzm8KVqDP`
+- GIVEN a session with KSUID `3H1vags1expKoH8KGebbbBenjSV`
 - WHEN a sandbox is created for this session
-- THEN the sandbox name SHALL be `session-2orepvogxmgxqmczlokzm8kvqdp` (via `safeResourceName()`: lowercased, 27 chars, no truncation)
+- THEN the sandbox name SHALL be `session-3h1vags1exp` (via `SandboxName()`: lowercased, truncated to 11 chars of session ID)
+- AND the Sandbox CR name SHALL be `default--session-3h1vags1exp` (gateway prepends workspace prefix)
 - AND the sandbox SHALL carry labels `ambient-code.io/session-id`, `ambient-code.io/project-id`, `ambient-code.io/managed=true`, and `ambient-code.io/managed-by=ambient-control-plane`
 
 #### Scenario: Idempotent creation
@@ -247,12 +267,22 @@ The `google-vertex-ai` provider type requires gateway-managed token refresh so t
 | `github` | `github` |
 | `anthropic` | `claude` |
 | `claude` | `claude` |
-| `jira` | `generic` |
-| `google` | `generic` |
-| `vertex` | `google-vertex-ai` |
-| `kubeconfig` | `generic` |
-| `mlflow` | `generic` |
-| (unknown) | `generic` |
+| `jira` | `generic` | **Limitation:** gateway does not inject env vars for `generic` type — see below |
+| `google` | `generic` | Same limitation as `jira` |
+| `vertex` | `google-vertex-ai` | |
+| `kubeconfig` | `generic` | Same limitation as `jira` |
+| `mlflow` | `generic` | Same limitation as `jira` |
+| (unknown) | `generic` | Same limitation as `jira` |
+
+#### Scenario: Generic provider credential injection limitation
+
+- GIVEN a provider with OpenShell type `generic` (e.g., `jira`, `kubeconfig`, `google`, `mlflow`)
+- AND the control plane has created the provider on the gateway with credentials from the K8s secret
+- WHEN a sandbox is created with the generic provider attached
+- THEN the gateway SHALL log `provider type has no profile; skipping provider policy layer` for the provider
+- AND the gateway SHALL NOT inject any environment variables for the provider into the sandbox
+- AND the `ProviderCredentialsFromSecret` function returns all K8s secret keys as-is (passthrough) for unknown types, but the gateway's supervisor has no env var mapping to inject them
+- AND this is an upstream OpenShell limitation — only typed providers (`github`, `claude-code`, `google-vertex-ai`, etc.) receive automatic credential env var injection
 
 ### Requirement: Providers V2 Enablement
 
@@ -274,11 +304,13 @@ See [OpenShell Vertex AI provider docs](https://docs.nvidia.com/openshell/provid
 - WHEN the control plane provisions another sandbox in the same namespace
 - THEN the `UpdateConfig` call SHALL succeed idempotently (setting the same value again is a no-op)
 
-### Requirement: Inference Configuration via SetClusterInference
+### Requirement: Inference Configuration via SetInferenceRoute
 
-After ensuring credential providers exist, the control plane SHALL configure the gateway's inference routing so that sandboxes can reach an LLM via the `inference.local` endpoint. This is equivalent to the CLI command `openshell inference set --provider <name> --model <model>` and is performed via the `SetClusterInference` gRPC RPC on the `openshell.inference.v1.Inference` service. See [OpenShell inference routing docs](https://docs.nvidia.com/openshell/sandboxes/inference-routing) for details on how `inference.local` routes requests through the gateway's privacy router.
+After ensuring credential providers exist, the control plane SHALL configure the gateway's inference routing so that sandboxes can reach an LLM via the `inference.local` endpoint. This is equivalent to the CLI command `openshell inference set --provider <name> --model <model>` and is performed via the `SetInferenceRoute` gRPC RPC on the `openshell.inference.v1.Inference` service. See [OpenShell inference routing docs](https://docs.nvidia.com/openshell/sandboxes/inference-routing) for details on how `inference.local` routes requests through the gateway's privacy router.
 
-The control plane iterates all bound credentials and configures inference routing for every provider whose OpenShell type is inference-capable. Inference-capable types are those that support the `inference.local` routing endpoint: `google-vertex-ai`, `claude`, `anthropic`, `nvidia`, `openai`, and `aws-bedrock`. For each qualifying provider, the control plane calls `SetClusterInference` with `provider_name` (the provider name as created by `ensureGatewayProviders`), `model_id`, and `no_verify=true`. These settings are applied per namespace after provider creation.
+> **Note:** The upstream OpenShell proto renamed `SetClusterInference`/`GetClusterInference` to `SetInferenceRoute`/`GetInferenceRoute` in v0.0.91. The old RPC name returns `Unimplemented` on v0.0.91+ gateways. The `SetInferenceRoute` request includes a `workspace` field for workspace-scoped routing.
+
+The control plane iterates all bound credentials and configures inference routing for every provider whose OpenShell type is inference-capable. Inference-capable types are those that support the `inference.local` routing endpoint: `google-vertex-ai`, `claude`, `anthropic`, `nvidia`, `openai`, and `aws-bedrock`. For each qualifying provider, the control plane calls `SetInferenceRoute` with `provider_name` (the provider name as created by `ensureGatewayProviders`), `model_id`, and `no_verify=true`. These settings are applied per namespace after provider creation.
 
 > **TODO:** The inference model is currently hardcoded to `claude-sonnet-4-6`. A future iteration should allow the model to be configured per-session via `session.LlmModel`, falling back to a sensible default when unset.
 
@@ -288,7 +320,7 @@ The control plane iterates all bound credentials and configures inference routin
 - AND the control plane has created the corresponding provider via `CreateProvider`
 - AND `providers_v2_enabled` has been set to `true` on the gateway (see [Providers V2 Enablement](#requirement-providers-v2-enablement))
 - WHEN the control plane provisions a sandbox in that project's namespace
-- THEN it SHALL call `SetClusterInference` with `provider_name=<provider-name>` (the name returned by `ProviderName(projectName, ambientProvider)`), `model_id="claude-sonnet-4-6"`, and `no_verify=true`
+- THEN it SHALL call `SetInferenceRoute` with `provider_name=<provider-name>` (the name returned by `ProviderName(projectName, ambientProvider)`), `model_id="claude-sonnet-4-6"`, and `no_verify=true`
 - AND the call SHALL complete before sandbox creation proceeds
 - AND failure SHALL prevent sandbox creation (the session remains in `Pending` phase)
 
@@ -296,7 +328,7 @@ The control plane iterates all bound credentials and configures inference routin
 
 - GIVEN a project has only credentials for non-inference-capable types (e.g., `github`, `jira`, `kubeconfig`)
 - WHEN the control plane provisions a sandbox
-- THEN it SHALL NOT call `UpdateConfig` for inference settings
+- THEN it SHALL NOT call `SetInferenceRoute`
 - AND sandbox creation SHALL proceed normally
 
 #### Scenario: UpdateConfig RPC vendoring
@@ -656,6 +688,8 @@ The control plane SHALL inject platform-required network policy rules (`_acp_int
 
 The control plane SHALL configure DNS resolution for sandboxes by patching the Sandbox CRD's `podTemplate.spec.dnsConfig` with `ndots:1`, then deleting the sandbox pod to force recreation with the updated DNS config. This is a workaround for [OpenShell#2053](https://github.com/NVIDIA/OpenShell/issues/2053) — without it, DNS resolution for external FQDNs (e.g., `api.github.com`) fails inside sandboxes because the default `ndots:5` causes excessive search-domain expansion.
 
+**FQDN requirement for cross-namespace service URLs:** Because sandbox pods run in the project namespace while CP services run in the runtime namespace, and `ndots:1` is configured on the sandbox, all service URLs passed to the sandbox as environment variables MUST be fully qualified with `.svc.cluster.local`. Short names like `ambient-control-plane.acp-api-01.svc` fail DNS resolution from the sandbox. This affects `CP_TOKEN_URL`, `AMBIENT_API_SERVER_URL`, `AMBIENT_GRPC_SERVER_ADDR`, and `MCP_API_SERVER_URL`.
+
 #### Scenario: DNS configuration after sandbox creation
 
 - GIVEN a sandbox has been created via `CreateSandbox`
@@ -779,7 +813,8 @@ The control plane SHALL maintain a cache of gRPC connections to OpenShell gatewa
 The control plane SHALL use mTLS for transport-level security when connecting to the OpenShell gateway. The gateway SHALL be deployed with `allow_unauthenticated_users = false` — all clients must authenticate via one of the gateway's application-layer authenticators in addition to presenting a valid mTLS client certificate.
 
 **Authentication paths:**
-- **ACP → gateway:** The control plane presents its Kubernetes ServiceAccount token as a Bearer token in gRPC requests. The gateway validates it via the `K8sServiceAccountAuthenticator` (TokenReview API). This is the same auth path used by sandbox pods for `IssueSandboxToken` bootstrap, ensuring a consistent authentication model.
+- **ACP → gateway (same cluster):** The control plane presents its Kubernetes ServiceAccount token as a Bearer token in gRPC requests. The gateway validates it via the `K8sServiceAccountAuthenticator` (TokenReview API). This is the same auth path used by sandbox pods for `IssueSandboxToken` bootstrap, ensuring a consistent authentication model.
+- **ACP → gateway (OIDC):** When the CP runs outside the gateway's cluster (e.g., ROSA deployments where the gateway cannot reach the CP's TokenReview API), the control plane authenticates via OIDC. The gateway is configured with an `OidcAuthenticator` (issuer URL, audience, roles claim), and the CP obtains a JWT from the OIDC issuer (e.g., Keycloak) and presents it as a Bearer token. The `TokenProvider` interface abstracts the auth mechanism — implementations exist for both K8s SA tokens and OIDC JWTs.
 - **Sandbox → gateway:** Sandbox pods authenticate via `IssueSandboxToken` (K8s SA token exchange for a gateway-minted JWT), then use the sandbox JWT for subsequent requests (policy fetch, log push, token refresh). This is managed entirely by the gateway and its supervisor — the control plane is not involved.
 
 The gateway is not exposed outside the cluster (no Route), so the only clients are ACP (via mTLS + K8s SA token) and sandboxes (via mTLS + gateway-minted JWTs).
@@ -955,9 +990,9 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | Runner pod | Same image and env vars, but the runner process is started via `ExecSandbox` with `["/bin/bash", "-c", "cd /runner/ambient-runner && PATH=/sandbox/.venv/bin:$PATH uvicorn main:app --host 0.0.0.0 --port 8001"]` after the sandbox reaches Ready — the gateway overrides the container entrypoint to the supervisor binary with `sleep infinity`, so the image's CMD is never executed directly. The exec goroutine must use a long-lived context (not the configurable polling timeout context) and must not accumulate stdout/stderr in memory |
 | `GatewayClient.ExecSandbox()` | Current implementation blocks on the full stream and accumulates output — must be updated to support fire-and-forget semantics for long-running processes (discard/stream output, use caller-provided context) |
 | `GatewayClient.UpdateConfig()` | New method — calls the `UpdateConfig` gRPC RPC; used by `enableProvidersV2` to set `providers_v2_enabled=true` globally on the gateway |
-| `GatewayClient.SetClusterInference()` | New method — calls the `SetClusterInference` gRPC RPC on the `openshell.inference.v1.Inference` service; used by `configureInference` to set provider and model for inference routing |
+| `GatewayClient.SetInferenceRoute()` | New method — calls the `SetInferenceRoute` gRPC RPC on the `openshell.inference.v1.Inference` service; used by `configureInference` to set provider and model for inference routing. Renamed from `SetClusterInference` in OpenShell v0.0.91 |
 | [kube_reconciler.go] `enableProvidersV2()` | New method — called before `ensureGatewayProviders`; sets `providers_v2_enabled=true` on the gateway, required for v0.0.72+ gateways |
-| [kube_reconciler.go] `configureInference()` | New method — called after `ensureGatewayProviders`; sets gateway inference routing via `SetClusterInference` when an inference-capable credential is present |
+| [kube_reconciler.go] `configureInference()` | New method — called after `ensureGatewayProviders`; sets gateway inference routing via `SetInferenceRoute` when an inference-capable credential is present |
 | `GatewayClient.UploadPayloads()` | New method — opens an SSH session via `CreateSshSession` / `ForwardTcp` gRPC RPCs and writes payload files into the sandbox via `mkdir -p && cat >` SSH commands. Called in the exec-after-Ready goroutine before `ExecSandbox` when the agent has inline content payloads |
 | `GatewayClient.ExecSandboxStreaming()` | New method — fire-and-forget variant of `ExecSandbox` that discards output and uses a caller-provided context, replacing the blocking `ExecSandbox` for long-running processes |
 | [kube_reconciler.go] `patchSandboxDNSConfig()` | New method — patches `agents.x-k8s.io/v1beta1` Sandbox CR's `podTemplate.spec.dnsConfig` with `ndots:1` and deletes the sandbox pod to force recreation. Workaround for [OpenShell#2053](https://github.com/NVIDIA/OpenShell/issues/2053) |

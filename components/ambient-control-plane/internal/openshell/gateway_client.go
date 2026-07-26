@@ -20,18 +20,31 @@ import (
 
 type CredentialResolver func(ctx context.Context, namespace string) (credentials.TransportCredentials, error)
 
-type GatewayClient struct {
-	mu          sync.RWMutex
-	conns       map[string]*grpc.ClientConn
-	serviceName string
-	grpcPort    int
-	resolveCred CredentialResolver
-	saTokenPath string
-	logger      zerolog.Logger
+type TokenProvider interface {
+	Token(ctx context.Context) (string, error)
 }
 
-func NewGatewayClient(serviceName string, grpcPort int, resolveCred CredentialResolver, saTokenPath string, logger zerolog.Logger) *GatewayClient {
-	return &GatewayClient{
+type GatewayClient struct {
+	mu            sync.RWMutex
+	conns         map[string]*grpc.ClientConn
+	serviceName   string
+	grpcPort      int
+	resolveCred   CredentialResolver
+	saTokenPath   string
+	tokenProvider TokenProvider
+	logger        zerolog.Logger
+}
+
+type GatewayClientOption func(*GatewayClient)
+
+func WithTokenProvider(tp TokenProvider) GatewayClientOption {
+	return func(g *GatewayClient) {
+		g.tokenProvider = tp
+	}
+}
+
+func NewGatewayClient(serviceName string, grpcPort int, resolveCred CredentialResolver, saTokenPath string, logger zerolog.Logger, opts ...GatewayClientOption) *GatewayClient {
+	g := &GatewayClient{
 		conns:       make(map[string]*grpc.ClientConn),
 		serviceName: serviceName,
 		grpcPort:    grpcPort,
@@ -39,9 +52,23 @@ func NewGatewayClient(serviceName string, grpcPort int, resolveCred CredentialRe
 		saTokenPath: saTokenPath,
 		logger:      logger.With().Str("component", "openshell-gateway").Logger(),
 	}
+	for _, opt := range opts {
+		opt(g)
+	}
+	return g
 }
 
 func (g *GatewayClient) authContext(ctx context.Context) context.Context {
+	if g.tokenProvider != nil {
+		token, err := g.tokenProvider.Token(ctx)
+		if err != nil {
+			g.logger.Warn().Err(err).Msg("failed to obtain OIDC token for gateway auth")
+			return ctx
+		}
+		if token != "" {
+			return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token))
+		}
+	}
 	if g.saTokenPath == "" {
 		return ctx
 	}
@@ -246,13 +273,13 @@ func (g *GatewayClient) inferenceClientForNamespace(ctx context.Context, namespa
 	return inferencepb.NewInferenceClient(conn), nil
 }
 
-func (g *GatewayClient) SetClusterInference(ctx context.Context, namespace string, req *inferencepb.SetClusterInferenceRequest) (*inferencepb.SetClusterInferenceResponse, error) {
+func (g *GatewayClient) SetInferenceRoute(ctx context.Context, namespace string, req *inferencepb.SetInferenceRouteRequest) (*inferencepb.SetInferenceRouteResponse, error) {
 	ctx = g.authContext(ctx)
 	client, err := g.inferenceClientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.SetClusterInference(ctx, req)
+	resp, err := client.SetInferenceRoute(ctx, req)
 	if err != nil && g.shouldEvict(err) {
 		g.evictConn(namespace)
 	}
@@ -390,10 +417,14 @@ func (g *GatewayClient) gatewayEndpoint(namespace string) string {
 	return fmt.Sprintf("dns:///%s.%s.svc.cluster.local:%d", g.serviceName, namespace, g.grpcPort)
 }
 
+func SandboxCRName(sandboxName string) string {
+	return "default--" + sandboxName
+}
+
 func SandboxName(sessionID string) string {
 	name := sessionID
-	if len(name) > 40 {
-		name = name[:40]
+	if len(name) > 11 {
+		name = name[:11]
 	}
 	result := make([]byte, len(name))
 	for i := 0; i < len(name); i++ {

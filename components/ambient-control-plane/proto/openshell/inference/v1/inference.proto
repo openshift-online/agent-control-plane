@@ -1,6 +1,6 @@
 // Vendored subset of the OpenShell inference proto.
 // Source: github.com/nvidia/openshell  proto/inference.proto
-// Only SetClusterInference and GetClusterInference are needed for ACP.
+// Only SetInferenceRoute and GetInferenceRoute are needed for ACP.
 
 syntax = "proto3";
 
@@ -9,39 +9,43 @@ package openshell.inference.v1;
 option go_package = "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/inference/v1";
 
 service Inference {
-  rpc SetClusterInference(SetClusterInferenceRequest)
-      returns (SetClusterInferenceResponse);
+  rpc SetInferenceRoute(SetInferenceRouteRequest)
+      returns (SetInferenceRouteResponse);
 
-  rpc GetClusterInference(GetClusterInferenceRequest)
-      returns (GetClusterInferenceResponse);
+  rpc GetInferenceRoute(GetInferenceRouteRequest)
+      returns (GetInferenceRouteResponse);
 }
 
-message SetClusterInferenceRequest {
+message SetInferenceRouteRequest {
   string provider_name = 1;
   string model_id = 2;
   string route_name = 3;
   bool verify = 4;
   bool no_verify = 5;
   uint64 timeout_secs = 6;
+  string workspace = 7;
 }
 
-message SetClusterInferenceResponse {
+message SetInferenceRouteResponse {
   string provider_name = 1;
   string model_id = 2;
   uint64 version = 3;
   string route_name = 4;
   bool validation_performed = 5;
   uint64 timeout_secs = 7;
+  string workspace = 8;
 }
 
-message GetClusterInferenceRequest {
+message GetInferenceRouteRequest {
   string route_name = 1;
+  string workspace = 2;
 }
 
-message GetClusterInferenceResponse {
+message GetInferenceRouteResponse {
   string provider_name = 1;
   string model_id = 2;
   uint64 version = 3;
   string route_name = 4;
   uint64 timeout_secs = 5;
+  string workspace = 6;
 }

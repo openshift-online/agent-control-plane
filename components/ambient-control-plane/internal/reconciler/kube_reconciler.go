@@ -609,10 +609,11 @@ func (r *SimpleKubeReconciler) patchSandboxDNSConfig(ctx context.Context, namesp
 		return fmt.Errorf("marshalling dnsConfig patch: %w", err)
 	}
 
+	crName := openshell.SandboxCRName(sandboxName)
 	const maxRetries = 5
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		_, err = r.nsKube().DynamicClient().Resource(sandboxGVR).Namespace(namespace).Patch(
-			ctx, sandboxName, k8stypes.MergePatchType, patchBytes, metav1.PatchOptions{},
+			ctx, crName, k8stypes.MergePatchType, patchBytes, metav1.PatchOptions{},
 		)
 		if err == nil {
 			r.logger.Info().Str("sandbox", sandboxName).Str("namespace", namespace).Msg("patched sandbox CR dnsConfig with ndots:1")
@@ -653,9 +654,10 @@ func (r *SimpleKubeReconciler) verifyAndFixDNSConfig(ctx context.Context, namesp
 		return true, nil
 	}
 
+	crName := openshell.SandboxCRName(sbxName)
 	r.logger.Warn().Str("sandbox", sbxName).Msg("sandbox pod has ndots:5, deleting for recreation from patched CR")
-	if err := r.nsKube().DeletePod(ctx, namespace, sbxName, &metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
-		return false, fmt.Errorf("deleting pod %s for ndots fix: %w", sbxName, err)
+	if err := r.nsKube().DeletePod(ctx, namespace, crName, &metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
+		return false, fmt.Errorf("deleting pod %s for ndots fix: %w", crName, err)
 	}
 	return false, nil
 }
@@ -1605,7 +1607,7 @@ func (r *SimpleKubeReconciler) configureInferenceFromProviders(ctx context.Conte
 			continue
 		}
 
-		resp, err := r.gateway.SetClusterInference(ctx, namespace, &inferencepb.SetClusterInferenceRequest{
+		resp, err := r.gateway.SetInferenceRoute(ctx, namespace, &inferencepb.SetInferenceRouteRequest{
 			ProviderName: osName,
 			ModelId:      inferenceModel,
 			NoVerify:     true,

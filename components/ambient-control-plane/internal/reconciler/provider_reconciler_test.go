@@ -33,7 +33,7 @@ import (
 type mockGateway struct {
 	updateProviderFn           func(ctx context.Context, namespace string, req *pb.UpdateProviderRequest) (*pb.ProviderResponse, error)
 	createProviderFn           func(ctx context.Context, namespace string, req *pb.CreateProviderRequest) (*pb.ProviderResponse, error)
-	setClusterInferenceFn      func(ctx context.Context, namespace string, req *inferencepb.SetClusterInferenceRequest) (*inferencepb.SetClusterInferenceResponse, error)
+	setInferenceRouteFn        func(ctx context.Context, namespace string, req *inferencepb.SetInferenceRouteRequest) (*inferencepb.SetInferenceRouteResponse, error)
 	configureProviderRefreshFn func(ctx context.Context, namespace string, req *pb.ConfigureProviderRefreshRequest) (*pb.ConfigureProviderRefreshResponse, error)
 	rotateProviderCredentialFn func(ctx context.Context, namespace string, req *pb.RotateProviderCredentialRequest) (*pb.RotateProviderCredentialResponse, error)
 	execSandboxFn              func(ctx context.Context, namespace string, req *pb.ExecSandboxRequest) (*openshell.ExecResult, error)
@@ -66,11 +66,11 @@ func (m *mockGateway) UpdateProvider(ctx context.Context, namespace string, req 
 	return &pb.ProviderResponse{}, nil
 }
 
-func (m *mockGateway) SetClusterInference(ctx context.Context, namespace string, req *inferencepb.SetClusterInferenceRequest) (*inferencepb.SetClusterInferenceResponse, error) {
-	if m.setClusterInferenceFn != nil {
-		return m.setClusterInferenceFn(ctx, namespace, req)
+func (m *mockGateway) SetInferenceRoute(ctx context.Context, namespace string, req *inferencepb.SetInferenceRouteRequest) (*inferencepb.SetInferenceRouteResponse, error) {
+	if m.setInferenceRouteFn != nil {
+		return m.setInferenceRouteFn(ctx, namespace, req)
 	}
-	return &inferencepb.SetClusterInferenceResponse{Version: 1}, nil
+	return &inferencepb.SetInferenceRouteResponse{Version: 1}, nil
 }
 
 func (m *mockGateway) ConfigureProviderRefresh(ctx context.Context, namespace string, req *pb.ConfigureProviderRefreshRequest) (*pb.ConfigureProviderRefreshResponse, error) {
@@ -980,7 +980,7 @@ func TestConfigureInferenceFromProviders(t *testing.T) {
 			wantCallCount:      1,
 		},
 		{
-			name:               "SetClusterInference fails",
+			name:               "SetInferenceRoute fails",
 			sessionModel:       "claude-sonnet-4-6",
 			inferenceProviders: map[string]string{"proj-anthropic": "anthropic"},
 			setInferenceErr:    fmt.Errorf("gateway unavailable"),
@@ -1001,12 +1001,12 @@ func TestConfigureInferenceFromProviders(t *testing.T) {
 			}
 			var calls []inferenceCall
 			gw := &mockGateway{
-				setClusterInferenceFn: func(_ context.Context, _ string, req *inferencepb.SetClusterInferenceRequest) (*inferencepb.SetClusterInferenceResponse, error) {
+				setInferenceRouteFn: func(_ context.Context, _ string, req *inferencepb.SetInferenceRouteRequest) (*inferencepb.SetInferenceRouteResponse, error) {
 					calls = append(calls, inferenceCall{providerName: req.ProviderName, modelID: req.ModelId})
 					if tt.setInferenceErr != nil {
 						return nil, tt.setInferenceErr
 					}
-					return &inferencepb.SetClusterInferenceResponse{Version: 1}, nil
+					return &inferencepb.SetInferenceRouteResponse{Version: 1}, nil
 				},
 			}
 
@@ -1030,7 +1030,7 @@ func TestConfigureInferenceFromProviders(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if len(calls) != tt.wantCallCount {
-				t.Errorf("expected %d SetClusterInference calls, got %d", tt.wantCallCount, len(calls))
+				t.Errorf("expected %d SetInferenceRoute calls, got %d", tt.wantCallCount, len(calls))
 			}
 			if tt.wantModel != "" && len(calls) > 0 {
 				if calls[0].modelID != tt.wantModel {
