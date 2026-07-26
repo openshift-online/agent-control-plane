@@ -21,7 +21,6 @@ spec:
       serviceAccountName: ambient-api-server
       restartPolicy: OnFailure
       securityContext:
-        runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -48,7 +47,7 @@ spec:
               readOnly: true
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
+            readOnlyRootFilesystem: false
             capabilities:
               drop:
                 - ALL
