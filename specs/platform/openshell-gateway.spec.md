@@ -475,6 +475,8 @@ The GatewayReconciler SHALL validate Gateway resource fields before applying K8s
 - THEN validation SHALL fail with a descriptive error
 - AND the Gateway SHALL not be reconciled until the configuration is corrected
 
+> **GHCR image tag convention:** OpenShell gateway images on GHCR use commit-SHA tags only (no semver tags). For example, `ghcr.io/nvidia/openshell/gateway:21da343c9f838bd9ac85dc61bf44889de1a72873` corresponds to v0.0.91. The GatewayReconciler continuously reconciles the image field, so the gitops overlay must be the source of truth for the image tag — manual image changes on the Deployment/StatefulSet will be reverted.
+
 #### Scenario: Invalid DNS name
 
 - GIVEN a Gateway with a `serverDnsNames` entry that violates RFC 1123
