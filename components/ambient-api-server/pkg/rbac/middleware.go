@@ -67,12 +67,8 @@ func (m *DBAuthorizationMiddleware) AuthorizeApi(next http.Handler) http.Handler
 		if middleware.IsServiceCaller(ctx) {
 			username := auth.GetUsernameFromContext(ctx)
 			if username == "" {
-				glog.Warningf("legacy service token used — consider migrating to OIDC service account authentication")
-				ctx = SetAuthResult(ctx, &AuthResult{
-					Username:      "service-token",
-					IsGlobalAdmin: true,
-				})
-				next.ServeHTTP(w, r.WithContext(ctx))
+				glog.Warningf("service caller with empty username rejected — OIDC service account required")
+				http.Error(w, `{"kind":"Error","reason":"Unauthorized"}`, http.StatusUnauthorized)
 				return
 			}
 			m.autoProvisionServiceAccount(ctx, username)

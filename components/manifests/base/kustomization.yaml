@@ -11,6 +11,7 @@ resources:
 - ambient-control-plane-service.yml
 - ambient-control-plane-token-svc.yaml
 - runner-networkpolicy.yaml
+- bootstrap-admin-job.yaml
 
 # Default images (can be overridden by overlays)
 images:

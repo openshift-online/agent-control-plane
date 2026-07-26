@@ -63,8 +63,9 @@ func New(
 
 	if cfg.gateway != nil {
 		sbx := &sandboxHandler{
-			gateway: cfg.gateway,
-			logger:  componentLogger,
+			gateway:    cfg.gateway,
+			logger:     componentLogger,
+			privateKey: privateKey,
 		}
 		mux.HandleFunc("/sandbox/", func(w http.ResponseWriter, r *http.Request) {
 			switch {

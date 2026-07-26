@@ -52,6 +52,11 @@ func newTestSandboxHandler(gw SandboxGateway) *sandboxHandler {
 	}
 }
 
+func withTestAuth(r *http.Request) *http.Request {
+	r.Header.Set("Authorization", "Bearer test-sandbox-token")
+	return r
+}
+
 func makeSandboxResponse(id, name string) *pb.SandboxResponse {
 	return &pb.SandboxResponse{
 		Sandbox: &pb.Sandbox{
@@ -88,7 +93,7 @@ func TestHandleLogs_ResolvesNameToUUID(t *testing.T) {
 	}
 
 	h := newTestSandboxHandler(gw)
-	req := httptest.NewRequest(http.MethodGet, "/sandbox/"+sandboxName+"/logs?namespace=tenant-a", nil)
+	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/"+sandboxName+"/logs?namespace=tenant-a", nil))
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
@@ -138,7 +143,7 @@ func TestHandleLogs_SSEFormat(t *testing.T) {
 	}
 
 	h := newTestSandboxHandler(gw)
-	req := httptest.NewRequest(http.MethodGet, "/sandbox/session-test/logs?namespace=ns", nil)
+	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/session-test/logs?namespace=ns", nil))
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
@@ -196,7 +201,7 @@ func TestHandleLogs_GetSandboxNotFound(t *testing.T) {
 	}
 
 	h := newTestSandboxHandler(gw)
-	req := httptest.NewRequest(http.MethodGet, "/sandbox/nonexistent/logs?namespace=ns", nil)
+	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/nonexistent/logs?namespace=ns", nil))
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
@@ -218,7 +223,7 @@ func TestHandleLogs_GetSandboxError(t *testing.T) {
 	}
 
 	h := newTestSandboxHandler(gw)
-	req := httptest.NewRequest(http.MethodGet, "/sandbox/session-x/logs?namespace=ns", nil)
+	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/session-x/logs?namespace=ns", nil))
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
@@ -230,7 +235,7 @@ func TestHandleLogs_GetSandboxError(t *testing.T) {
 
 func TestHandleLogs_MissingNamespace(t *testing.T) {
 	h := newTestSandboxHandler(&mockSandboxGateway{})
-	req := httptest.NewRequest(http.MethodGet, "/sandbox/session-x/logs", nil)
+	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/session-x/logs", nil))
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
@@ -260,7 +265,7 @@ func TestHandlePolicy_Success(t *testing.T) {
 	}
 
 	h := newTestSandboxHandler(gw)
-	req := httptest.NewRequest(http.MethodGet, "/sandbox/session-pol/policy?namespace=ns", nil)
+	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/session-pol/policy?namespace=ns", nil))
 	rr := httptest.NewRecorder()
 
 	h.handlePolicy(rr, req)
@@ -282,6 +287,44 @@ func TestHandlePolicy_Success(t *testing.T) {
 
 	if result["status"] != "active" {
 		t.Errorf("status: got %q, want %q", result["status"], "active")
+	}
+}
+
+func TestSandboxPolicy_RejectsUnauthenticated(t *testing.T) {
+	gw := &mockSandboxGateway{
+		getSandboxFn: func(context.Context, string, string) (*pb.SandboxResponse, error) {
+			t.Fatal("gateway should not be called without auth")
+			return nil, nil
+		},
+	}
+
+	h := newTestSandboxHandler(gw)
+	req := httptest.NewRequest(http.MethodGet, "/sandbox/session-x/policy?namespace=ns", nil)
+	rr := httptest.NewRecorder()
+
+	h.handlePolicy(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want %d", rr.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestSandboxLogs_RejectsUnauthenticated(t *testing.T) {
+	gw := &mockSandboxGateway{
+		getSandboxFn: func(context.Context, string, string) (*pb.SandboxResponse, error) {
+			t.Fatal("gateway should not be called without auth")
+			return nil, nil
+		},
+	}
+
+	h := newTestSandboxHandler(gw)
+	req := httptest.NewRequest(http.MethodGet, "/sandbox/session-x/logs?namespace=ns", nil)
+	rr := httptest.NewRecorder()
+
+	h.handleLogs(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want %d", rr.Code, http.StatusUnauthorized)
 	}
 }
 

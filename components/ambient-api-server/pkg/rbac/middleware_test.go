@@ -2,7 +2,10 @@ package rbac
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
 )
 
 func TestPathToResource(t *testing.T) {
@@ -80,7 +83,7 @@ func TestIsAuthExempt(t *testing.T) {
 		{http.MethodPost, "/api/ambient/v1/roles", false},
 		{http.MethodDelete, "/api/ambient/v1/roles/abc123", false},
 		{http.MethodGet, "/api/ambient/v1/roles/abc123/something", false},
-		{http.MethodPost, "/api/ambient/v1/role_bindings", true},
+		{http.MethodPost, "/api/ambient/v1/role_bindings", false},
 		{http.MethodPatch, "/api/ambient/v1/role_bindings/rb1", false},
 		{http.MethodDelete, "/api/ambient/v1/role_bindings/rb1", false},
 		{http.MethodGet, "/api/ambient/v1/role_bindings", false},
@@ -337,5 +340,32 @@ func TestSplitPath(t *testing.T) {
 				t.Errorf("splitPath(%q) len = %d, want %d; segments: %v", tt.path, len(got), tt.want, got)
 			}
 		})
+	}
+}
+
+func TestAuthorizeApi_RejectsEmptyUsernameServiceCaller(t *testing.T) {
+	mw := NewDBAuthorizationMiddleware(nil, true)
+
+	reached := false
+	handler := mw.AuthorizeApi(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		result := GetAuthResult(r.Context())
+		if result != nil && result.IsGlobalAdmin {
+			t.Error("empty-username service caller must not receive IsGlobalAdmin=true")
+		}
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/ambient/v1/sessions", nil)
+	ctx := middleware.WithCallerType(req.Context(), middleware.CallerTypeService)
+	req = req.WithContext(ctx)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("status: got %d, want %d", rr.Code, http.StatusUnauthorized)
+	}
+	if reached {
+		t.Error("next handler should not have been called for empty-username service caller")
 	}
 }

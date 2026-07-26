@@ -1,0 +1,65 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bootstrap-admin
+  labels:
+    app: ambient-api-server
+    component: bootstrap
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: ambient-api-server
+        component: bootstrap
+    spec:
+      serviceAccountName: ambient-api-server
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: seed-admin
+          image: quay.io/ambient_code/acp_api_server:latest
+          imagePullPolicy: Always
+          command:
+            - /usr/local/bin/ambient-api-server
+            - seed-admin
+            - --username=$(BOOTSTRAP_ADMIN_USERNAME)
+            - --db-host-file=/secrets/db/db.host
+            - --db-port-file=/secrets/db/db.port
+            - --db-user-file=/secrets/db/db.user
+            - --db-password-file=/secrets/db/db.password
+            - --db-name-file=/secrets/db/db.name
+            - --alsologtostderr
+            - -v=4
+          env:
+            - name: BOOTSTRAP_ADMIN_USERNAME
+              value: admin
+          volumeMounts:
+            - name: db-secrets
+              mountPath: /secrets/db
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+      volumes:
+        - name: db-secrets
+          secret:
+            secretName: ambient-api-server-db

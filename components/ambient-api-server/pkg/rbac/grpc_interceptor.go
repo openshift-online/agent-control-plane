@@ -42,11 +42,8 @@ func (m *DBAuthorizationMiddleware) populateGRPCContext(ctx context.Context) (co
 	if middleware.IsServiceCaller(ctx) {
 		username := auth.GetUsernameFromContext(ctx)
 		if username == "" {
-			glog.Warningf("legacy service token used — consider migrating to OIDC service account authentication")
-			return SetAuthResult(ctx, &AuthResult{
-				Username:      "service-token",
-				IsGlobalAdmin: true,
-			}), nil
+			glog.Warningf("gRPC service caller with empty username rejected — OIDC service account required")
+			return ctx, fmt.Errorf("service caller without OIDC username is not authorized")
 		}
 		m.autoProvisionServiceAccount(ctx, username)
 		enriched, err := m.PopulateAuthResult(ctx, username)

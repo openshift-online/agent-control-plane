@@ -2,6 +2,7 @@ package tokenserver
 
 import (
 	"context"
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,13 +22,39 @@ type SandboxGateway interface {
 }
 
 type sandboxHandler struct {
-	gateway SandboxGateway
-	logger  zerolog.Logger
+	gateway    SandboxGateway
+	logger     zerolog.Logger
+	privateKey *rsa.PrivateKey
+}
+
+func (h *sandboxHandler) requireAuth(w http.ResponseWriter, r *http.Request) bool {
+	ciphertext, err := extractBearerToken(r)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return false
+	}
+	if h.privateKey != nil {
+		handler := &handler{privateKey: h.privateKey}
+		sessionID, decErr := handler.decryptSessionID(ciphertext)
+		if decErr != nil {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return false
+		}
+		if !isValidSessionID(sessionID) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return false
+		}
+	}
+	return true
 }
 
 func (h *sandboxHandler) handlePolicy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if !h.requireAuth(w, r) {
 		return
 	}
 
@@ -78,6 +105,10 @@ func (h *sandboxHandler) handlePolicy(w http.ResponseWriter, r *http.Request) {
 func (h *sandboxHandler) handleLogs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if !h.requireAuth(w, r) {
 		return
 	}
 
