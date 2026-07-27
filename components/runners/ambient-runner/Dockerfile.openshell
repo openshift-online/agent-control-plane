@@ -82,7 +82,7 @@ RUN TARBALL="gh_${GH_VERSION}_linux_${TARGETARCH}.tar.gz" && \
     rm -f "/tmp/${TARBALL}"
 
 # uv (Python package/project manager)
-COPY --from=ghcr.io/astral-sh/uv@sha256:eb2843a1e56fd9e30c7276ce1a52cba86e64c7b385f5e3279a0e08e02dd058fc /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv@sha256:df4cae8f3a96d175e2e5f992e597550000edbe78fdc2594d5cd8de1a217f504c /uv /usr/local/bin/uv
 ENV UV_PYTHON_INSTALL_DIR="/sandbox/.uv/python"
 RUN uv python install 3.14.3 && \
     ln -s $(uv python find 3.14.3) /usr/local/bin/python3 && \
