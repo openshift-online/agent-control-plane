@@ -26,19 +26,17 @@ type PodStatusSyncer struct {
 	factory            *SDKClientFactory
 	kube               *kubeclient.KubeClient
 	gateway            *openshell.GatewayClient
-	useGateway         bool
 	platformMode       string
 	mppConfigNamespace string
 	logger             zerolog.Logger
 	errorFirstSeen     map[string]time.Time
 }
 
-func NewPodStatusSyncer(factory *SDKClientFactory, kube *kubeclient.KubeClient, gateway *openshell.GatewayClient, useGateway bool, platformMode, mppConfigNamespace string, logger zerolog.Logger) *PodStatusSyncer {
+func NewPodStatusSyncer(factory *SDKClientFactory, kube *kubeclient.KubeClient, gateway *openshell.GatewayClient, platformMode, mppConfigNamespace string, logger zerolog.Logger) *PodStatusSyncer {
 	return &PodStatusSyncer{
 		factory:            factory,
 		kube:               kube,
 		gateway:            gateway,
-		useGateway:         useGateway,
 		platformMode:       platformMode,
 		mppConfigNamespace: mppConfigNamespace,
 		logger:             logger.With().Str("component", "pod-status-syncer").Logger(),
@@ -63,20 +61,7 @@ func (s *PodStatusSyncer) Run(ctx context.Context) error {
 }
 
 func (s *PodStatusSyncer) syncOnce(ctx context.Context) {
-	if s.useGateway {
-		s.syncGatewaySandboxes(ctx)
-		return
-	}
-
-	namespaces, err := s.listManagedNamespaces(ctx)
-	if err != nil {
-		s.logger.Warn().Err(err).Msg("failed to list managed namespaces")
-		return
-	}
-
-	for _, ns := range namespaces {
-		s.syncNamespace(ctx, ns)
-	}
+	s.syncGatewaySandboxes(ctx)
 }
 
 func (s *PodStatusSyncer) listManagedNamespaces(ctx context.Context) ([]string, error) {

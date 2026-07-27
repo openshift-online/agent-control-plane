@@ -28,15 +28,19 @@ rules:
 # ConfigMaps (watch platform-config, create/delete gateway configs including CA bundles)
 - apiGroups: [""]
   resources: ["configmaps"]
-  verbs: ["get", "watch", "list", "create", "update", "patch", "delete"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
 # Deployments, StatefulSets (gateway provisioning + cleanup)
 - apiGroups: ["apps"]
   resources: ["deployments", "statefulsets", "statefulsets/finalizers"]
-  verbs: ["create", "get", "list", "update", "patch", "delete"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# PersistentVolumeClaims (gateway database storage)
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "watch", "create", "update", "delete", "deletecollection"]
 # NetworkPolicies (gateway isolation + session cleanup)
 - apiGroups: ["networking.k8s.io"]
   resources: ["networkpolicies"]
-  verbs: ["create", "get", "list", "update", "patch", "delete", "deletecollection"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
 # ClusterRoles and ClusterRoleBindings (gateway RBAC)
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["clusterroles", "clusterrolebindings"]
@@ -60,6 +64,14 @@ rules:
 - apiGroups: ["gateway.networking.k8s.io"]
   resources: ["gateways"]
   verbs: ["get", "list"]
+# OpenShift Routes (NLB passthrough Route for gateway exposure on ROSA/AWS)
+- apiGroups: ["route.openshift.io"]
+  resources: ["routes", "routes/custom-host"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# IngressControllers (auto-detect NLB domain for passthrough Route hostnames)
+- apiGroups: ["operator.openshift.io"]
+  resources: ["ingresscontrollers"]
+  verbs: ["get"]
 # Cluster ingress config (auto-detect base domain for Gateway API hostnames)
 - apiGroups: ["config.openshift.io"]
   resources: ["ingresses"]

@@ -982,8 +982,6 @@ spec:
           value: "ambient-vertex"
         - name: VERTEX_SECRET_NAMESPACE
           value: "${NAMESPACE}"
-        - name: OPENSHELL_USE_GATEWAY
-          value: "false"
         - name: OPENSHELL_ENABLED
           value: "false"
         volumeMounts:

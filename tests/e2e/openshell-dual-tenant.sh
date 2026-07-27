@@ -6,7 +6,7 @@
 # in both tenant namespaces.
 #
 # Prerequisites:
-#   - kind-up with OPENSHELL_USE_GATEWAY=true
+#   - kind-up with OpenShell gateway prerequisites
 #   - ACP projects tenant-a and tenant-b created (done automatically by kind-up)
 #   - TEST_TOKEN and API_URL set, or tests/cypress/.env.test present
 #
@@ -116,7 +116,7 @@ run_cmd_redact() {
 
 require_token() {
   if [ -z "$TOKEN" ]; then
-    echo -e "${RED}Error:${NC} TEST_TOKEN not set. Run 'make kind-up OPENSHELL_USE_GATEWAY=true' first."
+    echo -e "${RED}Error:${NC} TEST_TOKEN not set. Run 'make kind-up' first."
     echo "  Or: source tests/cypress/.env.test && ./tests/e2e/openshell-dual-tenant.sh"
     exit 1
   fi

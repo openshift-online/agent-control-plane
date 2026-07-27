@@ -105,7 +105,6 @@ type KubeReconcilerConfig struct {
 	PlatformMode                    string
 	MPPConfigNamespace              string
 	OpenShellEnabled                bool
-	OpenShellUseGateway             bool
 	OpenShellRunnerImage            string
 	OpenShellPolicyName             string
 	ServiceIdentity                 string
@@ -318,10 +317,7 @@ func (r *SimpleKubeReconciler) deprovisionAsync(session types.Session, nextPhase
 }
 
 func (r *SimpleKubeReconciler) provisionSession(ctx context.Context, session types.Session) error {
-	if r.cfg.OpenShellUseGateway {
-		return r.provisionSessionSandbox(ctx, session)
-	}
-	return r.provisionSessionPod(ctx, session)
+	return r.provisionSessionSandbox(ctx, session)
 }
 
 func (r *SimpleKubeReconciler) provisionSessionPod(ctx context.Context, session types.Session) error {
@@ -673,9 +669,6 @@ func (r *SimpleKubeReconciler) appendPromptToEntrypoint(ctx context.Context, ent
 }
 
 func (r *SimpleKubeReconciler) inferenceExecEnv(agent *types.Agent) map[string]string {
-	if !r.cfg.OpenShellUseGateway {
-		return nil
-	}
 	baseURL := "https://inference.local"
 	if agent != nil {
 		if v, ok := agent.Environment["ANTHROPIC_BASE_URL"]; ok && v != "" {
@@ -1683,10 +1676,7 @@ func (r *SimpleKubeReconciler) resolveMaxSeq(ctx context.Context, sdk *sdkclient
 }
 
 func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session types.Session, projectName string, sdk *sdkclient.Client, providerNames []string, hasMLflowProvider bool) map[string]string {
-	workspacePath := "/workspace"
-	if r.cfg.OpenShellUseGateway {
-		workspacePath = "/sandbox/workspace"
-	}
+	workspacePath := "/sandbox/workspace"
 
 	env := map[string]string{
 		"SESSION_ID":                  session.ID,
@@ -1718,18 +1708,11 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 		}
 	}
 
-	if r.cfg.OpenShellUseGateway {
-		// In gateway mode the supervisor proxy handles all inference via
-		// inference.local — regardless of provider (Vertex, Anthropic, etc.).
-		// The runner must activate inference routing mode so requests go
-		// through the proxy instead of directly to the provider API.
-		env["ACP_OPENSHELL_INFERENCE"] = "true"
-		// Set at sandbox level so every tool (claude, opencode, etc.) gets
-		// them — not just processes launched through a specific wrapper.
-		env["ANTHROPIC_BASE_URL"] = "https://inference.local"
-		env["ANTHROPIC_API_KEY"] = "notused"
-		env["CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"] = "1"
-	} else if r.cfg.VertexEnabled {
+	env["ACP_OPENSHELL_INFERENCE"] = "true"
+	env["ANTHROPIC_BASE_URL"] = "https://inference.local"
+	env["ANTHROPIC_API_KEY"] = "notused"
+	env["CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"] = "1"
+	if false && r.cfg.VertexEnabled {
 		env["USE_VERTEX"] = "1"
 		env["CLAUDE_CODE_USE_VERTEX"] = "1"
 		env["ANTHROPIC_VERTEX_PROJECT_ID"] = r.cfg.VertexProjectID
@@ -1761,10 +1744,7 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 		env["HTTPS_PROXY"] = r.cfg.HTTPSProxy
 	}
 	noProxy := r.cfg.NoProxy
-	if r.cfg.OpenShellUseGateway && noProxy == "" {
-		// In gateway mode the sandbox network namespace has no direct route
-		// to cluster IPs or DNS — all traffic must traverse the supervisor
-		// proxy. Only loopback is excluded.
+	if noProxy == "" {
 		noProxy = "127.0.0.1,localhost"
 	}
 	if noProxy != "" {
@@ -1799,10 +1779,7 @@ func (r *SimpleKubeReconciler) buildSandboxEnv(ctx context.Context, session type
 }
 
 func (r *SimpleKubeReconciler) deprovisionSession(ctx context.Context, session types.Session, nextPhase string) error {
-	if r.cfg.OpenShellUseGateway {
-		return r.deprovisionSessionSandbox(ctx, session, nextPhase)
-	}
-	return r.deprovisionSessionPod(ctx, session, nextPhase)
+	return r.deprovisionSessionSandbox(ctx, session, nextPhase)
 }
 
 func (r *SimpleKubeReconciler) deprovisionSessionPod(ctx context.Context, session types.Session, nextPhase string) error {
@@ -1913,10 +1890,7 @@ func (r *SimpleKubeReconciler) finalSandboxSnapshot(ctx context.Context, session
 }
 
 func (r *SimpleKubeReconciler) cleanupSession(ctx context.Context, session types.Session) error {
-	if r.cfg.OpenShellUseGateway {
-		return r.cleanupSessionSandbox(ctx, session)
-	}
-	return r.cleanupSessionPod(ctx, session)
+	return r.cleanupSessionSandbox(ctx, session)
 }
 
 func (r *SimpleKubeReconciler) cleanupSessionPod(ctx context.Context, session types.Session) error {
@@ -2496,7 +2470,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 	saName := serviceAccountName(session.ID)
 
 	runnerImage := r.cfg.RunnerImage
-	if r.cfg.OpenShellUseGateway && r.cfg.OpenShellRunnerImage != "" {
+	if r.cfg.OpenShellRunnerImage != "" {
 		runnerImage = r.cfg.OpenShellRunnerImage
 	}
 	imagePullPolicy := "Always"
@@ -2505,11 +2479,9 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 	}
 
 	labels := sessionLabels(session.ID, session.ProjectID)
-	useMCPSidecar := r.cfg.MCPImage != "" && r.cfg.CPTokenURL != "" && r.cfg.CPTokenPublicKey != "" && !r.cfg.OpenShellUseGateway
-	if r.cfg.OpenShellUseGateway && r.cfg.MCPImage != "" {
-		r.logger.Debug().Str("session_id", session.ID).Msg("MCP sidecar disabled: OPENSHELL_USE_GATEWAY is enabled")
-	} else if r.cfg.MCPImage != "" && !useMCPSidecar {
-		r.logger.Warn().Str("session_id", session.ID).Msg("MCP sidecar disabled: CP_TOKEN_URL or CPTokenPublicKey not configured")
+	useMCPSidecar := false
+	if r.cfg.MCPImage != "" {
+		r.logger.Debug().Str("session_id", session.ID).Msg("MCP sidecar disabled: gateway handles MCP")
 	}
 
 	containers := []interface{}{
@@ -2547,7 +2519,7 @@ func (r *SimpleKubeReconciler) ensurePod(ctx context.Context, namespace string, 
 
 	credentialSidecarMode := false
 	var credTmpVolumes []interface{}
-	if r.cfg.CPTokenURL != "" && r.cfg.CPTokenPublicKey != "" && !r.cfg.OpenShellUseGateway {
+	if false {
 		credSidecars, credMCPURLs, credTmpVols := r.buildCredentialSidecars(session.ID, namespace, credentialIDs, r.cfg.OpenShellEnabled)
 		credTmpVolumes = credTmpVols
 		containers = append(containers, credSidecars...)
@@ -2963,9 +2935,6 @@ func (r *SimpleKubeReconciler) resolveCredentialIDs(ctx context.Context, sdk *sd
 	totalBindings := len(agentBindings) + len(projectBindings) + len(globalBindings)
 	if totalBindings == 0 {
 		// Only log when NOT using gateway - gateway resolves credentials from agent provider declarations
-		if !r.cfg.OpenShellUseGateway {
-			r.logger.Info().Str("project_id", projectID).Msg("no credential bindings found for project; no credentials will be injected")
-		}
 		return map[string]string{}, nil
 	}
 

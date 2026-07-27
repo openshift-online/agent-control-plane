@@ -15,7 +15,7 @@
 #   3. The Credential kind in the overlay uses $VERTEX_SA_KEY for token expansion
 #
 # PREREQUISITES:
-#   - kind cluster running with OPENSHELL_USE_GATEWAY=true
+#   - kind cluster running with OpenShell gateway prerequisites
 #   - acpctl built and logged in (make build-cli && make kind-acpctl-login)
 #   - kubectl context set to the cluster
 #

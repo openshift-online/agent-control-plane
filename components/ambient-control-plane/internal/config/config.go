@@ -50,7 +50,6 @@ type ControlPlaneConfig struct {
 	NoProxy                         string
 	ImagePullSecret                 string
 	OpenShellEnabled                bool
-	OpenShellUseGateway             bool
 	OpenShellRunnerImage            string
 	OpenShellPolicyName             string
 	OpenShellGatewayServiceName     string
@@ -121,7 +120,6 @@ func Load() (*ControlPlaneConfig, error) {
 		NoProxy:                         os.Getenv("NO_PROXY"),
 		ImagePullSecret:                 os.Getenv("IMAGE_PULL_SECRET"),
 		OpenShellEnabled:                os.Getenv("OPENSHELL_ENABLED") == "true",
-		OpenShellUseGateway:             os.Getenv("OPENSHELL_USE_GATEWAY") == "true",
 		OpenShellRunnerImage:            envOrDefault("OPENSHELL_RUNNER_IMAGE", "quay.io/ambient_code/acp_runner_openshell:latest"),
 		OpenShellPolicyName:             envOrDefault("OPENSHELL_POLICY_CONFIGMAP", "openshell-policy"),
 		OpenShellGatewayServiceName:     envOrDefault("OPENSHELL_GATEWAY_SERVICE_NAME", "openshell-gateway"),

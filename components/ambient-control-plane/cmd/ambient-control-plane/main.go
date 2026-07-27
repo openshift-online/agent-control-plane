@@ -164,7 +164,6 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		PlatformMode:                    cfg.PlatformMode,
 		MPPConfigNamespace:              cfg.MPPConfigNamespace,
 		OpenShellEnabled:                cfg.OpenShellEnabled,
-		OpenShellUseGateway:             cfg.OpenShellUseGateway,
 		OpenShellRunnerImage:            cfg.OpenShellRunnerImage,
 		OpenShellPolicyName:             cfg.OpenShellPolicyName,
 		ServiceIdentity:                 cfg.ServiceIdentity,
@@ -218,56 +217,47 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	inf.RegisterHandler("projects", projectReconciler.Reconcile)
 	inf.RegisterHandler("project_settings", projectSettingsReconciler.Reconcile)
 
-	// Initialize API-driven gateway reconciler (if enabled)
 	gatewayErrCh := make(chan error, 1)
-	if cfg.OpenShellUseGateway {
-		kubeCfg, kubeErr := buildKubeConfig(cfg.Kubeconfig)
-		if kubeErr != nil {
-			return fmt.Errorf("build kubeconfig for gateway reconciler: %w", kubeErr)
-		}
-		gwClientset, csErr := kubernetes.NewForConfig(kubeCfg)
-		if csErr != nil {
-			return fmt.Errorf("create kubernetes clientset for gateway reconciler: %w", csErr)
-		}
-		gwDynamic, dynErr := dynamic.NewForConfig(kubeCfg)
-		if dynErr != nil {
-			return fmt.Errorf("create dynamic client for gateway reconciler: %w", dynErr)
-		}
-		gwReconciler := reconciler.NewGatewayReconciler(factory, gwDynamic, gwClientset, provisioner, log.Logger)
-		go func() {
-			gatewayErrCh <- gwReconciler.Run(ctx)
-		}()
-		log.Info().Msg("gateway reconciler enabled")
-	} else {
-		close(gatewayErrCh)
+	kubeCfg, kubeErr := buildKubeConfig(cfg.Kubeconfig)
+	if kubeErr != nil {
+		return fmt.Errorf("build kubeconfig for gateway reconciler: %w", kubeErr)
 	}
+	gwClientset, csErr := kubernetes.NewForConfig(kubeCfg)
+	if csErr != nil {
+		return fmt.Errorf("create kubernetes clientset for gateway reconciler: %w", csErr)
+	}
+	gwDynamic, dynErr := dynamic.NewForConfig(kubeCfg)
+	if dynErr != nil {
+		return fmt.Errorf("create dynamic client for gateway reconciler: %w", dynErr)
+	}
+	gwReconciler := reconciler.NewGatewayReconciler(factory, gwDynamic, gwClientset, provisioner, log.Logger)
+	go func() {
+		gatewayErrCh <- gwReconciler.Run(ctx)
+	}()
+	log.Info().Msg("gateway reconciler enabled")
 
-	var gateway *openshell.GatewayClient
-	if cfg.OpenShellUseGateway {
-		var resolveCred openshell.CredentialResolver
-		if cfg.OpenShellGatewayTLSEnabled {
-			tlsResolver := openshell.NewTLSResolver(provisionerKube, cfg.OpenShellGatewayClientTLSSecret, cfg.OpenShellGatewayTLSServerName, log.Logger)
-			resolveCred = tlsResolver.CredentialsForNamespace
-			log.Info().Str("secret", cfg.OpenShellGatewayClientTLSSecret).Str("server_name", cfg.OpenShellGatewayTLSServerName).Msg("OpenShell gateway TLS enabled")
-		} else {
-			resolveCred = openshell.InsecureResolver()
-			log.Info().Msg("OpenShell gateway TLS disabled (plaintext)")
-		}
-		gateway = openshell.NewGatewayClient(cfg.OpenShellGatewayServiceName, cfg.OpenShellGatewayGRPCPort, resolveCred, cfg.OpenShellGatewaySATokenPath, log.Logger, openshell.WithTokenProvider(tokenProvider))
-		defer func() {
-			if err := gateway.Close(); err != nil {
-				log.Warn().Err(err).Msg("failed to close gateway client")
-			}
-		}()
-		log.Info().Msg("OpenShell gateway mode enabled")
+	var resolveCred openshell.CredentialResolver
+	if cfg.OpenShellGatewayTLSEnabled {
+		tlsResolver := openshell.NewTLSResolver(provisionerKube, cfg.OpenShellGatewayClientTLSSecret, cfg.OpenShellGatewayTLSServerName, log.Logger)
+		resolveCred = tlsResolver.CredentialsForNamespace
+		log.Info().Str("secret", cfg.OpenShellGatewayClientTLSSecret).Str("server_name", cfg.OpenShellGatewayTLSServerName).Msg("OpenShell gateway TLS enabled")
+	} else {
+		resolveCred = openshell.InsecureResolver()
+		log.Info().Msg("OpenShell gateway TLS disabled (plaintext)")
 	}
+	gateway := openshell.NewGatewayClient(cfg.OpenShellGatewayServiceName, cfg.OpenShellGatewayGRPCPort, resolveCred, cfg.OpenShellGatewaySATokenPath, log.Logger, openshell.WithTokenProvider(tokenProvider))
+	defer func() {
+		if err := gateway.Close(); err != nil {
+			log.Warn().Err(err).Msg("failed to close gateway client")
+		}
+	}()
 
 	sessionReconcilers := createSessionReconcilers(cfg.Reconcilers, factory, kube, projectKube, provisioner, gateway, kubeReconcilerCfg, log.Logger, inf)
 	for _, sessionRec := range sessionReconcilers {
 		inf.RegisterHandler("sessions", sessionRec.Reconcile)
 	}
 
-	podSyncer := reconciler.NewPodStatusSyncer(factory, provisionerKube, gateway, cfg.OpenShellUseGateway, cfg.PlatformMode, cfg.MPPConfigNamespace, log.Logger)
+	podSyncer := reconciler.NewPodStatusSyncer(factory, provisionerKube, gateway, cfg.PlatformMode, cfg.MPPConfigNamespace, log.Logger)
 
 	tsErrCh := make(chan error, 1)
 	go func() {

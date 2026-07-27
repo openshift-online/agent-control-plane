@@ -106,18 +106,16 @@ KIND_HOST ?=
 LOCAL_IMAGES ?= false
 LOCAL_RUNNER ?= false
 LOCAL_VERTEX ?= false
-OPENSHELL_USE_GATEWAY ?= true
 ANTHROPIC_VERTEX_PROJECT_ID ?= $(shell echo $$ANTHROPIC_VERTEX_PROJECT_ID)
 CLOUD_ML_REGION ?= $(shell echo $$CLOUD_ML_REGION)
 # Default to ADC location if not set (created by: gcloud auth application-default login)
 GOOGLE_APPLICATION_CREDENTIALS ?= $(or $(shell echo $$GOOGLE_APPLICATION_CREDENTIALS),$(HOME)/.config/gcloud/application_default_credentials.json)
 VERTEX_CRED ?= $(GOOGLE_APPLICATION_CREDENTIALS)
 
-# OpenShell Gateway Configuration (OPENSHELL_USE_GATEWAY=true by default)
+# OpenShell Gateway Configuration
 # Provisions tenant namespaces with an OpenShell gateway each.
 # Override with OPENSHELL_TENANTS="ns1 ns2" to change the set of tenant namespaces.
 # Skip acpctl apply for specific tenants: SKIP_TENANT_SETUP="tenant-c"
-OPENSHELL_USE_GATEWAY ?= true
 OPENSHELL_TENANTS ?= tenant-a tenant-b tenant-c vteam-product-swarm codebase-maintainers
 SKIP_TENANT_SETUP ?=
 AGENT_SANDBOX_VERSION ?= v0.5.1
@@ -193,10 +191,7 @@ update-agent-sandbox: ## Update agent-sandbox CRD version. Usage: make update-ag
 
 ##@ Building
 
-MCP_BUILD_TARGETS := build-mcp build-credential-sidecars
-ifeq ($(OPENSHELL_USE_GATEWAY),true)
 MCP_BUILD_TARGETS :=
-endif
 
 build-all: build-runner-openshell build-api-server build-control-plane build-ambient-ui $(MCP_BUILD_TARGETS) ## Build all container images
 
@@ -205,7 +200,6 @@ build-ambient-ui: ## Build ambient-ui image
 	@cd components && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) $(BUILD_FLAGS) \
 		-f ambient-ui/Dockerfile \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
-		--build-arg OPENSHELL_USE_GATEWAY=$(OPENSHELL_USE_GATEWAY) \
 		-t $(AMBIENT_UI_IMAGE) .
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Ambient UI built: $(AMBIENT_UI_IMAGE)"
 
@@ -490,7 +484,7 @@ local-test-dev: ## Run local developer experience tests
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running local developer experience tests..."
 	@./tests/e2e/local-dev-test.sh $(if $(filter true,$(CI_MODE)),--ci,)
 
-test-openshell-dual-tenant: ## Test dual-tenant OpenShell gateway provisioning (requires kind-up OPENSHELL_USE_GATEWAY=true)
+test-openshell-dual-tenant: ## Test dual-tenant OpenShell gateway provisioning (requires kind-up)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running dual-tenant OpenShell sandbox provisioning test..."
 	@API_URL="http://localhost:$(KIND_FWD_API_SERVER_PORT)" ./tests/e2e/openshell-dual-tenant.sh
 
@@ -936,16 +930,7 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods..."
 	@./tests/infra/wait-for-ready.sh
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring OpenShell mode (gateway=$(OPENSHELL_USE_GATEWAY))..."
-	@kubectl set env deployment/ambient-api-server -n $(NAMESPACE) \
-		OPENSHELL_USE_GATEWAY=$(OPENSHELL_USE_GATEWAY) $(QUIET_REDIRECT)
-	@kubectl set env deployment/ambient-control-plane -n $(NAMESPACE) \
-		OPENSHELL_USE_GATEWAY=$(OPENSHELL_USE_GATEWAY) $(QUIET_REDIRECT)
-	@if [ "$(OPENSHELL_USE_GATEWAY)" = "true" ]; then \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell: gateway mode (default)"; \
-	else \
-		echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell: pod mode"; \
-	fi
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell: gateway mode"
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring SSO..."
 	@NAMESPACE=$(NAMESPACE) KIND_FWD_AMBIENT_UI_PORT=$(KIND_FWD_AMBIENT_UI_PORT) KIND_FWD_KEYCLOAK_PORT=$(KIND_FWD_KEYCLOAK_PORT) \
 		./scripts/setup-kind-sso.sh
@@ -979,7 +964,7 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 	@KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_HTTP_PORT=$(KIND_HTTP_PORT) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./tests/infra/extract-token.sh
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' ready!"
 	@# OpenShell gateway setup if requested
-	@if [ "$(OPENSHELL_USE_GATEWAY)" = "true" ] && [ "$(NO_SETUP)" != "true" ]; then \
+	@if [ "$(NO_SETUP)" != "true" ]; then \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Installing OpenShell gateway prerequisites ($(OPENSHELL_TENANTS))..."; \
 		NAMESPACE=$(NAMESPACE) \
 		OPENSHELL_TENANTS="$(OPENSHELL_TENANTS)" \
@@ -1022,11 +1007,6 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 			fi; \
 		done; \
 		kill $$PF_PID 2>/dev/null || true; \
-	fi
-	@# Vertex AI setup if requested (non-gateway)
-	@if [ "$(OPENSHELL_USE_GATEWAY)" != "true" ]; then \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring Vertex AI..."; \
-		$(MAKE) --no-print-directory kind-setup-vertex VERTEX_CRED="$(VERTEX_CRED)"; \
 	fi
 	@if [ -f .dev-bootstrap.env ] && [ -f ./scripts/bootstrap-workspace.sh ]; then \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Bootstrapping developer workspace..."; \
@@ -1367,7 +1347,6 @@ kind-reload-ambient-ui: check-kind check-kubectl check-local-context ## Rebuild 
 	@cd components && $(CONTAINER_ENGINE) build $(PLATFORM_FLAG) \
 		-f ambient-ui/Dockerfile \
 		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
-		--build-arg OPENSHELL_USE_GATEWAY=$(OPENSHELL_USE_GATEWAY) \
 		-t $(AMBIENT_UI_IMAGE) . $(QUIET_REDIRECT)
 	$(call kind-reload-component,$(AMBIENT_UI_IMAGE),ambient-ui,Ambient UI,ambient-ui)
 
@@ -1514,20 +1493,10 @@ kind-status: check-kind ## Show all kind clusters and their port assignments
 	fi
 
 kind-setup-vertex: check-kubectl _kind-require-cluster ## Configure Vertex AI for the kind cluster (VERTEX_CRED=~/.config/gcloud/application_default_credentials.json)
-	@if [ "$(OPENSHELL_USE_GATEWAY)" = "true" ]; then \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Gateway mode — setting up vertex provider declarations"; \
-		for ns in $(OPENSHELL_TENANTS); do \
-			echo "$(COLOR_BLUE)▶$(COLOR_RESET) Setting up vertex provider in $$ns..."; \
-			./scripts/setup-vertex-provider.sh "$$ns" "$${VERTEX_CRED:-$$HOME/.config/gcloud/application_default_credentials.json}"; \
-		done; \
-	else \
-		NAMESPACE=$(NAMESPACE) \
-			GOOGLE_APPLICATION_CREDENTIALS="$(GOOGLE_APPLICATION_CREDENTIALS)" \
-			ANTHROPIC_VERTEX_PROJECT_ID="$(ANTHROPIC_VERTEX_PROJECT_ID)" \
-			CLOUD_ML_REGION="$(CLOUD_ML_REGION)" \
-			AMBIENT_UI_URL="http://$$(if [ -n "$(KIND_HOST)" ]; then echo "$(KIND_HOST)"; else echo "localhost"; fi):$(KIND_FWD_AMBIENT_UI_PORT)" \
-			./scripts/setup-vertex-kind.sh; \
-	fi
+	@for ns in $(OPENSHELL_TENANTS); do \
+		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Setting up vertex provider in $$ns..."; \
+		./scripts/setup-vertex-provider.sh "$$ns" "$${VERTEX_CRED:-$$HOME/.config/gcloud/application_default_credentials.json}"; \
+	done
 
 kind-clean: kind-down ## Alias for kind-down
 
@@ -1660,10 +1629,7 @@ _kind-require-cluster: ## Internal: Fail fast if kind cluster is not running
 		(echo "$(COLOR_RED)✗$(COLOR_RESET) No ambient Kind cluster found. Run 'make kind-up' first, or set KIND_CLUSTER_NAME to an existing cluster." && exit 1)
 
 KIND_CORE_IMAGES := $(RUNNER_OPENSHELL_IMAGE) $(API_SERVER_IMAGE) $(CONTROL_PLANE_IMAGE) $(AMBIENT_UI_IMAGE)
-KIND_MCP_IMAGES := $(MCP_IMAGE) $(GITHUB_MCP_IMAGE) $(JIRA_MCP_IMAGE) $(K8S_MCP_IMAGE) $(GOOGLE_MCP_IMAGE)
-ifeq ($(OPENSHELL_USE_GATEWAY),true)
 KIND_MCP_IMAGES :=
-endif
 
 _kind-preload-runner: ## Internal: Pull runner image from Quay, retag, and load into kind cluster
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Pre-loading runner image into kind ($(KIND_CLUSTER_NAME))..."

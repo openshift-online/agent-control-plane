@@ -7,7 +7,7 @@
 # CI debuggability.
 #
 # Prerequisites:
-#   - kind-up with OPENSHELL_USE_GATEWAY=true (default)
+#   - kind-up with OpenShell gateway prerequisites
 #   - acpctl built (make build-cli)
 #   - openshell CLI installed and available in $PATH
 #   - Keycloak reachable (KEYCLOAK_URL, default http://localhost:11880)

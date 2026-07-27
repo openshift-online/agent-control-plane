@@ -406,7 +406,7 @@ PROJECT_ID=$(echo "$PROJECT_RESP" \
 if [ -n "$PROJECT_ID" ]; then
   pass "Project '${TENANT}' exists (id: ${PROJECT_ID})"
 else
-  fail "Project '${TENANT}' not found — was 'make kind-up' run with OPENSHELL_USE_GATEWAY=true?"
+  fail "Project '${TENANT}' not found — was 'make kind-up' run?"
   results
   exit 1
 fi

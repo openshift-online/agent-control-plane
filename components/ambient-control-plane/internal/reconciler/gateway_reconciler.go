@@ -51,6 +51,24 @@ var gatewayGVR = schema.GroupVersionResource{
 	Resource: "gateways",
 }
 
+var osRouteGVR = schema.GroupVersionResource{
+	Group:    "route.openshift.io",
+	Version:  "v1",
+	Resource: "routes",
+}
+
+var ingressControllerGVR = schema.GroupVersionResource{
+	Group:    "operator.openshift.io",
+	Version:  "v1",
+	Resource: "ingresscontrollers",
+}
+
+var networkPolicyGVR = schema.GroupVersionResource{
+	Group:    "networking.k8s.io",
+	Version:  "v1",
+	Resource: "networkpolicies",
+}
+
 const (
 	trustedCAConfigMapName = "gateway-trusted-ca"
 	trustedCAKey           = "ca-bundle.crt"
@@ -71,6 +89,7 @@ type GatewayReconciler struct {
 	gatewayAPIGatewayName      string
 	gatewayAPIGatewayNamespace string
 	baseDomain                 string
+	nlbRouteDomain             string
 }
 
 func NewGatewayReconciler(
@@ -119,12 +138,16 @@ func (r *GatewayReconciler) Run(ctx context.Context) error {
 	r.hasCertManager = r.detectCertManager()
 	r.baseDomain = r.detectBaseDomain(ctx)
 	r.hasGatewayAPI = r.detectGatewayAPI(ctx)
+	if r.isOpenShift && !r.hasGatewayAPI {
+		r.nlbRouteDomain = r.detectNLBRouteDomain(ctx)
+	}
 	r.logger.Info().
 		Int("manifest_files", len(manifests)).
 		Bool("openshift", r.isOpenShift).
 		Bool("cert_manager", r.hasCertManager).
 		Bool("gateway_api", r.hasGatewayAPI).
 		Str("base_domain", r.baseDomain).
+		Str("nlb_route_domain", r.nlbRouteDomain).
 		Dur("interval", gatewaySyncInterval).
 		Msg("gateway reconciler started")
 
@@ -407,6 +430,9 @@ func (r *GatewayReconciler) detectOpenShift() bool {
 
 func (r *GatewayReconciler) reconcileGRPCRoute(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway, namespace string) error {
 	if !r.hasGatewayAPI {
+		if r.isOpenShift {
+			return r.reconcilePassthroughRoute(ctx, projectClient, gw, namespace)
+		}
 		return nil
 	}
 
@@ -425,7 +451,7 @@ func (r *GatewayReconciler) reconcileGRPCRoute(ctx context.Context, projectClien
 		return nil
 	}
 
-	stsUID, err := r.getWorkloadUID(ctx, namespace, routeName)
+	stsUID, _, err := r.getWorkloadUID(ctx, namespace, routeName)
 	if err != nil {
 		r.logger.Info().Err(err).Str("namespace", namespace).Msg("workload not yet available, creating GRPCRoute without OwnerReference (will be set on next reconcile)")
 		stsUID = ""
@@ -640,15 +666,16 @@ func (r *GatewayReconciler) readCACert(ctx context.Context, namespace string) (s
 	return string(decoded), nil
 }
 
-func (r *GatewayReconciler) getWorkloadUID(ctx context.Context, namespace, name string) (string, error) {
-	for _, res := range []string{"deployments", "statefulsets"} {
+func (r *GatewayReconciler) getWorkloadUID(ctx context.Context, namespace, name string) (string, string, error) {
+	kinds := map[string]string{"deployments": "Deployment", "statefulsets": "StatefulSet"}
+	for res, kind := range kinds {
 		gvr := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: res}
 		obj, err := r.dynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err == nil {
-			return string(obj.GetUID()), nil
+			return string(obj.GetUID()), kind, nil
 		}
 	}
-	return "", fmt.Errorf("get workload %s: not found as deployment or statefulset", name)
+	return "", "", fmt.Errorf("get workload %s: not found as deployment or statefulset", name)
 }
 
 func (r *GatewayReconciler) reconcileGRPCRouteAddress(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway, hostname string) error {
@@ -1094,4 +1121,190 @@ func (r *GatewayReconciler) deleteIfExists(ctx context.Context, gvr schema.Group
 		return fmt.Errorf("delete %s/%s: %w", gvr.Resource, name, err)
 	}
 	return nil
+}
+
+func (r *GatewayReconciler) reconcilePassthroughRoute(ctx context.Context, projectClient *sdkclient.Client, gw *types.Gateway, namespace string) error {
+	routeName := "openshell-gateway-grpc"
+
+	routeDomain := r.nlbRouteDomain
+	if routeDomain == "" {
+		routeDomain = r.baseDomain
+	}
+	if routeDomain == "" {
+		r.logger.Debug().Str("gateway_name", gw.Name).Msg("no route domain available, skipping passthrough Route")
+		return nil
+	}
+
+	var hostname string
+	if gw.Route != nil && gw.Route.Host != "" {
+		hostname = gw.Route.Host
+	} else {
+		hostname = fmt.Sprintf("openshell-gateway-%s.%s", namespace, routeDomain)
+	}
+
+	stsUID, workloadKind, err := r.getWorkloadUID(ctx, namespace, "openshell-gateway")
+	if err != nil {
+		r.logger.Info().Err(err).Str("namespace", namespace).Msg("workload not yet available, creating passthrough Route without OwnerReference")
+		stsUID = ""
+		workloadKind = ""
+	}
+
+	route := r.buildPassthroughRoute(namespace, routeName, hostname, stsUID, workloadKind, r.nlbRouteDomain != "")
+	if err := r.applyUnstructured(ctx, osRouteGVR, namespace, routeName, route); err != nil {
+		return fmt.Errorf("apply passthrough Route: %w", err)
+	}
+
+	if err := r.reconcileRouterNetworkPolicy(ctx, namespace, stsUID, workloadKind); err != nil {
+		r.logger.Warn().Err(err).Str("namespace", namespace).Msg("failed to reconcile router NetworkPolicy")
+	}
+
+	routeAddress := "grpcs://" + hostname
+	if gw.RouteAddress == routeAddress {
+		return nil
+	}
+
+	patch := types.NewGatewayPatchBuilder().RouteAddress(routeAddress).Build()
+	if _, err := projectClient.Gateways().Update(ctx, gw.ID, patch); err != nil {
+		return fmt.Errorf("update routeAddress for gateway %s: %w", gw.ID, err)
+	}
+
+	r.logger.Info().
+		Str("gateway_name", gw.Name).
+		Str("route_address", routeAddress).
+		Msg("updated gateway routeAddress (passthrough Route)")
+	return nil
+}
+
+func (r *GatewayReconciler) buildPassthroughRoute(namespace, routeName, hostname, stsUID, workloadKind string, useNLBRouter bool) *unstructured.Unstructured {
+	labels := map[string]interface{}{
+		"app.kubernetes.io/name":       "openshell",
+		"app.kubernetes.io/component":  "gateway",
+		"app.kubernetes.io/managed-by": "agent-control-plane",
+	}
+	if useNLBRouter {
+		labels["router"] = "grpc"
+	}
+	metadata := map[string]interface{}{
+		"name":      routeName,
+		"namespace": namespace,
+		"labels":    labels,
+		"annotations": map[string]interface{}{
+			"haproxy.router.openshift.io/timeout": "3600s",
+		},
+	}
+	if stsUID != "" && workloadKind != "" {
+		metadata["ownerReferences"] = []interface{}{
+			map[string]interface{}{
+				"apiVersion": "apps/v1",
+				"kind":       workloadKind,
+				"name":       "openshell-gateway",
+				"uid":        stsUID,
+				"controller": true,
+			},
+		}
+	}
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "route.openshift.io/v1",
+			"kind":       "Route",
+			"metadata":   metadata,
+			"spec": map[string]interface{}{
+				"host": hostname,
+				"port": map[string]interface{}{
+					"targetPort": "grpc",
+				},
+				"tls": map[string]interface{}{
+					"termination": "passthrough",
+				},
+				"to": map[string]interface{}{
+					"kind":   "Service",
+					"name":   "openshell-gateway",
+					"weight": int64(100),
+				},
+			},
+		},
+	}
+}
+
+func (r *GatewayReconciler) reconcileRouterNetworkPolicy(ctx context.Context, namespace, stsUID, workloadKind string) error {
+	policyName := "openshell-gateway-allow-router"
+	metadata := map[string]interface{}{
+		"name":      policyName,
+		"namespace": namespace,
+		"labels": map[string]interface{}{
+			"app.kubernetes.io/name":       "openshell",
+			"app.kubernetes.io/component":  "gateway",
+			"app.kubernetes.io/managed-by": "agent-control-plane",
+		},
+	}
+	if stsUID != "" && workloadKind != "" {
+		metadata["ownerReferences"] = []interface{}{
+			map[string]interface{}{
+				"apiVersion": "apps/v1",
+				"kind":       workloadKind,
+				"name":       "openshell-gateway",
+				"uid":        stsUID,
+				"controller": true,
+			},
+		}
+	}
+	policy := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "networking.k8s.io/v1",
+			"kind":       "NetworkPolicy",
+			"metadata":   metadata,
+			"spec": map[string]interface{}{
+				"podSelector": map[string]interface{}{
+					"matchLabels": map[string]interface{}{
+						"app.kubernetes.io/instance": "openshell-gateway",
+						"app.kubernetes.io/name":     "openshell",
+					},
+				},
+				"ingress": []interface{}{
+					map[string]interface{}{
+						"from": []interface{}{
+							map[string]interface{}{
+								"namespaceSelector": map[string]interface{}{
+									"matchLabels": map[string]interface{}{
+										"kubernetes.io/metadata.name": "openshift-ingress",
+									},
+								},
+							},
+						},
+						"ports": []interface{}{
+							map[string]interface{}{
+								"port":     int64(8080),
+								"protocol": "TCP",
+							},
+							map[string]interface{}{
+								"port":     int64(8081),
+								"protocol": "TCP",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	return r.applyUnstructured(ctx, networkPolicyGVR, namespace, policyName, policy)
+}
+
+func (r *GatewayReconciler) detectNLBRouteDomain(ctx context.Context) string {
+	if domain := os.Getenv("NLB_ROUTE_DOMAIN"); domain != "" {
+		return domain
+	}
+
+	ic, err := r.dynamicClient.Resource(ingressControllerGVR).Namespace("openshift-ingress-operator").Get(ctx, "grpc", metav1.GetOptions{})
+	if err != nil {
+		if !k8serrors.IsNotFound(err) {
+			r.logger.Warn().Err(err).Msg("failed to read IngressController/grpc for NLB domain detection")
+		}
+		return ""
+	}
+
+	domain, _, _ := unstructured.NestedString(ic.Object, "spec", "domain")
+	if domain != "" {
+		r.logger.Info().Str("nlb_route_domain", domain).Msg("detected NLB route domain from IngressController/grpc")
+	}
+	return domain
 }

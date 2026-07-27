@@ -193,8 +193,8 @@ func (r *ProjectReconciler) controlPlaneRBACRules() []interface{} {
 	rules := []interface{}{
 		map[string]interface{}{
 			"apiGroups": []interface{}{""},
-			"resources": []interface{}{"secrets", "serviceaccounts", "services"},
-			"verbs":     []interface{}{"get", "list", "watch", "create", "delete", "deletecollection"},
+			"resources": []interface{}{"secrets", "serviceaccounts", "services", "persistentvolumeclaims", "configmaps"},
+			"verbs":     []interface{}{"get", "list", "watch", "create", "update", "delete", "deletecollection"},
 		},
 		map[string]interface{}{
 			"apiGroups": []interface{}{""},
@@ -203,8 +203,28 @@ func (r *ProjectReconciler) controlPlaneRBACRules() []interface{} {
 		},
 		map[string]interface{}{
 			"apiGroups": []interface{}{"rbac.authorization.k8s.io"},
-			"resources": []interface{}{"rolebindings"},
-			"verbs":     []interface{}{"get", "list", "watch", "create", "delete"},
+			"resources": []interface{}{"roles", "rolebindings"},
+			"verbs":     []interface{}{"get", "list", "watch", "create", "update", "delete"},
+		},
+		map[string]interface{}{
+			"apiGroups": []interface{}{"apps"},
+			"resources": []interface{}{"statefulsets", "deployments"},
+			"verbs":     []interface{}{"get", "list", "watch", "create", "update", "delete"},
+		},
+		map[string]interface{}{
+			"apiGroups": []interface{}{"batch"},
+			"resources": []interface{}{"jobs"},
+			"verbs":     []interface{}{"get", "list", "watch", "create", "update", "delete"},
+		},
+		map[string]interface{}{
+			"apiGroups": []interface{}{"networking.k8s.io"},
+			"resources": []interface{}{"networkpolicies"},
+			"verbs":     []interface{}{"get", "list", "watch", "create", "update", "delete"},
+		},
+		map[string]interface{}{
+			"apiGroups": []interface{}{"route.openshift.io"},
+			"resources": []interface{}{"routes", "routes/custom-host"},
+			"verbs":     []interface{}{"get", "list", "watch", "create", "update", "delete"},
 		},
 	}
 
@@ -218,11 +238,6 @@ func (r *ProjectReconciler) controlPlaneRBACRules() []interface{} {
 			map[string]interface{}{
 				"apiGroups": []interface{}{"image.openshift.io"},
 				"resources": []interface{}{"imagestreams", "imagestreamtags", "imagestreamimages"},
-				"verbs":     []interface{}{"get", "list", "create", "update", "delete"},
-			},
-			map[string]interface{}{
-				"apiGroups": []interface{}{"route.openshift.io"},
-				"resources": []interface{}{"routes"},
 				"verbs":     []interface{}{"get", "list", "create", "update", "delete"},
 			},
 		)

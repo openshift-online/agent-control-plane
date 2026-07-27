@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Install OpenShell gateway prerequisites into a Kind cluster (dual-tenant mode).
-# Called by `make kind-up OPENSHELL_USE_GATEWAY=true`.
+# Called by `make kind-up`.
 #
 # Provisions for each tenant in OPENSHELL_TENANTS (default: tenant-a tenant-b):
 #   1. Agent Sandbox CRD + controller (once, cluster-scoped)
 #   2. Tenant namespaces
 #   3. ACP project via the API
-#   4. Patches the control plane deployment with OPENSHELL_USE_GATEWAY=true
-#      and Vertex AI env vars (ANTHROPIC_VERTEX_PROJECT_ID, CLOUD_ML_REGION) if set
+#   4. Patches the control plane deployment with Vertex AI env vars
+#      (ANTHROPIC_VERTEX_PROJECT_ID, CLOUD_ML_REGION) if set
 #
 # Vertex AI credentials are configured separately by `make kind-setup-vertex`.
 #
@@ -152,17 +152,11 @@ else
   kill "${PF_PID}" 2>/dev/null || true
 fi
 
-# 4. Patch control plane with gateway flag and vertex env vars (idempotent)
+# 4. Patch control plane with Vertex AI env vars (idempotent)
 #    TLS is left at its default (true) — certgen-job creates openshell-client-tls
 #    and openshell-server-tls secrets so mTLS works out of the box in Kind.
-CP_ENV_ARGS="OPENSHELL_USE_GATEWAY=true"
+CP_ENV_ARGS=""
 CP_NEEDS_PATCH=false
-
-CURRENT_GW=$(kubectl get deployment ambient-control-plane -n "$NAMESPACE" \
-  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="OPENSHELL_USE_GATEWAY")].value}' 2>/dev/null || echo "")
-if [ "$CURRENT_GW" != "true" ]; then
-  CP_NEEDS_PATCH=true
-fi
 
 if [ -n "${ANTHROPIC_VERTEX_PROJECT_ID:-}" ]; then
   CURRENT_PROJECT=$(kubectl get deployment ambient-control-plane -n "$NAMESPACE" \
@@ -170,7 +164,7 @@ if [ -n "${ANTHROPIC_VERTEX_PROJECT_ID:-}" ]; then
   if [ "$CURRENT_PROJECT" != "$ANTHROPIC_VERTEX_PROJECT_ID" ]; then
     CP_NEEDS_PATCH=true
   fi
-  CP_ENV_ARGS="$CP_ENV_ARGS ANTHROPIC_VERTEX_PROJECT_ID=${ANTHROPIC_VERTEX_PROJECT_ID}"
+  CP_ENV_ARGS="ANTHROPIC_VERTEX_PROJECT_ID=${ANTHROPIC_VERTEX_PROJECT_ID}"
 fi
 
 if [ -n "${CLOUD_ML_REGION:-}" ]; then
@@ -179,10 +173,10 @@ if [ -n "${CLOUD_ML_REGION:-}" ]; then
   if [ "$CURRENT_REGION" != "$CLOUD_ML_REGION" ]; then
     CP_NEEDS_PATCH=true
   fi
-  CP_ENV_ARGS="$CP_ENV_ARGS CLOUD_ML_REGION=${CLOUD_ML_REGION}"
+  CP_ENV_ARGS="${CP_ENV_ARGS:+$CP_ENV_ARGS }CLOUD_ML_REGION=${CLOUD_ML_REGION}"
 fi
 
-if [ "$CP_NEEDS_PATCH" = "true" ]; then
+if [ "$CP_NEEDS_PATCH" = "true" ] && [ -n "$CP_ENV_ARGS" ]; then
   # shellcheck disable=SC2086
   kubectl set env deployment/ambient-control-plane -n "$NAMESPACE" $CP_ENV_ARGS >/dev/null
   kubectl rollout status deployment/ambient-control-plane -n "$NAMESPACE" --timeout=60s >/dev/null 2>&1
@@ -190,7 +184,6 @@ if [ "$CP_NEEDS_PATCH" = "true" ]; then
 else
   echo "  ambient-control-plane env already up to date — skipping"
 fi
-echo "  Note: ambient-ui gateway mode is baked in at build time via --build-arg OPENSHELL_USE_GATEWAY=true"
 
 # Vertex credentials and tenant overlays (examples/overlays/<tenant>/) are
 # applied by `make kind-up` after this script finishes — see the
