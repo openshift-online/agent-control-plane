@@ -1,0 +1,52 @@
+@font-face {
+  font-family: "Red Hat Display";
+  font-style: normal;
+  font-weight: 400;
+  src: url("../fonts/RedHatDisplay-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Red Hat Display";
+  font-style: normal;
+  font-weight: 700;
+  src: url("../fonts/RedHatDisplay-Bold.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Red Hat Text";
+  font-style: normal;
+  font-weight: 400;
+  src: url("../fonts/RedHatText-Regular.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Red Hat Text";
+  font-style: normal;
+  font-weight: 700;
+  src: url("../fonts/RedHatText-Bold.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Red Hat Mono";
+  font-style: normal;
+  font-weight: 400;
+  src: url("../fonts/RedHatMono-Regular.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Red Hat Mono";
+  font-style: normal;
+  font-weight: 700;
+  src: url("../fonts/RedHatMono-Bold.ttf") format("truetype");
+}
+
+:root {
+  --acp-dark: #292929;
+  --acp-coral: #f56e6e;
+  --red-hat-red: #ee0000;
+  --paper: #f7f7f7;
+  --text: #ffffff;
+  --caption-background: #000000;
+  --title-font: "Red Hat Display", sans-serif;
+  --body-font: "Red Hat Text", sans-serif;
+  --mono-font: "Red Hat Mono", monospace;
+}

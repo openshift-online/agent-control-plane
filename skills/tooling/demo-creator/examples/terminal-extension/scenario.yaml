@@ -1,0 +1,36 @@
+version: 1
+id: terminal-and-extension
+title: Inspect ACP in the browser extension
+fps: 30
+layout:
+  preset: terminal-extension
+story:
+  - type: title
+    durationSeconds: 3
+  - type: terminal
+    source: terminal.tape
+    durationSeconds: 30
+  - type: browser
+    durationSeconds: 24
+  - type: end
+    durationSeconds: 3
+captions:
+  - startSeconds: 4
+    endSeconds: 10
+    text: Inspect the owned demo project while the extension stays visible.
+  - startSeconds: 34
+    endSeconds: 40
+    text: The native extension confirms the same project in Sessions.
+acp:
+  project: demo-terminal-and-extension
+extension:
+  expectedId: bjlckanpiblmfadkmknbbpeenckfdgpi
+  actions:
+    - action: wait
+      ms: 5000
+    - action: uploadConnection
+      selector: "#importKindConnections"
+    - action: configureBearer
+    - action: expect
+      selector: "#sessionsTitle"
+      text: Sessions

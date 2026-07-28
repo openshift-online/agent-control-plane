@@ -1,0 +1,36 @@
+version: 1
+id: slides-and-extension
+title: ACP sessions beside a guided walkthrough
+fps: 30
+layout:
+  preset: slides-extension
+story:
+  - type: title
+    durationSeconds: 3
+  - type: slides
+    source: slides.md
+    durationSeconds: 24
+  - type: browser
+    durationSeconds: 30
+  - type: end
+    durationSeconds: 3
+captions:
+  - startSeconds: 4
+    endSeconds: 9
+    text: The walkthrough stays visible beside the native extension panel.
+  - startSeconds: 28
+    endSeconds: 34
+    text: The connection file and runtime credential open the Sessions view.
+acp:
+  project: demo-slides-and-extension
+extension:
+  expectedId: bjlckanpiblmfadkmknbbpeenckfdgpi
+  actions:
+    - action: wait
+      ms: 5000
+    - action: uploadConnection
+      selector: "#importKindConnections"
+    - action: configureBearer
+    - action: expect
+      selector: "#sessionsTitle"
+      text: Sessions

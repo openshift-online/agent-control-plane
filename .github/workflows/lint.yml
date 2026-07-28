@@ -27,11 +27,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
 
       - name: Detect changed components
         id: detect
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE_REF: ${{ github.event_name == 'push' && github.event.before || github.event_name == 'merge_group' && github.event.merge_group.base_sha || 'origin/main' }}
         run: bash .github/scripts/detect-components.sh --outputs
 
   go-api-server:
@@ -144,6 +147,7 @@ jobs:
         run: |
           failed=false
           for result in \
+            "${{ needs.detect-changes.result }}" \
             "${{ needs.go-api-server.result }}" \
             "${{ needs.go-cli.result }}"; do
             if [ "$result" == "failure" ] || [ "$result" == "cancelled" ]; then
@@ -152,6 +156,7 @@ jobs:
           done
           if [ "$failed" == "true" ]; then
             echo "Linting failed"
+            echo "  detect-changes: ${{ needs.detect-changes.result }}"
             echo "  go-api-server: ${{ needs.go-api-server.result }}"
             echo "  go-cli: ${{ needs.go-cli.result }}"
             exit 1

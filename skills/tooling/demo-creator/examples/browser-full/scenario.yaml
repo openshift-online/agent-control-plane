@@ -1,0 +1,49 @@
+version: 1
+id: extension-connection-flow
+title: Connect the ACP browser extension
+description: Show a deterministic connection-file upload in the native browser side panel.
+fps: 30
+canvas:
+  master: 1080p
+  derivative: 720p
+layout:
+  preset: browser-full
+story:
+  - type: title
+    durationSeconds: 3
+  - type: browser
+    durationSeconds: 13
+  - type: end
+    durationSeconds: 3
+captions:
+  - startSeconds: 3
+    endSeconds: 7
+    text: Open the pinned extension from the browser toolbar.
+  - startSeconds: 8
+    endSeconds: 13
+    text: Upload the connection file to configure the session.
+acp:
+  project: demo-extension-connection-flow
+extension:
+  expectedId: bjlckanpiblmfadkmknbbpeenckfdgpi
+  actions:
+    - action: wait
+      ms: 5000
+    - action: uploadConnection
+      selector: "#importKindConnections"
+    - action: wait
+      ms: 1000
+    - action: expect
+      selector: "#kindImportStatus"
+      text: selected
+    - action: configureBearer
+    - action: expect
+      selector: "#sessionsTitle"
+      text: Sessions
+production:
+  title: Connect the ACP browser extension
+  subtitle: Configure a native side panel from one connection file.
+  endTitle: Connection complete
+  endText: The repeatable workflow is ready for another run.
+  transitionMilliseconds: 300
+  silent: true

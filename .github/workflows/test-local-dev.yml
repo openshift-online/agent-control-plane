@@ -23,6 +23,12 @@ on:
 permissions:
   contents: read
 
+env:
+  KUBECTL_VERSION: "v1.36.3"
+  KIND_VERSION: "v0.32.0"
+  IMAGE_TAG: ${{ inputs.image-tag || 'latest' }}
+  BUILT_IMAGES: ${{ inputs.built-images || '[]' }}
+
 jobs:
   validate-manifests:
     runs-on: ubuntu-latest

@@ -25,8 +25,17 @@ get_changed_files() {
   fi
 
   if [ -n "$pr" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
-    gh pr diff "$pr" --repo "${GITHUB_REPOSITORY}" --name-only 2>/dev/null || true
-  elif git rev-parse --verify "${BASE_REF:-origin/main}" >/dev/null 2>&1; then
+    local api_files
+    if api_files=$(gh api --paginate \
+      "repos/${GITHUB_REPOSITORY}/pulls/${pr}/files?per_page=100" \
+      --jq '.[].filename'); then
+      printf '%s\n' "$api_files"
+      return
+    fi
+    printf 'Warning: failed to enumerate PR %s files; falling back to git diff\n' "$pr" >&2
+  fi
+
+  if git rev-parse --verify "${BASE_REF:-origin/main}" >/dev/null 2>&1; then
     git diff --name-only "${BASE_REF:-origin/main}...HEAD"
   elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
     git diff --name-only HEAD~1

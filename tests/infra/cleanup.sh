@@ -26,20 +26,98 @@ fi
 
 echo ""
 echo "Deleting kind cluster '${KIND_CLUSTER_NAME}'..."
-# Try to delete regardless of provider -- kind delete is idempotent and
-# the cluster may have been created with a different CONTAINER_ENGINE
-# than the current default.  Check both docker and podman providers.
 deleted=false
-if kind delete cluster --name "$KIND_CLUSTER_NAME" 2>/dev/null; then
+if [ "${DOCKER_ONLY_KIND_CLUSTER:-false}" = "true" ]; then
+  # The demo adapter must never delete by a reusable cluster name. It passes
+  # the immutable Docker IDs witnessed immediately after kind-up. Re-enumerate
+  # the exact label now and delete only still-present members of that witness.
+  EXPECTED_KIND_CONTAINER_IDS="${EXPECTED_KIND_CONTAINER_IDS:-}"
+  if [ "$CONTAINER_ENGINE" != "docker" ]; then
+    echo "   Refusing cross-provider cleanup for Docker-owned cluster '${KIND_CLUSTER_NAME}'"
+    exit 1
+  fi
+  if [ -z "$EXPECTED_KIND_CONTAINER_IDS" ]; then
+    echo "   Refusing Docker-only cleanup without exact container identities"
+    exit 1
+  fi
+  IFS=',' read -r -a expected_ids <<< "$EXPECTED_KIND_CONTAINER_IDS"
+  for container_id in "${expected_ids[@]}"; do
+    if [[ ! "$container_id" =~ ^[0-9a-f]{64}$ ]]; then
+      echo "   Refusing invalid expected container identity"
+      exit 1
+    fi
+  done
+  current_ids=()
+  current_id_count=0
+  while IFS= read -r container_id; do
+    if [ -n "$container_id" ]; then
+      current_ids+=("$container_id")
+      current_id_count=$((current_id_count + 1))
+    fi
+  done < <(
+    docker ps --all --no-trunc \
+      --filter "label=io.x-k8s.kind.cluster=${KIND_CLUSTER_NAME}" \
+      --format '{{.ID}}' | LC_ALL=C sort
+  )
+  sorted_expected_ids=()
+  while IFS= read -r container_id; do
+    [ -n "$container_id" ] && sorted_expected_ids+=("$container_id")
+  done < <(printf '%s\n' "${expected_ids[@]}" | LC_ALL=C sort)
+  expected_ids=("${sorted_expected_ids[@]}")
+  if [ "$current_id_count" -gt 0 ]; then
+    for container_id in "${current_ids[@]}"; do
+      witnessed=false
+      for expected_id in "${expected_ids[@]}"; do
+        if [ "$container_id" = "$expected_id" ]; then
+          witnessed=true
+          break
+        fi
+      done
+      if [ "$witnessed" != "true" ]; then
+        echo "   Refusing cleanup because a current container identity is outside the creation witness"
+        exit 1
+      fi
+    done
+    # A previous exact cleanup attempt may have removed only a subset before a
+    # later kubeconfig operation failed. Delete only the still-present IDs from
+    # the immutable creation witness; an empty set is already container-clean.
+    docker rm --force --volumes -- "${current_ids[@]}" >/dev/null
+  fi
+  owned_kube_identity="kind-${KIND_CLUSTER_NAME}"
+  # KUBECONFIG may be unset under `set -u`; only prune kubeconfig entries when a
+  # path is provided. Container removal above already made the cluster clean.
+  kubeconfig_path="${KUBECONFIG:-}"
+  if [ -n "$kubeconfig_path" ]; then
+    contexts="$(kubectl --kubeconfig "$kubeconfig_path" config get-contexts -o name)"
+    clusters="$(kubectl --kubeconfig "$kubeconfig_path" config get-clusters)"
+    users="$(kubectl --kubeconfig "$kubeconfig_path" config get-users)"
+    if printf '%s\n' "$contexts" | grep -Fqx -- "$owned_kube_identity"; then
+      kubectl --kubeconfig "$kubeconfig_path" config delete-context "$owned_kube_identity" >/dev/null
+    fi
+    if printf '%s\n' "$clusters" | grep -Fqx -- "$owned_kube_identity"; then
+      kubectl --kubeconfig "$kubeconfig_path" config delete-cluster "$owned_kube_identity" >/dev/null
+    fi
+    if printf '%s\n' "$users" | grep -Fqx -- "$owned_kube_identity"; then
+      kubectl --kubeconfig "$kubeconfig_path" config delete-user "$owned_kube_identity" >/dev/null
+    fi
+  else
+    echo "   KUBECONFIG unset; skipping kubeconfig entry cleanup for '${owned_kube_identity}'"
+  fi
   deleted=true
+else
+  # General developer cleanup keeps the historical provider fallback. The
+  # strict demo path above never enters this name-based branch.
+  if kind delete cluster --name "$KIND_CLUSTER_NAME" 2>/dev/null; then
+    deleted=true
+  fi
 fi
-if [ "$deleted" = false ] && [ "$CONTAINER_ENGINE" != "podman" ]; then
+if [ "$deleted" = false ] && [ "${DOCKER_ONLY_KIND_CLUSTER:-false}" != "true" ] && [ "$CONTAINER_ENGINE" != "podman" ]; then
   # Cluster might have been created with podman
   if KIND_EXPERIMENTAL_PROVIDER=podman kind delete cluster --name "$KIND_CLUSTER_NAME" 2>/dev/null; then
     deleted=true
   fi
 fi
-if [ "$deleted" = false ] && [ "$CONTAINER_ENGINE" = "podman" ]; then
+if [ "$deleted" = false ] && [ "${DOCKER_ONLY_KIND_CLUSTER:-false}" != "true" ] && [ "$CONTAINER_ENGINE" = "podman" ]; then
   # Cluster might have been created with docker
   if KIND_EXPERIMENTAL_PROVIDER="" kind delete cluster --name "$KIND_CLUSTER_NAME" 2>/dev/null; then
     deleted=true
@@ -54,7 +132,7 @@ fi
 # kind delete sometimes leaves the kindest container behind in podman.
 # Force-remove any leftover container whose name matches the kind node pattern.
 KIND_CONTAINER="${KIND_CLUSTER_NAME}-control-plane"
-if command -v podman &> /dev/null && podman container exists "$KIND_CONTAINER" 2>/dev/null; then
+if [ "${DOCKER_ONLY_KIND_CLUSTER:-false}" != "true" ] && command -v podman &> /dev/null && podman container exists "$KIND_CONTAINER" 2>/dev/null; then
   echo "   Removing leftover podman container '${KIND_CONTAINER}'..."
   podman rm -f "$KIND_CONTAINER" >/dev/null 2>&1 || true
   echo "   Removed"

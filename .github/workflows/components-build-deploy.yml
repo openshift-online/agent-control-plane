@@ -272,7 +272,14 @@ jobs:
 
   test-local-dev:
     needs: [build-matrix, build-amd64]
-    if: github.event_name == 'pull_request' && !failure() && !cancelled()
+    # Fork PRs cannot build the images exercised here because registry credentials
+    # are intentionally unavailable. Avoid testing their source manifests against
+    # stale :latest component images and reporting a misleading integration result.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !failure() &&
+      !cancelled()
     uses: ./.github/workflows/test-local-dev.yml
     with:
       image-tag: pr-${{ github.event.pull_request.number }}
@@ -281,7 +288,7 @@ jobs:
   build-ci-gate:
     name: Build CI Gate
     runs-on: ubuntu-latest
-    needs: [build-matrix, build-amd64, build-arm64, merge-manifests]
+    needs: [build-matrix, build-amd64, build-arm64, merge-manifests, test-local-dev]
     if: always()
     permissions:
       contents: write
@@ -293,18 +300,22 @@ jobs:
         run: |
           failed=false
           for result in \
+            "${{ needs.build-matrix.result }}" \
             "${{ needs.build-amd64.result }}" \
             "${{ needs.build-arm64.result }}" \
-            "${{ needs.merge-manifests.result }}"; do
+            "${{ needs.merge-manifests.result }}" \
+            "${{ needs.test-local-dev.result }}"; do
             if [ "$result" == "failure" ] || [ "$result" == "cancelled" ]; then
               failed=true
             fi
           done
           if [ "$failed" == "true" ]; then
             echo "Build/test failed"
+            echo "  build-matrix: ${{ needs.build-matrix.result }}"
             echo "  build-amd64: ${{ needs.build-amd64.result }}"
             echo "  build-arm64: ${{ needs.build-arm64.result }}"
             echo "  merge-manifests: ${{ needs.merge-manifests.result }}"
+            echo "  test-local-dev: ${{ needs.test-local-dev.result }}"
             exit 1
           fi
           echo "All builds and tests passed (or skipped)!"

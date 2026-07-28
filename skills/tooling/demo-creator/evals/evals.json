@@ -1,0 +1,85 @@
+{
+  "skill_name": "demo-creator",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Create a repeatable 1080p demo of the ACP browser extension. Start with the full headed browser, click the pinned extension icon, show the native side panel, import a synthetic connection file, and finish on a deterministic session list. The demo must be understandable without audio and also produce a 720p copy.",
+      "expected_output": "A runnable full-browser scenario plus 1080p and 720p video artifacts, captions, pointer events, contact sheet, locked manifest, and validation report.",
+      "files": [],
+      "assertions": [
+        "The browser capture shows the toolbar, pinned extension icon, actual native side-panel frame and content, and page behind it.",
+        "The output includes exact 1920x1080 and 1280x720 H.264/YUV420P videos at 30 fps.",
+        "Captions communicate the complete connection flow without audio and remain inside the dedicated bottom band.",
+        "The connection data and bearer token are not present in scenarios, logs, captions, images, metadata, reports, or final media.",
+        "Pointer events use normalized coordinates and clicks have visible shape-and-motion feedback for exactly 18 frames, clamped only when the video ends first."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Build a product demo with Presenterm slides on the left and the real ACP extension side panel on the right. Use the ACP dark visual treatment, large accessible captions, a reusable title card, and a reusable end card. Keep the extension panel readable at both 1080p and 720p.",
+      "expected_output": "A slides-extension scenario with deterministic slide rasterization, native browser capture, branded cards, two resolution outputs, and visual validation evidence.",
+      "files": [],
+      "assertions": [
+        "The 1080p layout uses a 1920x936 content area, 144 px caption band, 630 px extension cell, and 24 px gap unless a valid override is documented.",
+        "The 720p derivative uses a 1280x624 content area, 96 px caption band, 420 px extension cell, and 16 px gap.",
+        "The cards use vendored Red Hat fonts, ACP dark #292929, ACP coral #F56E6E, Red Hat red #EE0000, and the ACP robot asset.",
+        "Caption text is white on black, fits no more than two lines, and passes the declared contrast and bounds checks.",
+        "The extension footage is the native panel in a headed browser rather than an extension page opened directly."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Produce a silent terminal-and-extension demo: a deterministic VHS terminal on the left provisions a disposable ACP demo project while the native browser extension panel on the right shows the result. Make cleanup safe, show every click, and emit enough evidence to rerun or audit the demo.",
+      "expected_output": "A terminal-extension scenario with deterministic seeding, marker-guarded ACP lifecycle, native capture, pointer overlays, final videos, and reproducibility artifacts.",
+      "files": [],
+      "assertions": [
+        "ACP state uses a stable scenario-specific project and an ownership marker, and cleanup refuses unmarked resources.",
+        "The VHS tape and terminal output use synthetic values and contain no credentials or personal data.",
+        "The output set includes raw captures, manifest.lock.json, pointer-events.jsonl, VTT and SRT captions, transcript, contact sheet, validation report, and both MP4 resolutions.",
+        "The native browser adapter is selected for the host and fails rather than substituting simulated panel footage.",
+        "ffprobe, visual-frame inspection, package verification, secret scanning, and ownership checks are represented in the validation report."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Record a deterministic ACP Android onboarding demo from the repository APK. The app needs an ACP bearer token during setup, then the recorded flow taps through onboarding against a disposable local cluster. Use an already-installed Android SDK image and clean up everything the run creates, even after failure.",
+      "expected_output": "A mobile-full Android emulator scenario and capture plan bound to a clean source commit, matching APK lock, exact external Kind/AVD ownership markers, private setup-only credentials, and verified whole-cluster teardown.",
+      "files": [],
+      "assertions": [
+        "The scenario uses capture.kind android-emulator, capture.cluster.kind disposable-kind, repo: APK and matching .apk.lock.json paths, bounded expectedApplicationId and launchActivity, an installed stable-style systemImage, and no authored mobile source.",
+        "The runtime requires Task 3's generated canonical APK/lock pair, a clean worktree, exact HEAD commit and tree bindings through lock source {commit, tree, path}, matching embedded commit/tree/schema metadata, and APK digest; application ID matches the scenario while version fields and APK Analyzer identity/version match the lock and source-aware Doctor result. Installation consumes an inherited verified descriptor rather than an APK pathname.",
+        "Kind uses the repository-approved make kind-up and make kind-down targets with CONTAINER_ENGINE=docker and a run-private KUBECONFIG; cleanup covers the whole disposable cluster.",
+        "Kind and AVD ownership use exact external mode-0600 markers, bind live container/context/server and serial/port/PID/process-start identities, reverify immediately before mutation or teardown, and fail closed on any mismatch or ambiguity.",
+        "fillFromEnvironment is setup-only and names ACP_URL, ACP_PROJECT, or ACP_BEARER_TOKEN; ACP_URL is adapter-generated, ACP_PROJECT is used only for a real client control and duplicates the non-secret scenario project, Advanced bearer uses ACP_BEARER_TOKEN, OIDC stays system-browser PKCE without collected credentials, and no credential value enters host process arguments or artifacts."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Compose a silent-first portrait Android product demo at 1080p and 720p. Show every scripted tap with one accessible pointer treatment, preserve the complete phone screen, and make the captions readable without narration. Stream the source from exact-serial adb exec-out screenrecord as raw H.264.",
+      "expected_output": "A portrait mobile-full composition with aspect-fit media, one composed pointer, exact caption rules, explicit 30 fps emulator capture, and silent-first outputs at both required profiles.",
+      "files": [],
+      "assertions": [
+        "The emulator launches with -vsync-rate 30 because screenrecord has no FPS flag; exact-serial adb exec-out screenrecord --output-format=h264 streams stdout into an exclusive private raw file without a remote MP4, pull, or remove step.",
+        "Split-safe Annex-B parsing sets media zero at the first byte of the first complete decodable IDR after SPS/PPS; actions, pointers, and the deadline share that origin, and publication requires exact child close, stdout EOF, queued-write completion, and file sync with no forced termination.",
+        "Authored mobile duration is at most 179 seconds, leaving headroom inside the 180-second recorder ceiling after media zero. FFmpeg losslessly stream-copies the 30 fps H.264 stream to exactly ceil(authoredDurationMilliseconds * 30 / 1000) frames; packet/frame, codec, portrait-dimension, duration, one-video, and no-audio validation precede portable MP4 publication.",
+        "Each Android action list has at most 100 entries; UIAutomator resolves one exact 1-200-character resourceId, text, or contentDescription selector within 5 seconds, including bare hyphenated React Native testID resource IDs; wait is 0-10000 ms, literal fill is at most 500 non-secret characters, and every non-wait UI action receives the fixed 900 ms settle.",
+        "mobile-full aspect-fits the entire portrait source inside the full content region at both resolutions without stretching, cropping, or a hard-coded device projection.",
+        "Android show-touches and recorder cursor effects stay disabled; normalized tap events drive exactly one composed pointer/click treatment rather than a second halo.",
+        "Captions render once at exactly 44 px in the 1080p master; the pure two-thirds Lanczos derivative yields the nominal 29 px 720p caption without independent rendering, while captions use no more than two lines, stay visible for at least 2.5 seconds, contain no more than 3 words per second, and tell the full story without narration."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Prepare an auditable Android emulator demo run for release. I need the scenario, reproducibility evidence, both video sizes, accessibility artifacts, a contact sheet, and a machine-readable report. Be explicit about which Android binaries are licensing exceptions.",
+      "expected_output": "A complete Android demo output set whose generic capture manifest fields feed composition and validation, with security/OCR/human-review gates and truthful Android binary licensing notes.",
+      "files": [],
+      "assertions": [
+        "Composition consumes only artifacts.mobileCapture, artifacts.pointerEvents, and capture.source with portrait dimensions, landmarks, and bounded validation evidence; artifacts.androidApkLock is provenance for validation and composition does not depend on Android-private paths.",
+        "The output includes the validated portable MP4 capture, manifest.lock.json, pointer-events.jsonl, copied Android APK lock evidence, VTT and SRT captions, transcript.txt, contact-sheet.png, validation-report.json, demo-1080p.mp4, and demo-720p.mp4; private raw H.264 staging is removed after success or proven-quiescent failure, but remains private and unpublished when child close, stdout EOF, or writer quiescence is indeterminate.",
+        "Validation covers schema and semantic checks, exact media shape and 30 fps, source landmarks, pointer bounds/timing, APK identity, lifecycle cleanup, secret scanning, local OCR, and human review of both final video and contact sheet.",
+        "The workflow remains silent-first and does not assume narration, synthetic voice, or an audio stream.",
+        "Licensing calls the Android SDK command-line tools, Android SDK Platform-Tools package that provides ADB, emulator, and selected system-image packages explicit reviewed binary exceptions under their applicable package terms rather than describing the entire production toolchain as open source."
+      ]
+    }
+  ]
+}

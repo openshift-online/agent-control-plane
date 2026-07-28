@@ -1,0 +1,93 @@
+---
+version: 1
+id: android-onboarding
+title: Onboard ACP from Android
+description: >-
+  Capture repository-built Android onboarding against an owned disposable
+  Kind cluster.
+fps: 30
+canvas:
+  master: 1080p
+  derivative: 720p
+layout:
+  preset: mobile-full
+story:
+  - type: title
+    durationSeconds: 3
+  - type: mobile
+    durationSeconds: 15
+  - type: end
+    durationSeconds: 3
+captions:
+  - startSeconds: 3
+    endSeconds: 6
+    text: Set up memoryless Artoo.
+  - startSeconds: 7
+    endSeconds: 10.5
+    text: Start a persistent conversation.
+  - startSeconds: 12
+    endSeconds: 15
+    text: Artoo stays inside ACP.
+capture:
+  kind: android-emulator
+  cluster:
+    kind: disposable-kind
+  android:
+    expectedApplicationId: dev.ambientcode.mobile
+    launchActivity: dev.ambientcode.mobile/.MainActivity
+    apk: repo:components/mobile/dist/ambient-mobile.apk
+    apkLock: repo:components/mobile/dist/ambient-mobile.apk.lock.json
+    systemImage: system-images;android-36.1;google_apis_playstore;arm64-v8a
+    actionSettlingMilliseconds: 900
+    setupActions:
+      - action: fillFromEnvironment
+        selector:
+          by: resourceId
+          value: connection-origin
+        environment: ACP_URL
+      - action: tap
+        selector:
+          by: resourceId
+          value: auth-mode-bearer
+      - action: fillFromEnvironment
+        selector:
+          by: resourceId
+          value: bearer-token
+        environment: ACP_BEARER_TOKEN
+      - action: tap
+        selector:
+          by: resourceId
+          value: sign-in
+      - action: expect
+        selector:
+          by: resourceId
+          value: artoo-setup
+    actions:
+      - action: expect
+        selector:
+          by: resourceId
+          value: artoo-heading
+      - action: tap
+        selector:
+          by: resourceId
+          value: artoo-setup
+      - action: expect
+        selector:
+          by: resourceId
+          value: artoo-composer
+      - action: fill
+        selector:
+          by: resourceId
+          value: artoo-composer
+        value: Summarize this ACP environment.
+      - action: tap
+        selector:
+          by: resourceId
+          value: artoo-send
+production:
+  title: Onboard ACP from Android
+  subtitle: Use one verified APK and a disposable local cluster.
+  endTitle: Android onboarding complete
+  endText: The owned environment is ready to clean up.
+  transitionMilliseconds: 300
+  silent: true

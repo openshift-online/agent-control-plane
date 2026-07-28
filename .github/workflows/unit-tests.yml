@@ -37,14 +37,18 @@ jobs:
       cli: ${{ steps.detect.outputs.cli }}
       ambient-ui: ${{ steps.detect.outputs.ui }}
       scripts: ${{ steps.detect.outputs.scripts }}
+      demo-creator: ${{ steps.detect.outputs.demo-creator }}
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
 
       - name: Detect changed components
         id: detect
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE_REF: ${{ github.event_name == 'push' && github.event.before || github.event_name == 'merge_group' && github.event.merge_group.base_sha || 'origin/main' }}
         run: bash .github/scripts/detect-components.sh --outputs
 
   api-server:
@@ -197,6 +201,57 @@ jobs:
       - name: Run tests
         run: python tests/unit/test_model_discovery.py -v
 
+  demo-creator:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.demo-creator == 'true' || github.event_name == 'workflow_dispatch'
+    name: Demo Creator Tests
+    defaults:
+      run:
+        working-directory: skills/tooling/demo-creator/scripts
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'skills/tooling/demo-creator/scripts/package-lock.json'
+
+      - name: Install media and OCR dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            ffmpeg \
+            tesseract-ocr
+
+          ffmpeg -hide_banner -filters 2>&1 | grep -E '(^|[[:space:]])ass[[:space:]]' >/dev/null
+          ffmpeg -hide_banner -filters 2>&1 | grep -E '(^|[[:space:]])drawtext[[:space:]]' >/dev/null
+          ffmpeg -hide_banner -encoders 2>&1 | grep -E '(^|[[:space:]])libx264[[:space:]]' >/dev/null
+          ffprobe -version >/dev/null
+          tesseract --version >/dev/null
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: |
+          # `node --test` (what `npm test` runs) exits 0 even when its glob
+          # matches zero files, so a moved test directory, a wrong
+          # working-directory, or a Node without `**` support would let this job
+          # report a false green. Fail loudly if the same glob resolves to
+          # nothing before trusting the runner's exit code.
+          shopt -s globstar nullglob
+          test_files=(../tests/**/*.test.mjs)
+          if [ "${#test_files[@]}" -eq 0 ]; then
+            echo "::error::no demo-creator test files matched ../tests/**/*.test.mjs" >&2
+            exit 1
+          fi
+          echo "Discovered ${#test_files[@]} demo-creator test files"
+          npm test
+
   summary:
     name: Unit Tests CI Gate
     runs-on: ubuntu-latest
@@ -204,29 +259,33 @@ jobs:
       contents: write
       pull-requests: write
       checks: read
-    needs: [detect-changes, api-server, runner, cli, ambient-ui, scripts]
+    needs: [detect-changes, api-server, runner, cli, ambient-ui, scripts, demo-creator]
     if: always()
     steps:
       - name: Check overall status
         run: |
           failed=false
           for result in \
+            "${{ needs.detect-changes.result }}" \
             "${{ needs.api-server.result }}" \
             "${{ needs.runner.result }}" \
             "${{ needs.cli.result }}" \
             "${{ needs.ambient-ui.result }}" \
-            "${{ needs.scripts.result }}"; do
+            "${{ needs.scripts.result }}" \
+            "${{ needs.demo-creator.result }}"; do
             if [ "$result" == "failure" ] || [ "$result" == "cancelled" ]; then
               failed=true
             fi
           done
           if [ "$failed" == "true" ]; then
             echo "Unit tests failed"
+            echo "  detect-changes: ${{ needs.detect-changes.result }}"
             echo "  api-server: ${{ needs.api-server.result }}"
             echo "  runner: ${{ needs.runner.result }}"
             echo "  cli: ${{ needs.cli.result }}"
             echo "  ambient-ui: ${{ needs.ambient-ui.result }}"
             echo "  scripts: ${{ needs.scripts.result }}"
+            echo "  demo-creator: ${{ needs.demo-creator.result }}"
             exit 1
           fi
           echo "All unit tests passed!"

@@ -1,9 +1,47 @@
 package config
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
+
+func TestLoadOpenShellGatewaySATokenPath(t *testing.T) {
+	const (
+		envName     = "OPENSHELL_GATEWAY_SA_TOKEN_PATH"
+		defaultPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	)
+	tests := []struct {
+		name  string
+		set   bool
+		value string
+		want  string
+	}{
+		{name: "unset uses production default", want: defaultPath},
+		{name: "explicit empty disables bearer token", set: true, value: "", want: ""},
+		{name: "explicit path overrides default", set: true, value: "/custom/token", want: "/custom/token"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("AMBIENT_API_TOKEN", "test-token")
+			if tt.set {
+				t.Setenv(envName, tt.value)
+			} else {
+				t.Setenv(envName, "restore-sentinel")
+				if err := os.Unsetenv(envName); err != nil {
+					t.Fatalf("Unsetenv(%q): %v", envName, err)
+				}
+			}
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if cfg.OpenShellGatewaySATokenPath != tt.want {
+				t.Fatalf("OpenShellGatewaySATokenPath = %q, want %q", cfg.OpenShellGatewaySATokenPath, tt.want)
+			}
+		})
+	}
+}
 
 func TestLoadValidatesMLflowTrackingURI(t *testing.T) {
 	tests := []struct {

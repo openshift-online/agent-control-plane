@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "acceptedSpec": "specs/ui/android-artoo-client.spec.md",
+  "applicationId": "dev.ambientcode.mobile",
+  "uriScheme": "ambient-mobile",
+  "launchActivity": "dev.ambientcode.mobile/.MainActivity",
+  "resourceIdRepresentation": "bare-react-native-test-id",
+  "staticTestIds": [
+    "connection-origin",
+    "auth-mode-oidc",
+    "auth-mode-bearer",
+    "bearer-token",
+    "sign-in",
+    "sign-out",
+    "default-project-picker",
+    "artoo-heading",
+    "artoo-setup",
+    "artoo-composer",
+    "artoo-send",
+    "artoo-restart",
+    "other-sessions-list",
+    "new-session",
+    "new-session-submit",
+    "alerts",
+    "alerts-mark-all-read",
+    "settings",
+    "reset-local-data",
+    "secret-redact-send",
+    "secret-send-anyway",
+    "secret-cancel"
+  ],
+  "onboardingFlow": {
+    "setup": [
+      {
+        "action": "fillFromEnvironment",
+        "testID": "connection-origin",
+        "environment": "ACP_URL"
+      },
+      {
+        "action": "tap",
+        "testID": "auth-mode-bearer"
+      },
+      {
+        "action": "fillFromEnvironment",
+        "testID": "bearer-token",
+        "environment": "ACP_BEARER_TOKEN"
+      },
+      {
+        "action": "tap",
+        "testID": "sign-in"
+      },
+      {
+        "action": "expect",
+        "testID": "artoo-setup"
+      }
+    ],
+    "recorded": [
+      {
+        "action": "expect",
+        "testID": "artoo-heading"
+      },
+      {
+        "action": "tap",
+        "testID": "artoo-setup"
+      },
+      {
+        "action": "expect",
+        "testID": "artoo-composer"
+      },
+      {
+        "action": "fill",
+        "testID": "artoo-composer",
+        "value": "Summarize this ACP environment."
+      },
+      {
+        "action": "tap",
+        "testID": "artoo-send"
+      }
+    ]
+  }
+}

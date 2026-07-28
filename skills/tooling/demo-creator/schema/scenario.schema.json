@@ -1,0 +1,489 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://acp.dev/schemas/demo-creator/scenario-v1.json",
+  "title": "ACP demo creator scenario",
+  "type": "object",
+  "required": ["version", "id", "title", "layout", "story", "captions"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{2,57}$", "maxLength": 58 },
+    "title": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "description": { "type": "string", "maxLength": 500 },
+    "fps": { "const": 30, "default": 30 },
+    "canvas": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "master": { "const": "1080p", "default": "1080p" },
+        "derivative": { "const": "720p", "default": "720p" }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "required": ["preset"],
+      "additionalProperties": false,
+      "properties": {
+        "preset": {
+          "enum": ["browser-full", "slides-extension", "terminal-extension", "split", "mobile-full"]
+        },
+        "leftPercent": { "type": "integer", "minimum": 30, "maximum": 70 }
+      }
+    },
+    "story": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["type", "durationSeconds"],
+        "additionalProperties": false,
+        "properties": {
+          "type": { "enum": ["title", "browser", "slides", "terminal", "mobile", "end"] },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "^(?![A-Za-z]:[\\\\/])(?![\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$))[^\\u0000-\\u001F\\u007F]+$"
+          },
+          "durationSeconds": { "type": "number", "exclusiveMinimum": 0 },
+          "note": { "type": "string", "maxLength": 300 }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "type": { "const": "mobile" } },
+              "required": ["type"]
+            },
+            "then": { "properties": { "source": false } }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "mobile" } },
+              "required": ["type"]
+            },
+            "then": { "properties": { "durationSeconds": { "type": "number", "maximum": 179 } } }
+          }
+        ]
+      }
+    },
+    "captions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["startSeconds", "endSeconds", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "startSeconds": { "type": "number", "minimum": 0 },
+          "endSeconds": { "type": "number", "exclusiveMinimum": 0 },
+          "text": { "type": "string", "minLength": 1, "maxLength": 180 }
+        }
+      }
+    },
+    "acp": {
+      "type": "object",
+      "required": ["project"],
+      "additionalProperties": false,
+      "properties": {
+        "project": { "type": "string", "pattern": "^demo-[a-z][a-z0-9-]{2,57}$", "maxLength": 63 }
+      }
+    },
+    "extension": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "expectedId": { "type": "string", "pattern": "^[a-p]{32}$" },
+        "actions": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/extensionAction" }
+        }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "required": ["kind", "cluster", "android"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "android-emulator" },
+        "cluster": {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "disposable-kind" }
+          }
+        },
+        "android": {
+          "type": "object",
+          "required": ["expectedApplicationId", "launchActivity", "apk", "apkLock", "systemImage", "setupActions", "actions"],
+          "additionalProperties": false,
+          "properties": {
+            "expectedApplicationId": { "$ref": "#/$defs/androidApplicationId" },
+            "launchActivity": { "$ref": "#/$defs/androidLaunchActivity" },
+            "apk": { "$ref": "#/$defs/repositoryApkPath" },
+            "apkLock": { "$ref": "#/$defs/repositoryApkLockPath" },
+            "systemImage": { "$ref": "#/$defs/androidSystemImage" },
+            "actionSettlingMilliseconds": { "const": 900, "default": 900 },
+            "setupActions": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "contains": {
+                "type": "object",
+                "required": ["action", "environment"],
+                "properties": {
+                  "action": { "const": "fillFromEnvironment" },
+                  "environment": { "const": "ACP_URL" }
+                }
+              },
+              "minContains": 1,
+              "maxContains": 1,
+              "items": { "$ref": "#/$defs/androidSetupAction" }
+            },
+            "actions": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "items": { "$ref": "#/$defs/androidRecordedAction" }
+            }
+          }
+        }
+      }
+    },
+    "production": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "subtitle": { "type": "string", "maxLength": 500 },
+        "endTitle": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "endText": { "type": "string", "maxLength": 500 },
+        "transitionMilliseconds": { "type": "integer", "minimum": 0, "maximum": 1000, "default": 300 },
+        "silent": { "const": true, "default": true }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "story": {
+            "type": "array",
+            "contains": {
+              "type": "object",
+              "required": ["type"],
+              "properties": { "type": { "const": "mobile" } }
+            }
+          }
+        },
+        "required": ["story"]
+      },
+      "then": {
+        "required": ["capture"],
+        "properties": {
+          "capture": {},
+          "story": { "$ref": "#/$defs/androidStory" },
+          "layout": {
+            "type": "object",
+            "required": ["preset"],
+            "properties": { "preset": { "const": "mobile-full" } }
+          },
+          "extension": false
+        }
+      },
+      "else": {
+        "required": ["acp"],
+        "properties": { "acp": { "$ref": "#/properties/acp" } }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["capture"],
+        "properties": {
+          "capture": {
+            "type": "object",
+            "required": ["android"],
+            "properties": {
+              "android": {
+                "type": "object",
+                "required": ["setupActions"],
+                "properties": {
+                  "setupActions": {
+                    "type": "array",
+                    "contains": {
+                      "type": "object",
+                      "required": ["action", "environment"],
+                      "properties": {
+                        "action": { "const": "fillFromEnvironment" },
+                        "environment": { "const": "ACP_PROJECT" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": ["acp"],
+        "properties": { "acp": { "$ref": "#/properties/acp" } }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": { "capture": {} },
+        "required": ["capture"]
+      },
+      "then": {
+        "properties": {
+          "story": { "$ref": "#/$defs/androidStory" }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "layout": {
+            "type": "object",
+            "properties": { "preset": { "const": "mobile-full" } },
+            "required": ["preset"]
+          }
+        },
+        "required": ["layout"]
+      },
+      "then": {
+        "properties": {
+          "story": { "$ref": "#/$defs/androidStory" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "androidStory": {
+      "type": "array",
+      "contains": {
+        "type": "object",
+        "required": ["type"],
+        "properties": { "type": { "const": "mobile" } }
+      },
+      "minContains": 1,
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": { "enum": ["title", "mobile", "end"] }
+        }
+      }
+    },
+    "selector": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "shortText": { "type": "string", "maxLength": 500 },
+    "repositoryArtifactPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^repo:(?!/)(?!\\.{1,2}(?:/|$))(?!.*//)(?!.*/\\.{1,2}(?:/|$))(?!.*\\\\)[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    },
+    "androidApplicationId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 200,
+      "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+$"
+    },
+    "androidLaunchActivity": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 300,
+      "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+/(?:\\.[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)*|[a-z][a-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)+)$"
+    },
+    "repositoryApkPath": {
+      "allOf": [
+        { "$ref": "#/$defs/repositoryArtifactPath" },
+        { "type": "string", "pattern": "\\.apk$" }
+      ]
+    },
+    "repositoryApkLockPath": {
+      "allOf": [
+        { "$ref": "#/$defs/repositoryArtifactPath" },
+        { "type": "string", "pattern": "\\.apk\\.lock\\.json$" }
+      ]
+    },
+    "androidSystemImage": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^system-images;android-(?:[2-9][0-9]|[1-9][0-9]{2})(?:\\.[0-9]+)?;(?:default|google_apis|google_apis_playstore|google_apis_ps16k);(?:arm64-v8a|x86_64)$"
+    },
+    "androidEnvironmentKey": {
+      "enum": ["ACP_URL", "ACP_PROJECT", "ACP_BEARER_TOKEN"]
+    },
+    "androidSelector": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["by", "value"],
+          "additionalProperties": false,
+          "properties": {
+            "by": { "const": "resourceId" },
+            "value": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^(?:[A-Za-z][A-Za-z0-9_-]*|[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*:id/[A-Za-z][A-Za-z0-9_]*)$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["by", "value"],
+          "additionalProperties": false,
+          "properties": {
+            "by": { "const": "text" },
+            "value": { "type": "string", "minLength": 1, "maxLength": 200 }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["by", "value"],
+          "additionalProperties": false,
+          "properties": {
+            "by": { "const": "contentDescription" },
+            "value": { "type": "string", "minLength": 1, "maxLength": 200 }
+          }
+        }
+      ]
+    },
+    "androidRecordedAction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["action", "ms"],
+          "additionalProperties": false,
+          "properties": {
+            "action": { "const": "wait" },
+            "ms": { "type": "integer", "minimum": 0, "maximum": 10000 }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["action", "selector"],
+          "additionalProperties": false,
+          "properties": {
+            "action": { "enum": ["expect", "tap"] },
+            "selector": { "$ref": "#/$defs/androidSelector" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["action", "selector", "value"],
+          "additionalProperties": false,
+          "properties": {
+            "action": { "const": "fill" },
+            "selector": { "$ref": "#/$defs/androidSelector" },
+            "value": { "$ref": "#/$defs/shortText" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["action"],
+          "additionalProperties": false,
+          "properties": {
+            "action": { "const": "back" }
+          }
+        }
+      ]
+    },
+    "androidSetupAction": {
+      "oneOf": [
+        { "$ref": "#/$defs/androidRecordedAction" },
+        {
+          "type": "object",
+          "required": ["action", "selector", "environment"],
+          "additionalProperties": false,
+          "properties": {
+            "action": { "const": "fillFromEnvironment" },
+            "selector": { "$ref": "#/$defs/androidSelector" },
+            "environment": { "$ref": "#/$defs/androidEnvironmentKey" }
+          }
+        }
+      ]
+    },
+    "extensionAction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["action", "ms"],
+          "additionalProperties": false,
+          "properties": {
+            "action": { "const": "wait" },
+            "ms": { "type": "integer", "minimum": 0, "maximum": 10000 }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["action", "selector"],
+          "additionalProperties": false,
+          "properties": {
+            "action": { "const": "click" },
+            "selector": { "$ref": "#/$defs/selector" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["action", "selector", "value"],
+          "additionalProperties": false,
+          "properties": {
+            "action": { "const": "fill" },
+            "selector": { "$ref": "#/$defs/selector" },
+            "value": { "$ref": "#/$defs/shortText" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["action", "selector", "path"],
+          "additionalProperties": false,
+          "properties": {
+            "action": { "const": "upload" },
+            "selector": { "$ref": "#/$defs/selector" },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "pattern": "^(?![A-Za-z]:[\\\\/])(?![\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$))[^\\u0000-\\u001F\\u007F]+$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["action", "selector"],
+          "additionalProperties": false,
+          "properties": {
+            "action": { "const": "uploadConnection" },
+            "selector": { "$ref": "#/$defs/selector" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["action", "selector", "text"],
+          "additionalProperties": false,
+          "properties": {
+            "action": { "const": "expect" },
+            "selector": { "$ref": "#/$defs/selector" },
+            "text": { "$ref": "#/$defs/shortText" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["action"],
+          "additionalProperties": false,
+          "properties": {
+            "action": { "const": "configureBearer" }
+          }
+        }
+      ]
+    }
+  }
+}

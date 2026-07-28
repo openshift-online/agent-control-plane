@@ -46,5 +46,9 @@
   "scripts": {
     "paths": [".github/scripts/**", "tests/test_model_discovery.py"],
     "label": "scripts"
+  },
+  "demo-creator": {
+    "paths": ["skills/tooling/demo-creator/**", "Makefile", "tests/infra/setup-kind.sh", "tests/infra/cleanup.sh"],
+    "label": "component/demo-creator"
   }
 }
