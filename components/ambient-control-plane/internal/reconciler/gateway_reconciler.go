@@ -320,6 +320,12 @@ func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient 
 		if err := r.reconcileOpenShiftSCC(ctx, namespace); err != nil {
 			r.logger.Warn().Err(err).Str("namespace", namespace).Msg("failed to reconcile OpenShift SCC binding")
 		}
+		if err := r.reconcileRouterNetworkPolicy(ctx, gw, namespace); err != nil {
+			r.logger.Warn().Err(err).Str("namespace", namespace).Msg("failed to reconcile router NetworkPolicy")
+		}
+		if err := r.reconcileOpenShiftRoute(ctx, gw, namespace); err != nil {
+			r.logger.Warn().Err(err).Str("namespace", namespace).Msg("failed to reconcile OpenShift Route")
+		}
 	}
 
 	if r.hasCertManager {
@@ -857,6 +863,16 @@ var (
 		Version:  "v1",
 		Resource: "rolebindings",
 	}
+	networkPolicyGVR = schema.GroupVersionResource{
+		Group:    "networking.k8s.io",
+		Version:  "v1",
+		Resource: "networkpolicies",
+	}
+	openShiftRouteGVR = schema.GroupVersionResource{
+		Group:    "route.openshift.io",
+		Version:  "v1",
+		Resource: "routes",
+	}
 )
 
 func (r *GatewayReconciler) reconcileOpenShiftSCC(ctx context.Context, namespace string) error {
@@ -906,6 +922,136 @@ func (r *GatewayReconciler) reconcileOpenShiftSCC(ctx context.Context, namespace
 		return fmt.Errorf("update SCC RoleBinding: %w", err)
 	}
 	return nil
+}
+
+func (r *GatewayReconciler) reconcileRouterNetworkPolicy(ctx context.Context, gw *types.Gateway, namespace string) error {
+	netpolName := "openshell-gateway-allow-router"
+
+	if gw.Route == nil {
+		return r.deleteIfExists(ctx, networkPolicyGVR, namespace, netpolName)
+	}
+
+	netpol := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "networking.k8s.io/v1",
+			"kind":       "NetworkPolicy",
+			"metadata": map[string]interface{}{
+				"name":      netpolName,
+				"namespace": namespace,
+				"labels": map[string]interface{}{
+					"app.kubernetes.io/name":       "openshell",
+					"app.kubernetes.io/component":  "gateway",
+					"app.kubernetes.io/managed-by": "agent-control-plane",
+				},
+			},
+			"spec": map[string]interface{}{
+				"podSelector": map[string]interface{}{
+					"matchLabels": map[string]interface{}{
+						"app.kubernetes.io/instance": "openshell-gateway",
+						"app.kubernetes.io/name":     "openshell",
+					},
+				},
+				"policyTypes": []interface{}{"Ingress"},
+				"ingress": []interface{}{
+					map[string]interface{}{
+						"from": []interface{}{
+							map[string]interface{}{
+								"namespaceSelector": map[string]interface{}{
+									"matchLabels": map[string]interface{}{
+										"kubernetes.io/metadata.name": "openshift-ingress",
+									},
+								},
+							},
+						},
+						"ports": []interface{}{
+							map[string]interface{}{
+								"port":     int64(8080),
+								"protocol": "TCP",
+							},
+							map[string]interface{}{
+								"port":     int64(8081),
+								"protocol": "TCP",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return r.applyUnstructured(ctx, networkPolicyGVR, namespace, netpolName, netpol)
+}
+
+func (r *GatewayReconciler) reconcileOpenShiftRoute(ctx context.Context, gw *types.Gateway, namespace string) error {
+	routeName := "openshell-gateway-grpc"
+
+	if gw.Route == nil {
+		return r.deleteIfExists(ctx, openShiftRouteGVR, namespace, routeName)
+	}
+
+	hostname := gw.Route.Host
+	if hostname == "" && r.baseDomain != "" {
+		hostname = fmt.Sprintf("openshell-gateway-%s.grpc.%s", namespace, r.baseDomain)
+	}
+	if hostname == "" {
+		r.logger.Debug().Str("gateway_name", gw.Name).Msg("no hostname available for OpenShift Route, skipping")
+		return nil
+	}
+
+	stsUID, err := r.getWorkloadUID(ctx, namespace, "openshell-gateway")
+	if err != nil {
+		r.logger.Info().Err(err).Str("namespace", namespace).Msg("workload not yet available, creating Route without OwnerReference")
+		stsUID = ""
+	}
+
+	metadata := map[string]interface{}{
+		"name":      routeName,
+		"namespace": namespace,
+		"labels": map[string]interface{}{
+			"app.kubernetes.io/name":       "openshell",
+			"app.kubernetes.io/component":  "gateway",
+			"app.kubernetes.io/managed-by": "agent-control-plane",
+			"router":                       "grpc",
+		},
+		"annotations": map[string]interface{}{
+			"haproxy.router.openshift.io/timeout": "3600s",
+		},
+	}
+	if stsUID != "" {
+		metadata["ownerReferences"] = []interface{}{
+			map[string]interface{}{
+				"apiVersion": "apps/v1",
+				"kind":       "StatefulSet",
+				"name":       "openshell-gateway",
+				"uid":        stsUID,
+				"controller": true,
+			},
+		}
+	}
+
+	route := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "route.openshift.io/v1",
+			"kind":       "Route",
+			"metadata":   metadata,
+			"spec": map[string]interface{}{
+				"host": hostname,
+				"port": map[string]interface{}{
+					"targetPort": "grpc",
+				},
+				"tls": map[string]interface{}{
+					"termination": "passthrough",
+				},
+				"to": map[string]interface{}{
+					"kind":   "Service",
+					"name":   "openshell-gateway",
+					"weight": int64(100),
+				},
+			},
+		},
+	}
+
+	return r.applyUnstructured(ctx, openShiftRouteGVR, namespace, routeName, route)
 }
 
 func (r *GatewayReconciler) reconcileCertManagerResources(ctx context.Context, gw *types.Gateway, namespace string) error {
