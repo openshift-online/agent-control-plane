@@ -23,3 +23,7 @@ Visual feedback for running sessions including live preview, screenshot capture,
 ### [Learn](learn.spec.md)
 
 In-app catalog of learning resources compiled from `docs/src/content/docs/concepts/` (Concepts) and `examples/docs/` (Examples). Static build-time content, global scope.
+
+### [Platform Feedback](platform-feedback.spec.md)
+
+Persistent feedback mechanism (right-edge strip + modal dialog) for users to send free-text feedback to project maintainers via a configured Slack channel.
