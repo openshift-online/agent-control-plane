@@ -5,7 +5,7 @@
 .PHONY: local-test local-test-dev local-test-quick test-all local-troubleshoot local-port-forward local-stop-port-forward
 .PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-reload-ambient-control-plane kind-reload-ambient-api-server kind-reload-runner-openshell kind-load-runner kind-status kind-login kind-sso-toggle kind-setup-vertex
 .PHONY: preflight-cluster preflight dev-env dev
-.PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift test-gateway-e2e test-vteam-catalog-lab
+.PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift test-gateway-e2e test-vteam-catalog-lab test-readme
 .PHONY: crc-up crc-down crc-reload-component crc-reload-images
 .PHONY: unleash-port-forward unleash-status
 .PHONY: kind-port-forward kind-port-forward-stop _kind-start-port-forward _kind-print-access kind-acpctl-login kind-apply-examples
@@ -503,6 +503,10 @@ test-gateway-e2e: check-kubectl _kind-require-cluster ## Run full gateway e2e te
 test-vteam-catalog-lab: check-kubectl _kind-require-cluster ## Validate vTeam Catalog lab markdown copy/paste flow
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running vTeam Catalog lab markdown e2e test..."
 	@./tests/e2e/vteam-catalog-lab-test.sh
+
+test-readme: ## E2E-test README.md technical content (static gate always; live flow if a cluster is reachable)
+	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running README e2e test..."
+	@./tests/e2e/readme-e2e-test.sh
 
 local-test-quick: check-kubectl ## Quick smoke test of local environment
 	@echo "$(COLOR_BOLD)🧪 Quick Smoke Test$(COLOR_RESET)"
