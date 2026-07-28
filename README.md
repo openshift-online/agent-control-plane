@@ -131,6 +131,14 @@ Upstream agent skills (Fleet SDLC, AI Security Harness, and related dependencies
 
    Equivalent: `apm run install` (defined in `apm.yml`).
 
+3. Update skills after upstream releases:
+
+   ```bash
+   make apm-update
+   ```
+
+   Equivalent: `apm run update`. Bumps the pinned ai-security-harness commit, runs `apm update` for other dependencies, then reinstalls. Commit `scripts/ai-security-harness.lock.yaml` and `apm.lock.yaml` when the pin changes.
+
 Skills are deployed to `.claude/skills/` (gitignored). Local project skills live under `skills/` and are checked into git. Re-run `make apm-install` after pulling manifest or lockfile changes.
 
 ### OpenShell Gateway (Kind)

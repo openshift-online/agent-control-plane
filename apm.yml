@@ -7,11 +7,14 @@ targets:
 dependencies:
   apm:
   - OpenShift-Fleet/agentic-sdlc
-  - git: https://gitlab.cee.redhat.com/hybrid-platforms-sec/ai-security-harness.git
-    ref: main
-    type: gitlab
+  # - git: https://gitlab.cee.redhat.com/hybrid-platforms-sec/ai-security-harness.git
+  #   ref: main
+  #   type: gitlab
+  - path: ./vendor/ai-security-harness
     alias: ai-security-harness
+    # Upstream GitLab commit pinned in scripts/ai-security-harness.lock.yaml
   mcp: []
 includes: auto
 scripts:
   install: ./scripts/apm-install.sh
+  update: ./scripts/apm-update.sh

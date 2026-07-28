@@ -1,0 +1,9 @@
+# Upstream pin for scripts/sync-ai-security-harness-skills.sh
+#
+# Sync checks out resolved_commit exactly. To advance to latest main after review:
+#   make apm-update-harness
+#
+# Commit changes to this file alongside apm.lock.yaml when updating.
+repository: https://gitlab.cee.redhat.com/hybrid-platforms-sec/ai-security-harness.git
+tracking_ref: main
+resolved_commit: d72e4488a4c00a9667e44dc5eb61a895f1ce537b

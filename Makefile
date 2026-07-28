@@ -10,7 +10,7 @@
 .PHONY: unleash-port-forward unleash-status
 .PHONY: kind-port-forward kind-port-forward-stop _kind-start-port-forward _kind-print-access kind-acpctl-login kind-apply-examples
 .PHONY: setup-minio minio-console minio-logs minio-status
-.PHONY: validate-makefile lint-makefile check-shell makefile-health benchmark benchmark-ci apm-install
+.PHONY: validate-makefile lint-makefile check-shell makefile-health benchmark benchmark-ci apm-install apm-update apm-update-harness
 .PHONY: _create-operator-config _auto-port-forward _show-access-info _kind-load-images _kind-preload-runner
 .PHONY: build-credential-sidecars build-credential-github build-credential-jira build-credential-k8s build-credential-google
 
@@ -300,6 +300,14 @@ setup-hooks: ## Install pre-commit hooks (linters + branch protection)
 
 apm-install: ## Install APM skills (loads GITLAB_APM_PAT from .env.local)
 	@./scripts/apm-install.sh
+
+apm-update: ## Update all APM deps (harness pin, apm update, reinstall)
+	@./scripts/apm-update.sh
+
+apm-update-harness: ## Bump ai-security-harness pin only (no apm update)
+	@./scripts/sync-ai-security-harness-skills.sh --update-pin
+	@./scripts/apm-install.sh
+	@echo "[i] Commit scripts/ai-security-harness.lock.yaml and apm.lock.yaml if changed."
 
 remove-hooks: ## Remove pre-commit hooks
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Removing git hooks..."
