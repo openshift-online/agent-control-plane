@@ -17,6 +17,7 @@ const (
 	ResourceProvider        Resource = "provider"
 	ResourceGateway         Resource = "gateway"
 	ResourceCluster         Resource = "cluster"
+	ResourceApplication     Resource = "application"
 )
 
 type Action string
@@ -132,4 +133,10 @@ var (
 	PermClusterUpdate = Permission{ResourceCluster, ActionUpdate}
 	PermClusterDelete = Permission{ResourceCluster, ActionDelete}
 	PermClusterList   = Permission{ResourceCluster, ActionList}
+
+	PermApplicationCreate = Permission{ResourceApplication, ActionCreate}
+	PermApplicationRead   = Permission{ResourceApplication, ActionRead}
+	PermApplicationUpdate = Permission{ResourceApplication, ActionUpdate}
+	PermApplicationDelete = Permission{ResourceApplication, ActionDelete}
+	PermApplicationList   = Permission{ResourceApplication, ActionList}
 )
