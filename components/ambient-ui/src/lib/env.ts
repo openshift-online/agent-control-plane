@@ -15,4 +15,5 @@ export const env = {
   SSO_REDIRECT_URI: getOptionalEnv('SSO_REDIRECT_URI'),
   SESSION_SECRET: getOptionalEnv('SESSION_SECRET'),
   CONTROL_PLANE_URL: getOptionalEnv('CONTROL_PLANE_URL'),
+  FEEDBACK_SLACK_WEBHOOK_URL: getOptionalEnv('FEEDBACK_SLACK_WEBHOOK_URL'),
 } as const

@@ -50,9 +50,9 @@ skills/
 
 ## Reconciliation State
 
-**Last analyzed**: 2026-07-18 (openshell-cli-e2e-test gap analysis)
-**Spec corpus**: 30 specs across 4 domains
-**Codebase commit**: 40b550a7 (squizzi/amsterdam branch)
+**Last analyzed**: 2026-07-28 (platform-feedback implementation)
+**Spec corpus**: 31 specs across 4 domains
+**Codebase commit**: f9e85c56 (user-feedback branch)
 
 ### Coverage Summary
 
@@ -60,9 +60,9 @@ skills/
 |--------|-------|-------------|---------|---------|---------|----------|
 | Platform | 13 | 131 | 126 | 1 | 4 | 96.2% |
 | Security | 6 | 55 | 47 | 3 | 5 | 85.5% |
-| UI | 7 | 70 | 62 | 6 | 2 | 88.6% |
+| UI | 8 | 78 | 70 | 6 | 2 | 89.7% |
 | CLI | 1 | 13 | 13 | 0 | 0 | 100% |
-| **TOTAL** | **30** | **269** | **248** | **10** | **11** | **92.2%** |
+| **TOTAL** | **31** | **277** | **256** | **10** | **11** | **92.4%** |
 
 ### Spec Dependency Order
 
@@ -77,7 +77,7 @@ Layer 4:          openshell-sandbox-provisioning, agent-inheritance, project-gat
 Layer 5:          scheduled-session-execution, session-activity-tracking, mcp-server
 Layer 6 (leaves): architecture, annotations, views, live-preview, project-sharing,
                   scheduled-sessions, work-tracking-dashboard, credentials-tui,
-                  openshell-cli-e2e-test, gateway-cli
+                  openshell-cli-e2e-test, gateway-cli, platform-feedback
 ```
 
 ---
@@ -175,6 +175,14 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | U6 | live-preview | SSE fallback indicator | FE | missing | minor | Blocked: no SSE client exists. Uses polling only. |
 | U7 | architecture | Sidebar "Configure" group label | FE | **done** | minor | Sidebar uses "Config" label. Non-OpenShell dual-mode code path removed. |
 | U8 | project-sharing | Settings access via gear icon | FE | **done** | minor | Gear icon added to nav header. Visible only on project-scoped pages. |
+| U9 | platform-feedback | Persistent feedback strip | FE | **done** | major | Right-edge vertical strip, z-[9999], keyboard-focusable, aria-label, hidden when webhook not configured. |
+| U10 | platform-feedback | Feedback dialog | FE | **done** | major | Shadcn Dialog with header, encouragement copy, textarea, submit/cancel, disabled when empty. |
+| U11 | platform-feedback | BFF feedback route (GET + POST) | FE | **done** | major | `POST /api/feedback` with SSO auth, validation, rate limiting (5/user/min), Slack Block Kit delivery. `GET /api/feedback` availability check. |
+| U12 | platform-feedback | Submission states (success/error/rate-limit) | FE | **done** | major | Loading spinner, success auto-close (2.5s), error preserves text, 429 rate-limit message. |
+| U13 | platform-feedback | Slack channel configuration | FE | **done** | major | `FEEDBACK_SLACK_WEBHOOK_URL` env var via Secret. Strip hidden when unconfigured (503). |
+| U14 | platform-feedback | Slack Block Kit message format | FE | **done** | minor | Header, body, context (from/page/timestamp). |
+| U15 | platform-feedback | Rate limiting | FE | **done** | minor | In-memory Map, 5 req/user/min, 429 + Retry-After header. |
+| U16 | platform-feedback | Accessibility (WCAG 2.1 AA) | FE | **done** | minor | Keyboard-focusable strip, focus trap (Dialog), aria-label, sr-only label on textarea. |
 
 ### Divergences (Require Human Decision)
 
@@ -210,6 +218,7 @@ Gaps grouped by execution wave. Each wave gates the next.
 | ~~15~~ | ~~Tests + CLI~~ | ~~2~~ | ~~P28, P29~~ | ✅ Completed 2026-07-16 |
 | ~~16~~ | ~~SDK~~ | ~~1~~ | ~~P28~~ | ✅ Completed 2026-07-18 |
 | ~~17~~ | ~~CP~~ | ~~2~~ | ~~P29, P30~~ | ✅ Completed 2026-07-18 |
+| ~~18~~ | ~~FE (BFF)~~ | ~~8~~ | ~~U9–U16~~ | ✅ Completed 2026-07-28 |
 
 
 **Partials** (S9, S10, S11, P1, P9) are low-severity and can be addressed opportunistically.
@@ -270,3 +279,4 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-16 | 40b550a7 | Wave 15 executed: P28, P29 | 92.2% | openshell-cli-e2e-test spec fully implemented. E2E test script (8 sections, 37 scenarios) and tmux demo script created. Coverage up from 91.9% to 92.2%. |
 | 2026-07-18 | (pending) | Waves 15-16 executed: P28, P29, P30 | 92.0% | SDK generator extended for action response schemas (`status`/`heartbeat` knownActions, `ResponseSchema` types). ClusterHealthSyncer reconciler (30s polling, heartbeat probing). PlacementStrategy interface + RoundRobinPlacement (role filtering, label matching, heartbeat threshold). |
 | 2026-07-20 | 922dbc40 | Spec consolidation pass | 91.6% | 3 gateway specs (gateway-provisioning, gateway-oidc, gateway-route-exposure) consolidated into openshell-gateway.spec.md (45 reqs). project-gateway-lifecycle.spec.md added (6 reqs). 13 new done entries (P31-P38, P42-P43, cert-manager, OIDC, route exposure, SCC). 3 new missing gaps (P39 database provisioning, P40 cross-cluster exposure, P41 E2E test). CI: test-local-dev-simulation removed from workflows. |
+| 2026-07-28 | f9e85c56 | Wave 18 executed: U9–U16 (platform-feedback) | 92.4% | New spec `platform-feedback.spec.md` (8 reqs). Full implementation: BFF route (`GET`+`POST /api/feedback`), SSO auth, in-memory rate limiting, Slack Block Kit delivery, `FeedbackStrip` component (right-edge, z-9999), `FeedbackDialog` (shadcn Dialog), React Query hooks, `FEEDBACK_SLACK_WEBHOOK_URL` env var via Secret. Lockfile regenerated for Node 22 container compat. |
