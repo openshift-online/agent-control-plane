@@ -27,7 +27,7 @@ func gatewayImageFromEnv() string {
 	if v := os.Getenv("GATEWAY_IMAGE"); v != "" {
 		return v
 	}
-	return "ghcr.io/nvidia/openshell/gateway:0.0.83"
+	return "ghcr.io/nvidia/openshell/gateway:0.0.92"
 }
 
 var DefaultOIDCIssuerURL = oidcIssuerURLFromEnv()

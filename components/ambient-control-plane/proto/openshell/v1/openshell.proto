@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Vendored from github.com/NVIDIA/OpenShell/proto/openshell.proto at e3d26dd3ae0dee247bbc5db368545832757ac493
+// Vendored from github.com/NVIDIA/OpenShell/proto/openshell.proto at 1221b5868a1d649fa33d0dd6e8e175f9d1c7ec72
 // Subset: sandbox lifecycle, exec, and provider management RPCs needed by the control plane.
 
 syntax = "proto3";
@@ -12,6 +12,7 @@ option go_package = "github.com/ambient-code/platform/components/ambient-control
 
 import "openshell/datamodel/v1/datamodel.proto";
 import "google/protobuf/struct.proto";
+import "openshell/options/v1/options.proto";
 import "openshell/sandbox/v1/sandbox.proto";
 
 // OpenShell service provides sandbox, provider, and runtime management capabilities.
@@ -25,6 +26,9 @@ import "openshell/sandbox/v1/sandbox.proto";
 service OpenShell {
   // Check the health of the service.
   rpc Health(HealthRequest) returns (HealthResponse);
+
+  // Fetch elevated live gateway runtime metadata.
+  rpc GetGatewayInfo(GetGatewayInfoRequest) returns (GetGatewayInfoResponse);
 
   // Create a new sandbox.
   rpc CreateSandbox(CreateSandboxRequest) returns (SandboxResponse);
@@ -249,6 +253,31 @@ service OpenShell {
   // rewritten.
   rpc RefreshSandboxToken(RefreshSandboxTokenRequest)
       returns (RefreshSandboxTokenResponse);
+
+  // ---------------------------------------------------------------------------
+  // Workspace management RPCs
+  // ---------------------------------------------------------------------------
+
+  // Create a workspace.
+  rpc CreateWorkspace(CreateWorkspaceRequest) returns (CreateWorkspaceResponse);
+
+  // Fetch a workspace by name.
+  rpc GetWorkspace(GetWorkspaceRequest) returns (GetWorkspaceResponse);
+
+  // List workspaces.
+  rpc ListWorkspaces(ListWorkspacesRequest) returns (ListWorkspacesResponse);
+
+  // Delete a workspace by name.
+  rpc DeleteWorkspace(DeleteWorkspaceRequest) returns (DeleteWorkspaceResponse);
+
+  // Add a member to a workspace.
+  rpc AddWorkspaceMember(AddWorkspaceMemberRequest) returns (AddWorkspaceMemberResponse);
+
+  // Remove a member from a workspace.
+  rpc RemoveWorkspaceMember(RemoveWorkspaceMemberRequest) returns (RemoveWorkspaceMemberResponse);
+
+  // List members of a workspace.
+  rpc ListWorkspaceMembers(ListWorkspaceMembersRequest) returns (ListWorkspaceMembersResponse);
 }
 
 // IssueSandboxToken request. Empty body; identity is established by the
@@ -261,7 +290,7 @@ message IssueSandboxTokenRequest {}
 // gateway RPC.
 message IssueSandboxTokenResponse {
   // Gateway-minted JWT bound to the calling sandbox's UUID.
-  string token = 1;
+  string token = 1 [(openshell.options.v1.secret) = true];
   // Absolute expiry of the issued token, milliseconds since the epoch. 0 means
   // the token is non-expiring.
   int64 expires_at_ms = 2;
@@ -276,7 +305,7 @@ message RefreshSandboxTokenRequest {}
 // in-memory bearer credential.
 message RefreshSandboxTokenResponse {
   // Fresh gateway-minted JWT bound to the same sandbox UUID.
-  string token = 1;
+  string token = 1 [(openshell.options.v1.secret) = true];
   // Absolute expiry of the new token, milliseconds since the epoch. 0 means
   // the token is non-expiring.
   int64 expires_at_ms = 2;
@@ -292,6 +321,40 @@ message HealthResponse {
 
   // Service version.
   string version = 2;
+}
+
+// Gateway info request.
+message GetGatewayInfoRequest {}
+
+// Gateway info response.
+message GetGatewayInfoResponse {
+  // Service status.
+  ServiceStatus status = 1;
+
+  // OpenShell gateway binary version.
+  string gateway_version = 2;
+
+  // Compute driver runtimes initialized by this gateway. Current gateways
+  // return exactly one entry.
+  repeated ComputeDriverInfo compute_drivers = 3;
+}
+
+// Info for one initialized compute driver runtime.
+message ComputeDriverInfo {
+  // Gateway-selected driver name used for routing and driver_config keys.
+  string name = 1;
+
+  // Capabilities reported by the driver during gateway runtime initialization.
+  ComputeDriverCapabilities capabilities = 2;
+}
+
+// Public compute driver capability snapshot.
+message ComputeDriverCapabilities {
+  // Driver-reported human-readable name from the startup capability snapshot.
+  string driver_name = 1;
+
+  // Driver-reported implementation version from the startup capability snapshot.
+  string driver_version = 2;
 }
 
 // Public sandbox resource exposed by the OpenShell API.
@@ -452,12 +515,18 @@ message CreateSandboxRequest {
   string name = 2;
   // Optional labels for the sandbox (key-value metadata).
   map<string, string> labels = 3;
+  // Optional annotations for the sandbox (non-selector metadata).
+  map<string, string> annotations = 4;
+  // Workspace for the sandbox. Empty defaults to "default".
+  string workspace = 5;
 }
 
 // Get sandbox request.
 message GetSandboxRequest {
   // Sandbox name (canonical lookup key).
   string name = 1;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 2;
 }
 
 // List sandboxes request.
@@ -466,12 +535,18 @@ message ListSandboxesRequest {
   uint32 offset = 2;
   // Optional label selector for filtering (format: "key1=value1,key2=value2").
   string label_selector = 3;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 4;
+  // List across all workspaces. Mutually exclusive with workspace.
+  bool all_workspaces = 5;
 }
 
 // List providers attached to a sandbox request.
 message ListSandboxProvidersRequest {
   // Sandbox name (canonical lookup key).
   string sandbox_name = 1;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 2;
 }
 
 // Attach provider to sandbox request.
@@ -485,6 +560,8 @@ message AttachSandboxProviderRequest {
   // If non-zero, the server validates that the sandbox's current resource_version
   // matches this value before applying the mutation, returning ABORTED on mismatch.
   uint64 expected_resource_version = 3;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 4;
 }
 
 // Detach provider from sandbox request.
@@ -498,12 +575,16 @@ message DetachSandboxProviderRequest {
   // If non-zero, the server validates that the sandbox's current resource_version
   // matches this value before applying the mutation, returning ABORTED on mismatch.
   uint64 expected_resource_version = 3;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 4;
 }
 
 // Delete sandbox request.
 message DeleteSandboxRequest {
   // Sandbox name (canonical lookup key).
   string name = 1;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 2;
 }
 
 // Sandbox response.
@@ -560,7 +641,7 @@ message CreateSshSessionResponse {
   // Session token for the gateway tunnel. URL-safe ASCII
   // ([A-Za-z0-9._~+/=-]) up to 4096 bytes. No shell metacharacters or
   // whitespace.
-  string token = 2;
+  string token = 2 [(openshell.options.v1.secret) = true];
 
   // Gateway host for SSH proxy connection. IPv4 address, bracketed IPv6
   // address, or DNS hostname (Punycode-encoded for IDN). Alphanumeric plus
@@ -590,6 +671,8 @@ message ExposeServiceRequest {
   uint32 target_port = 3;
   // Whether to print/use the browser-facing service URL.
   bool domain = 4;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 5;
 }
 
 // Request to fetch an exposed sandbox service endpoint.
@@ -598,6 +681,8 @@ message GetServiceRequest {
   string sandbox = 1;
   // Service name within the sandbox. Empty selects the unnamed endpoint.
   string service = 2;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 3;
 }
 
 // Request to list exposed sandbox service endpoints.
@@ -608,6 +693,10 @@ message ListServicesRequest {
   uint32 limit = 2;
   // Page offset.
   uint32 offset = 3;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 4;
+  // List across all workspaces. Mutually exclusive with workspace.
+  bool all_workspaces = 5;
 }
 
 // Response containing exposed sandbox service endpoints.
@@ -621,6 +710,8 @@ message DeleteServiceRequest {
   string sandbox = 1;
   // Service name within the sandbox. Empty selects the unnamed endpoint.
   string service = 2;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 3;
 }
 
 // Response for deleting an exposed sandbox service endpoint.
@@ -654,7 +745,7 @@ message ServiceEndpointResponse {
 // Revoke SSH session request.
 message RevokeSshSessionRequest {
   // Session token to revoke.
-  string token = 1;
+  string token = 1 [(openshell.options.v1.secret) = true];
 }
 
 // Revoke SSH session response.
@@ -730,7 +821,7 @@ message TcpForwardInit {
   }
   // Optional target-specific authorization token. SSH targets use this as the
   // short-lived SSH session token issued by CreateSshSession.
-  string authorization_token = 7;
+  string authorization_token = 7 [(openshell.options.v1.secret) = true];
 }
 
 // A single frame on the CLI-to-gateway TCP forward stream.
@@ -769,7 +860,7 @@ message SshSession {
   string sandbox_id = 2;
 
   // Session token.
-  string token = 3;
+  string token = 3 [(openshell.options.v1.secret) = true];
 
   // Expiry timestamp in milliseconds since epoch. 0 means no expiry
   // (backward-compatible default for sessions created before this field existed).
@@ -850,17 +941,25 @@ message SandboxStreamWarning {
 // Create provider request.
 message CreateProviderRequest {
   openshell.datamodel.v1.Provider provider = 1;
+  // Workspace for the provider. Empty defaults to "default".
+  string workspace = 2;
 }
 
 // Get provider request.
 message GetProviderRequest {
   string name = 1;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 2;
 }
 
 // List providers request.
 message ListProvidersRequest {
   uint32 limit = 1;
   uint32 offset = 2;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 3;
+  // List across all workspaces. Mutually exclusive with workspace.
+  bool all_workspaces = 4;
 }
 
 // Update provider request.
@@ -869,11 +968,15 @@ message UpdateProviderRequest {
   // Optional per-credential expiry timestamps to merge into the provider.
   // A zero value removes the expiry for that credential.
   map<string, int64> credential_expires_at_ms = 2;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 3;
 }
 
 // Delete provider request.
 message DeleteProviderRequest {
   string name = 1;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 2;
 }
 
 // Provider response.
@@ -890,11 +993,18 @@ message ListProvidersResponse {
 message ListProviderProfilesRequest {
   uint32 limit = 1;
   uint32 offset = 2;
+  // Workspace scope. When set, returns workspace-scoped + built-in profiles.
+  // When empty, returns platform-scoped + built-in only.
+  string workspace = 3;
 }
 
 // Fetch provider type profile request.
 message GetProviderProfileRequest {
   string id = 1;
+  // Workspace scope for two-tier profile resolution. When set, checks
+  // workspace-scoped profiles first, then platform-scoped, then built-in.
+  // When empty, checks platform-scoped then built-in only.
+  string workspace = 2;
 }
 
 // Provider profile payload with optional source metadata for diagnostics.
@@ -979,6 +1089,7 @@ enum ProviderCredentialRefreshStrategy {
   PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_REFRESH_TOKEN = 3;
   PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_CLIENT_CREDENTIALS = 4;
   PROVIDER_CREDENTIAL_REFRESH_STRATEGY_GOOGLE_SERVICE_ACCOUNT_JWT = 5;
+  PROVIDER_CREDENTIAL_REFRESH_STRATEGY_AWS_STS_ASSUME_ROLE = 6;
 }
 
 message ProviderCredentialRefreshMaterial {
@@ -988,6 +1099,15 @@ message ProviderCredentialRefreshMaterial {
   bool secret = 4;
 }
 
+// Declares that a single refresh operation mints more than one credential.
+// The refresh is attached to a primary credential; each additional output
+// maps a strategy-defined semantic output id to a sibling credential whose
+// env_vars receive the minted value.
+message ProviderCredentialRefreshOutput {
+  string output = 1;      // strategy-defined semantic output id (e.g. "session_token")
+  string credential = 2;  // sibling credential name whose env_vars receive this output
+}
+
 message ProviderCredentialRefresh {
   ProviderCredentialRefreshStrategy strategy = 1;
   string token_url = 2;
@@ -995,6 +1115,7 @@ message ProviderCredentialRefresh {
   int64 refresh_before_seconds = 4;
   int64 max_lifetime_seconds = 5;
   repeated ProviderCredentialRefreshMaterial material = 6;
+  repeated ProviderCredentialRefreshOutput additional_outputs = 7;
 }
 
 message ProviderCredentialRefreshStatus {
@@ -1021,7 +1142,7 @@ message StoredProviderCredentialRefreshState {
   string provider_name = 3;
   string credential_key = 4;
   ProviderCredentialRefreshStrategy strategy = 5;
-  map<string, string> material = 6;
+  map<string, string> material = 6 [(openshell.options.v1.secret) = true];
   repeated string secret_material_keys = 7;
   int64 expires_at_ms = 8;
   int64 next_refresh_at_ms = 9;
@@ -1032,11 +1153,18 @@ message StoredProviderCredentialRefreshState {
   repeated string scopes = 14;
   int64 refresh_before_seconds = 15;
   int64 max_lifetime_seconds = 16;
+  // Resolved mapping of strategy-defined output id -> concrete env key, pinned
+  // at configure time from the profile's additional_outputs. Read by minting,
+  // collision reservation, and env-key surfacing so later profile edits cannot
+  // silently redirect writes.
+  map<string, string> additional_output_keys = 17;
 }
 
 message GetProviderRefreshStatusRequest {
   string provider = 1;
   string credential_key = 2;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 3;
 }
 
 message GetProviderRefreshStatusResponse {
@@ -1047,9 +1175,11 @@ message ConfigureProviderRefreshRequest {
   string provider = 1;
   string credential_key = 2;
   ProviderCredentialRefreshStrategy strategy = 3;
-  map<string, string> material = 4;
+  map<string, string> material = 4 [(openshell.options.v1.secret) = true];
   repeated string secret_material_keys = 5;
   optional int64 expires_at_ms = 6;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 7;
 }
 
 message ConfigureProviderRefreshResponse {
@@ -1059,6 +1189,8 @@ message ConfigureProviderRefreshResponse {
 message RotateProviderCredentialRequest {
   string provider = 1;
   string credential_key = 2;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 3;
 }
 
 message RotateProviderCredentialResponse {
@@ -1068,6 +1200,8 @@ message RotateProviderCredentialResponse {
 message DeleteProviderRefreshRequest {
   string provider = 1;
   string credential_key = 2;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 3;
 }
 
 message DeleteProviderRefreshResponse {
@@ -1101,6 +1235,14 @@ message ProviderProfile {
   // profile files use 0. Gateway responses set this for stored custom profiles.
   // Update calls use this for optimistic concurrency.
   uint64 resource_version = 10;
+  // Optional non-secret annotations attached by profile sources or importers.
+  map<string, string> annotations = 11;
+  // Server-set provenance: "builtin", "user", or "interceptor/{name}".
+  // Ignored on import/update payloads.
+  string source = 12;
+  // Server-set visibility: "platform", "workspace", or empty for
+  // non-scoped sources. Ignored on import/update payloads.
+  string scope = 13;
 }
 
 // Stored custom provider profile object.
@@ -1122,6 +1264,9 @@ message ListProviderProfilesResponse {
 // Import custom provider profiles request.
 message ImportProviderProfilesRequest {
   repeated ProviderProfileImportItem profiles = 1;
+  // Workspace scope. When set, profiles are workspace-scoped (Workspace Admin).
+  // When empty, profiles are platform-scoped (Platform Admin).
+  string workspace = 2;
 }
 
 // Import custom provider profiles response.
@@ -1141,6 +1286,9 @@ message UpdateProviderProfilesRequest {
   uint64 expected_resource_version = 2;
   // Existing custom provider profile ID to update. The payload ID must match.
   string id = 3;
+  // Workspace scope. When set, targets workspace-scoped profile. When empty,
+  // targets platform-scoped profile.
+  string workspace = 4;
 }
 
 // Update one custom provider profile response.
@@ -1153,6 +1301,9 @@ message UpdateProviderProfilesResponse {
 // Lint provider profiles request.
 message LintProviderProfilesRequest {
   repeated ProviderProfileImportItem profiles = 1;
+  // Workspace scope. Used to check for conflicts against existing profiles
+  // in the target workspace.
+  string workspace = 2;
 }
 
 // Lint provider profiles response.
@@ -1169,6 +1320,9 @@ message DeleteProviderResponse {
 // Delete custom provider profile request.
 message DeleteProviderProfileRequest {
   string id = 1;
+  // Workspace scope. When set, targets workspace-scoped profile. When empty,
+  // targets platform-scoped profile.
+  string workspace = 2;
 }
 
 // Delete custom provider profile response.
@@ -1185,7 +1339,7 @@ message GetSandboxProviderEnvironmentRequest {
 // Get sandbox provider environment response.
 message GetSandboxProviderEnvironmentResponse {
   // Provider credential environment variables.
-  map<string, string> environment = 1;
+  map<string, string> environment = 1 [(openshell.options.v1.secret) = true];
   // Fingerprint for the provider credential inputs that produced environment.
   uint64 provider_env_revision = 2;
   // Expiration timestamps for returned environment variables.
@@ -1231,6 +1385,15 @@ message UpdateConfigRequest {
   // matches this value before applying the mutation, returning ABORTED on mismatch.
   // Ignored for global-scoped updates.
   uint64 expected_resource_version = 8;
+  // Caller-provided annotations associated with a sandbox-scoped update. Values
+  // must not contain secrets; the gateway treats them as opaque metadata and does
+  // not interpret or verify their semantics. For policy updates, the gateway
+  // stores the annotations immutably with the revision and merges them into
+  // sandbox metadata as a convenience projection. For setting-only updates, it
+  // only merges them into sandbox metadata.
+  map<string, string> annotations = 9;
+  // Workspace scope. Empty defaults to "default". Ignored for global-scoped updates.
+  string workspace = 10;
 }
 
 message PolicyMergeOperation {
@@ -1286,6 +1449,8 @@ message UpdateConfigResponse {
   uint64 settings_revision = 3;
   // True when a setting delete operation removed an existing key.
   bool deleted = 4;
+  // Sandbox metadata annotations after the update. Empty for global updates.
+  map<string, string> annotations = 5;
 }
 
 // Get sandbox policy status request.
@@ -1296,6 +1461,8 @@ message GetSandboxPolicyStatusRequest {
   uint32 version = 2;
   // Query global policy revisions instead of a sandbox-scoped one.
   bool global = 3;
+  // Workspace scope. Empty defaults to "default". Ignored when global is true.
+  string workspace = 4;
 }
 
 // Get sandbox policy status response.
@@ -1314,6 +1481,8 @@ message ListSandboxPoliciesRequest {
   uint32 offset = 3;
   // List global policy revisions instead of sandbox-scoped ones.
   bool global = 4;
+  // Workspace scope. Empty defaults to "default". Ignored when global is true.
+  string workspace = 5;
 }
 
 // List sandbox policies response.
@@ -1352,6 +1521,8 @@ message SandboxPolicyRevision {
   int64 loaded_at_ms = 6;
   // The full policy (only populated when explicitly requested).
   openshell.sandbox.v1.SandboxPolicy policy = 7;
+  // Immutable provenance supplied with this policy revision.
+  map<string, string> provenance = 8;
 }
 
 // Policy load status.
@@ -1383,6 +1554,8 @@ message GetSandboxLogsRequest {
   repeated string sources = 4;
   // Minimum log level to include (e.g. "INFO", "WARN", "ERROR"). Empty means all levels.
   string min_level = 5;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 6;
 }
 
 // Batch of log lines pushed from sandbox to server.
@@ -1682,6 +1855,8 @@ message SubmitPolicyAnalysisRequest {
   string name = 4;
   // Anonymous network activity counters.
   repeated NetworkActivitySummary network_activity_summaries = 5;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 6;
 }
 
 message SubmitPolicyAnalysisResponse {
@@ -1703,6 +1878,8 @@ message GetDraftPolicyRequest {
   string name = 1;
   // Optional status filter: "pending", "approved", "rejected", or "" for all.
   string status_filter = 2;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 3;
 }
 
 message GetDraftPolicyResponse {
@@ -1722,6 +1899,8 @@ message ApproveDraftChunkRequest {
   string name = 1;
   // Chunk ID to approve.
   string chunk_id = 2;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 3;
 }
 
 message ApproveDraftChunkResponse {
@@ -1739,6 +1918,8 @@ message RejectDraftChunkRequest {
   string chunk_id = 2;
   // Optional reason for rejection (fed to LLM context in future analysis).
   string reason = 3;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 4;
 }
 
 message RejectDraftChunkResponse {}
@@ -1749,6 +1930,8 @@ message ApproveAllDraftChunksRequest {
   string name = 1;
   // Include chunks with security_notes (default false: skips them).
   bool include_security_flagged = 2;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 3;
 }
 
 message ApproveAllDraftChunksResponse {
@@ -1770,6 +1953,8 @@ message EditDraftChunkRequest {
   string chunk_id = 2;
   // The modified rule (replaces existing proposed_rule).
   openshell.sandbox.v1.NetworkPolicyRule proposed_rule = 3;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 4;
 }
 
 message EditDraftChunkResponse {}
@@ -1780,6 +1965,8 @@ message UndoDraftChunkRequest {
   string name = 1;
   // Chunk ID to undo.
   string chunk_id = 2;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 3;
 }
 
 message UndoDraftChunkResponse {
@@ -1793,6 +1980,8 @@ message UndoDraftChunkResponse {
 message ClearDraftChunksRequest {
   // Sandbox name.
   string name = 1;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 2;
 }
 
 message ClearDraftChunksResponse {
@@ -1804,6 +1993,8 @@ message ClearDraftChunksResponse {
 message GetDraftHistoryRequest {
   // Sandbox name.
   string name = 1;
+  // Workspace scope. Empty defaults to "default".
+  string workspace = 2;
 }
 
 message DraftHistoryEntry {
@@ -1833,6 +2024,8 @@ message PolicyRevisionPayload {
   string load_error = 3;
   // When the policy version was reported as loaded (ms since epoch). 0 if unset.
   int64 loaded_at_ms = 4;
+  // Immutable provenance supplied when this revision was created.
+  map<string, string> provenance = 5;
 }
 
 // Stored payload for a draft policy chunk row in the generic objects table.
@@ -1876,6 +2069,7 @@ message StoredPolicyRevision {
   optional string load_error = 7;
   int64 created_at_ms = 8;
   optional int64 loaded_at_ms = 9;
+  map<string, string> provenance = 10;
 }
 
 // Internal stored draft chunk row materialized from the generic objects table.
@@ -1901,4 +2095,117 @@ message StoredDraftChunk {
   string validation_result = 18;
   // Operator-supplied free-form rejection text. See PolicyChunk.
   string rejection_reason = 19;
+}
+
+// ---------------------------------------------------------------------------
+// Workspace messages
+// ---------------------------------------------------------------------------
+
+// Create workspace request.
+message CreateWorkspaceRequest {
+  // Workspace name. Must be a valid DNS-1123 label.
+  string name = 1;
+  // Optional labels for the workspace (key-value metadata).
+  map<string, string> labels = 2;
+}
+
+// Create workspace response.
+message CreateWorkspaceResponse {
+  openshell.datamodel.v1.Workspace workspace = 1;
+}
+
+// Get workspace request.
+message GetWorkspaceRequest {
+  // Workspace name (canonical lookup key).
+  string name = 1;
+}
+
+// Get workspace response.
+message GetWorkspaceResponse {
+  openshell.datamodel.v1.Workspace workspace = 1;
+}
+
+// List workspaces request.
+message ListWorkspacesRequest {
+  uint32 limit = 1;
+  uint32 offset = 2;
+  // Optional label selector for filtering (format: "key1=value1,key2=value2").
+  string label_selector = 3;
+}
+
+// List workspaces response.
+message ListWorkspacesResponse {
+  repeated openshell.datamodel.v1.Workspace workspaces = 1;
+}
+
+// Delete workspace request.
+message DeleteWorkspaceRequest {
+  // Workspace name (canonical lookup key).
+  string name = 1;
+}
+
+// Delete workspace response.
+message DeleteWorkspaceResponse {
+  bool deleted = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Workspace membership messages
+// ---------------------------------------------------------------------------
+
+// Workspace-scoped role for members.
+enum WorkspaceRole {
+  WORKSPACE_ROLE_UNSPECIFIED = 0;
+  WORKSPACE_ROLE_USER = 1;
+  WORKSPACE_ROLE_ADMIN = 2;
+}
+
+// Workspace membership record.
+message WorkspaceMember {
+  openshell.datamodel.v1.ObjectMeta metadata = 1;
+  // OIDC subject claim identifying the principal.
+  string principal_subject = 2;
+  // Role assigned to the principal within the workspace.
+  WorkspaceRole role = 3;
+}
+
+// Add workspace member request.
+message AddWorkspaceMemberRequest {
+  // Workspace name.
+  string workspace = 1;
+  // OIDC subject claim identifying the principal.
+  string principal_subject = 2;
+  // Role to assign.
+  WorkspaceRole role = 3;
+}
+
+// Add workspace member response.
+message AddWorkspaceMemberResponse {
+  WorkspaceMember member = 1;
+}
+
+// Remove workspace member request.
+message RemoveWorkspaceMemberRequest {
+  // Workspace name.
+  string workspace = 1;
+  // OIDC subject claim identifying the principal to remove.
+  string principal_subject = 2;
+}
+
+// Remove workspace member response.
+message RemoveWorkspaceMemberResponse {
+  bool removed = 1;
+}
+
+// List workspace members request.
+message ListWorkspaceMembersRequest {
+  // Workspace name.
+  string workspace = 1;
+  uint32 limit = 2;
+  uint32 offset = 3;
+}
+
+// List workspace members response.
+message ListWorkspaceMembersResponse {
+  repeated WorkspaceMember members = 1;
 }

@@ -29,7 +29,7 @@ func ReconcileGateways(
 ) error {
 	defaultImage := os.Getenv("OPENSHELL_GATEWAY_IMAGE")
 	if defaultImage == "" {
-		defaultImage = "ghcr.io/nvidia/openshell/gateway:0.0.83" // Fallback
+		defaultImage = "ghcr.io/nvidia/openshell/gateway:0.0.92" // Fallback
 	}
 
 	for _, nsConfig := range namespaceConfigs {

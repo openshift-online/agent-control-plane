@@ -102,6 +102,7 @@ fi
 #                  (use this for files that are a curated subset of upstream)
 
 FILES=(
+  "proto/options.proto|openshell/options/v1/options.proto|openshell/options/v1;options_v1|"
   "proto/datamodel.proto|openshell/datamodel/v1/datamodel.proto|openshell/datamodel/v1;datamodel_v1|"
   "proto/sandbox.proto|openshell/sandbox/v1/sandbox.proto|openshell/sandbox/v1;sandbox_v1|"
   "proto/openshell.proto|openshell/v1/openshell.proto|openshell/v1;openshell_v1|Subset: sandbox lifecycle, exec, and provider management RPCs needed by the control plane."
@@ -112,8 +113,8 @@ FILES=(
 # Written to a temp file so we can pipe the fetched content via stdin without
 # conflicting with a heredoc.
 
-PYSCRIPT="$(mktemp -t vendor_proto).py"
-PYTMP="$(mktemp -t vendor_proto_tmp)"
+PYSCRIPT="$(mktemp -t vendor_proto_XXXXXX).py"
+PYTMP="$(mktemp -t vendor_proto_tmp_XXXXXX)"
 trap 'rm -f "$PYSCRIPT" "$PYTMP"' EXIT
 
 cat > "$PYSCRIPT" <<'PYEOF'
