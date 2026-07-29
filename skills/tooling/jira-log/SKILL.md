@@ -41,13 +41,49 @@ Extract from user input, per ticket:
 |-------|---------|-------|
 | Summary | (required) | Title of the issue |
 | Issue Type | Story | Also: Bug, Task, Spike, Epic. Normalize case. |
-| Priority | Normal | |
+| Priority | (inferred or ask) | See priority inference below. Values: Blocker, Critical, Major, Normal, Minor. |
+| Activity Type | (inferred) | See inference rules below. |
 | Description | (from context) | Sub-bullets, multi-line text, or gathered interactively |
 | Epic link | — | If a ticket should belong to an epic |
 | Blocking | — | "X blocks Y" relationships |
 | Related | — | "X related to Y" relationships |
 
 Type prefix syntax: `[Bug] Session crashes` → type=Bug, summary="Session crashes".
+
+#### Activity Type Inference
+
+Infer `Activity Type` (`customfield_10464`) from the issue type and content. The user can
+override by specifying it explicitly (e.g. `Activity: Security & Compliance`).
+
+| Signal | Activity Type |
+|--------|---------------|
+| New features, stories, product capabilities, CLI commands, UI views, API endpoints | `Product / Portfolio Work` |
+| Bugs, alerts, stability fixes, quality improvements, rebranding, lint/format cleanup | `Quality / Stability / Reliability` |
+| Security hardening, CVEs, compliance, image migrations, RBAC, credential handling | `Security & Compliance` |
+| Tech debt, refactoring, long-term sustainability, dependency upgrades, code cleanup | `Future Sustainability` |
+
+**Decision order** (first match wins):
+1. User explicitly states an activity type → use it verbatim
+2. Keywords: security, CVE, compliance, vulnerability, RBAC, credential, image migration → `Security & Compliance`
+3. Issue type is Bug, or keywords: alert, FIRING, incident, flaky, regression, stability → `Quality / Stability / Reliability`
+4. Keywords: tech debt, refactor, deprecat, sustainab, dependency upgrade, cleanup → `Future Sustainability`
+5. Default (features, stories, new capabilities, spikes, tests for product work) → `Product / Portfolio Work`
+
+#### Priority Inference
+
+Infer `priority` from the issue context. Available values (highest to lowest):
+`Blocker` > `Critical` > `Major` > `Normal` > `Minor`.
+
+**Decision order** (first match wins):
+1. User explicitly states a priority → use it verbatim
+2. Keywords or context: blocks release, blocks deployment, production down, outage, data loss, `[FIRING]` → `Blocker`
+3. Keywords: security vulnerability, CVE with high/critical CVSS, breaks existing functionality, regression in core flow → `Critical`
+4. Bugs affecting users, important features on a deadline, compliance-driven work → `Major`
+5. Nice-to-have improvements, minor polish, low-impact cleanup → `Minor`
+6. **Cannot infer** → ask the user: "What priority should this have?" with options `Blocker`, `Critical`, `Major`, `Normal`, `Minor`
+
+In **batch mode**, do not ask per-ticket. Instead, default unresolvable priorities to `Normal` and note
+it in the confirmation table so the user can edit before creation.
 
 ### Step 2 — Gather Context (single ticket only)
 
@@ -122,7 +158,9 @@ About to create ENGPROD Jira:
 
 **Summary**: [extracted summary]
 **Type**: [Story/Bug/Task/Spike/Epic]
+**Priority**: [inferred or user-selected priority]
 **Component**: acp
+**Activity Type**: [inferred activity type]
 
 **Description Preview**:
 [First 500 chars of formatted description]
@@ -135,11 +173,11 @@ Shall I create this issue? (yes/no/edit)
 ```
 About to create N ENGPROD tickets:
 
-| # | Type  | Summary                        | Epic          |
-|---|-------|--------------------------------|---------------|
-| 1 | Epic  | Feature X                      | —             |
-| 2 | Story | Implement Y                    | Feature X     |
-| 3 | Bug   | Fix Z                          | —             |
+| # | Type  | Priority | Summary                        | Activity Type                     | Epic          |
+|---|-------|----------|--------------------------------|-----------------------------------|---------------|
+| 1 | Epic  | Normal   | Feature X                      | Product / Portfolio Work          | —             |
+| 2 | Story | Major    | Implement Y                    | Product / Portfolio Work          | Feature X     |
+| 3 | Bug   | Major    | Fix Z                          | Quality / Stability / Reliability | —             |
 
 Blocking: #2 blocks #3
 Related: #4 related to #5
@@ -158,7 +196,7 @@ Use `mcp__jira__jira_create_issue` with:
   "issue_type": "[Story|Bug|Task|Spike|Epic]",
   "description": "[structured description from step 3]",
   "components": "acp",
-  "additional_fields": "{\"labels\": [\"team:acp\"]}"
+  "additional_fields": "{\"priority\": {\"name\": \"[priority]\"}, \"labels\": [\"team:acp\"], \"customfield_10464\": {\"value\": \"[inferred activity type]\"}}"
 }
 ```
 
@@ -183,6 +221,8 @@ Link: https://redhat.atlassian.net/browse/[ISSUE_KEY]
 Summary: [summary]
 Component: acp
 Type: [issue type]
+Priority: [priority]
+Activity Type: [inferred activity type]
 Agent Cold-Start Ready: Yes
 ```
 
@@ -190,11 +230,11 @@ Agent Cold-Start Ready: Yes
 ```
 Created N tickets:
 
-| Key            | Type  | Summary                        | Epic          |
-|----------------|-------|--------------------------------|---------------|
-| ENGPROD-XXXXX  | Epic  | Feature X                      | —             |
-| ENGPROD-XXXXX  | Story | Implement Y                    | Feature X     |
-| ENGPROD-XXXXX  | Bug   | Fix Z                          | —             |
+| Key            | Type  | Priority | Summary                        | Activity Type                     | Epic          |
+|----------------|-------|----------|--------------------------------|-----------------------------------|---------------|
+| ENGPROD-XXXXX  | Epic  | Normal   | Feature X                      | Product / Portfolio Work          | —             |
+| ENGPROD-XXXXX  | Story | Major    | Implement Y                    | Product / Portfolio Work          | Feature X     |
+| ENGPROD-XXXXX  | Bug   | Major    | Fix Z                          | Quality / Stability / Reliability | —             |
 
 Links created:
 - ENGPROD-XXXXX blocks ENGPROD-XXXXX
@@ -284,8 +324,19 @@ Creates 1 epic + 1 story + 1 task + 1 spike, links all to the epic, creates bloc
 | Component | acp | Agent Control Plane (lowercase) |
 | Label | `team:acp` | Set on create |
 | Issue Type | Story | Default; also Bug, Task, Spike, Epic |
+| Priority | (inferred or ask) | Blocker > Critical > Major > Normal > Minor. Ask user if unresolvable (single); default Normal (batch). |
+| Activity Type | `customfield_10464` | Single-select dropdown, inferred from context |
 | Browse URL | `https://redhat.atlassian.net/browse/` | |
 | Board | 348 | ENGPROD kanban board (no sprints) |
+
+## Activity Type Values
+
+| Value | When to use |
+|-------|-------------|
+| `Product / Portfolio Work` | Default. New features, stories, product capabilities, CLI commands, UI views, API endpoints, tests for product work |
+| `Quality / Stability / Reliability` | Bugs, alerts, stability fixes, quality improvements, rebranding, lint/format, flaky tests |
+| `Security & Compliance` | Security hardening, CVEs, compliance, image migrations, RBAC, credential handling, vulnerability remediation |
+| `Future Sustainability` | Tech debt, refactoring, long-term improvements, dependency upgrades, code cleanup, architectural simplification |
 
 ## Jira Link Types
 
