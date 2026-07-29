@@ -105,5 +105,6 @@ func init() {
 
 	db.RegisterMigration(migration())
 	db.RegisterMigration(typedFKMigration())
+	db.RegisterMigration(userIDKSUIDMigration())
 	db.RegisterMigration(uniqueBindingMigration())
 }

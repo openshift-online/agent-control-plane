@@ -209,12 +209,19 @@ func (h projectHandler) TransferOwnership(w http.ResponseWriter, r *http.Request
 	}
 
 	g := (*h.sessionFactory).New(ctx)
+
+	callerUserID, resolveErr := pkgrbac.ResolveUserID(g, username)
+	if resolveErr != nil {
+		handlers.HandleError(ctx, w, errors.Forbidden("Forbidden"))
+		return
+	}
+
 	var callerRoleNames []string
 	if dbErr := g.Table("role_bindings rb").
 		Select("r.name").
 		Joins("JOIN roles r ON r.id = rb.role_id").
 		Where("rb.user_id = ? AND (rb.project_id = ? OR rb.scope = 'global') AND r.deleted_at IS NULL AND rb.deleted_at IS NULL",
-			username, projectID).
+			callerUserID, projectID).
 		Scan(&callerRoleNames).Error; dbErr != nil {
 		handlers.HandleError(ctx, w, errors.GeneralError("authorization check failed"))
 		return

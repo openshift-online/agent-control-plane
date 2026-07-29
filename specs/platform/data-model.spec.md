@@ -1670,14 +1670,14 @@ When a runner fetches a credential, the response payload shape is consistent acr
 | `session` | `session_id` | Role applies to a specific session run |
 | `credential` | `credential_id` | Role governs access to a specific credential |
 
-`user_id` is a **separate, independently nullable FK** — it identifies the user who holds the binding when the grant is user-specific. It is null when the grant is project-level (not tied to a specific human):
+`user_id` is a **separate, independently nullable FK** referencing `users.id` (a KSUID primary key, **not** the username string). It identifies the user who holds the binding when the grant is user-specific. It is null when the grant is project-level (not tied to a specific human):
 
 | Use case | `user_id` | scope FK | Meaning |
 |---|---|---|---|
-| User A owns Credential Y | `user_id=A` | `credential_id=Y` | A can CRUD credential Y |
+| User A owns Credential Y | `user_id=<A's KSUID>` | `credential_id=Y` | A can CRUD credential Y |
 | Credential Y bound to Project X | `user_id=NULL` | `credential_id=Y` + `project_id=X` | Project X can access credential Y |
-| User A is project:owner of Project X | `user_id=A` | `project_id=X` | A owns project X |
-| Global platform:admin grant | `user_id=A` | _(none)_ | A has platform-wide admin |
+| User A is project:owner of Project X | `user_id=<A's KSUID>` | `project_id=X` | A owns project X |
+| Global platform:admin grant | `user_id=<A's KSUID>` | _(none)_ | A has platform-wide admin |
 
 For credential→project bindings, both `credential_id` and `project_id` are non-null. This is the one exception to the "single FK per row" pattern — a credential binding names both the credential (the resource) and the project (the recipient). `user_id` is null because the grant is not user-specific; it applies to the entire project.
 

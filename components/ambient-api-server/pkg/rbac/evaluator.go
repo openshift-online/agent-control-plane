@@ -34,7 +34,8 @@ func (e *Evaluator) fetchBindings(g *gorm.DB, username string) ([]bindingRow, er
 	err := g.Table("role_bindings rb").
 		Select("rb.role_id, r.name AS role_name, rb.scope, rb.user_id, rb.project_id, rb.agent_id, rb.session_id, rb.credential_id, r.permissions").
 		Joins("JOIN roles r ON r.id = rb.role_id").
-		Where("rb.user_id = ? AND rb.deleted_at IS NULL AND r.deleted_at IS NULL", username).
+		Joins("LEFT JOIN users u ON u.id = rb.user_id AND u.deleted_at IS NULL").
+		Where("(u.username = ? OR rb.user_id = ?) AND rb.deleted_at IS NULL AND r.deleted_at IS NULL", username, username).
 		Scan(&rows).Error
 	return rows, err
 }

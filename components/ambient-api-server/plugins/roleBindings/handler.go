@@ -63,12 +63,16 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 				// b) Level hierarchy check — scoped to the target resource
 				username := auth.GetUsernameFromContext(ctx)
+				callerUserID, resolveErr := pkgrbac.ResolveUserID(g, username)
+				if resolveErr != nil {
+					return nil, errors.Forbidden("Forbidden")
+				}
 				var callerRoleNames []string
 				baseQuery := func(g *gorm.DB) *gorm.DB {
 					return g.Table("role_bindings rb").
 						Select("r.name").
 						Joins("JOIN roles r ON r.id = rb.role_id").
-						Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username)
+						Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", callerUserID)
 				}
 				var scanErr error
 				if roleBinding.Scope == "project" && roleBinding.ProjectId.IsSet() {
@@ -100,7 +104,7 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 					var projCount int64
 					if dbErr := g.Table("role_bindings").
 						Where("user_id = ? AND (project_id = ? OR scope = 'global') AND deleted_at IS NULL",
-							username, *roleBinding.ProjectId.Get()).
+							callerUserID, *roleBinding.ProjectId.Get()).
 						Count(&projCount).Error; dbErr != nil {
 						return nil, errors.GeneralError("authorization check failed")
 					}
@@ -144,7 +148,7 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 					if dbErr := g.Table("role_bindings").
 						Joins("JOIN roles ON roles.id = role_bindings.role_id").
 						Where("role_bindings.user_id = ? AND roles.name = ? AND role_bindings.credential_id = ? AND role_bindings.deleted_at IS NULL AND roles.deleted_at IS NULL",
-							username, pkgrbac.RoleCredentialOwner, *roleBinding.CredentialId.Get()).
+							callerUserID, pkgrbac.RoleCredentialOwner, *roleBinding.CredentialId.Get()).
 						Count(&credOwnerCount).Error; dbErr != nil {
 						return nil, errors.GeneralError("authorization check failed")
 					}
@@ -158,7 +162,7 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 						if dbErr := g.Table("role_bindings").
 							Joins("JOIN roles ON roles.id = role_bindings.role_id").
 							Where("role_bindings.user_id = ? AND role_bindings.project_id = ? AND role_bindings.deleted_at IS NULL AND roles.deleted_at IS NULL",
-								username, *roleBinding.ProjectId.Get()).
+								callerUserID, *roleBinding.ProjectId.Get()).
 							Where("roles.name IN ?", []string{pkgrbac.RoleProjectOwner, pkgrbac.RoleProjectEditor}).
 							Count(&projEditorCount).Error; dbErr != nil {
 							return nil, errors.GeneralError("authorization check failed")
@@ -213,12 +217,17 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			{
 				g := (*h.sessionFactory).New(ctx)
 
+				callerUserID, resolveErr := pkgrbac.ResolveUserID(g, username)
+				if resolveErr != nil {
+					return nil, errors.Forbidden("Forbidden")
+				}
+
 				// Fetch caller's roles scoped to the binding's project (+ global)
 				// so the level check reflects project-scoped authority.
 				callerQuery := g.Table("role_bindings rb").
 					Select("r.name").
 					Joins("JOIN roles r ON r.id = rb.role_id").
-					Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username)
+					Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", callerUserID)
 				if found.Scope == "project" && found.ProjectId != nil {
 					callerQuery = callerQuery.Where("rb.project_id = ? OR rb.scope = 'global'", *found.ProjectId)
 				}
@@ -230,7 +239,7 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 
 				// Authorization: allow if caller is admin, owns the binding,
 				// or has project:owner+ on the same project as the binding.
-				isOwner := found.UserId != nil && *found.UserId == username
+				isOwner := found.UserId != nil && *found.UserId == callerUserID
 				isProjectOwnerPlus := false
 				if found.Scope == "project" && found.ProjectId != nil && callerLevel <= 1 {
 					// callerLevel <= 1 means project:owner or platform:admin
@@ -349,6 +358,14 @@ func (h roleBindingHandler) List(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					return nil, errors.Forbidden("invalid username")
 				}
+				if h.sessionFactory != nil {
+					g := (*h.sessionFactory).New(ctx)
+					if callerUserID, resolveErr := pkgrbac.ResolveUserID(g, username); resolveErr == nil {
+						if ksuidFilter, filterErr := pkgrbac.TSLEqual("user_id", callerUserID); filterErr == nil {
+							userFilter = pkgrbac.TSLOr(ksuidFilter, userFilter)
+						}
+					}
+				}
 				scopeFilter := userFilter
 
 				if len(authResult.ProjectIDs) > 0 {
@@ -435,6 +452,14 @@ func (h roleBindingHandler) listByScope(w http.ResponseWriter, r *http.Request, 
 				userFilter, err := pkgrbac.TSLEqualUsername("user_id", username)
 				if err != nil {
 					return nil, errors.Forbidden("invalid username")
+				}
+				if h.sessionFactory != nil {
+					g := (*h.sessionFactory).New(ctx)
+					if callerUserID, resolveErr := pkgrbac.ResolveUserID(g, username); resolveErr == nil {
+						if ksuidFilter, filterErr := pkgrbac.TSLEqual("user_id", callerUserID); filterErr == nil {
+							userFilter = pkgrbac.TSLOr(ksuidFilter, userFilter)
+						}
+					}
 				}
 				visibilityFilter := userFilter
 
@@ -551,6 +576,10 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 				// --- Authorization check ---
 				username := auth.GetUsernameFromContext(ctx)
+				callerUserID, resolveErr := pkgrbac.ResolveUserID(g, username)
+				if resolveErr != nil {
+					return nil, errors.Forbidden("Forbidden")
+				}
 
 				if binding.Scope == "credential" {
 					// Asymmetric unbind: project:editor+ can remove credential bindings
@@ -560,7 +589,7 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 					if dbErr := g.Table("role_bindings rb").
 						Select("r.name").
 						Joins("JOIN roles r ON r.id = rb.role_id").
-						Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username).
+						Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", callerUserID).
 						Scan(&callerAllRoles).Error; dbErr != nil {
 						return nil, errors.GeneralError("authorization check failed")
 					}
@@ -573,7 +602,7 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 						if dbErr := g.Table("role_bindings").
 							Joins("JOIN roles ON roles.id = role_bindings.role_id").
 							Where("role_bindings.user_id = ? AND role_bindings.project_id = ? AND role_bindings.deleted_at IS NULL AND roles.deleted_at IS NULL",
-								username, *binding.ProjectId).
+								callerUserID, *binding.ProjectId).
 							Where("roles.name IN ?", []string{pkgrbac.RoleProjectOwner, pkgrbac.RoleProjectEditor}).
 							Count(&projEditorCount).Error; dbErr != nil {
 							return nil, errors.GeneralError("authorization check failed")
@@ -592,7 +621,7 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 					baseQuery := g.Table("role_bindings rb").
 						Select("r.name").
 						Joins("JOIN roles r ON r.id = rb.role_id").
-						Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", username)
+						Where("rb.user_id = ? AND r.deleted_at IS NULL AND rb.deleted_at IS NULL", callerUserID)
 					if binding.Scope == "project" && binding.ProjectId != nil {
 						baseQuery = baseQuery.Where("rb.project_id = ? OR rb.scope = 'global'", *binding.ProjectId)
 					}

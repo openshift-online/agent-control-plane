@@ -93,6 +93,28 @@ func typedFKMigration() *gormigrate.Migration {
 	}
 }
 
+func userIDKSUIDMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202607290001",
+		Migrate: func(tx *gorm.DB) error {
+			return tx.Exec(`UPDATE role_bindings
+				SET user_id = u.id, updated_at = NOW()
+				FROM users u
+				WHERE role_bindings.user_id = u.username
+				  AND role_bindings.deleted_at IS NULL
+				  AND u.deleted_at IS NULL`).Error
+		},
+		Rollback: func(tx *gorm.DB) error {
+			return tx.Exec(`UPDATE role_bindings
+				SET user_id = u.username, updated_at = NOW()
+				FROM users u
+				WHERE role_bindings.user_id = u.id
+				  AND role_bindings.deleted_at IS NULL
+				  AND u.deleted_at IS NULL`).Error
+		},
+	}
+}
+
 func uniqueBindingMigration() *gormigrate.Migration {
 	return &gormigrate.Migration{
 		ID: "202606050010",

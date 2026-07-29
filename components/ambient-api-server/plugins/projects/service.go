@@ -14,6 +14,8 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/logger"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 	"gorm.io/gorm"
+
+	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 )
 
 // roleBindingRow is a local struct for creating role_bindings rows via GORM,
@@ -141,6 +143,12 @@ func (s *sqlProjectService) createOwnerBinding(ctx context.Context, projectID st
 	}
 	g := (*s.sessionFactory).New(ctx)
 
+	userID, err := pkgrbac.ResolveUserID(g, username)
+	if err != nil {
+		glog.Warningf("failed to resolve user ID for project owner binding %s: %v", projectID, err)
+		return
+	}
+
 	var roleID string
 	if err := g.Table("roles").Select("id").
 		Where("name = ? AND deleted_at IS NULL", "project:owner").
@@ -154,7 +162,7 @@ func (s *sqlProjectService) createOwnerBinding(ctx context.Context, projectID st
 		ID:        api.NewID(),
 		RoleId:    roleID,
 		Scope:     "project",
-		UserId:    &username,
+		UserId:    &userID,
 		ProjectId: &projectID,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -231,6 +239,12 @@ func (s *sqlProjectService) TransferOwnership(ctx context.Context, projectID, ca
 		return errors.GeneralError("failed to find project:editor role")
 	}
 
+	// Resolve caller username to KSUID for role_bindings queries.
+	callerUserID, resolveErr := pkgrbac.ResolveUserID(g, callerUsername)
+	if resolveErr != nil {
+		return errors.GeneralError("failed to resolve caller user ID")
+	}
+
 	// Verify target user exists.
 	var targetUserCount int64
 	if dbErr := g.Table("users").
@@ -278,7 +292,7 @@ func (s *sqlProjectService) TransferOwnership(ctx context.Context, projectID, ca
 		if !callerIsAdmin {
 			result := tx.Table("role_bindings").
 				Where("user_id = ? AND role_id = ? AND project_id = ? AND deleted_at IS NULL",
-					callerUsername, ownerRoleID, projectID).
+					callerUserID, ownerRoleID, projectID).
 				Updates(map[string]interface{}{
 					"role_id":    editorRoleID,
 					"updated_at": now,
