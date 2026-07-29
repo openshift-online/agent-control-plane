@@ -9,4 +9,6 @@ dependencies:
   - OpenShift-Fleet/agentic-sdlc
   mcp: []
 includes: auto
-scripts: {}
+scripts:
+  post-install: skills/tooling/overlay-sync-skills/overlay-sync.sh --hook post-install
+  post-update: skills/tooling/overlay-sync-skills/overlay-sync.sh --hook post-update
