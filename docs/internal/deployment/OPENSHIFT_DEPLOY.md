@@ -12,7 +12,7 @@ The Ambient Code Platform is an OpenShift-native platform that deploys an API se
 
 1. **Deploy** (from project root):
    ```bash
-   # Choose an overlay (e.g., openshift-dev, production)
+   # Choose an overlay (e.g., crc, production, hcmai)
    oc apply -k components/manifests/overlays/<your-overlay>
    ```
    This deploys to the `ambient-code` namespace using default images from quay.io/ambient_code.

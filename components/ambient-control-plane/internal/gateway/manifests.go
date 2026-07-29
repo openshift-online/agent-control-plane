@@ -219,7 +219,7 @@ func ApplyConfigOverrides(obj *unstructured.Unstructured, config GatewayConfig) 
 		}
 	}
 
-	// Add image_pull_policy for LOCAL_IMAGES=true (kind-local development)
+	// Add image_pull_policy for LOCAL_IMAGES=true (kind local development)
 	if kind == "ConfigMap" && obj.GetName() == "openshell-gateway-config" && os.Getenv("LOCAL_IMAGES") == "true" && config.Config == "" {
 		data, found, err := unstructured.NestedMap(obj.Object, "data")
 		if err != nil || !found {
