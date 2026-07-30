@@ -1,7 +1,7 @@
 package projectSettings
 
 import (
-	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	pb "github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/grpc/ambient/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

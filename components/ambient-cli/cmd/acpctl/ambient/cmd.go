@@ -8,8 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
-	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient/tui"
-	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/cmd/acpctl/ambient/tui"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/pkg/connection"
 )
 
 var Cmd = &cobra.Command{

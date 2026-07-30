@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/pkg/config"
 	"github.com/spf13/cobra"
 )
 

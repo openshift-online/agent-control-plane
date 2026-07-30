@@ -17,7 +17,7 @@ import (
 	"github.com/openshift-online/rh-trex-ai/plugins/generic"
 	"google.golang.org/grpc"
 
-	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	pb "github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/grpc/ambient/v1"
 )
 
 func notImplemented(w http.ResponseWriter, _ *http.Request) {

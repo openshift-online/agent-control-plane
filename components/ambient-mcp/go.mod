@@ -1,4 +1,4 @@
-module github.com/ambient-code/platform/components/ambient-mcp
+module github.com/openshift-online/agent-control-plane/components/ambient-mcp
 
 go 1.24.0
 

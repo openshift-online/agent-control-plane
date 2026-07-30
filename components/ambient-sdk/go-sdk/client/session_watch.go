@@ -19,8 +19,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 
-	ambient_v1 "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
-	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	ambient_v1 "github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 )
 
 const grpcDefaultPort = "9000"

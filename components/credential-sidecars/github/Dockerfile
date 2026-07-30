@@ -6,7 +6,7 @@ COPY components/credential-sidecars/entrypoint/ ./entrypoint/
 COPY components/ambient-mcp/ ./ambient-mcp/
 
 WORKDIR /build/entrypoint
-RUN go mod edit -replace github.com/ambient-code/platform/components/ambient-mcp=../ambient-mcp && \
+RUN go mod edit -replace github.com/openshift-online/agent-control-plane/components/ambient-mcp=../ambient-mcp && \
     go mod tidy && \
     CGO_ENABLED=0 go build -o /credential-entrypoint .
 

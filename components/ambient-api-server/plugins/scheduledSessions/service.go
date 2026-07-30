@@ -10,9 +10,9 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 	"gorm.io/gorm"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/clock"
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
-	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/clock"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/rbac"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/sessions"
 )
 
 type ScheduledSessionService interface {

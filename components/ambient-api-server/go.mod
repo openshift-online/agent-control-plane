@@ -1,4 +1,4 @@
-module github.com/ambient-code/platform/components/ambient-api-server
+module github.com/openshift-online/agent-control-plane/components/ambient-api-server
 
 go 1.25.0
 

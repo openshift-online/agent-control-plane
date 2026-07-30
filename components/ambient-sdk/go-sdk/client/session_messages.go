@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 )
 
 const (

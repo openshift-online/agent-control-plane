@@ -18,9 +18,9 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient/tui/views"
-	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
-	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/cmd/acpctl/ambient/tui/views"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/pkg/connection"
+	sdktypes "github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 )
 
 // pollInterval is the auto-refresh interval for resource tables.

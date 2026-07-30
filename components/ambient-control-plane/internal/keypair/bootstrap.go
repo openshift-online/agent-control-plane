@@ -9,7 +9,7 @@ import (
 	"encoding/pem"
 	"fmt"
 
-	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
+	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/kubeclient"
 	"github.com/rs/zerolog"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

@@ -1,5 +1,5 @@
 BINARY    := acpctl
-MODULE    := github.com/ambient-code/platform/components/ambient-cli
+MODULE    := github.com/openshift-online/agent-control-plane/components/ambient-cli
 PKG       := $(MODULE)/pkg/info
 
 VERSION   ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)

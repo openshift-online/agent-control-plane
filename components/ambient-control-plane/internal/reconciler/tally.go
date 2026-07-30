@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ambient-code/platform/components/ambient-control-plane/internal/informer"
-	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
+	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/informer"
+	sdkclient "github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/client"
 	"github.com/rs/zerolog"
 )
 

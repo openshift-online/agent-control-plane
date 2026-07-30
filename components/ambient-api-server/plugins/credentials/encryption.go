@@ -6,7 +6,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/crypto"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/crypto"
 	"gorm.io/gorm"
 )
 

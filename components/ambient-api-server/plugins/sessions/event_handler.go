@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/rbac"
 )
 
 type eventHandler struct {

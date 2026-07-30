@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
-	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/client"
+	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 )
 
 func main() {
@@ -51,7 +51,6 @@ func runFullLifecycle(ctx context.Context, c *client.Client, projectName string)
 
 	project, err := types.NewProjectBuilder().
 		Name(projectName).
-		DisplayName("SDK Demo Workspace").
 		Description("Created programmatically via Go SDK").
 		Build()
 	if err != nil {
@@ -80,7 +79,7 @@ func runFullLifecycle(ctx context.Context, c *client.Client, projectName string)
 
 	reposJSON, _ := json.Marshal([]map[string]interface{}{
 		{
-			"url":      "https://github.com/ambient-code/platform",
+			"url":      "https://github.com/openshift-online/agent-control-plane",
 			"branch":   "main",
 			"autoPush": false,
 		},

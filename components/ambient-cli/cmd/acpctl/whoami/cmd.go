@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/pkg/config"
 	"github.com/spf13/cobra"
 )
 

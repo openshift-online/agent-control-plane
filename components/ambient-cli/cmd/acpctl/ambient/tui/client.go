@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
-	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
-	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/pkg/connection"
+	sdkclient "github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/client"
+	sdktypes "github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 )
 
 // fetchTimeout is the per-request context deadline for all API fetches.

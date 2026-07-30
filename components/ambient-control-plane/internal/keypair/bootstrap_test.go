@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic/fake"
 
-	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
+	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/kubeclient"
 )
 
 func newFakeKubeClient(objects ...runtime.Object) *kubeclient.KubeClient {

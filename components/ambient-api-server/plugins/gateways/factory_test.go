@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/plugins/gateways"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/gateways"
 	"github.com/openshift-online/rh-trex-ai/pkg/environments"
 )
 

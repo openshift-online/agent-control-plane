@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/clock"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/clock"
 )
 
 func TestValidateCron_Valid(t *testing.T) {

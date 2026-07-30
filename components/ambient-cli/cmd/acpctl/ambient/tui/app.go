@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient/tui/views"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/cmd/acpctl/ambient/tui/views"
 )
 
 // Hoisted command bar border style to avoid allocations on every frame.

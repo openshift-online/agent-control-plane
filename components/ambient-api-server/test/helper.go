@@ -14,9 +14,9 @@ import (
 
 	amv1 "github.com/openshift-online/ocm-sdk-go/accountsmgmt/v1"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/cmd/ambient-api-server/environments"
-	localapi "github.com/ambient-code/platform/components/ambient-api-server/pkg/api"
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/cmd/ambient-api-server/environments"
+	localapi "github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/openapi"
 	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
 	"github.com/openshift-online/rh-trex-ai/pkg/testutil"
 )

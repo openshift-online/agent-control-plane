@@ -6,7 +6,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/clock"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/clock"
 )
 
 var cronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)

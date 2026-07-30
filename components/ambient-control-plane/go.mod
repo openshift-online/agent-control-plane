@@ -1,12 +1,12 @@
-module github.com/ambient-code/platform/components/ambient-control-plane
+module github.com/openshift-online/agent-control-plane/components/ambient-control-plane
 
 go 1.25.0
 
 require (
-	github.com/ambient-code/platform/components/ambient-api-server v0.0.0
-	github.com/ambient-code/platform/components/ambient-sdk/go-sdk v0.0.0
 	github.com/go-git/go-billy/v5 v5.9.0
 	github.com/go-git/go-git/v5 v5.19.1
+	github.com/openshift-online/agent-control-plane/components/ambient-api-server v0.0.0
+	github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk v0.0.0
 	github.com/rs/zerolog v1.34.0
 	golang.org/x/crypto v0.53.0
 	golang.org/x/oauth2 v0.34.0
@@ -85,6 +85,6 @@ require (
 )
 
 replace (
-	github.com/ambient-code/platform/components/ambient-api-server => ../ambient-api-server
-	github.com/ambient-code/platform/components/ambient-sdk/go-sdk => ../ambient-sdk/go-sdk
+	github.com/openshift-online/agent-control-plane/components/ambient-api-server => ../ambient-api-server
+	github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk => ../ambient-sdk/go-sdk
 )

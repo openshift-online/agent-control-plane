@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	. "github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
+	. "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/sessions"
 )
 
 // seedRunnerlessSession creates a session with no runner (KubeCrName is nil until CP reconciles).

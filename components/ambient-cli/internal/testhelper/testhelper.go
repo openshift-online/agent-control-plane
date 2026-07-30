@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/pkg/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )

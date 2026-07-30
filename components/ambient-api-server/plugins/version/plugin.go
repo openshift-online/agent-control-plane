@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	localapi "github.com/ambient-code/platform/components/ambient-api-server/pkg/api"
+	localapi "github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api"
 	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
 )
 

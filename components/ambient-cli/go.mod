@@ -1,9 +1,8 @@
-module github.com/ambient-code/platform/components/ambient-cli
+module github.com/openshift-online/agent-control-plane/components/ambient-cli
 
 go 1.25.0
 
 require (
-	github.com/ambient-code/platform/components/ambient-sdk/go-sdk v0.0.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
@@ -11,6 +10,7 @@ require (
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/golang-jwt/jwt/v4 v4.5.2
+	github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk v0.0.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/term v0.44.0
@@ -19,7 +19,6 @@ require (
 
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0 // indirect
-	github.com/ambient-code/platform/components/ambient-api-server v0.0.0-20260304211549-047314a7664b // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/catppuccin/go v0.3.0 // indirect
@@ -46,6 +45,7 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
+	github.com/openshift-online/agent-control-plane/components/ambient-api-server v0.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yuin/goldmark v1.8.2 // indirect
@@ -58,4 +58,7 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-replace github.com/ambient-code/platform/components/ambient-sdk/go-sdk => ../ambient-sdk/go-sdk
+replace (
+	github.com/openshift-online/agent-control-plane/components/ambient-api-server => ../ambient-api-server
+	github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk => ../ambient-sdk/go-sdk
+)

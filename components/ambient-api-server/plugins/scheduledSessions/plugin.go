@@ -16,10 +16,10 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/registry"
 	pkgserver "github.com/openshift-online/rh-trex-ai/pkg/server"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/clock"
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
-	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/plugins/rbac"
-	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/clock"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/rbac"
+	pkgrbac "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/rbac"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/sessions"
 )
 
 func init() {

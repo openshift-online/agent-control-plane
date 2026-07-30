@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ambient-code/platform/components/ambient-cli/internal/testhelper"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/internal/testhelper"
 )
 
 func TestDeleteProject_Success(t *testing.T) {

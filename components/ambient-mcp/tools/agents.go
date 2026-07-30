@@ -8,7 +8,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/ambient-code/platform/components/ambient-mcp/client"
+	"github.com/openshift-online/agent-control-plane/components/ambient-mcp/client"
 )
 
 type agentList struct {

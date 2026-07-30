@@ -5,7 +5,7 @@ import (
 
 	"github.com/golang/glog"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/openapi"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
 	"github.com/openshift-online/rh-trex-ai/pkg/util"

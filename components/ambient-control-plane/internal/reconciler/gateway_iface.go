@@ -3,9 +3,9 @@ package reconciler
 import (
 	"context"
 
-	"github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell"
-	inferencepb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/inference/v1"
-	pb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
+	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell"
+	inferencepb "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/inference/v1"
+	pb "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 )
 
 type gatewayClient interface {

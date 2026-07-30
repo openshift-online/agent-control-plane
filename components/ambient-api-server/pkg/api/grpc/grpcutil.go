@@ -1,7 +1,7 @@
 package grpc
 
 import (
-	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	pb "github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/grpc/ambient/v1"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 )
 

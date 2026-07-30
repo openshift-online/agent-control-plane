@@ -9,9 +9,9 @@ import (
 
 	. "github.com/onsi/gomega"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
-	"github.com/ambient-code/platform/components/ambient-api-server/plugins/projects"
-	"github.com/ambient-code/platform/components/ambient-api-server/test"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/openapi"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/projects"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/test"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/environments"
 )

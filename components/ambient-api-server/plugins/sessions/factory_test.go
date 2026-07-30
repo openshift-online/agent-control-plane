@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
-	"github.com/ambient-code/platform/components/ambient-api-server/plugins/users"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/sessions"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/users"
 	"github.com/openshift-online/rh-trex-ai/pkg/environments"
 )
 

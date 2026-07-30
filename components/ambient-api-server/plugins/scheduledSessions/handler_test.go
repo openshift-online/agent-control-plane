@@ -11,10 +11,10 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
-	. "github.com/ambient-code/platform/components/ambient-api-server/plugins/scheduledSessions"
-	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/openapi"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/rbac"
+	. "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/scheduledSessions"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/sessions"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 )
 

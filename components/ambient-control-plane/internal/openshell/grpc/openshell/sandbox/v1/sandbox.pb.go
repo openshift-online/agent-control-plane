@@ -2097,7 +2097,7 @@ const file_openshell_sandbox_v1_sandbox_proto_rawDesc = "" +
 	"\fPolicySource\x12\x1d\n" +
 	"\x19POLICY_SOURCE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15POLICY_SOURCE_SANDBOX\x10\x01\x12\x18\n" +
-	"\x14POLICY_SOURCE_GLOBAL\x10\x02B{Zygithub.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/sandbox/v1;sandbox_v1b\x06proto3"
+	"\x14POLICY_SOURCE_GLOBAL\x10\x02B{Zygithub.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/sandbox/v1;sandbox_v1b\x06proto3"
 
 var (
 	file_openshell_sandbox_v1_sandbox_proto_rawDescOnce sync.Once

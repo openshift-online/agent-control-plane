@@ -8,7 +8,7 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/sessions"
 )
 
 // InMemoryScheduledSessionService is a zero-dependency service for tests and local dev.

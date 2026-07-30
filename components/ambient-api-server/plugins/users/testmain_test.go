@@ -8,20 +8,20 @@ import (
 
 	"github.com/golang/glog"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/test"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/test"
 
 	// Ensure all plugin migrations run in this test binary
-	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/agents"
-	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/credentials"
-	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/inbox"
-	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/projectSettings"
-	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/projects"
-	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/roleBindings"
-	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/roles"
-	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/scheduledSessions"
-	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
-	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/users"
-	_ "github.com/ambient-code/platform/components/ambient-api-server/plugins/version"
+	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/agents"
+	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/credentials"
+	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/inbox"
+	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/projectSettings"
+	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/projects"
+	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/roleBindings"
+	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/roles"
+	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/scheduledSessions"
+	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/sessions"
+	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/users"
+	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/version"
 	_ "github.com/openshift-online/rh-trex-ai/plugins/events"
 	_ "github.com/openshift-online/rh-trex-ai/plugins/generic"
 )

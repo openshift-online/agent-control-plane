@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ambient-code/platform/components/ambient-cli/internal/testhelper"
-	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
-	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/internal/testhelper"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/pkg/config"
+	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 )
 
 func TestCreateProject_Success(t *testing.T) {

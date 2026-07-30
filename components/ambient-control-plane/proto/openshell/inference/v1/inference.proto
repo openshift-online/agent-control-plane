@@ -6,7 +6,7 @@ syntax = "proto3";
 
 package openshell.inference.v1;
 
-option go_package = "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/inference/v1";
+option go_package = "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/inference/v1";
 
 service Inference {
   rpc SetInferenceRoute(SetInferenceRouteRequest)

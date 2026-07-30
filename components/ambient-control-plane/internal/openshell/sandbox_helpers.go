@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	pb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
+	pb "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 )
 
 const LogTailLines uint32 = 500

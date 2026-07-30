@@ -1,4 +1,4 @@
-module github.com/ambient-code/platform/components/ambient-sdk/generator
+module github.com/openshift-online/agent-control-plane/components/ambient-sdk/generator
 
 go 1.24.4
 

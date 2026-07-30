@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/crypto"
 	"github.com/golang/glog"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/crypto"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/db"

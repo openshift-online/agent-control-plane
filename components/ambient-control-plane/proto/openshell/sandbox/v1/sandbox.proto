@@ -7,7 +7,7 @@ syntax = "proto3";
 
 package openshell.sandbox.v1;
 
-option go_package = "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/sandbox/v1;sandbox_v1";
+option go_package = "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/sandbox/v1;sandbox_v1";
 
 import "google/protobuf/struct.proto";
 

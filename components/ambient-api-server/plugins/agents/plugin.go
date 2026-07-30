@@ -3,8 +3,8 @@ package agents
 import (
 	"net/http"
 
-	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/plugins/rbac"
 	"github.com/gorilla/mux"
+	pkgrbac "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
@@ -16,9 +16,9 @@ import (
 	"github.com/openshift-online/rh-trex-ai/plugins/events"
 	"github.com/openshift-online/rh-trex-ai/plugins/generic"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/plugins/inbox"
-	"github.com/ambient-code/platform/components/ambient-api-server/plugins/roleBindings"
-	"github.com/ambient-code/platform/components/ambient-api-server/plugins/sessions"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/inbox"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/roleBindings"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/sessions"
 )
 
 type ServiceLocator func() AgentService

@@ -17,9 +17,9 @@ ARG GIT_VERSION=
 ARG BUILD_TIME=
 ARG GIT_TAG=
 RUN go build -ldflags="-s -w \
-  -X github.com/ambient-code/platform/components/ambient-api-server/pkg/api.Version=${GIT_VERSION} \
-  -X github.com/ambient-code/platform/components/ambient-api-server/pkg/api.BuildTime=${BUILD_TIME} \
-  -X github.com/ambient-code/platform/components/ambient-api-server/pkg/api.GitTag=${GIT_TAG}" \
+  -X github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api.Version=${GIT_VERSION} \
+  -X github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api.BuildTime=${BUILD_TIME} \
+  -X github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api.GitTag=${GIT_TAG}" \
   -o ambient-api-server ./cmd/ambient-api-server
 
 # Runtime stage

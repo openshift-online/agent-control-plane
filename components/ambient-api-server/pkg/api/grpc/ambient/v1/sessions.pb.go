@@ -1823,7 +1823,7 @@ const file_ambient_v1_sessions_proto_rawDesc = "" +
 	"\x12PushSessionMessage\x12%.ambient.v1.PushSessionMessageRequest\x1a\x1a.ambient.v1.SessionMessage\x12]\n" +
 	"\x14WatchSessionMessages\x12'.ambient.v1.WatchSessionMessagesRequest\x1a\x1a.ambient.v1.SessionMessage0\x01\x12Q\n" +
 	"\x10PushSessionEvent\x12#.ambient.v1.PushSessionEventRequest\x1a\x18.ambient.v1.SessionEvent\x12W\n" +
-	"\x12WatchSessionEvents\x12%.ambient.v1.WatchSessionEventsRequest\x1a\x18.ambient.v1.SessionEvent0\x01BcZagithub.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1b\x06proto3"
+	"\x12WatchSessionEvents\x12%.ambient.v1.WatchSessionEventsRequest\x1a\x18.ambient.v1.SessionEvent0\x01BcZagithub.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1b\x06proto3"
 
 var (
 	file_ambient_v1_sessions_proto_rawDescOnce sync.Once

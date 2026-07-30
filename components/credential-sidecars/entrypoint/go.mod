@@ -1,7 +1,7 @@
-module github.com/ambient-code/platform/components/credential-sidecars/entrypoint
+module github.com/openshift-online/agent-control-plane/components/credential-sidecars/entrypoint
 
 go 1.24.4
 
-require github.com/ambient-code/platform/components/ambient-mcp v0.0.0
+require github.com/openshift-online/agent-control-plane/components/ambient-mcp v0.0.0
 
-replace github.com/ambient-code/platform/components/ambient-mcp => ../../ambient-mcp
+replace github.com/openshift-online/agent-control-plane/components/ambient-mcp => ../../ambient-mcp

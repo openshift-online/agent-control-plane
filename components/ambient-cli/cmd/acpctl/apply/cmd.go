@@ -11,11 +11,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
-	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
-	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
-	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/kustomize"
-	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/pkg/config"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/pkg/connection"
+	sdkclient "github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/client"
+	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/kustomize"
+	sdktypes "github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 	"github.com/spf13/cobra"
 )
 

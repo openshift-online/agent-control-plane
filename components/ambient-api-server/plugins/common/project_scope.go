@@ -4,7 +4,7 @@ package common
 import (
 	"net/http"
 
-	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
+	pkgrbac "github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 )

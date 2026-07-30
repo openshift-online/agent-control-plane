@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ambient-code/platform/components/ambient-control-plane/internal/auth"
+	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/auth"
 	"github.com/rs/zerolog"
 )
 

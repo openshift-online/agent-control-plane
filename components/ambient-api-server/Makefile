@@ -10,7 +10,7 @@ git_dirty:=$(shell git diff --quiet 2>/dev/null || echo "-modified")
 build_version:=$(git_sha)$(git_dirty)
 build_time:=$(shell date -u '+%Y-%m-%d %H:%M:%S UTC')
 git_tag:=$(shell git describe --tags --always --dirty 2>/dev/null || echo "unknown")
-ldflags=-X github.com/ambient-code/platform/components/ambient-api-server/pkg/api.Version=$(build_version) -X 'github.com/ambient-code/platform/components/ambient-api-server/pkg/api.BuildTime=$(build_time)' -X github.com/ambient-code/platform/components/ambient-api-server/pkg/api.GitTag=$(git_tag)
+ldflags=-X github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api.Version=$(build_version) -X 'github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api.BuildTime=$(build_time)' -X github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api.GitTag=$(git_tag)
 
 .PHONY: binary
 binary:

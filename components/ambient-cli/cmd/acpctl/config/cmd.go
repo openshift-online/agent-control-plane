@@ -2,8 +2,8 @@
 package config
 
 import (
-	configget "github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/config/get"
-	configset "github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/config/set"
+	configget "github.com/openshift-online/agent-control-plane/components/ambient-cli/cmd/acpctl/config/get"
+	configset "github.com/openshift-online/agent-control-plane/components/ambient-cli/cmd/acpctl/config/set"
 	"github.com/spf13/cobra"
 )
 

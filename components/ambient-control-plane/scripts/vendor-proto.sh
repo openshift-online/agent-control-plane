@@ -31,7 +31,7 @@ PROTO_DIR="$COMPONENT_DIR/proto"
 VENDOR_MD="$PROTO_DIR/VENDOR.md"
 
 UPSTREAM_REPO="NVIDIA/OpenShell"
-GO_PKG_BASE="github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc"
+GO_PKG_BASE="github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc"
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 

@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	sdktypes "github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 
-	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient/tui/views"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/cmd/acpctl/ambient/tui/views"
 )
 
 func TestParseCommand_Credentials(t *testing.T) {

@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
-	"github.com/ambient-code/platform/components/ambient-control-plane/internal/watcher"
-	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
-	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	pb "github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/watcher"
+	sdkclient "github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/client"
+	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 	"github.com/rs/zerolog"
 )
 

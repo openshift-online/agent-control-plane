@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"strings"
 
-	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/pkg/connection"
 	"github.com/spf13/cobra"
 )
 

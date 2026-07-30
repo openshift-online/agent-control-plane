@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/middleware"
 )
 
 func TestPathToResource(t *testing.T) {

@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ambient-code/platform/components/ambient-mcp/tokenexchange"
+	"github.com/openshift-online/agent-control-plane/components/ambient-mcp/tokenexchange"
 )
 
 func main() {

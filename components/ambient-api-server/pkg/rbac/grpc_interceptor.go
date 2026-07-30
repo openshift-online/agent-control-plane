@@ -11,7 +11,7 @@ import (
 
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/middleware"
 )
 
 // GRPCUnaryInterceptor returns a unary interceptor that populates

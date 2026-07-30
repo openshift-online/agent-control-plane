@@ -4,8 +4,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/ambient-code/platform/components/ambient-mcp/client"
-	"github.com/ambient-code/platform/components/ambient-mcp/tools"
+	"github.com/openshift-online/agent-control-plane/components/ambient-mcp/client"
+	"github.com/openshift-online/agent-control-plane/components/ambient-mcp/tools"
 )
 
 func newServer(c *client.Client, transport string) *server.MCPServer {

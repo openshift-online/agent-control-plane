@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
-	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/client"
+	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 )
 
 func main() {

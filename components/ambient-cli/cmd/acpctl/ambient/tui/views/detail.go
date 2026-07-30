@@ -10,7 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	sdktypes "github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 )
 
 // Local color constants for the detail view. Defined here instead of importing

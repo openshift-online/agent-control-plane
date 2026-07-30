@@ -12,7 +12,7 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
 	"gorm.io/gorm/clause"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/middleware"
 )
 
 // userRow is a local struct for GORM auto-provision inserts, avoiding

@@ -4,14 +4,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
+	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/kubeclient"
 	"github.com/rs/zerolog"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/fake"
 
-	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 )
 
 type stubProvisioner struct{}

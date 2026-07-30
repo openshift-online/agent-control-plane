@@ -1,13 +1,16 @@
-module github.com/ambient-code/platform/components/ambient-sdk/go-sdk/examples
+module github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/examples
 
 go 1.25.0
 
-replace github.com/ambient-code/platform/components/ambient-sdk/go-sdk => ../
+replace (
+	github.com/openshift-online/agent-control-plane/components/ambient-api-server => ../../../ambient-api-server
+	github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk => ../
+)
 
-require github.com/ambient-code/platform/components/ambient-sdk/go-sdk v0.0.0-00010101000000-000000000000
+require github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk v0.0.0-00010101000000-000000000000
 
 require (
-	github.com/ambient-code/platform/components/ambient-api-server v0.0.0-20260304211549-047314a7664b // indirect
+	github.com/openshift-online/agent-control-plane/components/ambient-api-server v0.0.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.38.0 // indirect

@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/pkg/config"
 )
 
 // TUIConfig holds the multi-context configuration for the TUI.

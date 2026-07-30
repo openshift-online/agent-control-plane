@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,7 +30,7 @@ TODO: all of it can be better
 
 var (
 	kind                        = "Asteroid"
-	repo                        = "github.com/ambient-code/platform/components"
+	repo                        = "github.com/openshift-online/agent-control-plane/components"
 	project                     = "ambient-api-server"
 	fields                      = ""
 	plural                      = ""
@@ -49,7 +50,7 @@ func init() {
 	flags.AddGoFlagSet(flag.CommandLine)
 
 	flags.StringVar(&kind, "kind", kind, "the name of the kind.  e.g Account or User")
-	flags.StringVar(&repo, "repo", repo, "the module path of the repo (e.g. github.com/ambient-code/platform/components)")
+	flags.StringVar(&repo, "repo", repo, "the module path of the repo (e.g. github.com/openshift-online/agent-control-plane/components)")
 	flags.StringVar(&project, "project", project, "the name of the project.  e.g ambient-api-server")
 	flags.StringVar(&fields, "fields", fields, "comma-separated list of custom fields in format name:type (e.g. 'name:string,age:int,active:bool')")
 	flags.StringVar(&plural, "plural", plural, "the plural form of the kind. If not provided, uses irregular plurals map or adds 's'")
@@ -102,7 +103,7 @@ func pluralize(word string) string {
 func getCmdDir() string {
 	entries, err := os.ReadDir("cmd")
 	if err != nil {
-		panic(err)
+		log.Fatalf("failed to read cmd directory: %v", err)
 	}
 
 	for _, entry := range entries {
@@ -111,7 +112,8 @@ func getCmdDir() string {
 		}
 	}
 
-	panic("No command directory found in cmd/")
+	log.Fatal("no command directory found in cmd/")
+	return ""
 }
 
 func main() {
@@ -121,7 +123,7 @@ func main() {
 	// Parse custom fields
 	parsedFields, err := parseFields(fields)
 	if err != nil {
-		panic(fmt.Sprintf("Error parsing fields: %v", err))
+		log.Fatalf("error parsing fields: %v", err)
 	}
 
 	templates := []string{
@@ -143,12 +145,12 @@ func main() {
 		path := fmt.Sprintf("templates/generate-%s.txt", nm)
 		contents, err := os.ReadFile(path)
 		if err != nil {
-			panic(err)
+			log.Fatalf("failed to read template %s: %v", path, err)
 		}
 
 		kindTmpl, err := template.New(nm).Parse(string(contents))
 		if err != nil {
-			panic(err)
+			log.Fatalf("failed to parse template %s: %v", nm, err)
 		}
 
 		kindLowerCamel := strings.ToLower(string(kind[0])) + kind[1:]
@@ -189,26 +191,26 @@ func main() {
 
 		outputPath, ok := outputPaths["generate-"+nm]
 		if !ok {
-			panic("expected to find outputPath for " + nm)
+			log.Fatalf("expected to find outputPath for %s", nm)
 		}
 
 		// Create directory if it doesn't exist
 		outputDir := filepath.Dir(outputPath)
 		err = os.MkdirAll(outputDir, 0755)
 		if err != nil {
-			panic(err)
+			log.Fatalf("failed to create directory %s: %v", outputDir, err)
 		}
 
 		f, err := os.Create(outputPath)
 		if err != nil {
-			panic(err)
+			log.Fatalf("failed to create file %s: %v", outputPath, err)
 		}
 		defer func() { _ = f.Close() }()
 
 		w := bufio.NewWriter(f)
 		err = kindTmpl.Execute(w, k)
 		if err != nil {
-			panic(err)
+			log.Fatalf("failed to execute template %s: %v", nm, err)
 		}
 		_ = w.Flush()
 		_ = f.Sync()
@@ -479,7 +481,7 @@ func readBetweenLines(path string, startLine string, endLine string) []string {
 func writeAfterLine(path string, matchingLine string, lineToWrite string) {
 	input, err := os.ReadFile(path)
 	if err != nil {
-		panic(err)
+		log.Fatalf("failed to read file %s: %v", path, err)
 	}
 	output := bytes.ReplaceAll(input, []byte(matchingLine), []byte(lineToWrite+"\n"+matchingLine))
 	if err = os.WriteFile(path, output, 0666); err != nil {
@@ -493,7 +495,7 @@ func addPluginImport(k myWriter) {
 
 	input, err := os.ReadFile(mainFile)
 	if err != nil {
-		panic(err)
+		log.Fatalf("failed to read %s: %v", mainFile, err)
 	}
 
 	// Check if the import already exists
@@ -522,7 +524,7 @@ func addPluginImport(k myWriter) {
 
 					err = os.WriteFile(mainFile, []byte(strings.Join(output, "\n")), 0666)
 					if err != nil {
-						panic(err)
+						log.Fatalf("failed to write %s: %v", mainFile, err)
 					}
 					fmt.Printf("Added plugin import to %s\n", mainFile)
 					return
@@ -533,5 +535,5 @@ func addPluginImport(k myWriter) {
 		output = append(output, line)
 	}
 
-	panic("Could not find import block in " + mainFile)
+	log.Fatalf("could not find import block in %s", mainFile)
 }

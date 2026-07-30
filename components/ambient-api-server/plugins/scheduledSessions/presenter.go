@@ -3,7 +3,7 @@ package scheduledSessions
 import (
 	"fmt"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/openapi"
 )
 
 const basePath = "/api/ambient/v1/projects/%s/scheduled-sessions/%s"

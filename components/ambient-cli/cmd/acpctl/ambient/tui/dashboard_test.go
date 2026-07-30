@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	sdktypes "github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 )
 
 func msg(eventType, payload string, createdAt *time.Time) sdktypes.SessionMessage {

@@ -9,8 +9,8 @@ import (
 	. "github.com/onsi/gomega"
 	"gopkg.in/resty.v1"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
-	"github.com/ambient-code/platform/components/ambient-api-server/test"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/openapi"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/test"
 )
 
 func TestProviderCreate(t *testing.T) {

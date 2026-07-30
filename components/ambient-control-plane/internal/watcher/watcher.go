@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
-	"github.com/ambient-code/platform/components/ambient-control-plane/internal/auth"
+	pb "github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/auth"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"

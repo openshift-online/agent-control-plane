@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
 
-	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	sdktypes "github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 )
 
 // PhaseColor returns the display color for a session or agent phase.

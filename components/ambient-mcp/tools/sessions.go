@@ -9,8 +9,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/ambient-code/platform/components/ambient-mcp/client"
-	"github.com/ambient-code/platform/components/ambient-mcp/mention"
+	"github.com/openshift-online/agent-control-plane/components/ambient-mcp/client"
+	"github.com/openshift-online/agent-control-plane/components/ambient-mcp/mention"
 )
 
 type sessionList struct {

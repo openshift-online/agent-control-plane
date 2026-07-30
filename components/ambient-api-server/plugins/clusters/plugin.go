@@ -3,8 +3,8 @@ package clusters
 import (
 	"net/http"
 
-	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/plugins/rbac"
 	"github.com/gorilla/mux"
+	pkgrbac "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"

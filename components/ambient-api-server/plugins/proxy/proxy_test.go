@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/plugins/proxy"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/proxy"
 )
 
 // buildHandler wraps a mock backend with the proxy middleware and a sentinel native handler.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/api/openapi"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/openapi"
 )
 
 func TestConvertApplication_RequiredFields(t *testing.T) {

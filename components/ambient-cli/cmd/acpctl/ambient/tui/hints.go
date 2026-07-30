@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"github.com/ambient-code/platform/components/ambient-cli/cmd/acpctl/ambient/tui/views"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/cmd/acpctl/ambient/tui/views"
 )
 
 // ViewHints holds the keyboard shortcut definitions for a single view.

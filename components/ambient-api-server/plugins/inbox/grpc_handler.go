@@ -5,9 +5,9 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	pb "github.com/ambient-code/platform/components/ambient-api-server/pkg/api/grpc/ambient/v1"
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/middleware"
-	"github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
+	pb "github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/grpc/ambient/v1"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/middleware"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/rbac"
 	"google.golang.org/grpc"
 )
 

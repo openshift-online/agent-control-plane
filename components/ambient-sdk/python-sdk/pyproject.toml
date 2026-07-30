@@ -55,11 +55,11 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ambient-code/platform"
+Homepage = "https://github.com/openshift-online/agent-control-plane"
 Documentation = "https://docs.ambient-code.io"
-Repository = "https://github.com/ambient-code/platform"
-Issues = "https://github.com/ambient-code/platform/issues"
-Changelog = "https://github.com/ambient-code/platform/releases"
+Repository = "https://github.com/openshift-online/agent-control-plane"
+Issues = "https://github.com/openshift-online/agent-control-plane/issues"
+Changelog = "https://github.com/openshift-online/agent-control-plane/releases"
 
 [tool.setuptools.packages.find]
 where = ["."]

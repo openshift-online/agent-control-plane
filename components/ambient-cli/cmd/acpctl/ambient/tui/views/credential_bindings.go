@@ -5,7 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/table"
 
-	sdktypes "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	sdktypes "github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 )
 
 func CredentialBindingColumns() []table.Column {

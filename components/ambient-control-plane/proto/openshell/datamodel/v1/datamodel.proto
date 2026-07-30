@@ -7,7 +7,7 @@ syntax = "proto3";
 
 package openshell.datamodel.v1;
 
-option go_package = "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/datamodel/v1;datamodel_v1";
+option go_package = "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/datamodel/v1;datamodel_v1";
 
 import "openshell/options/v1/options.proto";
 

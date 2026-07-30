@@ -7,9 +7,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ambient-code/platform/components/ambient-control-plane/internal/informer"
-	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
-	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/informer"
+	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/kubeclient"
+	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 	"github.com/rs/zerolog"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

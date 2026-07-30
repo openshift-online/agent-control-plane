@@ -8,7 +8,7 @@ CONTAINER_ENGINE="${CONTAINER_ENGINE:-docker}"
 
 usage() {
   echo "Usage: $0 <pr-url>"
-  echo "  pr-url:  e.g. https://github.com/ambient-code/platform/pull/1005"
+  echo "  pr-url:  e.g. https://github.com/openshift-online/agent-control-plane/pull/1005"
   echo ""
   echo "Optional environment variables:"
   echo "  REGISTRY          Registry prefix (default: quay.io/ambient_code)"

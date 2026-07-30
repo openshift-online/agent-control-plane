@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	sandboxpb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/sandbox/v1"
+	sandboxpb "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/sandbox/v1"
 )
 
 func TestParsePolicySpec(t *testing.T) {

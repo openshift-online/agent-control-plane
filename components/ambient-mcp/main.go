@@ -7,8 +7,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/ambient-code/platform/components/ambient-mcp/client"
-	"github.com/ambient-code/platform/components/ambient-mcp/tokenexchange"
+	"github.com/openshift-online/agent-control-plane/components/ambient-mcp/client"
+	"github.com/openshift-online/agent-control-plane/components/ambient-mcp/tokenexchange"
 )
 
 func main() {

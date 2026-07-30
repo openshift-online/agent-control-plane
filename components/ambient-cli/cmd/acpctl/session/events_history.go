@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ambient-code/platform/components/ambient-cli/pkg/config"
-	"github.com/ambient-code/platform/components/ambient-cli/pkg/connection"
-	"github.com/ambient-code/platform/components/ambient-cli/pkg/output"
-	sdkclient "github.com/ambient-code/platform/components/ambient-sdk/go-sdk/client"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/pkg/config"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/pkg/connection"
+	"github.com/openshift-online/agent-control-plane/components/ambient-cli/pkg/output"
+	sdkclient "github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/client"
 	"github.com/spf13/cobra"
 )
 

@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ambient-code/platform/components/ambient-control-plane/internal/informer"
-	"github.com/ambient-code/platform/components/ambient-sdk/go-sdk/types"
+	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/informer"
+	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 	"github.com/rs/zerolog"
 )
 

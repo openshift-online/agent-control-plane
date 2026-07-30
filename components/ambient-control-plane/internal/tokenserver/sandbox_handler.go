@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell"
-	pb "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
+	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell"
+	pb "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 	"github.com/rs/zerolog"
 )
 

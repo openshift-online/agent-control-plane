@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ambient-code/platform/components/ambient-control-plane/internal/kubeclient"
+	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/kubeclient"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"

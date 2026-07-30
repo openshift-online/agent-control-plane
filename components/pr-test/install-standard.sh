@@ -7,7 +7,7 @@ CLI="${OC:-oc}"
 
 usage() {
   echo "Usage: $0 <pr-url-or-number>"
-  echo "  pr-url-or-number:  e.g. https://github.com/ambient-code/platform/pull/1599  or  1599"
+  echo "  pr-url-or-number:  e.g. https://github.com/openshift-online/agent-control-plane/pull/1599  or  1599"
   echo ""
   echo "Creates namespace pr-<NUMBER>, deploys api-server + control-plane + PostgreSQL."
   echo ""

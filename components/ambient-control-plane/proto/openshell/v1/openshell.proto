@@ -8,7 +8,7 @@ syntax = "proto3";
 
 package openshell.v1;
 
-option go_package = "github.com/ambient-code/platform/components/ambient-control-plane/internal/openshell/grpc/openshell/v1;openshell_v1";
+option go_package = "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/v1;openshell_v1";
 
 import "openshell/datamodel/v1/datamodel.proto";
 import "google/protobuf/struct.proto";

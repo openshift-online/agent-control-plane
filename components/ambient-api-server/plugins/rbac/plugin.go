@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
+	pkgrbac "github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/rbac"
 )
 
 type MiddlewareLocator func() auth.AuthorizationMiddleware
