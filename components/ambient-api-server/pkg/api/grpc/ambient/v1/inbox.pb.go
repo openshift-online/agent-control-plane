@@ -190,7 +190,7 @@ const file_ambient_v1_inbox_proto_rawDesc = "" +
 	"\x19WatchInboxMessagesRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId2g\n" +
 	"\fInboxService\x12W\n" +
-	"\x12WatchInboxMessages\x12%.ambient.v1.WatchInboxMessagesRequest\x1a\x18.ambient.v1.InboxMessage0\x01BcZagithub.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1b\x06proto3"
+	"\x12WatchInboxMessages\x12%.ambient.v1.WatchInboxMessagesRequest\x1a\x18.ambient.v1.InboxMessage0\x01BrZpgithub.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/grpc/ambient/v1;ambient_v1b\x06proto3"
 
 var (
 	file_ambient_v1_inbox_proto_rawDescOnce sync.Once
