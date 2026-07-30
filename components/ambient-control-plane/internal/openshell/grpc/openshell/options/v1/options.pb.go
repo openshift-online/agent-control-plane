@@ -48,7 +48,7 @@ var File_openshell_options_v1_options_proto protoreflect.FileDescriptor
 const file_openshell_options_v1_options_proto_rawDesc = "" +
 	"\n" +
 	"\"openshell/options/v1/options.proto\x12\x14openshell.options.v1\x1a google/protobuf/descriptor.proto:7\n" +
-	"\x06secret\x12\x1d.google.protobuf.FieldOptions\x18ц\x03 \x01(\bR\x06secretB{Zygithub.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/options/v1;options_v1b\x06proto3"
+	"\x06secret\x12\x1d.google.protobuf.FieldOptions\x18ц\x03 \x01(\bR\x06secretB\x8b\x01Z\x88\x01github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/options/v1;options_v1b\x06proto3"
 
 var file_openshell_options_v1_options_proto_goTypes = []any{
 	(*descriptorpb.FieldOptions)(nil), // 0: google.protobuf.FieldOptions
