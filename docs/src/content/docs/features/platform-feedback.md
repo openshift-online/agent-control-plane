@@ -35,24 +35,25 @@ When the variable is not set, the feedback strip does not render and the `POST /
 
 ### Kind (local development)
 
-The webhook URL is stored in the `sso-credentials` Secret in the kind overlay:
-
-```yaml
-# components/manifests/overlays/kind/sso-credentials.yaml
-stringData:
-  FEEDBACK_SLACK_WEBHOOK_URL: "https://hooks.slack.com/services/T.../B.../..."
-```
-
-The `ambient-ui` deployment reads it via `secretKeyRef` with `optional: true`, so clusters without the key configured will not break.
-
-After setting the value, apply the secret and restart the UI:
+Pass the webhook URL as a Make variable when starting the cluster:
 
 ```bash
-kubectl apply -k components/manifests/overlays/kind -n ambient-code
-kubectl rollout restart deployment/ambient-ui -n ambient-code
+make kind-up FEEDBACK_SLACK_WEBHOOK_URL="https://hooks.slack.com/services/T.../B.../..."
 ```
 
-Or, to set it directly on a running cluster without modifying manifests:
+`kind-up` calls `kubectl set env` on the `ambient-ui` deployment after applying manifests, so the value is always applied regardless of what the base manifest declares. You will see a confirmation line in the output:
+
+```
+✓ Platform feedback: Slack webhook configured
+```
+
+To persist the value across `make kind-up` invocations without typing it each time, add it to `.env.local` (gitignored):
+
+```
+FEEDBACK_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T.../B.../...
+```
+
+To set it on an already-running cluster:
 
 ```bash
 kubectl set env deployment/ambient-ui -n ambient-code \
@@ -61,7 +62,7 @@ kubectl set env deployment/ambient-ui -n ambient-code \
 
 ### OpenShift / production
 
-Add `FEEDBACK_SLACK_WEBHOOK_URL` to the `sso-credentials` Secret in your environment's overlay (e.g., `overlays/hcmais/`, `overlays/production/`), or inject it via your secret management tooling (Vault, Sealed Secrets, External Secrets Operator).
+Inject `FEEDBACK_SLACK_WEBHOOK_URL` into the `ambient-ui` deployment via your secret management tooling (Vault, Sealed Secrets, External Secrets Operator, or an environment-specific kustomize overlay patch).
 
 ## Slack message format
 

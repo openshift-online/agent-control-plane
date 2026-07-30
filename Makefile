@@ -932,10 +932,12 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods..."
 	@./tests/infra/wait-for-ready.sh
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell: gateway mode"
+	@kubectl set env deployment/ambient-ui -n $(NAMESPACE) \
+		FEEDBACK_SLACK_WEBHOOK_URL="$(FEEDBACK_SLACK_WEBHOOK_URL)" $(QUIET_REDIRECT)
 	@if [ -n "$(FEEDBACK_SLACK_WEBHOOK_URL)" ]; then \
-		kubectl set env deployment/ambient-ui -n $(NAMESPACE) \
-			FEEDBACK_SLACK_WEBHOOK_URL="$(FEEDBACK_SLACK_WEBHOOK_URL)" $(QUIET_REDIRECT); \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Platform feedback: Slack webhook configured"; \
+	else \
+		echo "$(COLOR_YELLOW)⚠$(COLOR_RESET) Platform feedback: disabled (no FEEDBACK_SLACK_WEBHOOK_URL)"; \
 	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring SSO..."
 	@NAMESPACE=$(NAMESPACE) KIND_FWD_AMBIENT_UI_PORT=$(KIND_FWD_AMBIENT_UI_PORT) KIND_FWD_KEYCLOAK_PORT=$(KIND_FWD_KEYCLOAK_PORT) \
