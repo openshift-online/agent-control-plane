@@ -1389,6 +1389,16 @@ func (r *GatewayReconciler) reconcileSandboxNetworkPolicy(ctx context.Context, n
 									},
 								},
 							},
+							map[string]interface{}{
+								"podSelector": map[string]interface{}{
+									"matchExpressions": []interface{}{
+										map[string]interface{}{
+											"key":      "agents.x-k8s.io/sandbox-name-hash",
+											"operator": "Exists",
+										},
+									},
+								},
+							},
 						},
 						"ports": []interface{}{
 							map[string]interface{}{
