@@ -116,6 +116,7 @@ VERTEX_CRED ?= $(GOOGLE_APPLICATION_CREDENTIALS)
 # Provisions tenant namespaces with an OpenShell gateway each.
 # Override with OPENSHELL_TENANTS="ns1 ns2" to change the set of tenant namespaces.
 # Skip acpctl apply for specific tenants: SKIP_TENANT_SETUP="tenant-c"
+FEEDBACK_SLACK_WEBHOOK_URL ?=
 OPENSHELL_TENANTS ?= tenant-a tenant-b tenant-c vteam-product-swarm codebase-maintainers
 SKIP_TENANT_SETUP ?=
 AGENT_SANDBOX_VERSION ?= v0.5.1
@@ -931,6 +932,11 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods..."
 	@./tests/infra/wait-for-ready.sh
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell: gateway mode"
+	@if [ -n "$(FEEDBACK_SLACK_WEBHOOK_URL)" ]; then \
+		kubectl set env deployment/ambient-ui -n $(NAMESPACE) \
+			FEEDBACK_SLACK_WEBHOOK_URL="$(FEEDBACK_SLACK_WEBHOOK_URL)" $(QUIET_REDIRECT); \
+		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Platform feedback: Slack webhook configured"; \
+	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring SSO..."
 	@NAMESPACE=$(NAMESPACE) KIND_FWD_AMBIENT_UI_PORT=$(KIND_FWD_AMBIENT_UI_PORT) KIND_FWD_KEYCLOAK_PORT=$(KIND_FWD_KEYCLOAK_PORT) \
 		./scripts/setup-kind-sso.sh
