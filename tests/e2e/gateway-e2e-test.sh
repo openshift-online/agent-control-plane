@@ -67,6 +67,18 @@ _ensure_port_forward() {
   done
 }
 
+_check_port_forward() {
+  local port
+  port=$(echo "$API_URL" | sed -n 's|.*localhost:\([0-9]*\).*|\1|p' | head -1)
+  [[ -z "$port" ]] && return 0
+  local _s
+  _s=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "http://localhost:${port}/healthcheck" 2>/dev/null || true)
+  if [[ "$_s" = "000" || -z "$_s" ]]; then
+    echo -e "  ${YELLOW}Port-forward dead — restarting...${NC}"
+    _ensure_port_forward
+  fi
+}
+
 _ensure_port_forward
 
 _ensure_gateway_port_forward() {
@@ -171,6 +183,7 @@ run_cmd_redact() {
 }
 
 section() {
+  _check_port_forward
   echo ""
   sep
   printf '%b━━  %s%b\n' "${CYAN}" "$*" "${NC}"
