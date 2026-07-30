@@ -194,7 +194,13 @@ test_prerequisites() {
     assert_command_exists "make"
     assert_command_exists "kubectl"
     assert_command_exists "kind"
-    assert_command_exists "podman" || assert_command_exists "docker"
+    if command -v podman >/dev/null 2>&1; then
+        pass "Container runtime 'podman' is installed"
+    elif command -v docker >/dev/null 2>&1; then
+        pass "Container runtime 'docker' is installed"
+    else
+        fail "No container runtime installed (need podman or docker)"
+    fi
 
     # Check if running on macOS or Linux
     if [[ "$OSTYPE" == "darwin"* ]]; then
