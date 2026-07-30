@@ -1,0 +1,14 @@
+overlay-version: "1"
+base-skill: jira-create
+project: agent-control-plane
+overrides:
+  jira_project: "ENGPROD"
+  jira_component: "acp"
+  default_priority: "Normal"
+  default_labels: "team:acp"
+  default_activity_type: "Future Sustainability"
+  default_activity_type_id: "10606"
+  bug_activity_type: "Quality / Stability / Reliability"
+  bug_activity_type_id: "10608"
+  browse_url: "https://redhat.atlassian.net/browse/"
+  repo: "openshift-online/agent-control-plane"

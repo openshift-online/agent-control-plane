@@ -1,0 +1,14 @@
+base-skill: jira-create
+base-skill-source: OpenShift-Fleet/agentic-sdlc
+overlay-version: "1"
+generated-at: "2026-07-30"
+upstream:
+  - path: SKILL.md
+    sha: a9056767b7572536cc4932573fdbf550321feed2a9c4cd28bb59aa8419feef5c
+inputs:
+  - path: config.yaml
+    sha: d4161f7705a6683c4a333fbe192875b700300fe773029221b6224236f945d3ae
+  - path: project-context.md
+    sha: 23cf10c2cfcef9b6032ac35e5f30f5cb671afa01e4b288f73d7dc633f23931bf
+  - path: batch-mode.md
+    sha: 4d310c367d9ba53076e480574c2bdd696e33c8ffcbd4d99ccdabef2e04f599f5
