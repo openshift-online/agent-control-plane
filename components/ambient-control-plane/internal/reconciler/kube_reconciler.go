@@ -1606,6 +1606,13 @@ func (r *SimpleKubeReconciler) configureInferenceFromProviders(ctx context.Conte
 			NoVerify:     true,
 		})
 		if err != nil {
+			if status.Code(err) == codes.Unimplemented {
+				r.logger.Warn().
+					Str("namespace", namespace).
+					Str("provider", osName).
+					Msg("gateway does not support SetInferenceRoute; skipping inference configuration (upgrade gateway to enable)")
+				continue
+			}
 			return fmt.Errorf("setting inference for provider %s: %w", osName, err)
 		}
 
