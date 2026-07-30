@@ -1173,6 +1173,7 @@ func (r *SimpleKubeReconciler) ensureVertexCredentialRefresh(ctx context.Context
 				"private_key":  material.PrivateKey,
 			},
 			SecretMaterialKeys: []string{"private_key"},
+			Workspace:          "default",
 		}
 		r.logger.Info().
 			Str("provider", provName).
@@ -1199,6 +1200,7 @@ func (r *SimpleKubeReconciler) ensureVertexCredentialRefresh(ctx context.Context
 				"private_key":   "not-used-for-oauth2",
 			},
 			SecretMaterialKeys: []string{"client_secret", "refresh_token", "private_key"},
+			Workspace:          "default",
 		}
 		r.logger.Info().
 			Str("provider", provName).
@@ -1215,6 +1217,7 @@ func (r *SimpleKubeReconciler) ensureVertexCredentialRefresh(ctx context.Context
 	rotateResp, err := r.gateway.RotateProviderCredential(ctx, namespace, &openshellpb.RotateProviderCredentialRequest{
 		Provider:      provName,
 		CredentialKey: credKey,
+		Workspace:     "default",
 	})
 	if err != nil {
 		r.logger.Warn().Err(err).
