@@ -927,9 +927,10 @@ func TestVerifyAndFixDNSConfig(t *testing.T) {
 				},
 			}
 
+			crName := openshell.SandboxCRName("test-sandbox")
 			var objects []runtime.Object
 			if tt.podExists {
-				objects = append(objects, makeNamedPod("test-ns", "test-sandbox"))
+				objects = append(objects, makeNamedPod("test-ns", crName))
 			}
 			kube := newFakeKubeClientWithPods(objects...)
 			logger := zerolog.Nop()
@@ -950,13 +951,13 @@ func TestVerifyAndFixDNSConfig(t *testing.T) {
 			}
 
 			if tt.wantDeleted {
-				_, getErr := kube.DynamicClient().Resource(kubeclient.PodGVR).Namespace("test-ns").Get(context.Background(), "test-sandbox", metav1.GetOptions{})
+				_, getErr := kube.DynamicClient().Resource(kubeclient.PodGVR).Namespace("test-ns").Get(context.Background(), crName, metav1.GetOptions{})
 				if !k8serrors.IsNotFound(getErr) {
 					t.Errorf("expected pod to be deleted, but got err: %v", getErr)
 				}
 			}
 			if !tt.wantDeleted && tt.podExists && err == nil {
-				_, getErr := kube.DynamicClient().Resource(kubeclient.PodGVR).Namespace("test-ns").Get(context.Background(), "test-sandbox", metav1.GetOptions{})
+				_, getErr := kube.DynamicClient().Resource(kubeclient.PodGVR).Namespace("test-ns").Get(context.Background(), crName, metav1.GetOptions{})
 				if getErr != nil {
 					t.Errorf("expected pod to still exist, but got err: %v", getErr)
 				}

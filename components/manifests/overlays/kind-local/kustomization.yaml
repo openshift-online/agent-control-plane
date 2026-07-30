@@ -39,6 +39,19 @@ patches:
     version: v1
     kind: Deployment
     name: ambient-control-plane
+- path: image-pull-policy-patch.yaml
+  target:
+    group: batch
+    version: v1
+    kind: Job
+    name: bootstrap-admin
+# DEV-ONLY: relax security context for locally-built bootstrap-admin image
+- path: security-context-patch.yaml
+  target:
+    group: batch
+    version: v1
+    kind: Job
+    name: bootstrap-admin
 
 # Remap images from Quay.io to locally-built names
 # Podman tags images with localhost/ prefix, which kind preserves when loading

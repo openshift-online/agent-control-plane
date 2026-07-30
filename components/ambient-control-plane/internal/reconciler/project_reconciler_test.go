@@ -46,6 +46,9 @@ func newTestProjectReconciler(kube *kubeclient.KubeClient, platformMode string) 
 	}
 }
 
+// Rule counts: standard=7 (core, pods, rbac, apps, batch, networking, route),
+// mpp=9 (standard + build.openshift.io, image.openshift.io).
+// Expanded from 3/6 by PR #430 (gateway passthrough Route, RBAC expansion).
 func TestControlPlaneRBACRules_StandardMode(t *testing.T) {
 	r := newTestProjectReconciler(nil, "standard")
 	rules := r.controlPlaneRBACRules()
@@ -69,8 +72,8 @@ func TestControlPlaneRBACRules_StandardMode(t *testing.T) {
 		}
 	}
 
-	if len(rules) != 3 {
-		t.Errorf("expected 3 rule entries in standard mode, got %d", len(rules))
+	if len(rules) != 7 {
+		t.Errorf("expected 7 rule entries in standard mode, got %d", len(rules))
 	}
 }
 
@@ -100,8 +103,8 @@ func TestControlPlaneRBACRules_MPPMode(t *testing.T) {
 		}
 	}
 
-	if len(rules) != 6 {
-		t.Errorf("expected 6 rule entries in mpp mode, got %d", len(rules))
+	if len(rules) != 9 {
+		t.Errorf("expected 9 rule entries in mpp mode, got %d", len(rules))
 	}
 }
 
@@ -159,8 +162,8 @@ func TestEnsureControlPlaneRBAC_CreatesRoleAndBinding(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("expected rules in created Role: found=%v err=%v", found, err)
 	}
-	if len(rules) != 3 {
-		t.Errorf("expected 3 rules in created Role (standard mode), got %d", len(rules))
+	if len(rules) != 7 {
+		t.Errorf("expected 7 rules in created Role (standard mode), got %d", len(rules))
 	}
 }
 
@@ -201,7 +204,7 @@ func TestEnsureControlPlaneRBAC_UpdatesExistingRole(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("expected rules in updated Role: found=%v err=%v", found, err)
 	}
-	if len(rules) != 6 {
-		t.Errorf("expected 6 rules after update in mpp mode (was 1), got %d", len(rules))
+	if len(rules) != 9 {
+		t.Errorf("expected 9 rules after update in mpp mode (was 1), got %d", len(rules))
 	}
 }

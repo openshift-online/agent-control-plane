@@ -1,0 +1,13 @@
+# DEV-ONLY: Relaxes security constraints for the bootstrap-admin Job when
+# running locally-built images in Kind. Required because local images run as
+# root and write to the filesystem during bootstrap. This overlay is scoped
+# to overlays/kind-local/ which is only applied by `make kind-up` — it is
+# never referenced by production, staging, or CI overlays.
+#
+# DO NOT apply this patch outside of local Kind development.
+- op: replace
+  path: /spec/template/spec/securityContext/runAsNonRoot
+  value: false
+- op: replace
+  path: /spec/template/spec/containers/0/securityContext/readOnlyRootFilesystem
+  value: false
