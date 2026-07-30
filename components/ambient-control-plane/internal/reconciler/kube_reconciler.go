@@ -528,6 +528,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 			Providers:   providerNames,
 			Policy:      sandboxPolicy,
 		},
+		Workspace: "default",
 	}
 
 	if _, err := r.gateway.CreateSandbox(ctx, namespace, req); err != nil {
@@ -1607,6 +1608,7 @@ func (r *SimpleKubeReconciler) configureInferenceFromProviders(ctx context.Conte
 			ProviderName: osName,
 			ModelId:      inferenceModel,
 			NoVerify:     true,
+			Workspace:    "default",
 		})
 		if err != nil {
 			if status.Code(err) == codes.Unimplemented {
