@@ -11,8 +11,40 @@ metadata:
     app.kubernetes.io/managed-by: agent-control-plane
 spec:
   podSelector:
-    matchLabels:
-      openshell.ai/managed-by: openshell
+    matchExpressions:
+      - key: openshell.ai/managed-by
+        operator: In
+        values: ["openshell"]
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: NAMESPACE_PLACEHOLDER
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: openshell
+              app.kubernetes.io/instance: openshell-gateway
+      ports:
+        - protocol: TCP
+          port: 2222
+---
+# NetworkPolicy for OpenShell 0.0.92+ sandbox pods (new label format)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openshell-gateway-sandbox-ssh-v2
+  namespace: NAMESPACE_PLACEHOLDER
+  labels:
+    app.kubernetes.io/name: openshell
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: agent-control-plane
+spec:
+  podSelector:
+    matchExpressions:
+      - key: agents.x-k8s.io/sandbox-name-hash
+        operator: Exists
   policyTypes:
     - Ingress
   ingress:

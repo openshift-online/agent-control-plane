@@ -460,28 +460,42 @@ GW_FLAG="-g ${GW_LOCAL_NAME}"
 INSECURE_ENV="OPENSHELL_GATEWAY_INSECURE=true"
 
 show_cmd "${INSECURE_ENV} openshell ${GW_FLAG} sandbox exec ${SANDBOX_NAME} -- uname -a"
-SB_EXEC_OUTPUT=$(OPENSHELL_GATEWAY_INSECURE=true openshell -g "${GW_LOCAL_NAME}" sandbox exec "${SANDBOX_NAME}" -- uname -a 2>&1 || true)
-CLEAN_EXEC=$(echo "$SB_EXEC_OUTPUT" | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^ *$' | grep -v 'WARN' | tail -3)
-if [[ -n "$CLEAN_EXEC" ]]; then
-  pass "Sandbox exec: command executed inside sandbox"
-  echo "$CLEAN_EXEC" | while IFS= read -r line; do
-    dim "    $line"
-  done
+if SB_EXEC_OUTPUT=$(OPENSHELL_GATEWAY_INSECURE=true openshell -g "${GW_LOCAL_NAME}" sandbox exec "${SANDBOX_NAME}" -- uname -a 2>&1); then
+  CLEAN_EXEC=$(echo "$SB_EXEC_OUTPUT" | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^ *$' | grep -v 'WARN' | tail -3)
+  if [[ -n "$CLEAN_EXEC" ]]; then
+    pass "Sandbox exec: command executed inside sandbox"
+    echo "$CLEAN_EXEC" | while IFS= read -r line; do
+      dim "    $line"
+    done
+  else
+    fail_test "Sandbox exec: no output from uname command"
+    dim "    ${SB_EXEC_OUTPUT:0:200}"
+  fi
 else
-  fail_test "Sandbox exec failed"
+  fail_test "Sandbox exec: openshell command failed"
   dim "    ${SB_EXEC_OUTPUT:0:200}"
 fi
 
 show_cmd "${INSECURE_ENV} openshell ${GW_FLAG} sandbox exec ${SANDBOX_NAME} -- ls -la /workspace"
-SB_LS_OUTPUT=$(OPENSHELL_GATEWAY_INSECURE=true openshell -g "${GW_LOCAL_NAME}" sandbox exec "${SANDBOX_NAME}" -- ls -la /workspace 2>&1 || true)
-CLEAN_LS=$(echo "$SB_LS_OUTPUT" | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^ *$' | grep -v 'WARN' | tail -5)
-if [[ -n "$CLEAN_LS" ]]; then
-  pass "Sandbox workspace: /workspace directory listing"
-  echo "$CLEAN_LS" | while IFS= read -r line; do
-    dim "    $line"
-  done
+if SB_LS_OUTPUT=$(OPENSHELL_GATEWAY_INSECURE=true openshell -g "${GW_LOCAL_NAME}" sandbox exec "${SANDBOX_NAME}" -- ls -la /workspace 2>&1); then
+  CLEAN_LS=$(echo "$SB_LS_OUTPUT" | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^ *$' | grep -v 'WARN' | tail -5)
+  if [[ -n "$CLEAN_LS" ]]; then
+    pass "Sandbox workspace: /workspace directory listing"
+    echo "$CLEAN_LS" | while IFS= read -r line; do
+      dim "    $line"
+    done
+  else
+    fail_test "Sandbox workspace: no output from ls command"
+    dim "    ${SB_LS_OUTPUT:0:200}"
+  fi
 else
-  dim "  - /workspace not available (using default working directory)"
+  # /workspace not existing is common and not necessarily a failure
+  if echo "$SB_LS_OUTPUT" | grep -q "No such file or directory"; then
+    dim "  - /workspace not available (using default working directory)"
+  else
+    fail_test "Sandbox workspace: openshell ls command failed"
+    dim "    ${SB_LS_OUTPUT:0:200}"
+  fi
 fi
 
 echo ""
