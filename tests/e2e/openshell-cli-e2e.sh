@@ -115,6 +115,33 @@ run_cmd() {
   echo ""
 }
 
+# Retry a command until an assertion on CMD_OUTPUT/CMD_RC passes.
+# Usage: eventually <max_attempts> <interval_secs> <assertion_fn> <cmd...>
+#   assertion_fn receives no args and should inspect CMD_OUTPUT/CMD_RC,
+#   returning 0 on success or non-zero to retry.
+eventually() {
+  local max_attempts=$1 interval=$2 assertion=$3
+  shift 3
+  local attempt=1
+  while [ "$attempt" -le "$max_attempts" ]; do
+    CMD_RC=0
+    CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+    if $assertion; then
+      if [ "$attempt" -gt 1 ]; then
+        printf '    %b(passed on attempt %d/%d)%b\n' "${DIM}" "$attempt" "$max_attempts" "${NC}"
+      fi
+      return 0
+    fi
+    if [ "$attempt" -lt "$max_attempts" ]; then
+      printf '    %bretry %d/%d (waiting %ds)...%b\n' "${DIM}" "$attempt" "$max_attempts" "$interval" "${NC}"
+      sleep "$interval"
+    fi
+    ((attempt++))
+  done
+  echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
+  return 1
+}
+
 # --- Cleanup ---
 
 cleanup() {
@@ -453,11 +480,14 @@ fi
 
 # Exec into sandbox (only if ready)
 if [ "$SANDBOX_READY" = "true" ]; then
-  run_cmd openshell sandbox exec --gateway "$GATEWAY_NAME" -n "$SANDBOX_NAME" -- echo hello
-  if echo "$CMD_OUTPUT" | grep -q "hello"; then
+  printf '  %b▶%b  %b$ openshell sandbox exec --gateway "%s" -n "%s" -- echo hello%b\n' \
+    "${BOLD}" "${NC}" "${ORANGE}" "$GATEWAY_NAME" "$SANDBOX_NAME" "${NC}"
+  _assert_hello() { echo "$CMD_OUTPUT" | grep -q "hello"; }
+  if eventually 10 3 _assert_hello \
+    openshell sandbox exec --gateway "$GATEWAY_NAME" -n "$SANDBOX_NAME" -- echo hello; then
     pass "Sandbox exec: 'echo hello' returned 'hello'"
   else
-    fail "Sandbox exec: expected 'hello' in output"
+    fail "Sandbox exec: expected 'hello' in output (after retries)"
   fi
 else
   skip "Sandbox exec" "sandbox not ready"
@@ -616,11 +646,11 @@ else
   fi
 
   # Policy enforcement: allowed endpoint
-  printf '  %b▶%b  Policy enforcement (waiting 3s for propagation)...\n' "${BOLD}" "${NC}"
-  sleep 3
-  run_cmd openshell sandbox exec --gateway "$GATEWAY_NAME" \
-    -n "$SANDBOX_NAME" -- curl -sf https://update.code.visualstudio.com
-  if [ "$CMD_RC" -eq 0 ]; then
+  printf '  %b▶%b  Policy enforcement (with retries for supervisor relay)...\n' "${BOLD}" "${NC}"
+  _assert_allowed() { [ "$CMD_RC" -eq 0 ]; }
+  if eventually 10 3 _assert_allowed \
+    openshell sandbox exec --gateway "$GATEWAY_NAME" \
+      -n "$SANDBOX_NAME" -- curl -sf https://update.code.visualstudio.com; then
     pass "Policy enforcement: allowed endpoint (update.code.visualstudio.com) reachable"
   elif echo "$CMD_OUTPUT" | grep -q "policy_denied"; then
     fail "Allowed endpoint was denied by policy"
@@ -629,12 +659,15 @@ else
   fi
 
   # Policy enforcement: blocked endpoint
-  run_cmd openshell sandbox exec --gateway "$GATEWAY_NAME" \
-    -n "$SANDBOX_NAME" -- curl -sf http://example.com
-  if echo "$CMD_OUTPUT" | grep -q "policy_denied"; then
-    pass "Policy enforcement: blocked endpoint returned policy_denied"
-  elif [ "$CMD_RC" -ne 0 ]; then
-    pass "Policy enforcement: blocked endpoint rejected (rc=${CMD_RC})"
+  _assert_blocked() { echo "$CMD_OUTPUT" | grep -q "policy_denied" || [ "$CMD_RC" -ne 0 ]; }
+  if eventually 10 3 _assert_blocked \
+    openshell sandbox exec --gateway "$GATEWAY_NAME" \
+      -n "$SANDBOX_NAME" -- curl -sf http://example.com; then
+    if echo "$CMD_OUTPUT" | grep -q "policy_denied"; then
+      pass "Policy enforcement: blocked endpoint returned policy_denied"
+    else
+      pass "Policy enforcement: blocked endpoint rejected (rc=${CMD_RC})"
+    fi
   else
     fail "Policy enforcement: blocked endpoint was NOT denied"
   fi
