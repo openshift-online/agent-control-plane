@@ -95,7 +95,7 @@ _ensure_gateway_port_forward() {
   # Start a port-forward to the gateway gRPC port
   local gw_log
   gw_log=$(mktemp)
-  kubectl port-forward -n "${TENANT}" statefulset/openshell-gateway ":8080" \
+  kubectl port-forward -n "${TENANT}" svc/openshell-gateway ":8080" \
     >"$gw_log" 2>&1 &
   GW_PF_PID=$!
 
@@ -357,23 +357,24 @@ fi
 
 if [ "$E2E_GW_CLEANUP" = "true" ]; then
   # The gateway reconciler runs on a 30s interval. Wait up to 120s for the
-  # StatefulSet to appear, checking every 5s.
+  # gateway workload (Deployment or StatefulSet) to appear, checking every 5s.
   GW_DEPLOYED=false
   for i in $(seq 1 24); do
-    run_cmd kubectl get statefulset openshell-gateway -n "$E2E_GW_PROJECT" \
-      -o jsonpath='{.metadata.name}'
-    GW_STS="${CMD_OUTPUT:-}"
-    if [ "$GW_STS" = "openshell-gateway" ]; then
-      GW_DEPLOYED=true
-      break
-    fi
+    for _kind in deployment statefulset; do
+      _name=$(kubectl get "$_kind" openshell-gateway -n "$E2E_GW_PROJECT" \
+        -o jsonpath='{.metadata.name}' 2>/dev/null || echo "")
+      if [ "$_name" = "openshell-gateway" ]; then
+        GW_DEPLOYED=true
+        break 2
+      fi
+    done
     sleep 5
   done
 
   if [ "$GW_DEPLOYED" = "true" ]; then
-    pass "Gateway StatefulSet created in namespace '${E2E_GW_PROJECT}'"
+    pass "Gateway workload created in namespace '${E2E_GW_PROJECT}'"
   else
-    fail "Gateway StatefulSet not found in namespace '${E2E_GW_PROJECT}' after 120s"
+    fail "Gateway workload not found in namespace '${E2E_GW_PROJECT}' after 120s"
     echo "  Control plane may be using gateway name as namespace instead of project namespace"
   fi
 
@@ -502,14 +503,21 @@ fi
 
 section "8. OpenShell gateway healthy"
 
-run_cmd kubectl get statefulset openshell-gateway -n "$TENANT" \
-  -o jsonpath='{.status.readyReplicas}'
-GW_READY="${CMD_OUTPUT:-0}"
+GW_READY=""
+for _kind in deployment statefulset; do
+  _val=$(kubectl get "$_kind" openshell-gateway -n "$TENANT" \
+    -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "")
+  if [ -n "$_val" ]; then
+    GW_READY="$_val"
+    GW_WORKLOAD_KIND="$_kind"
+    break
+  fi
+done
 
-if [ "${GW_READY}" -ge 1 ]; then
-  pass "openshell-gateway in ${TENANT} ready (replicas: ${GW_READY})"
+if [ "${GW_READY:-0}" -ge 1 ] 2>/dev/null; then
+  pass "openshell-gateway in ${TENANT} ready (${GW_WORKLOAD_KIND}, replicas: ${GW_READY})"
 else
-  fail "openshell-gateway in ${TENANT} not ready (readyReplicas=${GW_READY})"
+  fail "openshell-gateway in ${TENANT} not ready (readyReplicas=${GW_READY:-not found})"
 fi
 
 run_cmd kubectl get deployment agent-sandbox-controller \
@@ -1017,16 +1025,20 @@ if ! _ensure_gateway_port_forward; then
 fi
 
 # Wait for gateway pod to be fully ready — the reconciler may have restarted
-# the StatefulSet during sections 9-11 (DNS or config change detection).
+# the workload during sections 9-11 (DNS or config change detection).
 GW_READY_FOR_NET=false
 for _i in $(seq 1 30); do
-  _gw_phase=$(kubectl get pod openshell-gateway-0 -n "$TENANT" \
-    -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
-  _gw_ready=$(kubectl get pod openshell-gateway-0 -n "$TENANT" \
-    -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || echo "")
-  if [ "$_gw_phase" = "Running" ] && [ "$_gw_ready" = "true" ]; then
-    GW_READY_FOR_NET=true
-    break
+  _gw_pod=$(kubectl get pod -n "$TENANT" -l app.kubernetes.io/name=openshell,app.kubernetes.io/component=gateway \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+  if [ -n "$_gw_pod" ]; then
+    _gw_phase=$(kubectl get pod "$_gw_pod" -n "$TENANT" \
+      -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+    _gw_ready=$(kubectl get pod "$_gw_pod" -n "$TENANT" \
+      -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || echo "")
+    if [ "$_gw_phase" = "Running" ] && [ "$_gw_ready" = "true" ]; then
+      GW_READY_FOR_NET=true
+      break
+    fi
   fi
   sleep 2
 done
@@ -1137,9 +1149,13 @@ fi
 
 # Brief gateway readiness check — cleanup may coincide with a reconciler restart
 for _i in $(seq 1 15); do
-  _gw_ready=$(kubectl get pod openshell-gateway-0 -n "$TENANT" \
-    -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || echo "")
-  [ "$_gw_ready" = "true" ] && break
+  _gw_pod=$(kubectl get pod -n "$TENANT" -l app.kubernetes.io/name=openshell,app.kubernetes.io/component=gateway \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+  if [ -n "$_gw_pod" ]; then
+    _gw_ready=$(kubectl get pod "$_gw_pod" -n "$TENANT" \
+      -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || echo "")
+    [ "$_gw_ready" = "true" ] && break
+  fi
   sleep 2
 done
 # Re-check CLI connectivity after potential gateway restart

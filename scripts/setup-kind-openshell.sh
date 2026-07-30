@@ -21,12 +21,42 @@ AGENT_SANDBOX_VERSION="${AGENT_SANDBOX_VERSION:-v0.5.1}"
 # Space-separated list of tenant namespaces to provision
 IFS=' ' read -ra TENANTS <<< "${OPENSHELL_TENANTS:-tenant-a tenant-b vteam-product-swarm codebase-maintainers}"
 
+CONTAINER_ENGINE="${CONTAINER_ENGINE:-$(command -v podman >/dev/null 2>&1 && echo podman || echo docker)}"
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-ambient-dev}"
+
+OPENSHELL_GATEWAY_IMAGE="${OPENSHELL_GATEWAY_IMAGE:-ghcr.io/nvidia/openshell/gateway:0.0.92}"
+OPENSHELL_PG_IMAGE="${OPENSHELL_PG_IMAGE:-registry.redhat.io/rhel9/postgresql-16:latest}"
+
 echo "Setting up OpenShell gateway prerequisites (tenants: ${TENANTS[*]})..."
 
-# 0. Suppress IPv6 (AAAA) DNS for all external domains in CoreDNS.
-#    Kind on Podman has no IPv6 connectivity. The OpenShell supervisor's DNS
-#    resolver tries IPv6 first and fails without falling back to IPv4, causing
-#    503 on inference calls (Vertex AI) and DENIED on api.anthropic.com, github.com, etc.
+# 0a. Load gateway and database images into Kind (idempotent).
+#     The control plane reconciler creates gateway Deployments that reference
+#     these images; they must be present inside the Kind node's containerd.
+_load_image() {
+  local img="$1"
+  if $CONTAINER_ENGINE exec "${KIND_CLUSTER_NAME}-control-plane" \
+      crictl inspecti "$img" >/dev/null 2>&1; then
+    echo "  Image '$img' already present in Kind"
+    return 0
+  fi
+  echo "  Pulling '$img'..."
+  if ! $CONTAINER_ENGINE pull "$img" 2>/dev/null; then
+    echo "  Warning: could not pull '$img' — skipping (registry auth may be required)"
+    return 1
+  fi
+  echo "  Loading '$img' into Kind..."
+  $CONTAINER_ENGINE save "$img" | \
+    $CONTAINER_ENGINE exec -i "${KIND_CLUSTER_NAME}-control-plane" \
+    ctr --namespace=k8s.io images import - >/dev/null 2>&1
+}
+
+_load_image "$OPENSHELL_GATEWAY_IMAGE" || true
+_load_image "$OPENSHELL_PG_IMAGE" || true
+
+# 0b. Suppress IPv6 (AAAA) DNS for all external domains in CoreDNS.
+#     Kind on Podman has no IPv6 connectivity. The OpenShell supervisor's DNS
+#     resolver tries IPv6 first and fails without falling back to IPv4, causing
+#     503 on inference calls (Vertex AI) and DENIED on api.anthropic.com, github.com, etc.
 echo "  Patching CoreDNS to suppress AAAA records (IPv4-only)..."
 COREFILE=$(kubectl get configmap coredns -n kube-system -o jsonpath='{.data.Corefile}')
 if echo "$COREFILE" | grep -q "template IN AAAA"; then
