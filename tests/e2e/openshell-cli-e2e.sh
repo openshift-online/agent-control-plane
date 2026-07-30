@@ -438,6 +438,11 @@ run_cmd $ACPCTL login --password-grant \
   --url "$API_URL" --project "$TENANT"
 openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
 run_cmd $ACPCTL gateway setup-cli --kubectl --project "$TENANT"
+if [ "$CMD_RC" -ne 0 ]; then
+  fail "acpctl gateway setup-cli failed (token refresh)"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
+  exit 1
+fi
 
 # List sandboxes
 run_cmd openshell sandbox list --gateway "$GATEWAY_NAME"
@@ -445,6 +450,8 @@ if echo "$CMD_OUTPUT" | grep -q "$SANDBOX_NAME"; then
   pass "Sandbox appears in list output"
 else
   fail "Sandbox '${SANDBOX_NAME}' not found in sandbox list"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
+  exit 1
 fi
 
 # Poll for sandbox readiness (180s timeout, 2s interval)
@@ -483,7 +490,7 @@ if [ "$SANDBOX_READY" = "true" ]; then
   printf '  %b▶%b  %b$ openshell sandbox exec --gateway "%s" -n "%s" -- echo hello%b\n' \
     "${BOLD}" "${NC}" "${ORANGE}" "$GATEWAY_NAME" "$SANDBOX_NAME" "${NC}"
   _assert_hello() { echo "$CMD_OUTPUT" | grep -q "hello"; }
-  if eventually 10 3 _assert_hello \
+  if eventually 5 3 _assert_hello \
     openshell sandbox exec --gateway "$GATEWAY_NAME" -n "$SANDBOX_NAME" -- echo hello; then
     pass "Sandbox exec: 'echo hello' returned 'hello'"
   else
@@ -648,7 +655,7 @@ else
   # Policy enforcement: allowed endpoint
   printf '  %b▶%b  Policy enforcement (with retries for supervisor relay)...\n' "${BOLD}" "${NC}"
   _assert_allowed() { [ "$CMD_RC" -eq 0 ]; }
-  if eventually 10 3 _assert_allowed \
+  if eventually 5 3 _assert_allowed \
     openshell sandbox exec --gateway "$GATEWAY_NAME" \
       -n "$SANDBOX_NAME" -- curl -sf https://update.code.visualstudio.com; then
     pass "Policy enforcement: allowed endpoint (update.code.visualstudio.com) reachable"
@@ -660,7 +667,7 @@ else
 
   # Policy enforcement: blocked endpoint
   _assert_blocked() { echo "$CMD_OUTPUT" | grep -q "policy_denied" || [ "$CMD_RC" -ne 0 ]; }
-  if eventually 10 3 _assert_blocked \
+  if eventually 5 3 _assert_blocked \
     openshell sandbox exec --gateway "$GATEWAY_NAME" \
       -n "$SANDBOX_NAME" -- curl -sf http://example.com; then
     if echo "$CMD_OUTPUT" | grep -q "policy_denied"; then

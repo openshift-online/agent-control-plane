@@ -60,6 +60,8 @@ jobs:
     env:
       KUBECTL_VERSION: v1.31.4
       KIND_VERSION: v0.31.0
+      IMAGE_TAG: ${{ inputs.image-tag || 'latest' }}
+      BUILT_IMAGES: ${{ inputs.built-images || '[]' }}
 
     steps:
     - name: Checkout code
