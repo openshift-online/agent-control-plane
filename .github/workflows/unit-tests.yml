@@ -129,7 +129,7 @@ jobs:
       - name: Build binary
         run: |
           cd components/ambient-cli
-          go build -ldflags "-X github.com/ambient-code/platform/components/ambient-cli/pkg/info.Version=ci-${{ github.sha }}" -o acpctl ./cmd/acpctl/
+          go build -ldflags "-X github.com/openshift-online/agent-control-plane/components/ambient-cli/pkg/info.Version=ci-${{ github.sha }}" -o acpctl ./cmd/acpctl/
 
       - name: Verify binary runs
         run: |
