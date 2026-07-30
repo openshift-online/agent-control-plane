@@ -684,7 +684,7 @@ test_security_token_redaction() {
     fi
 
     # Test 1: Logs should use tokenLen= instead of showing token
-    if echo "$logs" | grep -q "tokenLen=\|token (len="; then
+    if echo "$logs" | grep -q "tokenLen=\|token (len=\|REDACTED:len="; then
         pass "Logs use token length instead of token value (correct redaction)"
     else
         log_info "Token length logging not found (may need authenticated requests)"
