@@ -107,6 +107,28 @@ file_sha256() {
   shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1
 }
 
+# ── Helper: read (path, sha) pairs from a YAML list, e.g. the lock file's `upstream:` list ──
+
+yaml_list_kv() {
+  local file="$1" key="$2"
+  awk -v key="$key" '
+    $0 ~ "^"key":[[:space:]]*$" { inblock=1; path=""; next }
+    inblock && $0 !~ /^[[:space:]]/ { inblock=0 }
+    inblock && /^[[:space:]]*-[[:space:]]*path:/ {
+      p=$0
+      sub(/^[[:space:]]*-[[:space:]]*path:[[:space:]]*/, "", p)
+      path=p
+      next
+    }
+    inblock && /^[[:space:]]*sha:/ {
+      s=$0
+      sub(/^[[:space:]]*sha:[[:space:]]*/, "", s)
+      if (path != "") { print path "\t" s }
+      path=""
+    }
+  ' "$file"
+}
+
 # ── Process each overlay ───────────────────────────────────────────────────
 
 SYNCED=0
@@ -161,9 +183,8 @@ for overlay_name in "${OVERLAYS[@]}"; do
     continue
   fi
 
-  # 4d: Check upstream exists + 4e: Drift check
+  # 4d: Check upstream exists across targets
   upstream_found=false
-  upstream_sha=""
   first_deploy_dir=""
 
   while IFS= read -r deploy_dir; do
@@ -172,24 +193,28 @@ for overlay_name in "${OVERLAYS[@]}"; do
       upstream_found=true
       if [[ -z "$first_deploy_dir" ]]; then
         first_deploy_dir="$deploy_dir"
-        upstream_sha=$(file_sha256 "$upstream_file")
       fi
     fi
   done <<< "$DEPLOY_DIRS"
 
   if ! $upstream_found; then
-    warn "upstream skill '$base_skill' not found in any active target"
+    warn "upstream skill '$base_skill' not found in any active target — future updates can't be detected until it's reinstalled somewhere"
   fi
 
-  # Drift check
-  if [[ -f "$lock_file" ]] && [[ -n "$upstream_sha" ]]; then
-    lock_sha=$(yaml_value "$lock_file" "base-skill-sha")
-    if [[ -n "$lock_sha" ]] && [[ "$lock_sha" != "$upstream_sha" ]]; then
-      warn "upstream SHA differs — overlay may be stale, run /overlay-sync-skills to regenerate"
-      echo -e "      lock:     ${lock_sha:0:12}..."
-      echo -e "      upstream: ${upstream_sha:0:12}..."
-      WARNED=$((WARNED + 1))
-    fi
+  # 4e: Drift check — every upstream file tracked in the lock, not just SKILL.md
+  if [[ -f "$lock_file" ]] && [[ -n "$first_deploy_dir" ]]; then
+    while IFS=$'\t' read -r rel_path lock_sha; do
+      [[ -z "$rel_path" ]] && continue
+      upstream_path="$REPO_ROOT/${first_deploy_dir}skills/$base_skill/$rel_path"
+      [[ -f "$upstream_path" ]] || continue
+      current_sha=$(file_sha256 "$upstream_path")
+      if [[ "$current_sha" != "$lock_sha" ]]; then
+        warn "upstream $rel_path differs — overlay may be stale, run /overlay-sync-skills to regenerate"
+        echo -e "      lock:     ${lock_sha:0:12}..."
+        echo -e "      upstream: ${current_sha:0:12}..."
+        WARNED=$((WARNED + 1))
+      fi
+    done < <(yaml_list_kv "$lock_file" "upstream")
   fi
 
   # 4f: Copy to each active target

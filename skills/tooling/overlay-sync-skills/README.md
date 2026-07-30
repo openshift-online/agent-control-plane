@@ -102,7 +102,7 @@ The `overlay.lock.yaml` file tracks the SHA-256 of the upstream skill and every 
 
 ```
   jira-create
-    ⚠ upstream SHA differs — overlay may be stale, run /overlay-sync-skills to regenerate
+    ⚠ upstream SKILL.md differs — overlay may be stale, run /overlay-sync-skills to regenerate
       lock:     a9056767b757...
       upstream: def456abc123...
     ✓ .claude/skills/jira-create/ (1 file(s) synced)
