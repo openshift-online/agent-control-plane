@@ -110,6 +110,20 @@ oc logs -l app.kubernetes.io/name=openshell -n <tenant-namespace> | grep -i oidc
 > **Note:** If the cluster's ingress CA rotates, update the `gateway-trusted-ca`
 > ConfigMap and restart the gateway pods.
 
+### Sandbox SCC (Required on OpenShift)
+
+When a namespace that will host gateway sandboxes is created on OpenShift, the
+`openshell-sandbox` service account must be granted the `privileged` SCC. Without
+this, sandbox pods will fail to start due to insufficient permissions.
+
+```bash
+oc adm policy add-scc-to-user privileged -z openshell-sandbox -n <namespace>
+```
+
+Run this once per tenant namespace. See the
+[NVIDIA OpenShell docs](https://docs.nvidia.com/openshell/kubernetes/openshift#grant-the-privileged-scc-to-sandbox-pods)
+for details.
+
 ### Setting up API Keys
 After deployment, configure runner secrets through Settings → Runner Secrets in the UI. At minimum, provide `ANTHROPIC_API_KEY`.
 
