@@ -1,7 +1,7 @@
 ---
 name: overlay-sync-skills
 description: >
-  Merge upstream skills with project-specific overlays from skills/overlays/
+  Merge upstream skills with project-specific overlays from overlays/
   to produce generated files in customized/generated/. Use when overlays need
   initial generation, upstream skills drift (warned by apm install/update), or
   overlay inputs change. Triggers on: "sync overlay", "generate overlay",
@@ -29,7 +29,7 @@ The user may provide:
 
 ### Step 1: Discover Overlays
 
-Determine the overlay directory from user input. Default to `skills/overlays/` if no directory was specified.
+Determine the overlay directory from user input. Default to `overlays/` if no directory was specified.
 
 Scan the overlay directory for subdirectories containing `customized/config.yaml`.
 

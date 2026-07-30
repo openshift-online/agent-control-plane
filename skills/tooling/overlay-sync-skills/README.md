@@ -11,10 +11,10 @@ This directory contains two tools that work together:
 
 ### 1. Create an overlay
 
-Create a directory under `skills/overlays/` named after the upstream skill you want to customize:
+Create a directory under `overlays/` named after the upstream skill you want to customize:
 
 ```
-skills/overlays/<skill-name>/
+overlays/<skill-name>/
   customized/
     config.yaml           # required — structured parameters
     project-context.md    # optional — prose conventions, context
@@ -31,7 +31,7 @@ overrides:
   # key-value pairs that replace placeholders in the upstream skill
 ```
 
-Example (`skills/overlays/jira-create/customized/config.yaml`):
+Example (`overlays/jira-create/customized/config.yaml`):
 
 ```yaml
 overlay-version: "1"
@@ -62,7 +62,7 @@ Or process all overlays at once:
 The skill reads the upstream SKILL.md + your overlay inputs, merges them, and writes the result to `customized/generated/`:
 
 ```
-skills/overlays/jira-create/
+overlays/jira-create/
   customized/
     config.yaml
     project-context.md
@@ -84,7 +84,7 @@ The sync script replaces the upstream skill files with your generated versions i
 
 ## Custom overlay directory
 
-Both tools default to `skills/overlays/` but accept a custom path:
+Both tools default to `overlays/` but accept a custom path:
 
 ```
 # Agent skill — natural language
@@ -125,7 +125,7 @@ The `/overlay-sync-skills` skill checks input SHAs before merging. If nothing ch
 Some skills reference additional `.md` files beyond `SKILL.md`. To customize those, add a `template-overrides.md` (or similar) to your `customized/` directory describing what to change:
 
 ```
-skills/overlays/bug-specialist/
+overlays/bug-specialist/
   customized/
     config.yaml
     project-context.md
@@ -145,5 +145,5 @@ The `/overlay-sync-skills` skill reads all `*.md` files in `customized/` and app
 | `SKILL.md` | Agent skill — LLM merge logic, runs in agent session |
 | `overlay-sync.sh` | Bash script — copies generated files to targets, drift detection |
 | `apm.yml` (repo root) | Hooks: `post-install` and `post-update` point to `overlay-sync.sh` |
-| `skills/overlays/` | Default overlay directory |
+| `overlays/` | Default overlay directory |
 | `skill-overlay-architecture.md` (repo root) | Architecture doc — design rationale and spec alignment |

@@ -23,7 +23,7 @@ skip() { echo -e "    ${RED}✗${NC} $*"; }
 
 # ── Parse arguments ────────────────────────────────────────────────────────
 
-OVERLAY_DIR="skills/overlays"
+OVERLAY_DIR="overlays"
 HOOK=""
 
 while [[ $# -gt 0 ]]; do
@@ -33,7 +33,7 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       echo "Usage: $(basename "$0") [--overlay-dir <path>] [--hook <post-install|post-update>]"
       echo ""
-      echo "  --overlay-dir   Path to overlays directory (default: skills/overlays)"
+      echo "  --overlay-dir   Path to overlays directory (default: overlays)"
       echo "  --hook          APM lifecycle hook that invoked this script"
       exit 0
       ;;
