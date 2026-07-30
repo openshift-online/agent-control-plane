@@ -10,6 +10,7 @@ Guides for deploying the Ambient Code Platform to various environments.
 - **SSO Migration** - Keycloak SSO/OIDC authentication (see `specs/security/sso-authentication.spec.md`)
 
 ### Configuration
+- **[Gateway Trusted CA](OPENSHIFT_DEPLOY.md#gateway-trusted-ca-required-for-oidc)** - Ingress CA for gateway OIDC on OpenShift
 - **[Git Authentication](git-authentication.md)** - Configure Git credentials for runners
 - **[GitHub App Setup](../GITHUB_APP_SETUP.md)** - GitHub App integration
 
