@@ -358,6 +358,10 @@ func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient 
 		r.logger.Warn().Err(err).Str("namespace", namespace).Msg("failed to reconcile control plane NetworkPolicy")
 	}
 
+	if err := r.reconcileSandboxNetworkPolicy(ctx, namespace); err != nil {
+		r.logger.Warn().Err(err).Str("namespace", namespace).Msg("failed to reconcile sandbox NetworkPolicy")
+	}
+
 	if err := r.reconcileGRPCRoute(ctx, projectClient, gw, namespace); err != nil {
 		r.logger.Warn().Err(err).
 			Str("gateway_name", gw.Name).
@@ -1330,6 +1334,58 @@ func (r *GatewayReconciler) reconcileControlPlaneNetworkPolicy(ctx context.Conte
 								"podSelector": map[string]interface{}{
 									"matchLabels": map[string]interface{}{
 										"app": "ambient-control-plane",
+									},
+								},
+							},
+						},
+						"ports": []interface{}{
+							map[string]interface{}{
+								"port":     int64(8080),
+								"protocol": "TCP",
+							},
+							map[string]interface{}{
+								"port":     int64(8081),
+								"protocol": "TCP",
+							},
+						},
+					},
+				},
+				"policyTypes": []interface{}{"Ingress"},
+			},
+		},
+	}
+	return r.applyUnstructured(ctx, networkPolicyGVR, namespace, policyName, policy)
+}
+
+func (r *GatewayReconciler) reconcileSandboxNetworkPolicy(ctx context.Context, namespace string) error {
+	policyName := "openshell-gateway-allow-sandbox"
+	policy := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "networking.k8s.io/v1",
+			"kind":       "NetworkPolicy",
+			"metadata": map[string]interface{}{
+				"name":      policyName,
+				"namespace": namespace,
+				"labels": map[string]interface{}{
+					"app.kubernetes.io/name":       "openshell",
+					"app.kubernetes.io/component":  "gateway",
+					"app.kubernetes.io/managed-by": "agent-control-plane",
+				},
+			},
+			"spec": map[string]interface{}{
+				"podSelector": map[string]interface{}{
+					"matchLabels": map[string]interface{}{
+						"app.kubernetes.io/instance": "openshell-gateway",
+						"app.kubernetes.io/name":     "openshell",
+					},
+				},
+				"ingress": []interface{}{
+					map[string]interface{}{
+						"from": []interface{}{
+							map[string]interface{}{
+								"podSelector": map[string]interface{}{
+									"matchLabels": map[string]interface{}{
+										"openshell.ai/managed-by": "openshell",
 									},
 								},
 							},
