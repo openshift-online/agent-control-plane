@@ -12,6 +12,14 @@ description: >
 
 Merge upstream skill files with project-specific overlay inputs to produce generated files.
 
+## Scope
+
+This skill **only** merges overlay inputs into `customized/generated/`. It does **not** deploy generated files to target directories.
+
+**Do not run `overlay-sync.sh`.** Deploying generated files to `.claude/skills/`, `.cursor/skills/`, etc. is handled separately by APM `post-install`/`post-update` hooks or when the user explicitly asks to run the sync script.
+
+When an overlay is up to date, stop after reporting — do not re-merge and do not deploy.
+
 ## User Input
 
 ```text
