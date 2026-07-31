@@ -303,6 +303,7 @@ func (r *SimpleKubeReconciler) provisionAsync(session types.Session) {
 	defer cancel()
 	if err := r.provisionSession(ctx, session); err != nil {
 		r.logger.Error().Err(err).Str("session_id", session.ID).Msg("provisioning failed")
+		r.updateSessionPhase(ctx, session, PhaseFailed)
 	}
 }
 
