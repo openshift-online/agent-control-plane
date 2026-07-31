@@ -31,6 +31,7 @@ spec:
           port: 2222
 ---
 # NetworkPolicy for OpenShell 0.0.92+ sandbox pods (new label format)
+# Allows gateway to SSH into sandbox pods on port 2222
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -59,3 +60,33 @@ spec:
       ports:
         - protocol: TCP
           port: 2222
+---
+# NetworkPolicy allowing OpenShell 0.0.92+ sandbox pods to connect back to the gateway
+# The supervisor inside the sandbox needs to establish a session with the gateway on port 8080
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openshell-gateway-allow-sandbox-v2
+  namespace: NAMESPACE_PLACEHOLDER
+  labels:
+    app.kubernetes.io/name: openshell
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: agent-control-plane
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: openshell-gateway
+      app.kubernetes.io/name: openshell
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: agents.x-k8s.io/sandbox-name-hash
+                operator: Exists
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8081
