@@ -50,7 +50,7 @@ The following components SHALL be deployed:
 
 Credential sidecars are deprecated — the platform uses the provider model exclusively. Credential sidecar images SHALL NOT be built or deployed.
 
-The MCP server image MAY be excluded if the openshell provider flow does not require it.
+The MCP server image SHALL NOT be deployed — the openshell provider handles MCP functionality via the provider model.
 
 The control plane environment patches SHALL reference Konflux image paths for the runner image (the `RUNNER_IMAGE` env var used when spawning session pods).
 
