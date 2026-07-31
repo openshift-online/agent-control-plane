@@ -25,7 +25,7 @@ CONTAINER_ENGINE="${CONTAINER_ENGINE:-$(command -v podman >/dev/null 2>&1 && ech
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-ambient-dev}"
 
 OPENSHELL_GATEWAY_IMAGE="${OPENSHELL_GATEWAY_IMAGE:-ghcr.io/nvidia/openshell/gateway:0.0.92}"
-OPENSHELL_PG_IMAGE="${OPENSHELL_PG_IMAGE:-registry.redhat.io/rhel9/postgresql-16:latest}"
+OPENSHELL_PG_IMAGE="${OPENSHELL_PG_IMAGE:-postgres:16}"
 
 echo "Setting up OpenShell gateway prerequisites (tenants: ${TENANTS[*]})..."
 
