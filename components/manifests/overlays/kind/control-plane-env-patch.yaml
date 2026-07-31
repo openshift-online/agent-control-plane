@@ -24,6 +24,8 @@ spec:
               value: "http://ambient-api-server.ambient-code.svc.cluster.local:8000"
             - name: AMBIENT_GRPC_USE_TLS
               value: "false"
+            - name: OPENSHELL_GATEWAY_SA_TOKEN_PATH
+              value: ""
             - name: LOCAL_IMAGES
               value: "true"
             - name: USE_VERTEX
