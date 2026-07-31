@@ -12,3 +12,10 @@ includes: auto
 scripts:
   post-install: skills/tooling/overlay-sync-skills/overlay-sync.sh --hook post-install
   post-update: skills/tooling/overlay-sync-skills/overlay-sync.sh --hook post-update
+lifecycle:
+  post-install:
+    - type: command
+      run: skills/tooling/overlay-sync-skills/overlay-sync.sh --hook post-install
+  post-update:
+    - type: command
+      run: skills/tooling/overlay-sync-skills/overlay-sync.sh --hook post-update

@@ -82,6 +82,8 @@ The generated files need to land in `.claude/skills/`, `.cursor/skills/`, etc. T
 
 The sync script replaces the upstream skill files with your generated versions in each target directory.
 
+> **Note:** APM captures `post-install`/`post-update` hook output only to `~/.apm/logs/scripts.log` — it does not print to the console, even with `-v`. If you're relying on the hook, either check that log for drift/skip warnings after `apm install`/`apm update`, or run `./skills/tooling/overlay-sync-skills/overlay-sync.sh --hook post-install` (or `post-update`) manually to see the output directly.
+
 ## Custom overlay directory
 
 Both tools default to `overlays/` but accept a custom path:
