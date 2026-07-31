@@ -84,17 +84,16 @@ export function FeedbackStrip() {
 
   return (
     <>
-      <button
-        type="button"
+      <Button
         onClick={() => setOpen(true)}
         aria-label="Send feedback"
-        className="fixed right-0 top-1/2 z-[9999] -translate-y-1/2 cursor-pointer rounded-l-md bg-primary px-1.5 py-3 text-primary-foreground shadow-lg transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="fixed right-0 top-1/2 z-[9999] -translate-y-1/2 h-auto rounded-l-md rounded-r-none px-1.5 py-3 shadow-lg"
       >
         <span className="flex items-center gap-1 text-xs font-medium [writing-mode:vertical-lr] [text-orientation:mixed]">
           <MessageSquareText className="size-3.5 rotate-90" />
           Feedback
         </span>
-      </button>
+      </Button>
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-md">

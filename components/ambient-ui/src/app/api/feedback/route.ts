@@ -80,8 +80,15 @@ export async function POST(request: Request) {
       { status: 400 }
     )
   }
+  if (text.length > 3000) {
+    return Response.json(
+      { error: "Feedback must be 3000 characters or fewer" },
+      { status: 400 }
+    )
+  }
 
-  const pagePath = typeof body.pagePath === "string" ? body.pagePath : "/"
+  const rawPath = typeof body.pagePath === "string" ? body.pagePath : "/"
+  const pagePath = rawPath.slice(0, 200).replace(/[<>&*]/g, "")
 
   const slackPayload = buildSlackBlocks(text, username, pagePath)
 
