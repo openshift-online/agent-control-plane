@@ -463,8 +463,8 @@ echo ""
 GW_FLAG="-g ${GW_LOCAL_NAME}"
 INSECURE_ENV="OPENSHELL_GATEWAY_INSECURE=true"
 
-show_cmd "${INSECURE_ENV} openshell ${GW_FLAG} sandbox exec ${SANDBOX_NAME} -- uname -a"
-if SB_EXEC_OUTPUT=$(OPENSHELL_GATEWAY_INSECURE=true openshell -g "${GW_LOCAL_NAME}" sandbox exec "${SANDBOX_NAME}" -- uname -a 2>&1); then
+show_cmd "${INSECURE_ENV} openshell ${GW_FLAG} sandbox exec -n ${SANDBOX_NAME} -- uname -a"
+if SB_EXEC_OUTPUT=$(OPENSHELL_GATEWAY_INSECURE=true openshell -g "${GW_LOCAL_NAME}" sandbox exec -n "${SANDBOX_NAME}" -- uname -a 2>&1); then
   CLEAN_EXEC=$(echo "$SB_EXEC_OUTPUT" | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^ *$' | grep -v 'WARN' | tail -3)
   if [[ -n "$CLEAN_EXEC" ]]; then
     pass "Sandbox exec: command executed inside sandbox"
@@ -480,8 +480,8 @@ else
   dim "    ${SB_EXEC_OUTPUT:0:200}"
 fi
 
-show_cmd "${INSECURE_ENV} openshell ${GW_FLAG} sandbox exec ${SANDBOX_NAME} -- ls -la /workspace"
-if SB_LS_OUTPUT=$(OPENSHELL_GATEWAY_INSECURE=true openshell -g "${GW_LOCAL_NAME}" sandbox exec "${SANDBOX_NAME}" -- ls -la /workspace 2>&1); then
+show_cmd "${INSECURE_ENV} openshell ${GW_FLAG} sandbox exec -n ${SANDBOX_NAME} -- ls -la /workspace"
+if SB_LS_OUTPUT=$(OPENSHELL_GATEWAY_INSECURE=true openshell -g "${GW_LOCAL_NAME}" sandbox exec -n "${SANDBOX_NAME}" -- ls -la /workspace 2>&1); then
   CLEAN_LS=$(echo "$SB_LS_OUTPUT" | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^ *$' | grep -v 'WARN' | tail -5)
   if [[ -n "$CLEAN_LS" ]]; then
     pass "Sandbox workspace: /workspace directory listing"
