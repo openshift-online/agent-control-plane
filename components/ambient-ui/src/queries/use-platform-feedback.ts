@@ -12,8 +12,7 @@ type FeedbackSubmission = {
 }
 
 type FeedbackResult = {
-  success?: boolean
-  error?: string
+  success: boolean
 }
 
 export function useFeedbackAvailability() {
@@ -31,20 +30,13 @@ export function useFeedbackAvailability() {
 }
 
 export function useSubmitPlatformFeedback() {
-  return useMutation<FeedbackResult, Error & { retryAfter?: number }, FeedbackSubmission>({
+  return useMutation<FeedbackResult, Error, FeedbackSubmission>({
     mutationFn: async (submission) => {
       const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(submission),
       })
-
-      if (res.status === 429) {
-        const retryAfter = res.headers.get('Retry-After')
-        const err = new Error('Too many requests') as Error & { retryAfter?: number }
-        err.retryAfter = retryAfter ? parseInt(retryAfter, 10) : 60
-        throw err
-      }
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: 'Unknown error' })) as Record<string, unknown>

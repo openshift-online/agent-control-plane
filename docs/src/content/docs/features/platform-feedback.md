@@ -72,10 +72,6 @@ Each feedback message is posted using Slack Block Kit with three sections:
 - **Body**: the user's feedback text
 - **Context**: submitting username, page path, and timestamp
 
-## Rate limiting
-
-The BFF enforces per-user rate limiting: 5 requests per user per minute, identified by the SSO session username. Exceeding the limit returns `429 Too Many Requests` with a `Retry-After` header. The rate limiter is in-memory and resets when the pod restarts.
-
 ## Disabling feedback
 
 Remove or unset `FEEDBACK_SLACK_WEBHOOK_URL` from the deployment. The UI checks availability on load (`GET /api/feedback`) and hides the strip when the backend reports `available: false`.
@@ -86,5 +82,4 @@ Remove or unset `FEEDBACK_SLACK_WEBHOOK_URL` from the deployment. The UI checks 
 |---|---|---|
 | Feedback strip not visible | `FEEDBACK_SLACK_WEBHOOK_URL` not set | Set the env var and restart the pod |
 | Submit returns error | Slack webhook URL is invalid or channel was deleted | Verify the webhook URL in Slack app settings |
-| 429 "too quickly" message | User exceeded 5 submissions/minute | Wait and retry |
 | 401 on submit | SSO session expired | Refresh the page to re-authenticate |

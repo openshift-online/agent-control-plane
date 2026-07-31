@@ -4,36 +4,6 @@ import { env } from "@/lib/env"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const RATE_LIMIT_WINDOW_MS = 60_000
-const RATE_LIMIT_MAX = 5
-
-type RateLimitEntry = {
-  timestamps: number[]
-}
-
-const rateLimitStore = new Map<string, RateLimitEntry>()
-
-function checkRateLimit(username: string): { allowed: boolean; retryAfterSeconds?: number } {
-  const now = Date.now()
-  const entry = rateLimitStore.get(username)
-
-  if (!entry) {
-    rateLimitStore.set(username, { timestamps: [now] })
-    return { allowed: true }
-  }
-
-  entry.timestamps = entry.timestamps.filter(t => now - t < RATE_LIMIT_WINDOW_MS)
-
-  if (entry.timestamps.length >= RATE_LIMIT_MAX) {
-    const oldest = entry.timestamps[0]
-    const retryAfterSeconds = Math.ceil((oldest + RATE_LIMIT_WINDOW_MS - now) / 1000)
-    return { allowed: false, retryAfterSeconds }
-  }
-
-  entry.timestamps.push(now)
-  return { allowed: true }
-}
-
 function resolveUsername(accessToken: string): string {
   try {
     const parts = accessToken.split(".")
@@ -95,20 +65,6 @@ export async function POST(request: Request) {
   }
 
   const username = resolveUsername(session.accessToken)
-
-  const rateCheck = checkRateLimit(username)
-  if (!rateCheck.allowed) {
-    return new Response(
-      JSON.stringify({ error: "Too many requests. Please wait before submitting again." }),
-      {
-        status: 429,
-        headers: {
-          "Content-Type": "application/json",
-          "Retry-After": String(rateCheck.retryAfterSeconds),
-        },
-      }
-    )
-  }
 
   let body: Record<string, unknown>
   try {

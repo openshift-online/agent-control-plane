@@ -18,7 +18,7 @@ import {
   useSubmitPlatformFeedback,
 } from '@/queries/use-platform-feedback'
 
-type FeedbackState = 'idle' | 'submitting' | 'success' | 'error' | 'rate-limited'
+type FeedbackState = 'idle' | 'submitting' | 'success' | 'error'
 
 export function FeedbackStrip() {
   const { data: availability } = useFeedbackAvailability()
@@ -57,7 +57,7 @@ export function FeedbackStrip() {
     return null
   }
 
-  const canSubmit = text.trim().length > 0 && state !== 'submitting' && state !== 'success'
+  const canSubmit = text.trim().length > 0 && state === 'idle'
 
   function handleSubmit() {
     if (!canSubmit) return
@@ -68,17 +68,8 @@ export function FeedbackStrip() {
       {
         onSuccess: () => setState('success'),
         onError: (err) => {
-          if ('retryAfter' in err && err.retryAfter) {
-            setState('rate-limited')
-            setErrorMessage(
-              "You're sending feedback too quickly. Please wait a moment and try again."
-            )
-          } else {
-            setState('error')
-            setErrorMessage(
-              err.message || 'Something went wrong. Please try again.'
-            )
-          }
+          setState('error')
+          setErrorMessage(err.message || 'Something went wrong. Please try again.')
         },
       }
     )
@@ -136,7 +127,7 @@ export function FeedbackStrip() {
                   value={text}
                   onChange={(e) => {
                     setText(e.target.value)
-                    if (state === 'error' || state === 'rate-limited') {
+                    if (state === 'error') {
                       setState('idle')
                       setErrorMessage('')
                     }

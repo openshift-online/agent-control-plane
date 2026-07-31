@@ -165,26 +165,6 @@ The message SHOULD use Slack Block Kit formatting for visual structure.
   - Footer: "From: developer · Page: /sessions/abc-123"
 - AND the message uses Block Kit formatting
 
-### Requirement: Rate Limiting
-
-The BFF feedback endpoint SHALL enforce per-user rate limiting to prevent abuse. The limit SHALL be no more than 5 requests per user per minute, identified by the SSO session identity.
-
-When a user exceeds the rate limit, the endpoint SHALL return 429 Too Many Requests with a `Retry-After` header. The dialog SHALL display a message indicating the user should wait before submitting again.
-
-#### Scenario: Rate limit exceeded
-
-- GIVEN an authenticated user has submitted 5 feedback messages within the last minute
-- WHEN they submit another feedback message
-- THEN the BFF returns 429 with a `Retry-After` header
-- AND the dialog displays "You're sending feedback too quickly. Please wait a moment and try again."
-- AND the user's feedback text is preserved
-
-#### Scenario: Rate limit reset
-
-- GIVEN a user previously exceeded the rate limit
-- WHEN the `Retry-After` period has elapsed
-- THEN the user can submit feedback again normally
-
 ### Requirement: Accessibility
 
 The feedback strip and dialog SHALL meet WCAG 2.1 AA accessibility standards:
@@ -217,5 +197,4 @@ The feedback strip and dialog SHALL meet WCAG 2.1 AA accessibility standards:
 | UI pattern | Fixed right-edge strip + modal | Always visible without occupying layout space; highest z-index ensures reachability over all chrome |
 | Naming | "Platform Feedback" | Avoids collision with existing `FeedbackItem`/`FeedbackBatch` used for visual preview feedback |
 | Configuration | Environment variables | Follows project convention of separating configuration from code; no code change needed to switch channels |
-| Rate limiting | 5 req/user/min, in-memory | Prevents spam on a free-text POST endpoint; in-memory is sufficient since BFF is single-instance |
 | Auth requirement | SSO session required | Prevents anonymous spam; identifies the submitter for follow-up |
