@@ -139,6 +139,18 @@ _ensure_gateway_port_forward() {
   openshell sandbox list --gateway "${TENANT}" &>/dev/null
 }
 
+# Derives the sandbox name from a session ID, mirroring the Go
+# openshell.SandboxName() function (first 11 chars, lowercased).
+sandbox_name() {
+  echo "session-$(echo "${1:0:11}" | tr '[:upper:]' '[:lower:]')"
+}
+
+# Derives the pod name from a session ID, mirroring the Go
+# openshell.SandboxCRName(SandboxName(id)) convention.
+sandbox_pod_name() {
+  echo "default--$(sandbox_name "$1")"
+}
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -214,7 +226,7 @@ _delete_session() {
   if [ "$SKIP_CLEANUP" = "true" ]; then return 0; fi
   api DELETE "/api/ambient/v1/sessions/${sid}" >/dev/null 2>&1 && \
     echo "  Deleted session ${sid}" || true
-  local pod="session-$(echo "${sid:0:40}" | tr '[:upper:]' '[:lower:]')"
+  local pod="$(sandbox_pod_name "$sid")"
   for _i in $(seq 1 15); do
     kubectl get pod "$pod" -n "$TENANT" &>/dev/null || break
     sleep 2
@@ -237,7 +249,7 @@ cleanup() {
     for (( _i=${#CREATED_SESSIONS[@]}-1; _i>=0; _i-- )); do
       local _sid="${CREATED_SESSIONS[$_i]}"
       [ -z "$_sid" ] && continue
-      _pod="session-$(echo "${_sid:0:40}" | tr '[:upper:]' '[:lower:]')"
+      _pod="$(sandbox_pod_name "$_sid")"
       _phase=$(kubectl get pod "$_pod" -n "$TENANT" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
       if [ -n "$_phase" ]; then
         echo -e "  Retained session ${_sid}  pod=${_pod}  phase=${_phase}"
@@ -609,8 +621,7 @@ fi
 section "11. Sandbox configuration verification"
 
 if [ -n "$CREATED_SESSION_ID" ]; then
-  # Derive sandbox pod name: "session-" + lowercased session ID (first 40 chars)
-  SBX_NAME="session-$(echo "${CREATED_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
+  SBX_NAME="$(sandbox_pod_name "$CREATED_SESSION_ID")"
 
   # Wait for the sandbox pod to be running (up to 60s)
   POD_READY=false
@@ -646,7 +657,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
       # Poll briefly for the file to appear.
       PAYLOAD_READY=false
       for j in $(seq 1 10); do
-        run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- cat /sandbox/CLAUDE.md
+        run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -c agent -- cat /sandbox/CLAUDE.md
         PAYLOAD_CONTENT="${CMD_OUTPUT:-}"
         if echo "$PAYLOAD_CONTENT" | grep -q "mock LLM"; then
           PAYLOAD_READY=true
@@ -666,7 +677,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fi
 
     # 10b. Agent environment variable passed through to sandbox
-    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -c agent -- \
       printenv CLAUDE_CODE_ATTRIBUTION_HEADER
     ENV_VAL="${CMD_OUTPUT:-}"
     if [ "$ENV_VAL" = "0" ]; then
@@ -676,7 +687,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fi
 
     # 10c. MCP config env var patterns preserved (not auto-expanded)
-    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -c agent -- \
       cat /sandbox/.mcp.json
     MCP_CONTENT="${CMD_OUTPUT:-}"
     if [ -n "$MCP_CONTENT" ]; then
@@ -694,7 +705,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fi
 
     # 10d. Claude settings baked into image match source
-    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -c agent -- \
       cat /sandbox/.claude/settings.json
     SETTINGS_ACTUAL="${CMD_OUTPUT:-}"
     SETTINGS_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/claude-settings.json" 2>/dev/null || echo "")
@@ -707,7 +718,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fi
 
     # 10e. Claude settings.local.json baked into image matches source
-    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -c agent -- \
       cat /sandbox/.claude/settings.local.json
     SETTINGS_LOCAL_ACTUAL="${CMD_OUTPUT:-}"
     SETTINGS_LOCAL_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/claude-settings-local.json" 2>/dev/null || echo "")
@@ -720,7 +731,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fi
 
     # 10f. Sandbox network policy present at /etc/openshell/policy.yaml
-    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -c agent -- \
       cat /etc/openshell/policy.yaml
     POLICY_ACTUAL="${CMD_OUTPUT:-}"
     POLICY_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/policy.yaml" 2>/dev/null || echo "")
@@ -774,9 +785,9 @@ if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; the
     echo "--- DIAGNOSTIC: sandbox pod status ---"
     kubectl get pod "${SBX_NAME}" -n "${TENANT}" -o wide 2>&1 || true
     echo "--- DIAGNOSTIC: sandbox ANTHROPIC_BASE_URL ---"
-    kubectl exec -n "${TENANT}" "${SBX_NAME}" -- printenv ANTHROPIC_BASE_URL 2>&1 || echo "(not set or pod gone)"
+    kubectl exec -n "${TENANT}" "${SBX_NAME}" -c agent -- printenv ANTHROPIC_BASE_URL 2>&1 || echo "(not set or pod gone)"
     echo "--- DIAGNOSTIC: runner log (last 80 lines) ---"
-    kubectl exec -n "${TENANT}" "${SBX_NAME}" -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
+    kubectl exec -n "${TENANT}" "${SBX_NAME}" -c agent -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
     echo "--- DIAGNOSTIC: sandbox supervisor log (last 40 lines) ---"
     kubectl logs -n "${TENANT}" "${SBX_NAME}" -c agent --tail=40 2>&1 || true
     echo "--- DIAGNOSTIC: control plane log for session (last 20 matches) ---"
@@ -808,7 +819,7 @@ if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; the
     echo "--- DIAGNOSTIC: sandbox pod events ---"
     kubectl describe pod "${SBX_NAME}" -n "${TENANT}" 2>&1 | grep -A 20 "^Events:" || true
     echo "--- DIAGNOSTIC: runner log (last 80 lines) ---"
-    kubectl exec -n "${TENANT}" "${SBX_NAME}" -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
+    kubectl exec -n "${TENANT}" "${SBX_NAME}" -c agent -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
     echo "--- DIAGNOSTIC: sandbox supervisor log (last 80 lines) ---"
     kubectl logs -n "${TENANT}" "${SBX_NAME}" -c agent --tail=80 2>&1 || true
     echo "--- DIAGNOSTIC: control plane log (last 100 lines) ---"
@@ -862,7 +873,7 @@ if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; the
     echo "--- DIAGNOSTIC: sandbox pod status ---"
     kubectl get pod "${SBX_NAME}" -n "${TENANT}" -o wide 2>&1 || true
     echo "--- DIAGNOSTIC: runner log (last 80 lines) ---"
-    kubectl exec -n "${TENANT}" "${SBX_NAME}" -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
+    kubectl exec -n "${TENANT}" "${SBX_NAME}" -c agent -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
     echo "--- DIAGNOSTIC: sandbox supervisor log (last 80 lines) ---"
     kubectl logs -n "${TENANT}" "${SBX_NAME}" -c agent --tail=80 2>&1 || true
     echo "--- DIAGNOSTIC: control plane log (last 100 lines) ---"
@@ -915,7 +926,7 @@ if [ -n "$SHORT_SESSION_ID" ]; then
     fail "stop_on_run_finished not set on session (got: '${SHORT_FLAG}')"
   fi
 
-  SHORT_SBX_NAME="session-$(echo "${SHORT_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
+  SHORT_SBX_NAME="$(sandbox_pod_name "$SHORT_SESSION_ID")"
 
   # Wait for LLM response (same polling as long-running)
   SHORT_LLM_FOUND=0
@@ -940,7 +951,7 @@ if [ -n "$SHORT_SESSION_ID" ]; then
     echo "--- DIAGNOSTIC: sandbox pod ---"
     kubectl get pod "${SHORT_SBX_NAME}" -n "${TENANT}" -o wide 2>&1 || true
     echo "--- DIAGNOSTIC: runner log ---"
-    kubectl exec -n "${TENANT}" "${SHORT_SBX_NAME}" -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
+    kubectl exec -n "${TENANT}" "${SHORT_SBX_NAME}" -c agent -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
     echo "--- DIAGNOSTIC: supervisor log ---"
     kubectl logs -n "${TENANT}" "${SHORT_SBX_NAME}" -c agent --tail=80 2>&1 || true
     echo "--- DIAGNOSTIC: control plane log ---"
@@ -1080,7 +1091,7 @@ if [ -n "$LOCKED_AGENT_ID" ]; then
     CREATED_SESSIONS+=("$LOCKED_SESSION_ID")
     pass "Locked-down session started (id: ${LOCKED_SESSION_ID})"
 
-    LOCKED_SBX_NAME="session-$(echo "${LOCKED_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
+    LOCKED_SBX_NAME="$(sandbox_pod_name "$LOCKED_SESSION_ID")"
 
     LOCKED_POD_READY=false
     for i in $(seq 1 30); do
@@ -1114,10 +1125,11 @@ if [ -n "$LOCKED_AGENT_ID" ]; then
       # (HTTPS would fail at the CONNECT tunnel level with no response body.)
       # FIXME: switch to `openshell sandbox exec` when it is fixed upstream.
       if [ "$LOCKED_SESSION_RUNNING" = "true" ]; then
+        LOCKED_SSH_NAME="$(sandbox_name "$LOCKED_SESSION_ID")"
         run_cmd ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
           -o LogLevel=ERROR \
-          -o "ProxyCommand=openshell ssh-proxy --gateway-name $TENANT --name $LOCKED_SBX_NAME" \
-          "user@$LOCKED_SBX_NAME" \
+          -o "ProxyCommand=openshell ssh-proxy --gateway-name $TENANT --name $LOCKED_SSH_NAME" \
+          "user@$LOCKED_SSH_NAME" \
           'curl http://update.code.visualstudio.com 2>/dev/null'
         LOCKED_CURL_OUTPUT="${CMD_OUTPUT:-}"
 
@@ -1180,7 +1192,7 @@ if [ -n "$PERM_AGENT_ID" ]; then
     CREATED_SESSIONS+=("$PERM_SESSION_ID")
     pass "Permissive session started (id: ${PERM_SESSION_ID})"
 
-    PERM_SBX_NAME="session-$(echo "${PERM_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
+    PERM_SBX_NAME="$(sandbox_pod_name "$PERM_SESSION_ID")"
 
     PERM_POD_READY=false
     for i in $(seq 1 30); do
@@ -1213,10 +1225,11 @@ if [ -n "$PERM_AGENT_ID" ]; then
       # appears, the proxy blocked it; any other response means it got through.
       # FIXME: switch to `openshell sandbox exec` when it is fixed upstream.
       if [ "$PERM_SESSION_RUNNING" = "true" ]; then
+        PERM_SSH_NAME="$(sandbox_name "$PERM_SESSION_ID")"
         run_cmd ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
           -o LogLevel=ERROR \
-          -o "ProxyCommand=openshell ssh-proxy --gateway-name $TENANT --name $PERM_SBX_NAME" \
-          "user@$PERM_SBX_NAME" \
+          -o "ProxyCommand=openshell ssh-proxy --gateway-name $TENANT --name $PERM_SSH_NAME" \
+          "user@$PERM_SSH_NAME" \
           'curl https://update.code.visualstudio.com 2>/dev/null'
         PERM_CURL_OUTPUT="${CMD_OUTPUT:-}"
 
