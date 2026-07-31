@@ -162,6 +162,7 @@ NC='\033[0m'
 
 PASSED=0
 FAILED=0
+FAILED_TESTS=()
 CREATED_SESSION_ID=""
 CREATED_SESSIONS=()
 CMD_OUTPUT=""
@@ -169,7 +170,7 @@ CMD_RC=0
 
 sep()     { printf '%b%s%b\n' "${DIM}" "──────────────────────────────────────────────────" "${NC}"; }
 pass()    { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
-fail()    { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
+fail()    { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); FAILED_TESTS+=("$1"); }
 skip()    { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
 
 run_cmd() {
@@ -181,6 +182,12 @@ run_cmd() {
     echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
   fi
   echo ""
+}
+
+# Strip kubectl's "Defaulted container ..." stderr line from CMD_OUTPUT.
+# Use after run_cmd for commands whose output is compared by value.
+strip_kubectl_noise() {
+  CMD_OUTPUT=$(echo "${CMD_OUTPUT:-}" | grep -v '^Defaulted container ".*" out of:')
 }
 
 run_cmd_redact() {
@@ -207,6 +214,11 @@ results() {
   sep
   if [ "$FAILED" -gt 0 ]; then
     printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"
+    echo ""
+    echo -e "  ${RED}Failed tests:${NC}"
+    for _ft in "${FAILED_TESTS[@]}"; do
+      echo -e "    ${RED}✗${NC} ${_ft}"
+    done
   else
     printf '%b  %d passed ✓%b\n' "${GREEN}" "$PASSED" "${NC}"
   fi
@@ -679,6 +691,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     # 10b. Agent environment variable passed through to sandbox
     run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -c agent -- \
       printenv CLAUDE_CODE_ATTRIBUTION_HEADER
+    strip_kubectl_noise
     ENV_VAL="${CMD_OUTPUT:-}"
     if [ "$ENV_VAL" = "0" ]; then
       pass "Agent env var CLAUDE_CODE_ATTRIBUTION_HEADER passed through to sandbox"
@@ -707,6 +720,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     # 10d. Claude settings baked into image match source
     run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -c agent -- \
       cat /sandbox/.claude/settings.json
+    strip_kubectl_noise
     SETTINGS_ACTUAL="${CMD_OUTPUT:-}"
     SETTINGS_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/claude-settings.json" 2>/dev/null || echo "")
     if [ -n "$SETTINGS_ACTUAL" ] && [ "$SETTINGS_ACTUAL" = "$SETTINGS_EXPECTED" ]; then
@@ -720,6 +734,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     # 10e. Claude settings.local.json baked into image matches source
     run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -c agent -- \
       cat /sandbox/.claude/settings.local.json
+    strip_kubectl_noise
     SETTINGS_LOCAL_ACTUAL="${CMD_OUTPUT:-}"
     SETTINGS_LOCAL_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/claude-settings-local.json" 2>/dev/null || echo "")
     if [ -n "$SETTINGS_LOCAL_ACTUAL" ] && [ "$SETTINGS_LOCAL_ACTUAL" = "$SETTINGS_LOCAL_EXPECTED" ]; then
@@ -733,6 +748,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     # 10f. Sandbox network policy present at /etc/openshell/policy.yaml
     run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -c agent -- \
       cat /etc/openshell/policy.yaml
+    strip_kubectl_noise
     POLICY_ACTUAL="${CMD_OUTPUT:-}"
     POLICY_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/policy.yaml" 2>/dev/null || echo "")
     if [ -n "$POLICY_ACTUAL" ] && [ "$POLICY_ACTUAL" = "$POLICY_EXPECTED" ]; then
