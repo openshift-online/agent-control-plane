@@ -277,16 +277,20 @@ echo ""
 
 GW_LOCAL_NAME="${TENANT}-${GW_NAME}"
 
-show_cmd "$CLI get routes -n $TENANT -o json  # find NLB passthrough route"
+show_cmd "$CLI get routes -n $TENANT -o json  # find openshell gateway passthrough route"
 GW_ROUTE_HOST=$($CLI get routes -n "$TENANT" -o json 2>/dev/null | python3 -c "
 import json,sys
 data = json.load(sys.stdin)
 candidates = []
+gateway_name = '"${GW_NAME}"'
 for item in data.get('items',[]):
     tls = item.get('spec',{}).get('tls',{})
-    labels = item.get('metadata',{}).get('labels',{})
-    router = labels.get('router','')
-    if tls.get('termination') == 'passthrough' and router.startswith('grpc'):
+    to = item.get('spec',{}).get('to',{})
+    name = item.get('metadata',{}).get('name','')
+    # Look for passthrough routes to openshell-gateway service
+    if (tls.get('termination') == 'passthrough' and 
+        to.get('name') == gateway_name and
+        ('grpc' in name or 'gateway' in name)):
         candidates.append(item['spec']['host'])
 candidates.sort(key=lambda h: (0 if '.apps.rosa.' in h else 1, h))
 if candidates:
