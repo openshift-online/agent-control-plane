@@ -225,26 +225,48 @@ The control plane environment patch SHALL configure:
 
 ACP resource types (Projects, Agents, Credentials, Providers, Policies, RoleBindings, Gateways, Clusters) SHALL be defined as YAML manifests in the `agent-gitops` repository and applied to the integration environment via `acpctl apply`.
 
-The `agent-gitops` repository SHALL contain an ACP types directory (e.g. `types/integration/`) with Kustomize-structured YAML files defining the desired ACP resources. These are applied to the ACP API server using:
+The `agent-gitops` repository already organizes ACP types using Kustomize base/overlay structure:
 
-```shell
-acpctl apply -k types/integration/
+```
+teams/
+  base/                          # Shared ACP type definitions
+    kustomization.yaml           # Project, Agents, Providers, Credentials, RoleBindings
+    project.yaml
+    lead.yaml, engineer.yaml, amber.yaml
+    provider-vertex.yaml, provider-github.yaml, ...
+    credential-vertex.yaml, credential-github.yaml, ...
+    rolebindings.yaml
+  overlays/
+    hcmai-01/                    # Integration cluster overlay
+      kustomization.yaml         # References ../../base, adds cluster-specific resources
+      project-patch.yaml         # Project name/labels for hcmai-01
+      credential-kubeconfig.yaml # Cluster-specific kubeconfig credential
+      agents-patch.yaml          # Agent patches for this environment
+      rolebindings.yaml          # Cluster-specific role bindings
+    hcmai-02/                    # Stage cluster overlay
+    hcmai-03/                    # Production cluster overlay
 ```
 
-`acpctl apply` talks to the ACP API server (not Kubernetes directly) and supports create-or-update semantics for all ACP resource types. It supports Kustomize overlays via `-k`, enabling environment-specific overrides (e.g. different provider credentials per cluster).
+The PostSync verification Job SHALL apply the integration overlay:
+
+```shell
+acpctl apply -k teams/overlays/hcmai-01/
+```
+
+`acpctl apply` talks to the ACP API server (not Kubernetes directly) and supports create-or-update semantics for all ACP resource types. The Kustomize overlay pattern enables environment-specific overrides (different project names, credentials, and patches per cluster) while sharing base type definitions.
 
 ACP types SHALL be applied as the first step of the PostSync verification Job (see Post-Deploy Verification below). The verification Job already runs after the Kubernetes manifests are synced and the API server is healthy, so `acpctl apply -k` runs first to ensure ACP types are current, then the test suite validates the full deployment including those types.
 
 #### Scenario: ACP types applied after deployment
 
 - GIVEN the integration environment's ACP API server is healthy after an ArgoCD sync
-- WHEN the PostSync verification Job runs `acpctl apply -k types/integration/` as its first step
+- WHEN the PostSync verification Job runs `acpctl apply -k teams/overlays/hcmai-01/` as its first step
 - THEN Projects, Agents, Providers, Credentials, and other ACP types are created or updated
 - AND the test suite runs immediately after against the updated types
 
 #### Scenario: ACP type change does not require image update
 
-- GIVEN a developer adds a new Agent definition to `agent-gitops/types/integration/`
+- GIVEN a developer adds a new Agent definition to `agent-gitops/teams/overlays/hcmai-01/`
 - WHEN ArgoCD detects the commit and syncs
 - THEN the PostSync Job applies the new Agent via `acpctl apply -k`
 - AND the test suite validates the new type
@@ -254,7 +276,7 @@ ACP types SHALL be applied as the first step of the PostSync verification Job (s
 
 After ArgoCD completes a sync, a verification Job SHALL run as an ArgoCD PostSync hook inside the cluster. The Job performs two steps in sequence:
 
-1. **Apply ACP types**: Run `acpctl apply -k types/integration/` to ensure all ACP resource types (Projects, Agents, Providers, etc.) are current
+1. **Apply ACP types**: Run `acpctl apply -k teams/overlays/hcmai-01/` to ensure all ACP resource types (Projects, Agents, Providers, etc.) are current
 2. **Run test suite**: Execute the unified golden test suite against the live deployment
 
 The verification container image SHALL include both `acpctl` and the test suite scripts.
@@ -280,7 +302,7 @@ Additional test suites (RBAC, gateway, scheduled sessions) SHOULD be included as
 
 - GIVEN ArgoCD completes a sync deploying new images
 - WHEN the PostSync verification Job runs
-- THEN `acpctl apply -k types/integration/` applies ACP types successfully
+- THEN `acpctl apply -k teams/overlays/hcmai-01/` applies ACP types successfully
 - AND the test suite authenticates, creates test resources, triggers an LLM session, and validates the response
 - AND the Job exits with code 0
 - AND ArgoCD reports the sync as healthy
