@@ -797,9 +797,18 @@ if [ -n "$CREATED_SESSION_ID" ]; then
 
   else
     fail "Sandbox configuration verification — sandbox pod not ready (phase: ${WAIT_RESULT:-unknown})"
+    echo "--- DIAGNOSTIC: sandbox pod describe ---"
+    kubectl describe pod "${SBX_NAME}" -n "${TENANT}" 2>&1 | tail -30 || true
+    echo "--- DIAGNOSTIC: control plane log (last 50 lines) ---"
+    kubectl logs -n "${NAMESPACE}" -l app=ambient-control-plane --tail=50 2>&1 || true
+    echo "--- END DIAGNOSTICS ---"
+    results
+    exit 1
   fi
 else
   fail "Sandbox configuration verification — session not created"
+  results
+  exit 1
 fi
 
 # ============================================================================
