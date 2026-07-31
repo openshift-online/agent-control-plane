@@ -80,10 +80,11 @@ NC='\033[0m'
 
 PASSED=0
 FAILED=0
+FAILED_TESTS=()
 
 sep()     { printf '%b%s%b\n' "${DIM}" "──────────────────────────────────────────────────" "${NC}"; }
 pass()    { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
-fail()    { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
+fail()    { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); FAILED_TESTS+=("$1"); }
 skip()    { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
 
 section() {
@@ -140,6 +141,46 @@ eventually() {
   done
   echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
   return 1
+}
+
+# Poll a condition with a progress indicator.
+# Usage: wait_for <message> <max_attempts> <sleep_secs> <check_fn> [args...]
+# Returns 0 on success, 1 on timeout.
+WAIT_RESULT=""
+wait_for() {
+  local msg="$1" max="$2" interval="$3"
+  shift 3
+  printf '  %b⏳ %s' "${DIM}" "$msg"
+  local _wf_i
+  for _wf_i in $(seq 1 "$max"); do
+    if "$@"; then
+      printf '%b\n' "${NC}"
+      return 0
+    fi
+    printf '.'
+    sleep "$interval"
+  done
+  printf '%b\n' "${NC}"
+  return 1
+}
+
+_kubectl_pod_exists() {
+  kubectl get pod -l "$1" -n "$2" --no-headers 2>/dev/null | grep -q .
+}
+
+_certgen_finished() {
+  local _cg
+  _cg=$(kubectl get pod -n "$1" --no-headers 2>/dev/null | grep "certgen" || true)
+  [ -n "$_cg" ] && echo "$_cg" | grep -qE "Completed|Error"
+}
+
+_tls_secrets_exist() {
+  kubectl get secret openshell-ca-tls openshell-server-tls openshell-client-tls \
+    -n "$1" &>/dev/null
+}
+
+_kubectl_pod_running() {
+  kubectl get pod -l "$1" -n "$2" --no-headers 2>/dev/null | grep -q "Running"
 }
 
 # --- Cleanup ---
@@ -273,12 +314,9 @@ else
 fi
 
 # Wait for gateway pod to exist and reach ready (control plane reconciles asynchronously)
-printf '  %b▶%b  Waiting for gateway pod in %s...\n' "${BOLD}" "${NC}" "$TENANT"
 GW_POD_LABELS="app.kubernetes.io/instance=openshell-gateway,app.kubernetes.io/component=gateway"
-for _i in $(seq 1 120); do
-  kubectl get pod -l "$GW_POD_LABELS" -n "$TENANT" --no-headers 2>/dev/null | grep -q . && break
-  sleep 3
-done
+wait_for "Waiting for gateway pod in ${TENANT}..." 120 3 \
+    _kubectl_pod_exists "$GW_POD_LABELS" "$TENANT" || true
 kubectl wait --for=condition=ready pod -l "$GW_POD_LABELS" \
   -n "$TENANT" --timeout=180s 2>/dev/null || {
     fail "Gateway pod not ready in ${TENANT} after waiting"
@@ -297,24 +335,14 @@ pass "Gateway pod ready in ${TENANT}"
 #   2. Delete the server/client secrets (force cert-manager re-issue)
 #   3. Wait for cert-manager to recreate them
 #   4. Restart the gateway pod so it loads the final certs
-printf '  %b▶%b  Waiting for certgen to finish in %s...\n' "${BOLD}" "${NC}" "$TENANT"
-for _i in $(seq 1 30); do
-  _cg=$(kubectl get pod -n "$TENANT" --no-headers 2>/dev/null | grep "certgen" || true)
-  if [ -n "$_cg" ] && echo "$_cg" | grep -qE "Completed|Error"; then
-    break
-  fi
-  sleep 2
-done
+wait_for "Waiting for certgen to finish in ${TENANT}..." 30 2 \
+    _certgen_finished "$TENANT" || true
 
 kubectl delete secret openshell-server-tls openshell-client-tls \
   -n "$TENANT" --ignore-not-found 2>/dev/null || true
 
-printf '  %b▶%b  Waiting for cert-manager to issue TLS secrets in %s...\n' "${BOLD}" "${NC}" "$TENANT"
-for _i in $(seq 1 60); do
-  kubectl get secret openshell-ca-tls openshell-server-tls openshell-client-tls \
-    -n "$TENANT" &>/dev/null && break
-  sleep 3
-done
+wait_for "Waiting for cert-manager to issue TLS secrets in ${TENANT}..." 60 3 \
+    _tls_secrets_exist "$TENANT" || true
 if kubectl get secret openshell-ca-tls openshell-server-tls openshell-client-tls \
   -n "$TENANT" &>/dev/null; then
   pass "cert-manager TLS secrets ready in ${TENANT}"
@@ -326,10 +354,8 @@ else
 fi
 
 kubectl delete pod -l "$GW_POD_LABELS" -n "$TENANT" --wait=false
-for _i in $(seq 1 60); do
-  kubectl get pod -l "$GW_POD_LABELS" -n "$TENANT" --no-headers 2>/dev/null | grep -q "Running" && break
-  sleep 3
-done
+wait_for "Waiting for gateway pod to restart in ${TENANT}..." 60 3 \
+    _kubectl_pod_running "$GW_POD_LABELS" "$TENANT" || true
 kubectl wait --for=condition=ready pod -l "$GW_POD_LABELS" \
   -n "$TENANT" --timeout=120s 2>/dev/null || {
     fail "Gateway pod not ready after cert-manager restart"
@@ -852,6 +878,11 @@ echo ""
 sep
 if [ "$FAILED" -gt 0 ]; then
   printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"
+  echo ""
+  printf '%b  Failed tests:%b\n' "${RED}" "${NC}"
+  for _ft in "${FAILED_TESTS[@]}"; do
+    printf '    %b✗ %s%b\n' "${RED}" "$_ft" "${NC}"
+  done
 else
   printf '%b  %d passed ✓%b\n' "${GREEN}" "$PASSED" "${NC}"
 fi
