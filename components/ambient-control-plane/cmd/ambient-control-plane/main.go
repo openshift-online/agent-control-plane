@@ -217,25 +217,6 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	inf.RegisterHandler("projects", projectReconciler.Reconcile)
 	inf.RegisterHandler("project_settings", projectSettingsReconciler.Reconcile)
 
-	gatewayErrCh := make(chan error, 1)
-	kubeCfg, kubeErr := buildKubeConfig(cfg.Kubeconfig)
-	if kubeErr != nil {
-		return fmt.Errorf("build kubeconfig for gateway reconciler: %w", kubeErr)
-	}
-	gwClientset, csErr := kubernetes.NewForConfig(kubeCfg)
-	if csErr != nil {
-		return fmt.Errorf("create kubernetes clientset for gateway reconciler: %w", csErr)
-	}
-	gwDynamic, dynErr := dynamic.NewForConfig(kubeCfg)
-	if dynErr != nil {
-		return fmt.Errorf("create dynamic client for gateway reconciler: %w", dynErr)
-	}
-	gwReconciler := reconciler.NewGatewayReconciler(factory, gwDynamic, gwClientset, provisioner, log.Logger)
-	go func() {
-		gatewayErrCh <- gwReconciler.Run(ctx)
-	}()
-	log.Info().Msg("gateway reconciler enabled")
-
 	var resolveCred openshell.CredentialResolver
 	if cfg.OpenShellGatewayTLSEnabled {
 		tlsResolver := openshell.NewTLSResolver(provisionerKube, cfg.OpenShellGatewayClientTLSSecret, cfg.OpenShellGatewayTLSServerName, log.Logger)
@@ -251,6 +232,26 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 			log.Warn().Err(err).Msg("failed to close gateway client")
 		}
 	}()
+
+	gatewayErrCh := make(chan error, 1)
+	kubeCfg, kubeErr := buildKubeConfig(cfg.Kubeconfig)
+	if kubeErr != nil {
+		return fmt.Errorf("build kubeconfig for gateway reconciler: %w", kubeErr)
+	}
+	gwClientset, csErr := kubernetes.NewForConfig(kubeCfg)
+	if csErr != nil {
+		return fmt.Errorf("create kubernetes clientset for gateway reconciler: %w", csErr)
+	}
+	gwDynamic, dynErr := dynamic.NewForConfig(kubeCfg)
+	if dynErr != nil {
+		return fmt.Errorf("create dynamic client for gateway reconciler: %w", dynErr)
+	}
+	gwReconciler := reconciler.NewGatewayReconciler(factory, gwDynamic, gwClientset, provisioner, log.Logger,
+		reconciler.WithAuthModeCallback(gateway.SetNamespaceAuthMode))
+	go func() {
+		gatewayErrCh <- gwReconciler.Run(ctx)
+	}()
+	log.Info().Msg("gateway reconciler enabled")
 
 	sessionReconcilers := createSessionReconcilers(cfg.Reconcilers, factory, kube, projectKube, provisioner, gateway, kubeReconcilerCfg, log.Logger, inf)
 	for _, sessionRec := range sessionReconcilers {

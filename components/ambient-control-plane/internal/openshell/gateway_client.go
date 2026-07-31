@@ -25,14 +25,15 @@ type TokenProvider interface {
 }
 
 type GatewayClient struct {
-	mu            sync.RWMutex
-	conns         map[string]*grpc.ClientConn
-	serviceName   string
-	grpcPort      int
-	resolveCred   CredentialResolver
-	saTokenPath   string
-	tokenProvider TokenProvider
-	logger        zerolog.Logger
+	mu             sync.RWMutex
+	conns          map[string]*grpc.ClientConn
+	oidcNamespaces sync.Map // namespace → bool (true = OIDC enabled)
+	serviceName    string
+	grpcPort       int
+	resolveCred    CredentialResolver
+	saTokenPath    string
+	tokenProvider  TokenProvider
+	logger         zerolog.Logger
 }
 
 type GatewayClientOption func(*GatewayClient)
@@ -58,7 +59,21 @@ func NewGatewayClient(serviceName string, grpcPort int, resolveCred CredentialRe
 	return g
 }
 
-func (g *GatewayClient) authContext(ctx context.Context) context.Context {
+// SetNamespaceAuthMode records whether a namespace's gateway requires OIDC auth.
+// Called by the gateway reconciler after it processes each gateway's config.
+func (g *GatewayClient) SetNamespaceAuthMode(namespace string, hasOIDC bool) {
+	g.oidcNamespaces.Store(namespace, hasOIDC)
+	g.logger.Debug().Str("namespace", namespace).Bool("oidc", hasOIDC).Msg("gateway auth mode registered")
+}
+
+func (g *GatewayClient) authContext(ctx context.Context, namespace string) context.Context {
+	if mode, ok := g.oidcNamespaces.Load(namespace); ok {
+		if mode.(bool) {
+			return g.oidcAuthContext(ctx)
+		}
+		return ctx
+	}
+	// Namespace not yet registered — fall back to legacy behavior
 	if g.tokenProvider != nil {
 		token, err := g.tokenProvider.Token(ctx)
 		if err != nil {
@@ -82,6 +97,21 @@ func (g *GatewayClient) authContext(ctx context.Context) context.Context {
 		return ctx
 	}
 	return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token))
+}
+
+func (g *GatewayClient) oidcAuthContext(ctx context.Context) context.Context {
+	if g.tokenProvider == nil {
+		return ctx
+	}
+	token, err := g.tokenProvider.Token(ctx)
+	if err != nil {
+		g.logger.Warn().Err(err).Msg("failed to obtain OIDC token for gateway auth")
+		return ctx
+	}
+	if token != "" {
+		return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token))
+	}
+	return ctx
 }
 
 func (g *GatewayClient) clientForNamespace(ctx context.Context, namespace string) (pb.OpenShellClient, error) {
@@ -147,7 +177,7 @@ func (g *GatewayClient) shouldEvict(err error) bool {
 }
 
 func (g *GatewayClient) CreateSandbox(ctx context.Context, namespace string, req *pb.CreateSandboxRequest) (*pb.SandboxResponse, error) {
-	ctx = g.authContext(ctx)
+	ctx = g.authContext(ctx, namespace)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -160,7 +190,7 @@ func (g *GatewayClient) CreateSandbox(ctx context.Context, namespace string, req
 }
 
 func (g *GatewayClient) GetSandbox(ctx context.Context, namespace string, name string) (*pb.SandboxResponse, error) {
-	ctx = g.authContext(ctx)
+	ctx = g.authContext(ctx, namespace)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -173,7 +203,7 @@ func (g *GatewayClient) GetSandbox(ctx context.Context, namespace string, name s
 }
 
 func (g *GatewayClient) DeleteSandbox(ctx context.Context, namespace string, name string) error {
-	ctx = g.authContext(ctx)
+	ctx = g.authContext(ctx, namespace)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return err
@@ -186,7 +216,7 @@ func (g *GatewayClient) DeleteSandbox(ctx context.Context, namespace string, nam
 }
 
 func (g *GatewayClient) CreateProvider(ctx context.Context, namespace string, req *pb.CreateProviderRequest) (*pb.ProviderResponse, error) {
-	ctx = g.authContext(ctx)
+	ctx = g.authContext(ctx, namespace)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -199,7 +229,7 @@ func (g *GatewayClient) CreateProvider(ctx context.Context, namespace string, re
 }
 
 func (g *GatewayClient) UpdateProvider(ctx context.Context, namespace string, req *pb.UpdateProviderRequest) (*pb.ProviderResponse, error) {
-	ctx = g.authContext(ctx)
+	ctx = g.authContext(ctx, namespace)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -212,7 +242,7 @@ func (g *GatewayClient) UpdateProvider(ctx context.Context, namespace string, re
 }
 
 func (g *GatewayClient) GetProvider(ctx context.Context, namespace string, name string) (*pb.ProviderResponse, error) {
-	ctx = g.authContext(ctx)
+	ctx = g.authContext(ctx, namespace)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -231,7 +261,7 @@ type ExecResult struct {
 }
 
 func (g *GatewayClient) ExecSandbox(ctx context.Context, namespace string, req *pb.ExecSandboxRequest) (*ExecResult, error) {
-	ctx = g.authContext(ctx)
+	ctx = g.authContext(ctx, namespace)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -274,7 +304,7 @@ func (g *GatewayClient) inferenceClientForNamespace(ctx context.Context, namespa
 }
 
 func (g *GatewayClient) SetInferenceRoute(ctx context.Context, namespace string, req *inferencepb.SetInferenceRouteRequest) (*inferencepb.SetInferenceRouteResponse, error) {
-	ctx = g.authContext(ctx)
+	ctx = g.authContext(ctx, namespace)
 	client, err := g.inferenceClientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -287,7 +317,7 @@ func (g *GatewayClient) SetInferenceRoute(ctx context.Context, namespace string,
 }
 
 func (g *GatewayClient) ConfigureProviderRefresh(ctx context.Context, namespace string, req *pb.ConfigureProviderRefreshRequest) (*pb.ConfigureProviderRefreshResponse, error) {
-	ctx = g.authContext(ctx)
+	ctx = g.authContext(ctx, namespace)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -300,7 +330,7 @@ func (g *GatewayClient) ConfigureProviderRefresh(ctx context.Context, namespace 
 }
 
 func (g *GatewayClient) RotateProviderCredential(ctx context.Context, namespace string, req *pb.RotateProviderCredentialRequest) (*pb.RotateProviderCredentialResponse, error) {
-	ctx = g.authContext(ctx)
+	ctx = g.authContext(ctx, namespace)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -323,7 +353,7 @@ func (e *ExecExitError) Error() string {
 const maxLogChunkSize = 512
 
 func (g *GatewayClient) ExecSandboxStreaming(ctx context.Context, namespace string, req *pb.ExecSandboxRequest) error {
-	ctx = g.authContext(ctx)
+	ctx = g.authContext(ctx, namespace)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return err
@@ -370,7 +400,7 @@ func (g *GatewayClient) ExecSandboxStreaming(ctx context.Context, namespace stri
 }
 
 func (g *GatewayClient) UpdateConfig(ctx context.Context, namespace string, req *pb.UpdateConfigRequest) (*pb.UpdateConfigResponse, error) {
-	ctx = g.authContext(ctx)
+	ctx = g.authContext(ctx, namespace)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
@@ -383,7 +413,7 @@ func (g *GatewayClient) UpdateConfig(ctx context.Context, namespace string, req 
 }
 
 func (g *GatewayClient) WatchSandbox(ctx context.Context, namespace string, req *pb.WatchSandboxRequest) (pb.OpenShell_WatchSandboxClient, error) {
-	ctx = g.authContext(ctx)
+	ctx = g.authContext(ctx, namespace)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
