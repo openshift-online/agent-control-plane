@@ -233,27 +233,33 @@ acpctl apply -k types/integration/
 
 `acpctl apply` talks to the ACP API server (not Kubernetes directly) and supports create-or-update semantics for all ACP resource types. It supports Kustomize overlays via `-k`, enabling environment-specific overrides (e.g. different provider credentials per cluster).
 
-ACP type changes in `agent-gitops` SHALL be applied as an ArgoCD PostSync hook or as a separate automation step after the Kubernetes manifests are synced and the API server is healthy. This ensures the API server is available to receive the `acpctl apply` calls.
+ACP types SHALL be applied as the first step of the PostSync verification Job (see Post-Deploy Verification below). The verification Job already runs after the Kubernetes manifests are synced and the API server is healthy, so `acpctl apply -k` runs first to ensure ACP types are current, then the test suite validates the full deployment including those types.
 
 #### Scenario: ACP types applied after deployment
 
 - GIVEN the integration environment's ACP API server is healthy after an ArgoCD sync
-- WHEN `acpctl apply -k types/integration/` runs
+- WHEN the PostSync verification Job runs `acpctl apply -k types/integration/` as its first step
 - THEN Projects, Agents, Providers, Credentials, and other ACP types are created or updated
-- AND the output reports `created`, `configured`, or `unchanged` for each resource
+- AND the test suite runs immediately after against the updated types
 
 #### Scenario: ACP type change does not require image update
 
 - GIVEN a developer adds a new Agent definition to `agent-gitops/types/integration/`
 - WHEN ArgoCD detects the commit and syncs
-- THEN the new Agent is applied via `acpctl apply`
+- THEN the PostSync Job applies the new Agent via `acpctl apply -k`
+- AND the test suite validates the new type
 - AND no image rollout occurs — only the ACP type is updated
 
 ### Requirement: Post-Deploy Verification
 
-After ArgoCD completes a sync, a verification Job SHALL run as an ArgoCD PostSync hook inside the cluster.
+After ArgoCD completes a sync, a verification Job SHALL run as an ArgoCD PostSync hook inside the cluster. The Job performs two steps in sequence:
 
-The verification SHALL execute the unified golden test suite. This suite consolidates the existing test scripts (`components/pr-test/e2e-smoke.sh`, `tests/e2e/hcmai-smoke.sh`, `scripts/tests/*`) into a single parameterized test runner usable across all environments (kind, integration, stage, production). Until unification is complete, the PostSync hook SHALL use the best available existing suite.
+1. **Apply ACP types**: Run `acpctl apply -k types/integration/` to ensure all ACP resource types (Projects, Agents, Providers, etc.) are current
+2. **Run test suite**: Execute the unified golden test suite against the live deployment
+
+The verification container image SHALL include both `acpctl` and the test suite scripts.
+
+The test suite consolidates the existing test scripts (`components/pr-test/e2e-smoke.sh`, `tests/e2e/hcmai-smoke.sh`, `scripts/tests/*`) into a single parameterized test runner usable across all environments (kind, integration, stage, production). Until unification is complete, the PostSync hook SHALL use the best available existing suite.
 
 The golden test suite SHALL cover at minimum:
 1. Authenticate via OIDC client_credentials
@@ -266,25 +272,33 @@ The golden test suite SHALL cover at minimum:
 
 The verification Job SHALL use the `argocd.argoproj.io/hook: PostSync` annotation with `argocd.argoproj.io/sync-wave: "1"` to run after the `bootstrap-admin` Job (wave 0).
 
-The verification Job SHALL report results via its exit code: 0 for success, non-zero for failure. ArgoCD treats PostSync hook failure as a degraded sync.
+The verification Job SHALL report results via its exit code: 0 for success, non-zero for failure. If `acpctl apply -k` fails, the Job exits non-zero without running the test suite. ArgoCD treats PostSync hook failure as a degraded sync.
 
-Additional test suites (RBAC, gateway, scheduled sessions) SHOULD be included as separate PostSync Jobs or as stages within the verification Job.
+Additional test suites (RBAC, gateway, scheduled sessions) SHOULD be included as additional stages within the verification Job.
 
 #### Scenario: Deployment passes verification
 
 - GIVEN ArgoCD completes a sync deploying new images
 - WHEN the PostSync verification Job runs
-- THEN it authenticates, creates test resources, triggers an LLM session, and validates the response
+- THEN `acpctl apply -k types/integration/` applies ACP types successfully
+- AND the test suite authenticates, creates test resources, triggers an LLM session, and validates the response
 - AND the Job exits with code 0
 - AND ArgoCD reports the sync as healthy
 
 #### Scenario: Deployment fails verification
 
 - GIVEN ArgoCD completes a sync deploying new images
-- WHEN the PostSync verification Job fails (LLM response not received, session stuck, auth failure)
+- WHEN the PostSync verification Job's test suite fails (LLM response not received, session stuck, auth failure)
 - THEN the Job exits with a non-zero code
 - AND ArgoCD reports the sync as degraded
 - AND the failure is visible in the ArgoCD dashboard
+
+#### Scenario: ACP type apply fails
+
+- GIVEN ArgoCD completes a sync deploying new images
+- WHEN the PostSync verification Job runs `acpctl apply -k` and it fails (API server unreachable, invalid manifest)
+- THEN the Job exits with a non-zero code without running the test suite
+- AND ArgoCD reports the sync as degraded
 
 #### Scenario: Verification runs after bootstrap
 
