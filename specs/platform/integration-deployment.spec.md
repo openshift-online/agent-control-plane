@@ -9,7 +9,7 @@
 
 Define the desired state for automated continuous deployment of the Agent Control Plane to a dedicated integration environment. When all CI checks pass on `main`, the system deploys the latest Konflux-built images to the hcmai-01 ROSA cluster via ArgoCD, then runs a full verification suite. This integration environment serves as the quality gate before promotion to stage (hcmai-02) and production (hcmai-03).
 
-The ROSA cluster is internal (VPN-only), so deployment is pull-based: ArgoCD on the cluster watches a GitOps repository on internal GitLab for manifest and image reference changes.
+The ROSA cluster is internal (VPN-only), so deployment is pull-based: ArgoCD on the cluster watches a GitOps repository on internal GitLab. Konflux's Release pipeline handles image promotion by opening PRs to that repository; ArgoCD syncs the merged changes to the cluster.
 
 ## Cluster Topology
 
@@ -24,8 +24,9 @@ The ROSA cluster is internal (VPN-only), so deployment is pull-based: ArgoCD on 
 | Decision | Rationale |
 |----------|-----------|
 | Konflux images, not GHA images | Red Hat internal standard; provides SLSA attestation, vulnerability scanning (Clair, Snyk, ClamAV), RPM signature verification, and supply chain compliance via Tekton Chains. Other Red Hat projects already use Konflux images for internal deployments. |
+| Konflux Release pipeline for image promotion | Konflux owns the image lifecycle end-to-end: build → integration test → Enterprise Contract validation → Release. The Release pipeline's `update-infra-deployments` task opens a PR to `agent-gitops` updating only image digest lines. This is the standard RHTAP pattern used by other Konflux-hosted services (MintMaker, integration-service, etc.). |
 | Pull-based deployment via ArgoCD | The ROSA cluster is internal/VPN — GitHub Actions cannot push to it. ArgoCD on the cluster pulls from internal GitLab, which the cluster can reach. |
-| GitOps repo on internal GitLab | `gitlab.cee.redhat.com/agent-control-plane/agent-gitops` is reachable from ROSA clusters. Separating deployment configuration from application source follows GitOps best practice. |
+| GitOps repo for manifests, not images | `agent-gitops` defines ACP resource types and manifests. Image digest references live in the overlay's `kustomization.yaml` images section and are the only lines the Konflux Release pipeline touches. Manifest/type changes remain manual developer PRs. |
 | Update-in-place, not ephemeral | Integration is a persistent environment continuously updated, unlike the ephemeral per-PR namespaces used by pr-test on Stage. Initial bootstrap is manual and out of scope. |
 | Unified golden test suite | A single parameterized test suite SHALL be used across all environments (kind, integration, stage, production). Follow-up work will consolidate the existing suites (`components/pr-test/e2e-smoke.sh`, `tests/e2e/hcmai-smoke.sh`, `scripts/tests/*`) into one. |
 | Secrets managed by Vault | Secrets are provisioned into the cluster via HashiCorp Vault and the secrets operator. They are not stored in the GitOps repo and are not managed from this codebase. |
@@ -69,32 +70,54 @@ The control plane environment patches SHALL reference Konflux image paths for th
 
 ### Requirement: Image Update Flow
 
-After all Konflux builds for a `main` commit succeed, the system SHALL update image references in the `agent-gitops` repository on internal GitLab (`gitlab.cee.redhat.com/agent-control-plane/agent-gitops`).
+Image promotion SHALL use Konflux's native Release pipeline, not a custom mechanism. The `agent-gitops` repository defines ACP manifests and resource types; the Konflux Release pipeline is the only automated process that updates image digest references in it.
 
-The update mechanism SHALL NOT commit to `agent-gitops` until all component images for the same commit have built successfully — partial updates (some components at commit A, others at commit B) SHALL NOT occur.
+The flow SHALL be:
 
-The update SHOULD be atomic: a single commit updating all component image digests.
+1. Konflux builds all component images on merge to `main` and creates an immutable **Snapshot** recording their digests
+2. Konflux runs **IntegrationTestScenarios** against the Snapshot
+3. The **Enterprise Contract** policy validates supply chain compliance (SLSA provenance, vulnerability scan results, signatures)
+4. On success, Konflux creates a **Release** CR (triggered automatically via `auto-release: true` on the ReleasePlan)
+5. The Release triggers a managed pipeline (e.g. `rhtap-service-push`) which runs the **`update-infra-deployments`** task
+6. The task clones `agent-gitops`, runs an **`infra-deployment-update-script`** (a sed script that updates only the image digest lines in the integration overlay's `kustomization.yaml`), and **opens a PR**
+7. The PR merges (auto-merge or with approval) → ArgoCD detects the change and syncs
 
-#### Scenario: Successful build triggers image update
+A **ReleasePlan** SHALL be created in the ACP tenant namespace with `auto-release: true` targeting the managed namespace. A **ReleasePlanAdmission** SHALL be created in the managed namespace accepting releases from the ACP tenant, referencing the `rhtap-service-push` pipeline and an Enterprise Contract policy.
+
+The `infra-deployment-update-script` in the ReleasePlanAdmission SHALL update only the `images:` section of the integration overlay's `kustomization.yaml`, using digest references from the Snapshot. Manifest structure and resource type definitions SHALL NOT be modified by this script.
+
+The Release SHALL NOT be created until all component images in the Snapshot have built successfully — Konflux's integration-service enforces this by only creating Snapshots from complete builds.
+
+#### Scenario: Successful build triggers Release pipeline
 
 - GIVEN all Konflux push pipelines complete for commit `abc1234` on `main`
-- WHEN the image-update mechanism runs
-- THEN a single commit is pushed to `agent-gitops` updating all component image digests
-- AND the commit message references the source commit SHA (`abc1234`)
+- WHEN integration tests and Enterprise Contract validation pass
+- THEN Konflux creates a Release CR automatically
+- AND the managed pipeline opens a PR to `agent-gitops` updating image digests in the integration overlay
+- AND the PR contains only image digest changes, not manifest modifications
 
-#### Scenario: Partial build failure blocks update
+#### Scenario: Enterprise Contract failure blocks Release
+
+- GIVEN all Konflux push pipelines complete for commit `abc1234`
+- WHEN the Enterprise Contract policy detects a violation (missing SLSA provenance, failed vulnerability scan)
+- THEN no Release CR is created
+- AND no PR is opened to `agent-gitops`
+- AND the integration environment continues running the previous known-good images
+
+#### Scenario: Partial build failure blocks Snapshot
 
 - GIVEN all but one Konflux push pipeline completes for commit `abc1234`
 - WHEN the `acp-runner-main` build fails
-- THEN no commit is pushed to `agent-gitops`
+- THEN no complete Snapshot is created
+- AND the Release pipeline does not trigger
 - AND the integration environment continues running the previous known-good images
 
 #### Scenario: Rapid successive merges
 
 - GIVEN commit `abc1234` builds are in progress
-- WHEN commit `def5678` is merged to `main` and its builds complete first
-- THEN the image-update mechanism SHALL update `agent-gitops` with `def5678` images
-- AND the `abc1234` update is skipped (latest-wins)
+- WHEN commit `def5678` is merged to `main` and its builds and Release complete first
+- THEN the `def5678` Release PR is opened and merged to `agent-gitops`
+- AND the `abc1234` Release, if it completes later, opens its own PR which is superseded or closed
 
 ### Requirement: ArgoCD Continuous Sync
 
@@ -107,12 +130,12 @@ The ArgoCD Application SHALL have:
 
 ArgoCD SHALL NOT auto-sync if the previous sync's PostSync hooks (verification) failed.
 
-#### Scenario: Image update triggers rollout
+#### Scenario: Release PR merge triggers rollout
 
 - GIVEN ArgoCD watches `agent-gitops` with auto-sync enabled
-- WHEN a new commit updates image digests in the integration overlay
-- THEN ArgoCD detects the change and begins a sync
-- AND the sync applies the updated manifests to the hcmai-01 cluster
+- WHEN a Konflux Release pipeline's image-update PR is merged
+- THEN ArgoCD detects the new commit and begins a sync
+- AND the sync applies the updated image digests to the hcmai-01 cluster
 - AND pods roll out with the new images
 
 #### Scenario: Cluster drift is auto-corrected
@@ -232,37 +255,43 @@ Keycloak SHALL be deployed separately, following the existing `overlays/hcmais/k
 
 ### Requirement: Deployment Gating
 
-The image-update mechanism SHALL only trigger when all CI checks on `main` are green.
+The Konflux Release pipeline provides multi-layer gating before any image reaches the integration environment:
 
-At minimum, "green" means all Konflux push pipelines completed successfully for the target commit. The mechanism SHOULD also gate on GitHub Actions CI status (unit tests, linting, kustomize validation) if that status is available.
+1. **Build gate**: All component Konflux push pipelines must succeed — no Snapshot is created from partial builds
+2. **Integration test gate**: IntegrationTestScenarios configured in Konflux must pass against the Snapshot
+3. **Enterprise Contract gate**: Supply chain policy (SLSA provenance, vulnerability scans, signatures) must validate
+4. **Release gate**: The ReleasePlan's `auto-release: true` label triggers a Release only when all prior gates pass
+
+The ReleasePlan SHOULD also gate on GitHub Actions CI status (unit tests, linting, kustomize validation) if that status is available via Konflux's integration test mechanism.
 
 ArgoCD guarantees that PostSync hooks (verification tests) only run after the sync is complete and all resources are healthy. This means the deployment pipeline does not need a separate mechanism to confirm ArgoCD has finished syncing — the PostSync hook annotation provides this guarantee natively.
 
 #### Scenario: Green CI triggers deployment
 
 - GIVEN commit `abc1234` is merged to `main`
-- WHEN all Konflux pipelines and GHA CI checks pass
-- THEN the image-update mechanism commits new digests to `agent-gitops`
-- AND ArgoCD syncs the new images to hcmai-01
+- WHEN all Konflux pipelines pass, integration tests succeed, and Enterprise Contract validates
+- THEN the Release pipeline opens a PR to `agent-gitops` updating image digests
+- AND after the PR merges, ArgoCD syncs the new images to hcmai-01
 - AND PostSync hooks run only after all resources reach a healthy state
 
 #### Scenario: Failing CI blocks deployment
 
 - GIVEN commit `abc1234` is merged to `main`
 - WHEN the `acp-ui-main` Konflux pipeline fails (e.g. Clair vulnerability scan)
-- THEN no image update is committed to `agent-gitops`
+- THEN no complete Snapshot is created
+- AND no Release is triggered
 - AND the integration environment remains on the previous version
 
 ### Requirement: Rollback
 
 When PostSync verification fails, the system SHALL NOT automatically promote the failing version further (no auto-promotion to stage).
 
-The system SHOULD support rollback to the previous known-good version by reverting the image-update commit in `agent-gitops`. ArgoCD auto-sync then applies the reverted (previous) image digests.
+The system SHOULD support rollback to the previous known-good version by reverting the Release pipeline's image-update PR in `agent-gitops`. ArgoCD auto-sync then applies the reverted (previous) image digests.
 
 #### Scenario: Manual rollback via git revert
 
 - GIVEN a deployment to hcmai-01 fails PostSync verification
-- WHEN an operator runs `git revert HEAD` on `agent-gitops` and pushes
+- WHEN an operator reverts the Release pipeline's image-update PR in `agent-gitops` and pushes
 - THEN ArgoCD detects the revert commit
 - AND syncs the cluster back to the previous known-good image digests
 - AND the PostSync verification runs again against the rolled-back version
@@ -292,3 +321,6 @@ The following are anticipated extensions but are not in scope for this spec:
 - [install-openshift.sh]: ../../components/pr-test/install-openshift.sh
 - [bootstrap-admin-job.yaml]: ../../components/manifests/base/bootstrap-admin-job.yaml
 - [Tekton pipelines]: ../../.tekton/
+- [Konflux Release Service]: https://github.com/konflux-ci/release-service
+- [Release Service Catalog]: https://github.com/konflux-ci/release-service-catalog
+- [RHTAP service-push pipeline]: https://github.com/konflux-ci/release-service-catalog/tree/production/pipelines/managed/rhtap-service-push
