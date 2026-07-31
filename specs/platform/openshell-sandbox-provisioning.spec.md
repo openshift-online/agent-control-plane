@@ -977,7 +977,7 @@ The control plane SHALL expose configuration for OpenShell gateway mode alongsid
 | Consumer | Impact |
 |---|---|
 | [kube_reconciler.go] `ensurePod()` | Preserved unchanged; used when `OPENSHELL_USE_GATEWAY=false` |
-| [kube_reconciler.go] credential sidecars | Preserved unchanged; replaced by OpenShell providers only when gateway mode is active |
+| ~~[kube_reconciler.go] credential sidecars~~ | **Removed** — credential sidecars replaced by OpenShell providers; the provider model is now the only credential injection mechanism in gateway mode |
 | [kube_reconciler.go] `ensureOpenShellPolicy()` | Preserved unchanged; skipped when gateway mode is active |
 | [kube_reconciler.go] `buildRunnerSecurityContext()` | Preserved unchanged; not invoked in gateway mode (gateway owns pod security settings) |
 | [pod_sync.go] | Extended with sandbox sync branch for gateway mode |

@@ -175,10 +175,12 @@ bound to. Credential tokens SHALL be write-only in the API.
 
 ### Requirement: Agent Credential Isolation
 
+> **Note:** Credential sidecars have been replaced by the OpenShell provider model. Integration credentials are now injected into sandboxes via OpenShell gateway providers, not sidecar containers. The provider model achieves the same isolation guarantee — the agent process never holds real credentials, only opaque placeholders resolved by the gateway's egress proxy at request time. See `openshell-sandbox-provisioning.spec.md` § Credential Mapping to OpenShell Providers.
+
 Integration credentials (GitHub, GitLab, Jira, Google, kubeconfig) SHALL
 NOT be visible to the agent process. The runner container's environment SHALL NOT
 contain integration credential tokens. The agent SHALL access external services
-exclusively through MCP tools exposed by sidecar containers with isolated environments.
+exclusively through gateway-managed providers with isolated credential injection.
 
 LLM provider credentials (Anthropic API key, Vertex AI service account) are exempt
 from this requirement — they are necessary for the agent's own inference and MAY
@@ -191,43 +193,45 @@ remain in the runner container.
 - THEN no integration tokens are present — `GITHUB_TOKEN`, `JIRA_API_TOKEN`, etc. are absent
 - AND the agent can only interact with GitHub/Jira via MCP tools
 
-#### Scenario: Credential sidecar holds tokens in isolation
+#### Scenario: Provider holds tokens in isolation (replaces credential sidecars)
 
 - GIVEN a GitHub credential bound to a Project
-- WHEN the CP provisions the session pod
-- THEN a `github-mcp` sidecar container is added to the pod spec
-- AND the sidecar's environment contains `GITHUB_PERSONAL_ACCESS_TOKEN`
-- AND the sidecar exposes MCP tools on a localhost port
+- WHEN the CP provisions the session sandbox via the OpenShell gateway
+- THEN a gateway provider is configured for the credential
+- AND the gateway's egress proxy resolves credential placeholders to real values at request time
+- AND the agent process inside the sandbox never holds real credentials
 - AND the runner container does NOT have `GITHUB_TOKEN` in its environment
 
 #### Scenario: Git write operations use MCP tools, not tokens
 
 - GIVEN the agent needs to push commits to a GitHub repository
 - WHEN the agent performs the push
-- THEN the agent calls the `github-mcp` sidecar's `PushFiles` or `CreatePullRequest` MCP tools
-- AND the sidecar executes the GitHub API call using its isolated token
+- THEN the agent calls the MCP server's `PushFiles` or `CreatePullRequest` MCP tools
+- AND the MCP server executes the GitHub API call using gateway-managed credentials
 - AND the runner container never has a git credential helper or token
 - AND direct `git push` / `gh pr create` from the runner container SHALL fail (no credentials available)
 
 ### Requirement: MCP Credential Lifecycle
 
+> **Note:** Credential sidecars have been replaced by the OpenShell provider model. Credentials are now managed as gateway providers with gateway-managed refresh cycles, not as sidecar containers.
+
 MCP server credentials SHALL follow the same RoleBinding-scoped access model as other
 integration credentials. Each integration credential bound to a Project SHALL be
-materialized as a sidecar container with its own isolated environment. The sidecar
-SHALL manage its own credential refresh cycle.
+materialized as an OpenShell gateway provider. The gateway SHALL manage
+credential refresh cycles (e.g., via `ConfigureProviderRefresh` for Vertex AI).
 
-#### Scenario: Sidecar credential refresh
+#### Scenario: Gateway-managed credential refresh
 
-- GIVEN a credential MCP sidecar running alongside a runner
+- GIVEN a credential provider configured on the OpenShell gateway
 - WHEN the credential token approaches expiry
-- THEN the sidecar re-fetches the token from the backend API using its own auth
+- THEN the gateway re-fetches the token using the configured refresh strategy
 - AND the agent is not interrupted or restarted
 
 #### Scenario: Credential-free fallback
 
 - GIVEN a Project with no bound credentials
 - WHEN a session is provisioned
-- THEN no credential sidecars are injected
+- THEN no credential providers are configured on the gateway
 - AND the runner operates without integration credentials
 
 ### Requirement: Per-Session Service Account Isolation
@@ -408,9 +412,9 @@ These endpoints MUST validate the caller is cluster-internal to prevent token ex
 |  |  - writes status back    |  |   - user's SSO token        |  |
 |  |                           |  |   - bound vertex cred       |  |
 |  | [API Server]              |  |   +------------------+      |  |
-|  |  SA: (pod identity)       |  |   | MCP sidecar/pod  |      |  |
-|  |  - PostgreSQL backend     |  |   | - integration     |      |  |
-|  |  - Credential store      |  |   | - creds from API  |      |  |
+|  |  SA: (pod identity)       |  |   | MCP sidecar +     |      |  |
+|  |  - PostgreSQL backend     |  |   | gateway providers |      |  |
+|  |  - Credential store      |  |   | - creds via proxy |      |  |
 |  |  - RBAC enforcement      |  |   +------------------+      |  |
 |  |                           |  |                             |  |
 |  | [Backend]                 |  |  [Session B Pod]            |  |
@@ -427,8 +431,8 @@ These endpoints MUST validate the caller is cluster-internal to prevent token ex
 2. No runner session can operate beyond the user's own authorization scope
 3. Integration credentials are global, bound to Projects via RoleBindings, and fetched at runtime, never baked in
 4. The Control Plane SA is the only identity that spans Projects and Clusters
-5. Integration credentials are isolated in sidecar containers; the agent process has no access to integration tokens via environment, filesystem, or process inheritance
-6. LLM provider credentials (Anthropic API key, Vertex SA) are exempt from sidecar isolation — they remain in the runner container
+5. Integration credentials are isolated via OpenShell gateway providers; the agent process has no access to integration tokens via environment, filesystem, or process inheritance — only opaque placeholders resolved by the gateway's egress proxy
+6. LLM provider credentials (Anthropic API key, Vertex SA) are exempt from provider isolation — they remain in the runner container
 7. Remote cluster kubeconfigs are stored encrypted in PostgreSQL (write-only in API) and loaded into the `ClusterClientPool` at runtime — they are never exposed to runners, sidecars, or end users
 8. Each remote cluster kubeconfig is scoped to the minimum permissions required for session and gateway provisioning — it does not grant cluster-admin or access to non-ACP namespaces
 
@@ -446,7 +450,7 @@ These endpoints MUST validate the caller is cluster-internal to prevent token ex
 | Union-only permissions | No deny rules — simpler mental model for fleet operators. |
 | Token stored in database, encrypted at rest | Single authoritative store. A future Vault integration can be adopted by pointing the DB row at a Vault path without changing the API surface. |
 | `google` token serialized as a string | Service Account JSON is serialized into the single `token` field. Keeps the schema uniform across all providers. |
-| Integration credentials isolated in sidecars, not runner env | Prevents token exfiltration by the agent via `Bash`/`Read` tools. The agent interacts with external services only through MCP tools. Sidecar containers have isolated environments containing only their own credentials. |
+| Integration credentials isolated via gateway providers, not runner env | Prevents token exfiltration by the agent via `Bash`/`Read` tools. The agent interacts with external services only through MCP tools. Gateway providers inject credentials via egress proxy — the agent only sees opaque placeholders. (Previously implemented as sidecar containers; replaced by the OpenShell provider model.) |
 | No validation on creation | First-use error is acceptable. Avoids a network call to the provider at creation time and the failure modes that come with it. |
 | Credential rotation is user-managed | Users update the token via `PATCH` or `acpctl credential update`. No platform-side rotation or expiry tracking. |
 | No migration utility for existing K8s Secrets | Users re-enter credentials via the new API. The old Secret-based path is removed when the new API is live. |

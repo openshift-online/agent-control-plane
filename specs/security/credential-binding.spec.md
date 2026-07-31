@@ -238,7 +238,7 @@ Deleting a `scope=credential` RoleBinding SHALL NOT terminate running sessions t
 |----------|-----------------|-----------------|
 | Control plane `resolveCredentialIDs` | Lists all credentials via `sdk.Credentials().ListAll()`, picks first per provider | Query `scope=credential` RoleBindings filtered by `project_id` and `agent_id`, implement hierarchical resolution |
 | RBAC middleware (credential binding creation) | Validates `credential:owner` + `project:owner` for project-level bindings | Relax bind check to `project:editor`+, add agent-level validation (verify agent belongs to project), global bindings (require `platform:admin`), reject `agent_id` without `project_id`, and asymmetric unbind auth (`project:editor`+ can unbind without `credential:owner`) |
-| Credential sidecar entrypoint | Fetches token via bearer token from CP token exchange | No change — consumes `CREDENTIAL_IDS` produced by CP |
+| ~~Credential sidecar entrypoint~~ | ~~Fetches token via bearer token from CP token exchange~~ | **Removed** — credential sidecars replaced by the OpenShell provider model; credentials are now injected via gateway providers, not sidecar containers |
 | Runner `populate_runtime_credentials` | Fetches tokens from `CREDENTIAL_IDS` env var | No change — consumes `CREDENTIAL_IDS` produced by CP |
 | UI binding matrix | Creates RoleBindings with `credential_id` + `project_id` ± `agent_id` | No change — already creates correct binding structure |
 
