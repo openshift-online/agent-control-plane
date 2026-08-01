@@ -67,6 +67,18 @@ _ensure_port_forward() {
   done
 }
 
+_check_port_forward() {
+  local port
+  port=$(echo "$API_URL" | sed -n 's|.*localhost:\([0-9]*\).*|\1|p' | head -1)
+  [[ -z "$port" ]] && return 0
+  local _s
+  _s=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "http://localhost:${port}/healthcheck" 2>/dev/null || true)
+  if [[ "$_s" = "000" || -z "$_s" ]]; then
+    echo -e "  ${YELLOW}Port-forward dead — restarting...${NC}"
+    _ensure_port_forward
+  fi
+}
+
 _ensure_port_forward
 
 _ensure_gateway_port_forward() {
@@ -83,7 +95,7 @@ _ensure_gateway_port_forward() {
   # Start a port-forward to the gateway gRPC port
   local gw_log
   gw_log=$(mktemp)
-  kubectl port-forward -n "${TENANT}" statefulset/openshell-gateway ":8080" \
+  kubectl port-forward -n "${TENANT}" svc/openshell-gateway ":8080" \
     >"$gw_log" 2>&1 &
   GW_PF_PID=$!
 
@@ -127,6 +139,18 @@ _ensure_gateway_port_forward() {
   openshell sandbox list --gateway "${TENANT}" &>/dev/null
 }
 
+# Derives the sandbox name from a session ID, mirroring the Go
+# openshell.SandboxName() function (first 11 chars, lowercased).
+sandbox_name() {
+  echo "session-$(echo "${1:0:11}" | tr '[:upper:]' '[:lower:]')"
+}
+
+# Derives the pod name from a session ID, mirroring the Go
+# openshell.SandboxCRName(SandboxName(id)) convention.
+sandbox_pod_name() {
+  echo "default--$(sandbox_name "$1")"
+}
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -138,6 +162,7 @@ NC='\033[0m'
 
 PASSED=0
 FAILED=0
+FAILED_TESTS=()
 CREATED_SESSION_ID=""
 CREATED_SESSIONS=()
 CMD_OUTPUT=""
@@ -145,7 +170,7 @@ CMD_RC=0
 
 sep()     { printf '%b%s%b\n' "${DIM}" "──────────────────────────────────────────────────" "${NC}"; }
 pass()    { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
-fail()    { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
+fail()    { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); FAILED_TESTS+=("$1"); }
 skip()    { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
 
 run_cmd() {
@@ -157,6 +182,75 @@ run_cmd() {
     echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
   fi
   echo ""
+}
+
+# Strip kubectl's "Defaulted container ..." stderr line from CMD_OUTPUT.
+# Use after run_cmd for commands whose output is compared by value.
+strip_kubectl_noise() {
+  CMD_OUTPUT=$(echo "${CMD_OUTPUT:-}" | grep -v '^Defaulted container ".*" out of:')
+}
+
+# Poll a condition with a progress indicator.
+# Usage: wait_for <message> <max_attempts> <sleep_secs> <check_fn> [args...]
+# Returns 0 on success, 1 on timeout. Check functions set WAIT_RESULT for callers.
+WAIT_RESULT=""
+wait_for() {
+  local msg="$1" max="$2" interval="$3"
+  shift 3
+  printf '  %b⏳ %s' "${DIM}" "$msg"
+  local _wf_i
+  for _wf_i in $(seq 1 "$max"); do
+    if "$@"; then
+      printf '%b\n' "${NC}"
+      return 0
+    fi
+    printf '.'
+    sleep "$interval"
+  done
+  printf '%b\n' "${NC}"
+  return 1
+}
+
+_pod_phase_running() {
+  WAIT_RESULT=$(kubectl get pod "$1" -n "$2" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+  [ "$WAIT_RESULT" = "Running" ]
+}
+
+_session_phase_active() {
+  WAIT_RESULT=$(api GET "/api/ambient/v1/sessions/$1" 2>/dev/null \
+    | jq -r '.phase // empty' 2>/dev/null || echo "")
+  [ "$WAIT_RESULT" = "Running" ] || [ "$WAIT_RESULT" = "Succeeded" ] || [ "$WAIT_RESULT" = "Failed" ]
+}
+
+_session_phase_completed() {
+  WAIT_RESULT=$(api GET "/api/ambient/v1/sessions/$1" 2>/dev/null \
+    | jq -r '.phase // empty' 2>/dev/null || echo "")
+  [ "$WAIT_RESULT" = "Completed" ] || [ "$WAIT_RESULT" = "Succeeded" ]
+}
+
+_pod_terminated() {
+  WAIT_RESULT=$(kubectl get pod "$1" -n "$2" -o jsonpath='{.status.phase}' 2>/dev/null || echo "gone")
+  [ "$WAIT_RESULT" = "gone" ] || [ "$WAIT_RESULT" = "Succeeded" ] || [ "$WAIT_RESULT" = "Failed" ]
+}
+
+_gw_pod_ready() {
+  local _gw_pod _phase _ready
+  _gw_pod=$(kubectl get pod -n "$1" -l app.kubernetes.io/name=openshell,app.kubernetes.io/component=gateway \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+  [ -z "$_gw_pod" ] && return 1
+  _phase=$(kubectl get pod "$_gw_pod" -n "$1" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+  _ready=$(kubectl get pod "$_gw_pod" -n "$1" -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || echo "")
+  [ "$_phase" = "Running" ] && [ "$_ready" = "true" ]
+}
+
+_gw_workload_exists() {
+  local _kind _name
+  for _kind in deployment statefulset; do
+    _name=$(kubectl get "$_kind" openshell-gateway -n "$1" \
+      -o jsonpath='{.metadata.name}' 2>/dev/null || echo "")
+    [ "$_name" = "openshell-gateway" ] && return 0
+  done
+  return 1
 }
 
 run_cmd_redact() {
@@ -171,6 +265,7 @@ run_cmd_redact() {
 }
 
 section() {
+  _check_port_forward
   echo ""
   sep
   printf '%b━━  %s%b\n' "${CYAN}" "$*" "${NC}"
@@ -182,6 +277,11 @@ results() {
   sep
   if [ "$FAILED" -gt 0 ]; then
     printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"
+    echo ""
+    echo -e "  ${RED}Failed tests:${NC}"
+    for _ft in "${FAILED_TESTS[@]}"; do
+      echo -e "    ${RED}✗${NC} ${_ft}"
+    done
   else
     printf '%b  %d passed ✓%b\n' "${GREEN}" "$PASSED" "${NC}"
   fi
@@ -201,7 +301,7 @@ _delete_session() {
   if [ "$SKIP_CLEANUP" = "true" ]; then return 0; fi
   api DELETE "/api/ambient/v1/sessions/${sid}" >/dev/null 2>&1 && \
     echo "  Deleted session ${sid}" || true
-  local pod="session-$(echo "${sid:0:40}" | tr '[:upper:]' '[:lower:]')"
+  local pod="$(sandbox_pod_name "$sid")"
   for _i in $(seq 1 15); do
     kubectl get pod "$pod" -n "$TENANT" &>/dev/null || break
     sleep 2
@@ -224,7 +324,7 @@ cleanup() {
     for (( _i=${#CREATED_SESSIONS[@]}-1; _i>=0; _i-- )); do
       local _sid="${CREATED_SESSIONS[$_i]}"
       [ -z "$_sid" ] && continue
-      _pod="session-$(echo "${_sid:0:40}" | tr '[:upper:]' '[:lower:]')"
+      _pod="$(sandbox_pod_name "$_sid")"
       _phase=$(kubectl get pod "$_pod" -n "$TENANT" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
       if [ -n "$_phase" ]; then
         echo -e "  Retained session ${_sid}  pod=${_pod}  phase=${_phase}"
@@ -344,23 +444,12 @@ fi
 
 if [ "$E2E_GW_CLEANUP" = "true" ]; then
   # The gateway reconciler runs on a 30s interval. Wait up to 120s for the
-  # StatefulSet to appear, checking every 5s.
-  GW_DEPLOYED=false
-  for i in $(seq 1 24); do
-    run_cmd kubectl get statefulset openshell-gateway -n "$E2E_GW_PROJECT" \
-      -o jsonpath='{.metadata.name}'
-    GW_STS="${CMD_OUTPUT:-}"
-    if [ "$GW_STS" = "openshell-gateway" ]; then
-      GW_DEPLOYED=true
-      break
-    fi
-    sleep 5
-  done
-
-  if [ "$GW_DEPLOYED" = "true" ]; then
-    pass "Gateway StatefulSet created in namespace '${E2E_GW_PROJECT}'"
+  # gateway workload (Deployment or StatefulSet) to appear, checking every 5s.
+  if wait_for "Waiting for gateway workload in ${E2E_GW_PROJECT} (reconciler interval ~30s)..." 24 5 \
+      _gw_workload_exists "$E2E_GW_PROJECT"; then
+    pass "Gateway workload created in namespace '${E2E_GW_PROJECT}'"
   else
-    fail "Gateway StatefulSet not found in namespace '${E2E_GW_PROJECT}' after 120s"
+    fail "Gateway workload not found in namespace '${E2E_GW_PROJECT}' after 120s"
     echo "  Control plane may be using gateway name as namespace instead of project namespace"
   fi
 
@@ -489,14 +578,21 @@ fi
 
 section "8. OpenShell gateway healthy"
 
-run_cmd kubectl get statefulset openshell-gateway -n "$TENANT" \
-  -o jsonpath='{.status.readyReplicas}'
-GW_READY="${CMD_OUTPUT:-0}"
+GW_READY=""
+for _kind in deployment statefulset; do
+  _val=$(kubectl get "$_kind" openshell-gateway -n "$TENANT" \
+    -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "")
+  if [ -n "$_val" ]; then
+    GW_READY="$_val"
+    GW_WORKLOAD_KIND="$_kind"
+    break
+  fi
+done
 
-if [ "${GW_READY}" -ge 1 ]; then
-  pass "openshell-gateway in ${TENANT} ready (replicas: ${GW_READY})"
+if [ "${GW_READY:-0}" -ge 1 ] 2>/dev/null; then
+  pass "openshell-gateway in ${TENANT} ready (${GW_WORKLOAD_KIND}, replicas: ${GW_READY})"
 else
-  fail "openshell-gateway in ${TENANT} not ready (readyReplicas=${GW_READY})"
+  fail "openshell-gateway in ${TENANT} not ready (readyReplicas=${GW_READY:-not found})"
 fi
 
 run_cmd kubectl get deployment agent-sandbox-controller \
@@ -588,44 +684,28 @@ fi
 section "11. Sandbox configuration verification"
 
 if [ -n "$CREATED_SESSION_ID" ]; then
-  # Derive sandbox pod name: "session-" + lowercased session ID (first 40 chars)
-  SBX_NAME="session-$(echo "${CREATED_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
+  SBX_NAME="$(sandbox_pod_name "$CREATED_SESSION_ID")"
 
   # Wait for the sandbox pod to be running (up to 60s)
-  POD_READY=false
-  for i in $(seq 1 30); do
-    POD_PHASE=$(kubectl get pod "$SBX_NAME" -n "$TENANT" \
-      -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
-    if [ "$POD_PHASE" = "Running" ]; then
-      POD_READY=true
-      break
-    fi
-    sleep 2
-  done
-
-  if [ "$POD_READY" = "true" ]; then
+  if wait_for "Waiting for sandbox pod ${SBX_NAME} to be Running..." 30 2 \
+      _pod_phase_running "$SBX_NAME" "$TENANT"; then
     pass "Sandbox pod '${SBX_NAME}' is running"
 
     # The control plane uploads payloads only after the sandbox reaches READY
     # phase, passes DNS verification, and transitions the session to Running.
     # Poll for the session phase instead of using a fixed sleep.
     SESSION_RUNNING=false
-    for i in $(seq 1 30); do
-      PHASE=$(api GET "/api/ambient/v1/sessions/${CREATED_SESSION_ID}" 2>/dev/null \
-        | jq -r '.phase // empty' 2>/dev/null || echo "")
-      if [ "$PHASE" = "Running" ] || [ "$PHASE" = "Succeeded" ] || [ "$PHASE" = "Failed" ]; then
-        SESSION_RUNNING=true
-        break
-      fi
-      sleep 2
-    done
+    if wait_for "Waiting for session to reach Running phase..." 30 2 \
+        _session_phase_active "$CREATED_SESSION_ID"; then
+      SESSION_RUNNING=true
+    fi
 
     if [ "$SESSION_RUNNING" = "true" ]; then
       # Session is Running — payloads are uploaded just before exec starts.
       # Poll briefly for the file to appear.
       PAYLOAD_READY=false
       for j in $(seq 1 10); do
-        run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- cat /sandbox/CLAUDE.md
+        run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -c agent -- cat /sandbox/CLAUDE.md
         PAYLOAD_CONTENT="${CMD_OUTPUT:-}"
         if echo "$PAYLOAD_CONTENT" | grep -q "mock LLM"; then
           PAYLOAD_READY=true
@@ -641,12 +721,13 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     else
       fail "Payload /sandbox/CLAUDE.md not found or content mismatch"
       echo "  Got: $(echo "${PAYLOAD_CONTENT:-}" | head -c 200)"
-      echo "  Session phase: ${PHASE:-unknown}"
+      echo "  Session phase: ${WAIT_RESULT:-unknown}"
     fi
 
     # 10b. Agent environment variable passed through to sandbox
-    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -c agent -- \
       printenv CLAUDE_CODE_ATTRIBUTION_HEADER
+    strip_kubectl_noise
     ENV_VAL="${CMD_OUTPUT:-}"
     if [ "$ENV_VAL" = "0" ]; then
       pass "Agent env var CLAUDE_CODE_ATTRIBUTION_HEADER passed through to sandbox"
@@ -655,7 +736,7 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fi
 
     # 10c. MCP config env var patterns preserved (not auto-expanded)
-    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -c agent -- \
       cat /sandbox/.mcp.json
     MCP_CONTENT="${CMD_OUTPUT:-}"
     if [ -n "$MCP_CONTENT" ]; then
@@ -673,8 +754,9 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fi
 
     # 10d. Claude settings baked into image match source
-    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -c agent -- \
       cat /sandbox/.claude/settings.json
+    strip_kubectl_noise
     SETTINGS_ACTUAL="${CMD_OUTPUT:-}"
     SETTINGS_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/claude-settings.json" 2>/dev/null || echo "")
     if [ -n "$SETTINGS_ACTUAL" ] && [ "$SETTINGS_ACTUAL" = "$SETTINGS_EXPECTED" ]; then
@@ -686,8 +768,9 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fi
 
     # 10e. Claude settings.local.json baked into image matches source
-    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -c agent -- \
       cat /sandbox/.claude/settings.local.json
+    strip_kubectl_noise
     SETTINGS_LOCAL_ACTUAL="${CMD_OUTPUT:-}"
     SETTINGS_LOCAL_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/claude-settings-local.json" 2>/dev/null || echo "")
     if [ -n "$SETTINGS_LOCAL_ACTUAL" ] && [ "$SETTINGS_LOCAL_ACTUAL" = "$SETTINGS_LOCAL_EXPECTED" ]; then
@@ -699,8 +782,9 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fi
 
     # 10f. Sandbox network policy present at /etc/openshell/policy.yaml
-    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -- \
+    run_cmd kubectl exec -n "$TENANT" "$SBX_NAME" -c agent -- \
       cat /etc/openshell/policy.yaml
+    strip_kubectl_noise
     POLICY_ACTUAL="${CMD_OUTPUT:-}"
     POLICY_EXPECTED=$(cat "$REPO_ROOT/components/runners/ambient-runner/policy.yaml" 2>/dev/null || echo "")
     if [ -n "$POLICY_ACTUAL" ] && [ "$POLICY_ACTUAL" = "$POLICY_EXPECTED" ]; then
@@ -712,10 +796,19 @@ if [ -n "$CREATED_SESSION_ID" ]; then
     fi
 
   else
-    fail "Sandbox configuration verification — sandbox pod not ready (phase: ${POD_PHASE:-unknown})"
+    fail "Sandbox configuration verification — sandbox pod not ready (phase: ${WAIT_RESULT:-unknown})"
+    echo "--- DIAGNOSTIC: sandbox pod describe ---"
+    kubectl describe pod "${SBX_NAME}" -n "${TENANT}" 2>&1 | tail -30 || true
+    echo "--- DIAGNOSTIC: control plane log (last 50 lines) ---"
+    kubectl logs -n "${NAMESPACE}" -l app=ambient-control-plane --tail=50 2>&1 || true
+    echo "--- END DIAGNOSTICS ---"
+    results
+    exit 1
   fi
 else
   fail "Sandbox configuration verification — session not created"
+  results
+  exit 1
 fi
 
 # ============================================================================
@@ -753,9 +846,9 @@ if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; the
     echo "--- DIAGNOSTIC: sandbox pod status ---"
     kubectl get pod "${SBX_NAME}" -n "${TENANT}" -o wide 2>&1 || true
     echo "--- DIAGNOSTIC: sandbox ANTHROPIC_BASE_URL ---"
-    kubectl exec -n "${TENANT}" "${SBX_NAME}" -- printenv ANTHROPIC_BASE_URL 2>&1 || echo "(not set or pod gone)"
+    kubectl exec -n "${TENANT}" "${SBX_NAME}" -c agent -- printenv ANTHROPIC_BASE_URL 2>&1 || echo "(not set or pod gone)"
     echo "--- DIAGNOSTIC: runner log (last 80 lines) ---"
-    kubectl exec -n "${TENANT}" "${SBX_NAME}" -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
+    kubectl exec -n "${TENANT}" "${SBX_NAME}" -c agent -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
     echo "--- DIAGNOSTIC: sandbox supervisor log (last 40 lines) ---"
     kubectl logs -n "${TENANT}" "${SBX_NAME}" -c agent --tail=40 2>&1 || true
     echo "--- DIAGNOSTIC: control plane log for session (last 20 matches) ---"
@@ -787,7 +880,7 @@ if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; the
     echo "--- DIAGNOSTIC: sandbox pod events ---"
     kubectl describe pod "${SBX_NAME}" -n "${TENANT}" 2>&1 | grep -A 20 "^Events:" || true
     echo "--- DIAGNOSTIC: runner log (last 80 lines) ---"
-    kubectl exec -n "${TENANT}" "${SBX_NAME}" -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
+    kubectl exec -n "${TENANT}" "${SBX_NAME}" -c agent -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
     echo "--- DIAGNOSTIC: sandbox supervisor log (last 80 lines) ---"
     kubectl logs -n "${TENANT}" "${SBX_NAME}" -c agent --tail=80 2>&1 || true
     echo "--- DIAGNOSTIC: control plane log (last 100 lines) ---"
@@ -812,8 +905,10 @@ if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; the
   # deprovisioning can take up to ~2 minutes to kick in.
   LONGRUN_STABLE=true
   LONGRUN_FAIL_REASON=""
+  printf '  %b⏳ Verifying session remains Running for 120s...' "${DIM}"
   for i in $(seq 1 12); do
     sleep 10
+    printf '.'
     LONGRUN_PHASE=$(api GET "/api/ambient/v1/sessions/${CREATED_SESSION_ID}" 2>/dev/null \
       | jq -r '.phase // empty' 2>/dev/null || echo "")
     LONGRUN_POD_PHASE=$(kubectl get pod "${SBX_NAME}" -n "$TENANT" \
@@ -830,6 +925,7 @@ if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; the
       break
     fi
   done
+  printf '%b\n' "${NC}"
 
   if [ "$LONGRUN_STABLE" = "true" ]; then
     pass "Long-running session and sandbox remained Running for 120s after LLM response"
@@ -841,7 +937,7 @@ if [ -n "$CREATED_SESSION_ID" ] && [ "${SESSION_RUNNING:-false}" = "true" ]; the
     echo "--- DIAGNOSTIC: sandbox pod status ---"
     kubectl get pod "${SBX_NAME}" -n "${TENANT}" -o wide 2>&1 || true
     echo "--- DIAGNOSTIC: runner log (last 80 lines) ---"
-    kubectl exec -n "${TENANT}" "${SBX_NAME}" -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
+    kubectl exec -n "${TENANT}" "${SBX_NAME}" -c agent -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
     echo "--- DIAGNOSTIC: sandbox supervisor log (last 80 lines) ---"
     kubectl logs -n "${TENANT}" "${SBX_NAME}" -c agent --tail=80 2>&1 || true
     echo "--- DIAGNOSTIC: control plane log (last 100 lines) ---"
@@ -894,7 +990,7 @@ if [ -n "$SHORT_SESSION_ID" ]; then
     fail "stop_on_run_finished not set on session (got: '${SHORT_FLAG}')"
   fi
 
-  SHORT_SBX_NAME="session-$(echo "${SHORT_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
+  SHORT_SBX_NAME="$(sandbox_pod_name "$SHORT_SESSION_ID")"
 
   # Wait for LLM response (same polling as long-running)
   SHORT_LLM_FOUND=0
@@ -919,7 +1015,7 @@ if [ -n "$SHORT_SESSION_ID" ]; then
     echo "--- DIAGNOSTIC: sandbox pod ---"
     kubectl get pod "${SHORT_SBX_NAME}" -n "${TENANT}" -o wide 2>&1 || true
     echo "--- DIAGNOSTIC: runner log ---"
-    kubectl exec -n "${TENANT}" "${SHORT_SBX_NAME}" -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
+    kubectl exec -n "${TENANT}" "${SHORT_SBX_NAME}" -c agent -- cat /sandbox/.runner/logs/runner.log 2>&1 | tail -80 || echo "(no runner log)"
     echo "--- DIAGNOSTIC: supervisor log ---"
     kubectl logs -n "${TENANT}" "${SHORT_SBX_NAME}" -c agent --tail=80 2>&1 || true
     echo "--- DIAGNOSTIC: control plane log ---"
@@ -929,21 +1025,11 @@ if [ -n "$SHORT_SESSION_ID" ]; then
 
   # After the runner finishes with stop_on_run_finished=true, the control plane
   # marks the session as Completed and deprovisions the sandbox.
-  SHORT_COMPLETED=false
-  for i in $(seq 1 60); do
-    SHORT_PHASE=$(api GET "/api/ambient/v1/sessions/${SHORT_SESSION_ID}" 2>/dev/null \
-      | jq -r '.phase // empty' 2>/dev/null || echo "")
-    if [ "$SHORT_PHASE" = "Completed" ] || [ "$SHORT_PHASE" = "Succeeded" ]; then
-      SHORT_COMPLETED=true
-      break
-    fi
-    sleep 2
-  done
-
-  if [ "$SHORT_COMPLETED" = "true" ]; then
-    pass "Short-running session transitioned to ${SHORT_PHASE}"
+  if wait_for "Waiting for short-running session to complete..." 60 2 \
+      _session_phase_completed "$SHORT_SESSION_ID"; then
+    pass "Short-running session transitioned to ${WAIT_RESULT}"
   else
-    fail "Short-running session phase is '${SHORT_PHASE}' (expected Completed)"
+    fail "Short-running session phase is '${WAIT_RESULT}' (expected Completed)"
     echo "--- DIAGNOSTIC: session status_message ---"
     api GET "/api/ambient/v1/sessions/${SHORT_SESSION_ID}" 2>/dev/null \
       | jq '{phase, status_message: .status_message}' 2>/dev/null || true
@@ -951,21 +1037,11 @@ if [ -n "$SHORT_SESSION_ID" ]; then
 
   # Verify sandbox pod is terminated after session completion (up to 120s).
   # The sandbox controller may take up to ~2 minutes to fully deprovision.
-  SHORT_SBX_GONE=false
-  for i in $(seq 1 60); do
-    SHORT_POD_PHASE=$(kubectl get pod "$SHORT_SBX_NAME" -n "$TENANT" \
-      -o jsonpath='{.status.phase}' 2>/dev/null || echo "gone")
-    if [ "$SHORT_POD_PHASE" = "gone" ] || [ "$SHORT_POD_PHASE" = "Succeeded" ] || [ "$SHORT_POD_PHASE" = "Failed" ]; then
-      SHORT_SBX_GONE=true
-      break
-    fi
-    sleep 2
-  done
-
-  if [ "$SHORT_SBX_GONE" = "true" ]; then
+  if wait_for "Waiting for short-running sandbox to terminate..." 60 2 \
+      _pod_terminated "$SHORT_SBX_NAME" "$TENANT"; then
     pass "Short-running sandbox terminated after session completion"
   else
-    fail "Short-running sandbox pod still running (phase: ${SHORT_POD_PHASE})"
+    fail "Short-running sandbox pod still running (phase: ${WAIT_RESULT})"
   fi
 else
   fail "Failed to start short-running session"
@@ -1004,21 +1080,9 @@ if ! _ensure_gateway_port_forward; then
 fi
 
 # Wait for gateway pod to be fully ready — the reconciler may have restarted
-# the StatefulSet during sections 9-11 (DNS or config change detection).
-GW_READY_FOR_NET=false
-for _i in $(seq 1 30); do
-  _gw_phase=$(kubectl get pod openshell-gateway-0 -n "$TENANT" \
-    -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
-  _gw_ready=$(kubectl get pod openshell-gateway-0 -n "$TENANT" \
-    -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || echo "")
-  if [ "$_gw_phase" = "Running" ] && [ "$_gw_ready" = "true" ]; then
-    GW_READY_FOR_NET=true
-    break
-  fi
-  sleep 2
-done
-
-if [ "$GW_READY_FOR_NET" = "true" ]; then
+# the workload during sections 9-11 (DNS or config change detection).
+if wait_for "Waiting for gateway pod to be ready for network tests..." 30 2 \
+    _gw_pod_ready "$TENANT"; then
   pass "Gateway pod ready for network policy tests"
   # Re-establish port-forward if gateway restarted (old PF would be stale)
   if ! openshell sandbox list --gateway "${TENANT}" &>/dev/null 2>&1; then
@@ -1045,6 +1109,16 @@ LOCKED_AGENT_ID=$(echo "$AGENTS_RESP" \
   | jq -r '.items[] | select(.name == "network-test-locked-down") | .id' 2>/dev/null | head -1 || echo "")
 
 if [ -n "$LOCKED_AGENT_ID" ]; then
+  # The start handler returns an existing active session for the same agent
+  # instead of creating a new one.  Delete any stale session (left by a prior
+  # --skip-cleanup run) so we get a fresh sandbox for this test.
+  _stale=$(api GET "/api/ambient/v1/sessions?search=agent_id+%3D+'${LOCKED_AGENT_ID}'" 2>/dev/null \
+    | jq -r '.items[]? | select(.phase == "Pending" or .phase == "Creating" or .phase == "Running") | .id' 2>/dev/null || echo "")
+  for _sid in $_stale; do
+    api DELETE "/api/ambient/v1/sessions/${_sid}" >/dev/null 2>&1 || true
+  done
+  [ -n "$_stale" ] && sleep 2
+
   LOCKED_START_RESP=$(api POST "/api/ambient/v1/projects/${PROJECT_ID}/agents/${LOCKED_AGENT_ID}/start" \
     -d '{"prompt": "gateway-e2e-test: network policy enforcement"}' || echo "")
 
@@ -1055,33 +1129,18 @@ if [ -n "$LOCKED_AGENT_ID" ]; then
     CREATED_SESSIONS+=("$LOCKED_SESSION_ID")
     pass "Locked-down session started (id: ${LOCKED_SESSION_ID})"
 
-    LOCKED_SBX_NAME="session-$(echo "${LOCKED_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
+    LOCKED_SBX_NAME="$(sandbox_pod_name "$LOCKED_SESSION_ID")"
 
-    LOCKED_POD_READY=false
-    for i in $(seq 1 30); do
-      LOCKED_POD_PHASE=$(kubectl get pod "$LOCKED_SBX_NAME" -n "$TENANT" \
-        -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
-      if [ "$LOCKED_POD_PHASE" = "Running" ]; then
-        LOCKED_POD_READY=true
-        break
-      fi
-      sleep 2
-    done
-
-    if [ "$LOCKED_POD_READY" = "true" ]; then
+    if wait_for "Waiting for locked-down sandbox pod ${LOCKED_SBX_NAME}..." 30 2 \
+        _pod_phase_running "$LOCKED_SBX_NAME" "$TENANT"; then
       pass "Locked-down sandbox pod '${LOCKED_SBX_NAME}' is running"
 
       # Wait for session to reach Running phase so sandbox is fully initialized
       LOCKED_SESSION_RUNNING=false
-      for i in $(seq 1 30); do
-        LOCKED_PHASE=$(api GET "/api/ambient/v1/sessions/${LOCKED_SESSION_ID}" 2>/dev/null \
-          | jq -r '.phase // empty' 2>/dev/null || echo "")
-        if [ "$LOCKED_PHASE" = "Running" ] || [ "$LOCKED_PHASE" = "Succeeded" ] || [ "$LOCKED_PHASE" = "Failed" ]; then
-          LOCKED_SESSION_RUNNING=true
-          break
-        fi
-        sleep 2
-      done
+      if wait_for "Waiting for locked-down session to reach Running phase..." 30 2 \
+          _session_phase_active "$LOCKED_SESSION_ID"; then
+        LOCKED_SESSION_RUNNING=true
+      fi
 
       # Verify locked-down policy blocks external network access.
       # SSH into the sandbox and curl a known endpoint over plain HTTP so
@@ -1089,10 +1148,11 @@ if [ -n "$LOCKED_AGENT_ID" ]; then
       # (HTTPS would fail at the CONNECT tunnel level with no response body.)
       # FIXME: switch to `openshell sandbox exec` when it is fixed upstream.
       if [ "$LOCKED_SESSION_RUNNING" = "true" ]; then
+        LOCKED_SSH_NAME="$(sandbox_name "$LOCKED_SESSION_ID")"
         run_cmd ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
           -o LogLevel=ERROR \
-          -o "ProxyCommand=openshell ssh-proxy --gateway-name $TENANT --name $LOCKED_SBX_NAME" \
-          "user@$LOCKED_SBX_NAME" \
+          -o "ProxyCommand=openshell ssh-proxy --gateway-name $TENANT --name $LOCKED_SSH_NAME" \
+          "user@$LOCKED_SSH_NAME" \
           'curl http://update.code.visualstudio.com 2>/dev/null'
         LOCKED_CURL_OUTPUT="${CMD_OUTPUT:-}"
 
@@ -1109,10 +1169,10 @@ if [ -n "$LOCKED_AGENT_ID" ]; then
           echo "--- END DIAGNOSTICS ---"
         fi
       else
-        fail "Locked-down network test — session not Running (phase: ${LOCKED_PHASE:-unknown})"
+        fail "Locked-down network test — session not Running (phase: ${WAIT_RESULT:-unknown})"
       fi
     else
-      fail "Locked-down network test — sandbox pod not ready (phase: ${LOCKED_POD_PHASE:-unknown})"
+      fail "Locked-down network test — sandbox pod not ready (phase: ${WAIT_RESULT:-unknown})"
     fi
   else
     fail "Failed to start locked-down session"
@@ -1123,12 +1183,8 @@ else
 fi
 
 # Brief gateway readiness check — cleanup may coincide with a reconciler restart
-for _i in $(seq 1 15); do
-  _gw_ready=$(kubectl get pod openshell-gateway-0 -n "$TENANT" \
-    -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || echo "")
-  [ "$_gw_ready" = "true" ] && break
-  sleep 2
-done
+wait_for "Re-checking gateway readiness before permissive test..." 15 2 \
+    _gw_pod_ready "$TENANT" || true
 # Re-check CLI connectivity after potential gateway restart
 if ! openshell sandbox list --gateway "${TENANT}" &>/dev/null 2>&1; then
   _ensure_gateway_port_forward || true
@@ -1141,6 +1197,14 @@ PERM_AGENT_ID=$(echo "$AGENTS_RESP" \
   | jq -r '.items[] | select(.name == "network-test-permissive") | .id' 2>/dev/null | head -1 || echo "")
 
 if [ -n "$PERM_AGENT_ID" ]; then
+  # Same stale-session cleanup as for the locked-down agent above.
+  _stale=$(api GET "/api/ambient/v1/sessions?search=agent_id+%3D+'${PERM_AGENT_ID}'" 2>/dev/null \
+    | jq -r '.items[]? | select(.phase == "Pending" or .phase == "Creating" or .phase == "Running") | .id' 2>/dev/null || echo "")
+  for _sid in $_stale; do
+    api DELETE "/api/ambient/v1/sessions/${_sid}" >/dev/null 2>&1 || true
+  done
+  [ -n "$_stale" ] && sleep 2
+
   PERM_START_RESP=$(api POST "/api/ambient/v1/projects/${PROJECT_ID}/agents/${PERM_AGENT_ID}/start" \
     -d '{"prompt": "gateway-e2e-test: network policy enforcement"}' || echo "")
 
@@ -1151,32 +1215,17 @@ if [ -n "$PERM_AGENT_ID" ]; then
     CREATED_SESSIONS+=("$PERM_SESSION_ID")
     pass "Permissive session started (id: ${PERM_SESSION_ID})"
 
-    PERM_SBX_NAME="session-$(echo "${PERM_SESSION_ID:0:40}" | tr '[:upper:]' '[:lower:]')"
+    PERM_SBX_NAME="$(sandbox_pod_name "$PERM_SESSION_ID")"
 
-    PERM_POD_READY=false
-    for i in $(seq 1 30); do
-      PERM_POD_PHASE=$(kubectl get pod "$PERM_SBX_NAME" -n "$TENANT" \
-        -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
-      if [ "$PERM_POD_PHASE" = "Running" ]; then
-        PERM_POD_READY=true
-        break
-      fi
-      sleep 2
-    done
-
-    if [ "$PERM_POD_READY" = "true" ]; then
+    if wait_for "Waiting for permissive sandbox pod ${PERM_SBX_NAME}..." 30 2 \
+        _pod_phase_running "$PERM_SBX_NAME" "$TENANT"; then
       pass "Permissive sandbox pod '${PERM_SBX_NAME}' is running"
 
       PERM_SESSION_RUNNING=false
-      for i in $(seq 1 30); do
-        PERM_PHASE=$(api GET "/api/ambient/v1/sessions/${PERM_SESSION_ID}" 2>/dev/null \
-          | jq -r '.phase // empty' 2>/dev/null || echo "")
-        if [ "$PERM_PHASE" = "Running" ] || [ "$PERM_PHASE" = "Succeeded" ] || [ "$PERM_PHASE" = "Failed" ]; then
-          PERM_SESSION_RUNNING=true
-          break
-        fi
-        sleep 2
-      done
+      if wait_for "Waiting for permissive session to reach Running phase..." 30 2 \
+          _session_phase_active "$PERM_SESSION_ID"; then
+        PERM_SESSION_RUNNING=true
+      fi
 
       # Verify permissive policy allows external network access via curl.
       # The permissive policy allows /usr/bin/curl to reach
@@ -1184,10 +1233,11 @@ if [ -n "$PERM_AGENT_ID" ]; then
       # appears, the proxy blocked it; any other response means it got through.
       # FIXME: switch to `openshell sandbox exec` when it is fixed upstream.
       if [ "$PERM_SESSION_RUNNING" = "true" ]; then
+        PERM_SSH_NAME="$(sandbox_name "$PERM_SESSION_ID")"
         run_cmd ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
           -o LogLevel=ERROR \
-          -o "ProxyCommand=openshell ssh-proxy --gateway-name $TENANT --name $PERM_SBX_NAME" \
-          "user@$PERM_SBX_NAME" \
+          -o "ProxyCommand=openshell ssh-proxy --gateway-name $TENANT --name $PERM_SSH_NAME" \
+          "user@$PERM_SSH_NAME" \
           'curl https://update.code.visualstudio.com 2>/dev/null'
         PERM_CURL_OUTPUT="${CMD_OUTPUT:-}"
 
@@ -1206,10 +1256,10 @@ if [ -n "$PERM_AGENT_ID" ]; then
           echo "--- END DIAGNOSTICS ---"
         fi
       else
-        fail "Permissive network test — session not Running (phase: ${PERM_PHASE:-unknown})"
+        fail "Permissive network test — session not Running (phase: ${WAIT_RESULT:-unknown})"
       fi
     else
-      fail "Permissive network test — sandbox pod not ready (phase: ${PERM_POD_PHASE:-unknown})"
+      fail "Permissive network test — sandbox pod not ready (phase: ${WAIT_RESULT:-unknown})"
     fi
   else
     fail "Failed to start permissive session"

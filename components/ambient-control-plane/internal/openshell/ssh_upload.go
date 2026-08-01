@@ -35,7 +35,7 @@ type Payload struct {
 }
 
 func (g *GatewayClient) UploadPayloads(ctx context.Context, namespace string, sandboxID string, payloads []Payload) error {
-	ctx = g.authContext(ctx)
+	ctx = g.authContext(ctx, namespace)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return fmt.Errorf("get gateway client: %w", err)

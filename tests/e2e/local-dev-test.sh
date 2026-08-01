@@ -194,7 +194,13 @@ test_prerequisites() {
     assert_command_exists "make"
     assert_command_exists "kubectl"
     assert_command_exists "kind"
-    assert_command_exists "podman" || assert_command_exists "docker"
+    if command -v podman >/dev/null 2>&1; then
+        pass "Container runtime 'podman' is installed"
+    elif command -v docker >/dev/null 2>&1; then
+        pass "Container runtime 'docker' is installed"
+    else
+        fail "No container runtime installed (need podman or docker)"
+    fi
 
     # Check if running on macOS or Linux
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -684,7 +690,7 @@ test_security_token_redaction() {
     fi
 
     # Test 1: Logs should use tokenLen= instead of showing token
-    if echo "$logs" | grep -q "tokenLen=\|token (len="; then
+    if echo "$logs" | grep -q "tokenLen=\|token (len=\|REDACTED:len="; then
         pass "Logs use token length instead of token value (correct redaction)"
     else
         log_info "Token length logging not found (may need authenticated requests)"

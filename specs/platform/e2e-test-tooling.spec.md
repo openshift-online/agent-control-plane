@@ -453,6 +453,77 @@ Scripts SHALL NOT use `run_cmd` for internal helper functions (e.g., the `api()`
 - AND `CMD_RC` SHALL contain the exit code
 - AND the test SHALL use these variables for pass/fail assertions
 
+### Requirement: Wait Loop Progress Indicators
+
+Every wait loop in an e2e test script SHALL provide visual progress feedback using the `wait_for` helper function. Silent wait loops — loops that block for seconds or minutes without any terminal output — are prohibited. They make CI logs unreadable and leave operators guessing whether the test is stuck or working.
+
+Scripts SHALL define and use the following `wait_for` helper:
+
+```bash
+WAIT_RESULT=""
+wait_for() {
+  local msg="$1" max="$2" interval="$3"
+  shift 3
+  printf '  %b⏳ %s' "${DIM}" "$msg"
+  local _wf_i
+  for _wf_i in $(seq 1 "$max"); do
+    if "$@"; then
+      printf '%b\n' "${NC}"
+      return 0
+    fi
+    printf '.'
+    sleep "$interval"
+  done
+  printf '%b\n' "${NC}"
+  return 1
+}
+```
+
+The helper takes a human-readable message, a maximum attempt count, a sleep interval in seconds, and a check function with optional arguments. The message and dots are printed in dim text (`${DIM}`) and the color is reset (`${NC}`) only when the loop finishes, so the entire progress line renders as a single muted visual block.
+
+Check functions SHALL set the `WAIT_RESULT` global variable when callers need to inspect the last-checked value (e.g., for error messages). Common reusable check functions include:
+
+```bash
+_pod_phase_running() {
+  WAIT_RESULT=$(kubectl get pod "$1" -n "$2" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+  [ "$WAIT_RESULT" = "Running" ]
+}
+
+_session_phase_active() {
+  WAIT_RESULT=$(api GET "/api/ambient/v1/sessions/$1" 2>/dev/null \
+    | jq -r '.phase // empty' 2>/dev/null || echo "")
+  [ "$WAIT_RESULT" = "Running" ] || [ "$WAIT_RESULT" = "Succeeded" ] || [ "$WAIT_RESULT" = "Failed" ]
+}
+```
+
+For loops that do not fit the `wait_for` pattern (inverted conditions like stability checks, or loops that call `run_cmd` internally), scripts SHALL add inline progress using the same dim-text-with-dots style:
+
+```bash
+printf '  %b⏳ Verifying session remains Running for 120s...' "${DIM}"
+for i in $(seq 1 12); do
+  sleep 10
+  printf '.'
+  # ... check logic ...
+done
+printf '%b\n' "${NC}"
+```
+
+Scripts SHALL NOT leave any wait loop without progress output, regardless of the loop pattern.
+
+#### Scenario: Wait loops show progress
+
+- GIVEN an e2e test script with a wait loop polling for a Kubernetes resource
+- WHEN the loop is executing
+- THEN the terminal SHALL display a `⏳` prefixed message followed by dots accumulating at the polling interval
+- AND the dots SHALL render in dim text, matching the message color
+
+#### Scenario: New wait loops use wait_for
+
+- GIVEN a developer adds a new wait loop to an e2e test
+- WHEN the loop polls a condition with sleep intervals
+- THEN the loop SHALL use the `wait_for` helper or inline progress indicators
+- AND the progress output SHALL follow the dim-text-with-dots convention
+
 ### Requirement: Section Structure
 
 Each e2e test script SHALL organize its assertions into numbered sections using banner comments and the `section()` helper. Sections SHALL use full-width separator comments in the source:

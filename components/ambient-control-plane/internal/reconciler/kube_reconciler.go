@@ -583,6 +583,11 @@ func (r *SimpleKubeReconciler) injectACPInternalPolicy(ctx context.Context, name
 }
 
 // Workaround for https://github.com/NVIDIA/OpenShell/issues/2053
+// The Sandbox CRD supports spec.podTemplate.spec.dnsConfig. This patch sets
+// ndots:1 on the CR so that newly created pods inherit the correct value.
+// However, the controller does NOT update existing pod specs, so pods created
+// before this patch still have ndots:5. verifyAndFixDNSConfig() handles that
+// case by deleting the pod for recreation from the already-patched CR.
 func (r *SimpleKubeReconciler) patchSandboxDNSConfig(ctx context.Context, namespace, sandboxName string) error {
 	sandboxGVR := schema.GroupVersionResource{
 		Group:    "agents.x-k8s.io",
@@ -629,10 +634,14 @@ func (r *SimpleKubeReconciler) patchSandboxDNSConfig(ctx context.Context, namesp
 }
 
 // verifyAndFixDNSConfig checks the sandbox pod's /etc/resolv.conf for the
-// incorrect ndots:5 value. If found, the pod is deleted so the agent-sandbox
-// controller recreates it from the already-patched CR (which has ndots:1).
-// Returns (true, nil) when DNS config is correct, (false, nil) when the pod
-// was deleted and needs recreation, or (false, err) on failure.
+// incorrect ndots:5 value. If found, the pod is gracefully deleted so the
+// agent-sandbox controller recreates it from the already-patched CR (which
+// has ndots:1). Returns (true, nil) when DNS config is correct, (false, nil)
+// when the pod was deleted and needs recreation, or (false, err) on failure.
+//
+// Race safety: if the pod is replaced between the cat check and the delete,
+// DeletePod returns NotFound which is swallowed. The caller's poll loop will
+// re-verify DNS on the next READY transition.
 func (r *SimpleKubeReconciler) verifyAndFixDNSConfig(ctx context.Context, namespace, sandboxID, sbxName string) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()

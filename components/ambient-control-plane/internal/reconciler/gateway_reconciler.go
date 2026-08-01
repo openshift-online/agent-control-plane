@@ -74,6 +74,16 @@ const (
 	trustedCAKey           = "ca-bundle.crt"
 )
 
+type GatewayReconcilerOption func(*GatewayReconciler)
+
+// WithAuthModeCallback registers a function called after each gateway is
+// reconciled, informing consumers whether the namespace uses OIDC auth.
+func WithAuthModeCallback(fn func(namespace string, hasOIDC bool)) GatewayReconcilerOption {
+	return func(r *GatewayReconciler) {
+		r.onNamespaceAuthMode = fn
+	}
+}
+
 type GatewayReconciler struct {
 	factory                    *SDKClientFactory
 	dynamicClient              dynamic.Interface
@@ -90,6 +100,7 @@ type GatewayReconciler struct {
 	gatewayAPIGatewayNamespace string
 	baseDomain                 string
 	nlbRouteDomain             string
+	onNamespaceAuthMode        func(namespace string, hasOIDC bool)
 }
 
 func NewGatewayReconciler(
@@ -98,6 +109,7 @@ func NewGatewayReconciler(
 	clientset *kubernetes.Clientset,
 	provisioner kubeclient.NamespaceProvisioner,
 	logger zerolog.Logger,
+	opts ...GatewayReconcilerOption,
 ) *GatewayReconciler {
 	defaultImage := os.Getenv("OPENSHELL_GATEWAY_IMAGE")
 	if defaultImage == "" {
@@ -118,7 +130,7 @@ func NewGatewayReconciler(
 	if gwAPINamespace == "" {
 		gwAPINamespace = "openshift-ingress"
 	}
-	return &GatewayReconciler{
+	r := &GatewayReconciler{
 		factory:                    factory,
 		dynamicClient:              dynamicClient,
 		clientset:                  clientset,
@@ -129,6 +141,10 @@ func NewGatewayReconciler(
 		gatewayAPIGatewayName:      gwAPIName,
 		gatewayAPIGatewayNamespace: gwAPINamespace,
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
 }
 
 func (r *GatewayReconciler) Run(ctx context.Context) error {
@@ -373,6 +389,11 @@ func (r *GatewayReconciler) reconcileGateway(ctx context.Context, projectClient 
 		Str("image", resolveGatewayImage(gwConfig.Image, r.defaultGatewayImage)).
 		Int("dns_names", len(gw.ServerDnsNames)).
 		Msg("gateway reconciled")
+
+	if r.onNamespaceAuthMode != nil {
+		hasOIDC := gw.Oidc != nil && gw.Oidc.Issuer != ""
+		r.onNamespaceAuthMode(namespace, hasOIDC)
+	}
 
 	r.updateGatewayAnnotation(ctx, projectClient, gw, "ambient.ai/reconcile-status", "Synced")
 	return nil
@@ -1386,6 +1407,16 @@ func (r *GatewayReconciler) reconcileSandboxNetworkPolicy(ctx context.Context, n
 								"podSelector": map[string]interface{}{
 									"matchLabels": map[string]interface{}{
 										"openshell.ai/managed-by": "openshell",
+									},
+								},
+							},
+							map[string]interface{}{
+								"podSelector": map[string]interface{}{
+									"matchExpressions": []interface{}{
+										map[string]interface{}{
+											"key":      "agents.x-k8s.io/sandbox-name-hash",
+											"operator": "Exists",
+										},
 									},
 								},
 							},

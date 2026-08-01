@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"sync"
 
@@ -25,14 +24,15 @@ type TokenProvider interface {
 }
 
 type GatewayClient struct {
-	mu            sync.RWMutex
-	conns         map[string]*grpc.ClientConn
-	serviceName   string
-	grpcPort      int
-	resolveCred   CredentialResolver
-	saTokenPath   string
-	tokenProvider TokenProvider
-	logger        zerolog.Logger
+	mu             sync.RWMutex
+	conns          map[string]*grpc.ClientConn
+	oidcNamespaces sync.Map // namespace → bool (true = OIDC enabled)
+	serviceName    string
+	grpcPort       int
+	resolveCred    CredentialResolver
+	saTokenPath    string
+	tokenProvider  TokenProvider
+	logger         zerolog.Logger
 }
 
 type GatewayClientOption func(*GatewayClient)
@@ -58,30 +58,54 @@ func NewGatewayClient(serviceName string, grpcPort int, resolveCred CredentialRe
 	return g
 }
 
-func (g *GatewayClient) authContext(ctx context.Context) context.Context {
-	if g.tokenProvider != nil {
-		token, err := g.tokenProvider.Token(ctx)
-		if err != nil {
-			g.logger.Warn().Err(err).Msg("failed to obtain OIDC token for gateway auth")
-			return ctx
+// SetNamespaceAuthMode records whether a namespace's gateway requires OIDC auth.
+// Called by the gateway reconciler after it processes each gateway's config.
+func (g *GatewayClient) SetNamespaceAuthMode(namespace string, hasOIDC bool) {
+	g.oidcNamespaces.Store(namespace, hasOIDC)
+	g.logger.Debug().Str("namespace", namespace).Bool("oidc", hasOIDC).Msg("gateway auth mode registered")
+}
+
+func (g *GatewayClient) authContext(ctx context.Context, namespace string) context.Context {
+	if mode, ok := g.oidcNamespaces.Load(namespace); ok {
+		if mode.(bool) {
+			return g.oidcAuthContext(ctx)
 		}
-		if token != "" {
-			return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token))
-		}
-	}
-	if g.saTokenPath == "" {
 		return ctx
 	}
-	raw, err := os.ReadFile(g.saTokenPath)
+	// Namespace not yet registered — optimistically try OIDC. If the
+	// gateway rejects the token ("unknown signing key"), the caller
+	// retries without auth and registers the namespace as non-OIDC.
+	return g.oidcAuthContext(ctx)
+}
+
+func (g *GatewayClient) stripAuthContext(ctx context.Context) context.Context {
+	return metadata.NewOutgoingContext(ctx, metadata.MD{})
+}
+
+func (g *GatewayClient) isUnauthSigningKeyErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	st, ok := status.FromError(err)
+	if !ok {
+		return false
+	}
+	return st.Code() == codes.Unauthenticated && strings.Contains(st.Message(), "unknown signing key")
+}
+
+func (g *GatewayClient) oidcAuthContext(ctx context.Context) context.Context {
+	if g.tokenProvider == nil {
+		return ctx
+	}
+	token, err := g.tokenProvider.Token(ctx)
 	if err != nil {
-		g.logger.Warn().Err(err).Str("path", g.saTokenPath).Msg("failed to read SA token file")
+		g.logger.Warn().Err(err).Msg("failed to obtain OIDC token for gateway auth")
 		return ctx
 	}
-	token := strings.TrimSpace(string(raw))
-	if token == "" {
-		return ctx
+	if token != "" {
+		return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token))
 	}
-	return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token))
+	return ctx
 }
 
 func (g *GatewayClient) clientForNamespace(ctx context.Context, namespace string) (pb.OpenShellClient, error) {
@@ -147,12 +171,18 @@ func (g *GatewayClient) shouldEvict(err error) bool {
 }
 
 func (g *GatewayClient) CreateSandbox(ctx context.Context, namespace string, req *pb.CreateSandboxRequest) (*pb.SandboxResponse, error) {
-	ctx = g.authContext(ctx)
-	client, err := g.clientForNamespace(ctx, namespace)
+	authCtx := g.authContext(ctx, namespace)
+	client, err := g.clientForNamespace(authCtx, namespace)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.CreateSandbox(ctx, req)
+	resp, err := client.CreateSandbox(authCtx, req)
+	if g.isUnauthSigningKeyErr(err) {
+		g.logger.Info().Str("namespace", namespace).Msg("OIDC token rejected, retrying without auth")
+		g.SetNamespaceAuthMode(namespace, false)
+		noAuthCtx := g.stripAuthContext(ctx)
+		resp, err = client.CreateSandbox(noAuthCtx, req)
+	}
 	if err != nil && g.shouldEvict(err) {
 		g.evictConn(namespace)
 	}
@@ -160,12 +190,18 @@ func (g *GatewayClient) CreateSandbox(ctx context.Context, namespace string, req
 }
 
 func (g *GatewayClient) GetSandbox(ctx context.Context, namespace string, name string) (*pb.SandboxResponse, error) {
-	ctx = g.authContext(ctx)
-	client, err := g.clientForNamespace(ctx, namespace)
+	authCtx := g.authContext(ctx, namespace)
+	client, err := g.clientForNamespace(authCtx, namespace)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.GetSandbox(ctx, &pb.GetSandboxRequest{Name: name})
+	resp, err := client.GetSandbox(authCtx, &pb.GetSandboxRequest{Name: name})
+	if g.isUnauthSigningKeyErr(err) {
+		g.logger.Info().Str("namespace", namespace).Msg("OIDC token rejected, retrying without auth")
+		g.SetNamespaceAuthMode(namespace, false)
+		noAuthCtx := g.stripAuthContext(ctx)
+		resp, err = client.GetSandbox(noAuthCtx, &pb.GetSandboxRequest{Name: name})
+	}
 	if err != nil && g.shouldEvict(err) {
 		g.evictConn(namespace)
 	}
@@ -173,12 +209,18 @@ func (g *GatewayClient) GetSandbox(ctx context.Context, namespace string, name s
 }
 
 func (g *GatewayClient) DeleteSandbox(ctx context.Context, namespace string, name string) error {
-	ctx = g.authContext(ctx)
-	client, err := g.clientForNamespace(ctx, namespace)
+	authCtx := g.authContext(ctx, namespace)
+	client, err := g.clientForNamespace(authCtx, namespace)
 	if err != nil {
 		return err
 	}
-	_, err = client.DeleteSandbox(ctx, &pb.DeleteSandboxRequest{Name: name})
+	_, err = client.DeleteSandbox(authCtx, &pb.DeleteSandboxRequest{Name: name})
+	if g.isUnauthSigningKeyErr(err) {
+		g.logger.Info().Str("namespace", namespace).Msg("OIDC token rejected, retrying without auth")
+		g.SetNamespaceAuthMode(namespace, false)
+		noAuthCtx := g.stripAuthContext(ctx)
+		_, err = client.DeleteSandbox(noAuthCtx, &pb.DeleteSandboxRequest{Name: name})
+	}
 	if err != nil && g.shouldEvict(err) {
 		g.evictConn(namespace)
 	}
@@ -186,12 +228,18 @@ func (g *GatewayClient) DeleteSandbox(ctx context.Context, namespace string, nam
 }
 
 func (g *GatewayClient) CreateProvider(ctx context.Context, namespace string, req *pb.CreateProviderRequest) (*pb.ProviderResponse, error) {
-	ctx = g.authContext(ctx)
-	client, err := g.clientForNamespace(ctx, namespace)
+	authCtx := g.authContext(ctx, namespace)
+	client, err := g.clientForNamespace(authCtx, namespace)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.CreateProvider(ctx, req)
+	resp, err := client.CreateProvider(authCtx, req)
+	if g.isUnauthSigningKeyErr(err) {
+		g.logger.Info().Str("namespace", namespace).Msg("OIDC token rejected, retrying without auth")
+		g.SetNamespaceAuthMode(namespace, false)
+		noAuthCtx := g.stripAuthContext(ctx)
+		resp, err = client.CreateProvider(noAuthCtx, req)
+	}
 	if err != nil && g.shouldEvict(err) {
 		g.evictConn(namespace)
 	}
@@ -199,12 +247,18 @@ func (g *GatewayClient) CreateProvider(ctx context.Context, namespace string, re
 }
 
 func (g *GatewayClient) UpdateProvider(ctx context.Context, namespace string, req *pb.UpdateProviderRequest) (*pb.ProviderResponse, error) {
-	ctx = g.authContext(ctx)
-	client, err := g.clientForNamespace(ctx, namespace)
+	authCtx := g.authContext(ctx, namespace)
+	client, err := g.clientForNamespace(authCtx, namespace)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.UpdateProvider(ctx, req)
+	resp, err := client.UpdateProvider(authCtx, req)
+	if g.isUnauthSigningKeyErr(err) {
+		g.logger.Info().Str("namespace", namespace).Msg("OIDC token rejected, retrying without auth")
+		g.SetNamespaceAuthMode(namespace, false)
+		noAuthCtx := g.stripAuthContext(ctx)
+		resp, err = client.UpdateProvider(noAuthCtx, req)
+	}
 	if err != nil && g.shouldEvict(err) {
 		g.evictConn(namespace)
 	}
@@ -212,12 +266,18 @@ func (g *GatewayClient) UpdateProvider(ctx context.Context, namespace string, re
 }
 
 func (g *GatewayClient) GetProvider(ctx context.Context, namespace string, name string) (*pb.ProviderResponse, error) {
-	ctx = g.authContext(ctx)
-	client, err := g.clientForNamespace(ctx, namespace)
+	authCtx := g.authContext(ctx, namespace)
+	client, err := g.clientForNamespace(authCtx, namespace)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.GetProvider(ctx, &pb.GetProviderRequest{Name: name})
+	resp, err := client.GetProvider(authCtx, &pb.GetProviderRequest{Name: name})
+	if g.isUnauthSigningKeyErr(err) {
+		g.logger.Info().Str("namespace", namespace).Msg("OIDC token rejected, retrying without auth")
+		g.SetNamespaceAuthMode(namespace, false)
+		noAuthCtx := g.stripAuthContext(ctx)
+		resp, err = client.GetProvider(noAuthCtx, &pb.GetProviderRequest{Name: name})
+	}
 	if err != nil && g.shouldEvict(err) {
 		g.evictConn(namespace)
 	}
@@ -231,12 +291,18 @@ type ExecResult struct {
 }
 
 func (g *GatewayClient) ExecSandbox(ctx context.Context, namespace string, req *pb.ExecSandboxRequest) (*ExecResult, error) {
-	ctx = g.authContext(ctx)
-	client, err := g.clientForNamespace(ctx, namespace)
+	authCtx := g.authContext(ctx, namespace)
+	client, err := g.clientForNamespace(authCtx, namespace)
 	if err != nil {
 		return nil, err
 	}
-	stream, err := client.ExecSandbox(ctx, req)
+	stream, err := client.ExecSandbox(authCtx, req)
+	if g.isUnauthSigningKeyErr(err) {
+		g.logger.Info().Str("namespace", namespace).Msg("OIDC token rejected, retrying without auth")
+		g.SetNamespaceAuthMode(namespace, false)
+		noAuthCtx := g.stripAuthContext(ctx)
+		stream, err = client.ExecSandbox(noAuthCtx, req)
+	}
 	if err != nil {
 		if g.shouldEvict(err) {
 			g.evictConn(namespace)
@@ -274,12 +340,18 @@ func (g *GatewayClient) inferenceClientForNamespace(ctx context.Context, namespa
 }
 
 func (g *GatewayClient) SetInferenceRoute(ctx context.Context, namespace string, req *inferencepb.SetInferenceRouteRequest) (*inferencepb.SetInferenceRouteResponse, error) {
-	ctx = g.authContext(ctx)
-	client, err := g.inferenceClientForNamespace(ctx, namespace)
+	authCtx := g.authContext(ctx, namespace)
+	client, err := g.inferenceClientForNamespace(authCtx, namespace)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.SetInferenceRoute(ctx, req)
+	resp, err := client.SetInferenceRoute(authCtx, req)
+	if g.isUnauthSigningKeyErr(err) {
+		g.logger.Info().Str("namespace", namespace).Msg("OIDC token rejected, retrying without auth")
+		g.SetNamespaceAuthMode(namespace, false)
+		noAuthCtx := g.stripAuthContext(ctx)
+		resp, err = client.SetInferenceRoute(noAuthCtx, req)
+	}
 	if err != nil && g.shouldEvict(err) {
 		g.evictConn(namespace)
 	}
@@ -287,12 +359,18 @@ func (g *GatewayClient) SetInferenceRoute(ctx context.Context, namespace string,
 }
 
 func (g *GatewayClient) ConfigureProviderRefresh(ctx context.Context, namespace string, req *pb.ConfigureProviderRefreshRequest) (*pb.ConfigureProviderRefreshResponse, error) {
-	ctx = g.authContext(ctx)
-	client, err := g.clientForNamespace(ctx, namespace)
+	authCtx := g.authContext(ctx, namespace)
+	client, err := g.clientForNamespace(authCtx, namespace)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.ConfigureProviderRefresh(ctx, req)
+	resp, err := client.ConfigureProviderRefresh(authCtx, req)
+	if g.isUnauthSigningKeyErr(err) {
+		g.logger.Info().Str("namespace", namespace).Msg("OIDC token rejected, retrying without auth")
+		g.SetNamespaceAuthMode(namespace, false)
+		noAuthCtx := g.stripAuthContext(ctx)
+		resp, err = client.ConfigureProviderRefresh(noAuthCtx, req)
+	}
 	if err != nil && g.shouldEvict(err) {
 		g.evictConn(namespace)
 	}
@@ -300,12 +378,18 @@ func (g *GatewayClient) ConfigureProviderRefresh(ctx context.Context, namespace 
 }
 
 func (g *GatewayClient) RotateProviderCredential(ctx context.Context, namespace string, req *pb.RotateProviderCredentialRequest) (*pb.RotateProviderCredentialResponse, error) {
-	ctx = g.authContext(ctx)
-	client, err := g.clientForNamespace(ctx, namespace)
+	authCtx := g.authContext(ctx, namespace)
+	client, err := g.clientForNamespace(authCtx, namespace)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.RotateProviderCredential(ctx, req)
+	resp, err := client.RotateProviderCredential(authCtx, req)
+	if g.isUnauthSigningKeyErr(err) {
+		g.logger.Info().Str("namespace", namespace).Msg("OIDC token rejected, retrying without auth")
+		g.SetNamespaceAuthMode(namespace, false)
+		noAuthCtx := g.stripAuthContext(ctx)
+		resp, err = client.RotateProviderCredential(noAuthCtx, req)
+	}
 	if err != nil && g.shouldEvict(err) {
 		g.evictConn(namespace)
 	}
@@ -323,12 +407,18 @@ func (e *ExecExitError) Error() string {
 const maxLogChunkSize = 512
 
 func (g *GatewayClient) ExecSandboxStreaming(ctx context.Context, namespace string, req *pb.ExecSandboxRequest) error {
-	ctx = g.authContext(ctx)
-	client, err := g.clientForNamespace(ctx, namespace)
+	authCtx := g.authContext(ctx, namespace)
+	client, err := g.clientForNamespace(authCtx, namespace)
 	if err != nil {
 		return err
 	}
-	stream, err := client.ExecSandbox(ctx, req)
+	stream, err := client.ExecSandbox(authCtx, req)
+	if g.isUnauthSigningKeyErr(err) {
+		g.logger.Info().Str("namespace", namespace).Msg("OIDC token rejected, retrying without auth")
+		g.SetNamespaceAuthMode(namespace, false)
+		noAuthCtx := g.stripAuthContext(ctx)
+		stream, err = client.ExecSandbox(noAuthCtx, req)
+	}
 	if err != nil {
 		if g.shouldEvict(err) {
 			g.evictConn(namespace)
@@ -370,12 +460,18 @@ func (g *GatewayClient) ExecSandboxStreaming(ctx context.Context, namespace stri
 }
 
 func (g *GatewayClient) UpdateConfig(ctx context.Context, namespace string, req *pb.UpdateConfigRequest) (*pb.UpdateConfigResponse, error) {
-	ctx = g.authContext(ctx)
-	client, err := g.clientForNamespace(ctx, namespace)
+	authCtx := g.authContext(ctx, namespace)
+	client, err := g.clientForNamespace(authCtx, namespace)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.UpdateConfig(ctx, req)
+	resp, err := client.UpdateConfig(authCtx, req)
+	if g.isUnauthSigningKeyErr(err) {
+		g.logger.Info().Str("namespace", namespace).Msg("OIDC token rejected, retrying without auth")
+		g.SetNamespaceAuthMode(namespace, false)
+		noAuthCtx := g.stripAuthContext(ctx)
+		resp, err = client.UpdateConfig(noAuthCtx, req)
+	}
 	if err != nil && g.shouldEvict(err) {
 		g.evictConn(namespace)
 	}
@@ -383,12 +479,18 @@ func (g *GatewayClient) UpdateConfig(ctx context.Context, namespace string, req 
 }
 
 func (g *GatewayClient) WatchSandbox(ctx context.Context, namespace string, req *pb.WatchSandboxRequest) (pb.OpenShell_WatchSandboxClient, error) {
-	ctx = g.authContext(ctx)
-	client, err := g.clientForNamespace(ctx, namespace)
+	authCtx := g.authContext(ctx, namespace)
+	client, err := g.clientForNamespace(authCtx, namespace)
 	if err != nil {
 		return nil, err
 	}
-	stream, err := client.WatchSandbox(ctx, req)
+	stream, err := client.WatchSandbox(authCtx, req)
+	if g.isUnauthSigningKeyErr(err) {
+		g.logger.Info().Str("namespace", namespace).Msg("OIDC token rejected, retrying without auth")
+		g.SetNamespaceAuthMode(namespace, false)
+		noAuthCtx := g.stripAuthContext(ctx)
+		stream, err = client.WatchSandbox(noAuthCtx, req)
+	}
 	if err != nil {
 		if g.shouldEvict(err) {
 			g.evictConn(namespace)

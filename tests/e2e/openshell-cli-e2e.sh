@@ -80,10 +80,11 @@ NC='\033[0m'
 
 PASSED=0
 FAILED=0
+FAILED_TESTS=()
 
 sep()     { printf '%b%s%b\n' "${DIM}" "──────────────────────────────────────────────────" "${NC}"; }
 pass()    { echo -e "  ${GREEN}✓${NC} $1"; PASSED=$((PASSED + 1)); }
-fail()    { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); }
+fail()    { echo -e "  ${RED}✗${NC} $1"; FAILED=$((FAILED + 1)); FAILED_TESTS+=("$1"); }
 skip()    { echo -e "  ${YELLOW}⊘${NC} $1 (skipped: $2)"; }
 
 section() {
@@ -113,6 +114,73 @@ run_cmd() {
     echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
   fi
   echo ""
+}
+
+# Retry a command until an assertion on CMD_OUTPUT/CMD_RC passes.
+# Usage: eventually <max_attempts> <interval_secs> <assertion_fn> <cmd...>
+#   assertion_fn receives no args and should inspect CMD_OUTPUT/CMD_RC,
+#   returning 0 on success or non-zero to retry.
+eventually() {
+  local max_attempts=$1 interval=$2 assertion=$3
+  shift 3
+  local attempt=1
+  while [ "$attempt" -le "$max_attempts" ]; do
+    CMD_RC=0
+    CMD_OUTPUT=$("$@" 2>&1) || CMD_RC=$?
+    if $assertion; then
+      if [ "$attempt" -gt 1 ]; then
+        printf '    %b(passed on attempt %d/%d)%b\n' "${DIM}" "$attempt" "$max_attempts" "${NC}"
+      fi
+      return 0
+    fi
+    if [ "$attempt" -lt "$max_attempts" ]; then
+      printf '    %bretry %d/%d (waiting %ds)...%b\n' "${DIM}" "$attempt" "$max_attempts" "$interval" "${NC}"
+      sleep "$interval"
+    fi
+    ((attempt++))
+  done
+  echo "$CMD_OUTPUT" | head -20 | sed 's/^/    /'
+  return 1
+}
+
+# Poll a condition with a progress indicator.
+# Usage: wait_for <message> <max_attempts> <sleep_secs> <check_fn> [args...]
+# Returns 0 on success, 1 on timeout.
+WAIT_RESULT=""
+wait_for() {
+  local msg="$1" max="$2" interval="$3"
+  shift 3
+  printf '  %b⏳ %s' "${DIM}" "$msg"
+  local _wf_i
+  for _wf_i in $(seq 1 "$max"); do
+    if "$@"; then
+      printf '%b\n' "${NC}"
+      return 0
+    fi
+    printf '.'
+    sleep "$interval"
+  done
+  printf '%b\n' "${NC}"
+  return 1
+}
+
+_kubectl_pod_exists() {
+  kubectl get pod -l "$1" -n "$2" --no-headers 2>/dev/null | grep -q .
+}
+
+_certgen_finished() {
+  local _cg
+  _cg=$(kubectl get pod -n "$1" --no-headers 2>/dev/null | grep "certgen" || true)
+  [ -n "$_cg" ] && echo "$_cg" | grep -qE "Completed|Error"
+}
+
+_tls_secrets_exist() {
+  kubectl get secret openshell-ca-tls openshell-server-tls openshell-client-tls \
+    -n "$1" &>/dev/null
+}
+
+_kubectl_pod_running() {
+  kubectl get pod -l "$1" -n "$2" --no-headers 2>/dev/null | grep -q "Running"
 }
 
 # --- Cleanup ---
@@ -246,12 +314,9 @@ else
 fi
 
 # Wait for gateway pod to exist and reach ready (control plane reconciles asynchronously)
-printf '  %b▶%b  Waiting for gateway pod in %s...\n' "${BOLD}" "${NC}" "$TENANT"
 GW_POD_LABELS="app.kubernetes.io/instance=openshell-gateway,app.kubernetes.io/component=gateway"
-for _i in $(seq 1 120); do
-  kubectl get pod -l "$GW_POD_LABELS" -n "$TENANT" --no-headers 2>/dev/null | grep -q . && break
-  sleep 3
-done
+wait_for "Waiting for gateway pod in ${TENANT}..." 120 3 \
+    _kubectl_pod_exists "$GW_POD_LABELS" "$TENANT" || true
 kubectl wait --for=condition=ready pod -l "$GW_POD_LABELS" \
   -n "$TENANT" --timeout=180s 2>/dev/null || {
     fail "Gateway pod not ready in ${TENANT} after waiting"
@@ -270,24 +335,14 @@ pass "Gateway pod ready in ${TENANT}"
 #   2. Delete the server/client secrets (force cert-manager re-issue)
 #   3. Wait for cert-manager to recreate them
 #   4. Restart the gateway pod so it loads the final certs
-printf '  %b▶%b  Waiting for certgen to finish in %s...\n' "${BOLD}" "${NC}" "$TENANT"
-for _i in $(seq 1 30); do
-  _cg=$(kubectl get pod -n "$TENANT" --no-headers 2>/dev/null | grep "certgen" || true)
-  if [ -n "$_cg" ] && echo "$_cg" | grep -qE "Completed|Error"; then
-    break
-  fi
-  sleep 2
-done
+wait_for "Waiting for certgen to finish in ${TENANT}..." 30 2 \
+    _certgen_finished "$TENANT" || true
 
 kubectl delete secret openshell-server-tls openshell-client-tls \
   -n "$TENANT" --ignore-not-found 2>/dev/null || true
 
-printf '  %b▶%b  Waiting for cert-manager to issue TLS secrets in %s...\n' "${BOLD}" "${NC}" "$TENANT"
-for _i in $(seq 1 60); do
-  kubectl get secret openshell-ca-tls openshell-server-tls openshell-client-tls \
-    -n "$TENANT" &>/dev/null && break
-  sleep 3
-done
+wait_for "Waiting for cert-manager to issue TLS secrets in ${TENANT}..." 60 3 \
+    _tls_secrets_exist "$TENANT" || true
 if kubectl get secret openshell-ca-tls openshell-server-tls openshell-client-tls \
   -n "$TENANT" &>/dev/null; then
   pass "cert-manager TLS secrets ready in ${TENANT}"
@@ -299,10 +354,8 @@ else
 fi
 
 kubectl delete pod -l "$GW_POD_LABELS" -n "$TENANT" --wait=false
-for _i in $(seq 1 60); do
-  kubectl get pod -l "$GW_POD_LABELS" -n "$TENANT" --no-headers 2>/dev/null | grep -q "Running" && break
-  sleep 3
-done
+wait_for "Waiting for gateway pod to restart in ${TENANT}..." 60 3 \
+    _kubectl_pod_running "$GW_POD_LABELS" "$TENANT" || true
 kubectl wait --for=condition=ready pod -l "$GW_POD_LABELS" \
   -n "$TENANT" --timeout=120s 2>/dev/null || {
     fail "Gateway pod not ready after cert-manager restart"
@@ -411,6 +464,11 @@ run_cmd $ACPCTL login --password-grant \
   --url "$API_URL" --project "$TENANT"
 openshell gateway remove "${GATEWAY_NAME}" 2>/dev/null || true
 run_cmd $ACPCTL gateway setup-cli --kubectl --project "$TENANT"
+if [ "$CMD_RC" -ne 0 ]; then
+  fail "acpctl gateway setup-cli failed (token refresh)"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
+  exit 1
+fi
 
 # List sandboxes
 run_cmd openshell sandbox list --gateway "$GATEWAY_NAME"
@@ -418,6 +476,8 @@ if echo "$CMD_OUTPUT" | grep -q "$SANDBOX_NAME"; then
   pass "Sandbox appears in list output"
 else
   fail "Sandbox '${SANDBOX_NAME}' not found in sandbox list"
+  echo ""; sep; printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"; sep; echo ""
+  exit 1
 fi
 
 # Poll for sandbox readiness (180s timeout, 2s interval)
@@ -453,11 +513,14 @@ fi
 
 # Exec into sandbox (only if ready)
 if [ "$SANDBOX_READY" = "true" ]; then
-  run_cmd openshell sandbox exec --gateway "$GATEWAY_NAME" -n "$SANDBOX_NAME" -- echo hello
-  if echo "$CMD_OUTPUT" | grep -q "hello"; then
+  printf '  %b▶%b  %b$ openshell sandbox exec --gateway "%s" -n "%s" -- echo hello%b\n' \
+    "${BOLD}" "${NC}" "${ORANGE}" "$GATEWAY_NAME" "$SANDBOX_NAME" "${NC}"
+  _assert_hello() { echo "$CMD_OUTPUT" | grep -q "hello"; }
+  if eventually 5 3 _assert_hello \
+    openshell sandbox exec --gateway "$GATEWAY_NAME" -n "$SANDBOX_NAME" -- echo hello; then
     pass "Sandbox exec: 'echo hello' returned 'hello'"
   else
-    fail "Sandbox exec: expected 'hello' in output"
+    fail "Sandbox exec: expected 'hello' in output (after retries)"
   fi
 else
   skip "Sandbox exec" "sandbox not ready"
@@ -616,11 +679,11 @@ else
   fi
 
   # Policy enforcement: allowed endpoint
-  printf '  %b▶%b  Policy enforcement (waiting 3s for propagation)...\n' "${BOLD}" "${NC}"
-  sleep 3
-  run_cmd openshell sandbox exec --gateway "$GATEWAY_NAME" \
-    -n "$SANDBOX_NAME" -- curl -sf https://update.code.visualstudio.com
-  if [ "$CMD_RC" -eq 0 ]; then
+  printf '  %b▶%b  Policy enforcement (with retries for supervisor relay)...\n' "${BOLD}" "${NC}"
+  _assert_allowed() { [ "$CMD_RC" -eq 0 ]; }
+  if eventually 5 3 _assert_allowed \
+    openshell sandbox exec --gateway "$GATEWAY_NAME" \
+      -n "$SANDBOX_NAME" -- curl -sf https://update.code.visualstudio.com; then
     pass "Policy enforcement: allowed endpoint (update.code.visualstudio.com) reachable"
   elif echo "$CMD_OUTPUT" | grep -q "policy_denied"; then
     fail "Allowed endpoint was denied by policy"
@@ -629,12 +692,15 @@ else
   fi
 
   # Policy enforcement: blocked endpoint
-  run_cmd openshell sandbox exec --gateway "$GATEWAY_NAME" \
-    -n "$SANDBOX_NAME" -- curl -sf http://example.com
-  if echo "$CMD_OUTPUT" | grep -q "policy_denied"; then
-    pass "Policy enforcement: blocked endpoint returned policy_denied"
-  elif [ "$CMD_RC" -ne 0 ]; then
-    pass "Policy enforcement: blocked endpoint rejected (rc=${CMD_RC})"
+  _assert_blocked() { echo "$CMD_OUTPUT" | grep -q "policy_denied" || [ "$CMD_RC" -ne 0 ]; }
+  if eventually 5 3 _assert_blocked \
+    openshell sandbox exec --gateway "$GATEWAY_NAME" \
+      -n "$SANDBOX_NAME" -- curl -sf http://example.com; then
+    if echo "$CMD_OUTPUT" | grep -q "policy_denied"; then
+      pass "Policy enforcement: blocked endpoint returned policy_denied"
+    else
+      pass "Policy enforcement: blocked endpoint rejected (rc=${CMD_RC})"
+    fi
   else
     fail "Policy enforcement: blocked endpoint was NOT denied"
   fi
@@ -812,6 +878,11 @@ echo ""
 sep
 if [ "$FAILED" -gt 0 ]; then
   printf '%b  %d passed, %d failed%b\n' "${RED}" "$PASSED" "$FAILED" "${NC}"
+  echo ""
+  printf '%b  Failed tests:%b\n' "${RED}" "${NC}"
+  for _ft in "${FAILED_TESTS[@]}"; do
+    printf '    %b✗ %s%b\n' "${RED}" "$_ft" "${NC}"
+  done
 else
   printf '%b  %d passed ✓%b\n' "${GREEN}" "$PASSED" "${NC}"
 fi

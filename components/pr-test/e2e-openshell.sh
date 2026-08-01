@@ -288,7 +288,7 @@ for item in data.get('items',[]):
     to = item.get('spec',{}).get('to',{})
     name = item.get('metadata',{}).get('name','')
     # Look for passthrough routes to openshell-gateway service
-    if (tls.get('termination') == 'passthrough' and 
+    if (tls.get('termination') == 'passthrough' and
         to.get('name') == gateway_name and
         ('grpc' in name or 'gateway' in name)):
         candidates.append(item['spec']['host'])

@@ -604,7 +604,7 @@ func buildGatewayDeployment(nsConfig NamespaceConfig, defaultImage string, opts 
 						},
 						"volumes": []interface{}{
 							map[string]interface{}{"name": "gateway-config", "configMap": map[string]interface{}{"name": "openshell-gateway-config"}},
-							map[string]interface{}{"name": "sandbox-jwt", "secret": map[string]interface{}{"secretName": "openshell-gateway-jwt-keys", "defaultMode": int64(256)}},
+							map[string]interface{}{"name": "sandbox-jwt", "secret": map[string]interface{}{"secretName": "openshell-gateway-jwt-keys", "defaultMode": int64(0440)}},
 							map[string]interface{}{"name": "tls-cert", "secret": map[string]interface{}{"secretName": "openshell-server-tls"}},
 							map[string]interface{}{"name": "tls-client-ca", "secret": map[string]interface{}{"secretName": "openshell-server-tls", "items": []interface{}{map[string]interface{}{"key": "ca.crt", "path": "ca.crt"}}}},
 							map[string]interface{}{"name": "tmp", "emptyDir": map[string]interface{}{}},

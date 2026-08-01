@@ -11,6 +11,14 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// staticTokenUsername is the identity assigned to callers authenticating with
+// the shared static bearer token (e.g. the control plane, bootstrap jobs).
+// autoProvisionServiceAccount in pkg/rbac grants this identity a global
+// platform:admin RoleBinding — the same mechanism used for OIDC service
+// accounts. Access is scoped to the API server's RBAC evaluator; it does
+// NOT grant K8s cluster privileges.
+const staticTokenUsername = "static-service-token"
+
 var grpcBypassMethods = map[string]bool{
 	"/grpc.health.v1.Health/Check":                                   true,
 	"/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo": true,
@@ -26,7 +34,9 @@ func bearerTokenGRPCUnaryInterceptor(expectedToken, serviceAccountUsername strin
 			if authHeader := md.Get("authorization"); len(authHeader) > 0 {
 				if token, err := extractBearerToken(authHeader[0]); err == nil {
 					if subtle.ConstantTimeCompare([]byte(token), []byte(expectedToken)) == 1 {
-						return handler(WithCallerType(ctx, CallerTypeService), req)
+						ctx = WithCallerType(ctx, CallerTypeService)
+						ctx = auth.SetUsernameContext(ctx, staticTokenUsername)
+						return handler(ctx, req)
 					}
 					if username := usernameFromJWT(token); username != "" {
 						if isServiceAccount(username, serviceAccountUsername) {
@@ -52,7 +62,9 @@ func bearerTokenGRPCStreamInterceptor(expectedToken, serviceAccountUsername stri
 			if authHeader := md.Get("authorization"); len(authHeader) > 0 {
 				if token, err := extractBearerToken(authHeader[0]); err == nil {
 					if subtle.ConstantTimeCompare([]byte(token), []byte(expectedToken)) == 1 {
-						return handler(srv, &serviceCallerStream{ServerStream: ss, ctx: WithCallerType(ss.Context(), CallerTypeService)})
+						ctx := WithCallerType(ss.Context(), CallerTypeService)
+						ctx = auth.SetUsernameContext(ctx, staticTokenUsername)
+						return handler(srv, &serviceCallerStream{ServerStream: ss, ctx: ctx})
 					}
 					if username := usernameFromJWT(token); username != "" {
 						ctx := auth.SetUsernameContext(ss.Context(), username)

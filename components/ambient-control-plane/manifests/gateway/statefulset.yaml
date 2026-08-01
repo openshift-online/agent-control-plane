@@ -109,7 +109,7 @@ spec:
         - name: sandbox-jwt
           secret:
             secretName: openshell-gateway-jwt-keys
-            defaultMode: 256
+            defaultMode: 288
         - name: tls-cert
           secret:
             secretName: openshell-server-tls
