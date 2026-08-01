@@ -231,24 +231,6 @@ func TestAuthContext_NoPath(t *testing.T) {
 	}
 }
 
-func TestAuthContext_ValidToken(t *testing.T) {
-	dir := t.TempDir()
-	tokenFile := filepath.Join(dir, "token")
-	if err := os.WriteFile(tokenFile, []byte("test-sa-token\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	g := NewGatewayClient("gw", 8443, nil, tokenFile, zerolog.Nop())
-	ctx := g.authContext(context.Background(), "test-ns")
-	md, ok := metadata.FromOutgoingContext(ctx)
-	if !ok {
-		t.Fatal("expected outgoing metadata")
-	}
-	vals := md.Get("authorization")
-	if len(vals) != 1 || vals[0] != "Bearer test-sa-token" {
-		t.Errorf("authorization = %v, want [Bearer test-sa-token]", vals)
-	}
-}
-
 func TestExecExitError(t *testing.T) {
 	t.Run("implements error interface", func(t *testing.T) {
 		var err error = &ExecExitError{Code: 42}
@@ -275,15 +257,6 @@ func TestExecExitError(t *testing.T) {
 			t.Fatal("errors.As should return false for non-ExecExitError")
 		}
 	})
-}
-
-func TestAuthContext_MissingFile(t *testing.T) {
-	g := NewGatewayClient("gw", 8443, nil, "/nonexistent/path/token", zerolog.Nop())
-	ctx := g.authContext(context.Background(), "test-ns")
-	md, ok := metadata.FromOutgoingContext(ctx)
-	if ok && len(md.Get("authorization")) > 0 {
-		t.Error("expected no authorization metadata when token file is missing")
-	}
 }
 
 func TestAuthContext_NonOIDCNamespace(t *testing.T) {
@@ -318,22 +291,52 @@ func TestAuthContext_OIDCNamespace(t *testing.T) {
 	}
 }
 
-func TestAuthContext_UnregisteredNamespaceFallback(t *testing.T) {
-	dir := t.TempDir()
-	tokenFile := filepath.Join(dir, "token")
-	if err := os.WriteFile(tokenFile, []byte("sa-token"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	g := NewGatewayClient("gw", 8443, nil, tokenFile, zerolog.Nop())
-	// Don't register any namespace — should fall back to legacy SA token behavior
+func TestAuthContext_UnregisteredNamespaceTriesOIDC(t *testing.T) {
+	tp := &staticToken{token: "oidc-token"}
+	g := NewGatewayClient("gw", 8443, nil, "", zerolog.Nop(), WithTokenProvider(tp))
+	// Unregistered namespace should optimistically try OIDC; the caller
+	// retries without auth if the gateway rejects it.
 	ctx := g.authContext(context.Background(), "unknown-ns")
 	md, ok := metadata.FromOutgoingContext(ctx)
 	if !ok {
-		t.Fatal("expected outgoing metadata for unregistered namespace with SA token")
+		t.Fatal("expected outgoing metadata for unregistered namespace with OIDC provider")
 	}
 	vals := md.Get("authorization")
-	if len(vals) != 1 || vals[0] != "Bearer sa-token" {
-		t.Errorf("authorization = %v, want [Bearer sa-token]", vals)
+	if len(vals) != 1 || vals[0] != "Bearer oidc-token" {
+		t.Errorf("authorization = %v, want [Bearer oidc-token]", vals)
+	}
+}
+
+func TestIsUnauthSigningKeyErr(t *testing.T) {
+	g := NewGatewayClient("gw", 8443, nil, "", zerolog.Nop())
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"non-status error", fmt.Errorf("plain"), false},
+		{"Unauthenticated with signing key", status.Error(codes.Unauthenticated, "invalid token: unknown signing key"), true},
+		{"Unauthenticated without signing key", status.Error(codes.Unauthenticated, "missing token"), false},
+		{"PermissionDenied with signing key", status.Error(codes.PermissionDenied, "unknown signing key"), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := g.isUnauthSigningKeyErr(tt.err)
+			if got != tt.want {
+				t.Errorf("isUnauthSigningKeyErr() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStripAuthContext(t *testing.T) {
+	g := NewGatewayClient("gw", 8443, nil, "", zerolog.Nop())
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer token"))
+	stripped := g.stripAuthContext(ctx)
+	md, ok := metadata.FromOutgoingContext(stripped)
+	if ok && len(md.Get("authorization")) > 0 {
+		t.Error("stripAuthContext should remove authorization metadata")
 	}
 }
 

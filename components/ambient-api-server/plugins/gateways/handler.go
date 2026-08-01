@@ -30,12 +30,6 @@ func gatewayImageFromEnv() string {
 	return "ghcr.io/nvidia/openshell/gateway:0.0.92"
 }
 
-var DefaultOIDCIssuerURL = oidcIssuerURLFromEnv()
-
-func oidcIssuerURLFromEnv() string {
-	return os.Getenv("OIDC_ISSUER_URL")
-}
-
 func applyGatewayDefaults(gw *Gateway, projectID string) {
 	if gw.Name == "" {
 		gw.Name = "openshell-gateway"
@@ -50,18 +44,10 @@ func applyGatewayDefaults(gw *Gateway, projectID string) {
 		s := string(raw)
 		gw.ServerDnsNames = &s
 	}
-	if gw.Oidc == nil && DefaultOIDCIssuerURL != "" {
-		oidcDefaults := map[string]interface{}{
-			"issuer":      DefaultOIDCIssuerURL,
-			"audience":    "openshell-cli",
-			"roles_claim": "realm_access.roles",
-			"admin_role":  "openshell-admin",
-			"user_role":   "openshell-user",
-		}
-		raw, _ := json.Marshal(oidcDefaults)
-		s := string(raw)
-		gw.Oidc = &s
-	}
+	// OIDC is opt-in: only gateways whose manifests explicitly include an
+	// oidc block should have OIDC enabled.  Auto-injecting OIDC based on
+	// the global OIDC_ISSUER_URL caused non-OIDC tenants to reject both
+	// authenticated and unauthenticated control-plane calls.
 	if gw.Route == nil {
 		routeDefault := map[string]interface{}{}
 		raw, _ := json.Marshal(routeDefault)
