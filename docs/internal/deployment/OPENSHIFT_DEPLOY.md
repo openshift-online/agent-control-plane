@@ -67,7 +67,8 @@ pods must trust the CA that signed the OIDC issuer's TLS certificate. On OpenShi
 Routes use certificates signed by the cluster's ingress CA, which is not present in
 the gateway's minimal container image.
 
-The control plane looks for a ConfigMap named `gateway-trusted-ca` in the
+The control plane looks for a ConfigMap named `gateway-trusted-ca` (defined in
+`components/ambient-control-plane/internal/reconciler/gateway_reconciler.go`) in the
 `ambient-code` namespace. If found, it automatically copies the CA bundle to each
 tenant namespace and mounts it into gateway pods via the `SSL_CERT_FILE` environment
 variable.
@@ -80,7 +81,10 @@ JWKS fetch failed: error sending request for url (https://<keycloak-route>/...ce
 
 **Create the ConfigMap:**
 ```bash
-# Extract the OpenShift ingress CA (signs *.apps.<cluster> Route certificates)
+# Extract the OpenShift ingress CA (signs *.apps.<cluster> Route certificates).
+# On ROSA with STS or other managed OCP variants, router-ca may not exist in
+# openshift-config-managed. Check `oc get configmap -n openshift-config-managed`
+# and use whichever ConfigMap holds the ingress CA for your variant.
 oc get configmap router-ca -n openshift-config-managed \
   -o jsonpath='{.data.ca-bundle\.crt}' > /tmp/ca-bundle.crt
 

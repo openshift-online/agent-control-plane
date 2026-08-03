@@ -69,6 +69,7 @@ var networkPolicyGVR = schema.GroupVersionResource{
 	Resource: "networkpolicies",
 }
 
+// Cross-ref: docs/internal/deployment/OPENSHIFT_DEPLOY.md § "Gateway Trusted CA"
 const (
 	trustedCAConfigMapName = "gateway-trusted-ca"
 	trustedCAKey           = "ca-bundle.crt"
