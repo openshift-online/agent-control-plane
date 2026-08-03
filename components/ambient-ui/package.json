@@ -60,7 +60,7 @@
     "@vitest/coverage-istanbul": "^4.0.18",
     "eslint": "^9",
     "eslint-config-next": "15.5.19",
-    "jsdom": "^28.1.0",
+    "jsdom": "^30.0.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.8"
