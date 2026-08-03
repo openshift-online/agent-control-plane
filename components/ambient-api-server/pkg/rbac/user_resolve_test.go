@@ -29,10 +29,10 @@ func newMockGorm(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 
 func TestResolveUserID(t *testing.T) {
 	tests := []struct {
-		name      string
-		setup     func(sqlmock.Sqlmock)
-		wantID    string
-		wantErr   error
+		name       string
+		setup      func(sqlmock.Sqlmock)
+		wantID     string
+		wantErr    error
 		wantAnyErr bool
 	}{
 		{
