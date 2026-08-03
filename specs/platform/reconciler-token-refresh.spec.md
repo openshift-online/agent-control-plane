@@ -20,11 +20,14 @@ Session `dasfadsfdsa` (`3HHmQCYv7CBSoNwuiSeVohWmLm7`):
 | Time | Event |
 |------|-------|
 | 21:24:48 | OIDC token acquired (expires 21:29:48, 5 min TTL) |
-| 21:29:09 | `provisionSessionSandbox` → `ForProject()` captures SDK client with current token |
+| 21:29:09 | `provisionSessionSandbox` → `ForProject()` captures SDK client with current token (~39s remaining) |
 | 21:29:09 | Sandbox created, `execAfterReady` goroutine spawned |
 | 21:29:51–21:30:15 | Three ndots retry cycles (pod deleted and recreated 3×, ~26s added) |
-| 21:30:31 | Sandbox ready; `UpdateStatus(phase=Running)` → **HTTP 401** (token expired ~40s ago) |
+| 21:29:48 | Token expires — only ~39s after capture, not the full 5 min TTL |
+| 21:30:31 | Sandbox ready; `UpdateStatus(phase=Running)` → **HTTP 401** (token expired ~43s ago) |
 | 21:30:44 | `markCompleted` → **HTTP 401** |
+
+The token had only ~39 seconds of remaining validity at the time `ForProject()` captured it — the OIDC token was acquired ~4 min 21 s earlier by a prior reconciler cycle. This means even a short sandbox wait (30–90 seconds) can trigger a 401 if the token happens to be near expiry at capture time.
 
 The session never left `Creating`. The UI showed it stuck indefinitely.
 
@@ -63,6 +66,16 @@ This ensures that `OIDCTokenProvider.Token()` is called at the moment the token 
 - THEN `ForProject()` SHALL return the cached client (token unchanged)
 - AND no unnecessary token fetch occurs
 
+#### Scenario: Token nearly expired at capture time
+
+- GIVEN an OIDC token acquired at T₋₄min (with 5-minute TTL, so ~60s remaining)
+- AND `ForProject()` captures the SDK client at T₀ with only ~60s of validity
+- AND the sandbox becomes ready at T₀ + 90 seconds (beyond remaining validity)
+- WHEN `execAfterReady` re-acquires the SDK client before calling `UpdateStatus`
+- THEN `ForProject()` SHALL call `OIDCTokenProvider.Token()` which fetches a fresh token
+- AND `UpdateStatus(phase=Running)` SHALL succeed
+- NOTE: This is the actual failure mode from the 2026-07-31 incident — the token had ~39s remaining at capture, not a full 5-minute window
+
 #### Scenario: failSession closure uses fresh token
 
 - GIVEN `execAfterReady` times out after 600 seconds
@@ -70,12 +83,24 @@ This ensures that `OIDCTokenProvider.Token()` is called at the moment the token 
 - THEN it SHALL use a freshly acquired SDK client, not the one captured at provision start
 - AND the failure SHALL be recorded in the API server
 
-#### Scenario: Token refresh fails
+#### Scenario: Token refresh fails during phase update
 
 - GIVEN the OIDC provider is unreachable when `ForProject()` is called
-- WHEN `execAfterReady` attempts to re-acquire the SDK client
+- WHEN `execAfterReady` attempts to re-acquire the SDK client for `UpdateStatus(phase=Running)`
 - THEN the error SHALL be logged with the session ID
-- AND the operation (phase update or failure marking) SHALL be skipped with a warning, not crash the reconciler
+- AND the operation SHALL be skipped with a warning, not crash the reconciler
+- AND the session will be left in `Creating` (the next reconcile loop will pick it up)
+
+#### Scenario: Token refresh fails inside failSession
+
+- GIVEN `execAfterReady` times out or encounters a sandbox error
+- AND `failSession` calls `ForProject()` to acquire a fresh client
+- AND `ForProject()` returns an error (OIDC unreachable, network partition, etc.)
+- WHEN `failSession` cannot mark the session as `Failed` via the API
+- THEN `failSession` SHALL log the error at `Error` level with the session ID and the `ForProject()` error
+- AND `failSession` SHALL attempt a **Kubernetes-side annotation** on the session's Job or Pod recording the failure reason, as a last-resort breadcrumb
+- AND the session will remain in `Creating` — the reconciler's next full-sync pass will detect the stale session and retry the failure marking with a new token
+- NOTE: This prevents the exact same stuck-in-Creating outcome as the original bug. The reconciler's periodic resync is the ultimate backstop, not a single `failSession` invocation.
 
 ### Requirement: execAfterReady Receives Factory, Not Client
 
@@ -136,6 +161,18 @@ The `failSession` closure inside `execAfterReady` currently captures the `sdk` v
 - ndots retry loop optimization (tracked in #421)
 - Token endpoint for runner pods (orthogonal; runner uses CP token endpoint, not SDK client)
 
+### Design decision: per-call-site refresh vs. client-level token provider
+
+An alternative to patching individual call sites is making `sdkclient.Client` accept a `func() (string, error)` token provider so that every HTTP request lazily fetches a fresh token. This would eliminate the entire class of stale-token bugs across all current and future long-running functions (e.g. `deprovisionSessionSandbox` at ~line 1863).
+
+We chose per-call-site patching for this spec because:
+
+1. **Blast radius**: Modifying `sdkclient.Client` to use a token provider changes the SDK's HTTP transport layer, affecting all SDK consumers (CLI, runner, sidecars), not just the control plane reconciler. That change warrants its own spec and cross-component testing.
+2. **Urgency**: The stuck-in-Creating bug is actively blocking users. A targeted fix in `execAfterReady` can ship immediately while a client-level fix is designed properly.
+3. **Verification**: Per-call-site patching produces an explicit, auditable list of "these are the calls that run after a long wait." A transparent token provider fixes the bug silently, making it harder to reason about token lifecycle in code review.
+
+A follow-up spec SHOULD evaluate the client-level token provider pattern to prevent this bug class in future long-running functions. Until then, any new function that acquires an SDK client and waits (>30s) before using it should follow the same `ForProject()` re-acquisition pattern documented here.
+
 ---
 
 ## Implementation Notes
@@ -146,9 +183,11 @@ The key call sites inside `execAfterReady` that need fresh clients:
 
 | Line | Call | Risk |
 |------|------|------|
-| 949 | `sdk.Sessions().UpdateStatus(ctx, sessionID, {phase: Running})` | High — after readiness wait |
-| 783 | `sdk.Sessions().UpdateStatus(ctx, sessionID, {phase: Failed})` (via `failSession`) | High — after timeout |
-| 1059+ | completion marking after exec stream finishes | Medium — after entrypoint run |
+| ~958 | `sdk.Sessions().UpdateStatus(ctx, sessionID, {phase: Running})` | High — after readiness wait |
+| ~792 | `sdk.Sessions().UpdateStatus(ctx, sessionID, {phase: Failed})` (via `failSession`) | High — after timeout |
+| ~1054 | `sdk.Sessions().Get(checkCtx, sessionID)` (exec-retry loop, `codes.NotFound` branch) | High — after readiness wait + exec stream |
+| ~1086 | `sdk.Sessions().Get(ctx, sessionID)` (re-reads `stop_on_run_finished` after exec) | High — after readiness wait + full entrypoint execution |
+| ~1105 | `sdk.Sessions().UpdateStatus(ctx, sessionID, {phase: Completed/Failed})` (completion marking) | High — after readiness wait + full entrypoint execution (longest elapsed time, highest expiry risk) |
 
 Each of these should be preceded by `sdk, err := r.factory.ForProject(ctx, projectID)`.
 
