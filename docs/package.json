@@ -14,7 +14,7 @@
     "@astrojs/starlight": "^0.39",
     "astro": "^6.3",
     "playwright": "^1.58.2",
-    "sharp": "^0.33.0"
+    "sharp": "^0.35.0"
   },
   "devDependencies": {
     "rehype-mermaid": "^3.0.0"
