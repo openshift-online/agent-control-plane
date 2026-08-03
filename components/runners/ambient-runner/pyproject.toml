@@ -16,7 +16,7 @@ dependencies = [
   "requests==2.34.2",
   "pyjwt==2.13.0",
   "cryptography==48.0.1",
-  "grpcio==1.81.1",
+  "grpcio==1.83.0",
   "protobuf==6.33.6",
 ]
 
