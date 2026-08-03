@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 
 	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/openapi"
@@ -212,7 +213,8 @@ func (h projectHandler) TransferOwnership(w http.ResponseWriter, r *http.Request
 
 	callerUserID, resolveErr := pkgrbac.ResolveUserID(g, username)
 	if resolveErr != nil {
-		handlers.HandleError(ctx, w, errors.Forbidden("Forbidden"))
+		glog.Errorf("ResolveUserID failed for ownership transfer: %v", resolveErr)
+		handlers.HandleError(ctx, w, errors.GeneralError("authorization check failed"))
 		return
 	}
 

@@ -31,6 +31,10 @@ func NewEvaluator(sessionFactory *db.SessionFactory) *Evaluator {
 
 func (e *Evaluator) fetchBindings(g *gorm.DB, username string) ([]bindingRow, error) {
 	var rows []bindingRow
+	// TODO(2026-10-01): remove the OR rb.user_id = ? fallback once all
+	// role_bindings rows have been migrated from username to KSUID
+	// (migration 202607290001). After confirming migration is complete
+	// in all environments, simplify to: WHERE u.username = ?
 	err := g.Table("role_bindings rb").
 		Select("rb.role_id, r.name AS role_name, rb.scope, rb.user_id, rb.project_id, rb.agent_id, rb.session_id, rb.credential_id, r.permissions").
 		Joins("JOIN roles r ON r.id = rb.role_id").

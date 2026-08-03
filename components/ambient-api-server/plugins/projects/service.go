@@ -15,7 +15,7 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
 	"gorm.io/gorm"
 
-	pkgrbac "github.com/ambient-code/platform/components/ambient-api-server/pkg/rbac"
+	pkgrbac "github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/rbac"
 )
 
 // roleBindingRow is a local struct for creating role_bindings rows via GORM,

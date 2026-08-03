@@ -1,10 +1,14 @@
 package rbac
 
 import (
+	"errors"
 	"fmt"
 
 	"gorm.io/gorm"
 )
+
+// ErrUserNotFound is returned when the username has no matching row in users.
+var ErrUserNotFound = errors.New("user not found")
 
 // ResolveUserID looks up the KSUID primary key for a username.
 // All role_bindings.user_id values must store the users.id KSUID,
@@ -15,10 +19,10 @@ func ResolveUserID(g *gorm.DB, username string) (string, error) {
 		Where("username = ? AND deleted_at IS NULL", username).
 		Scan(&id).Error
 	if err != nil {
-		return "", fmt.Errorf("resolve user %q: %w", username, err)
+		return "", fmt.Errorf("resolve user ID: %w", err)
 	}
 	if id == "" {
-		return "", fmt.Errorf("user %q not found", username)
+		return "", ErrUserNotFound
 	}
 	return id, nil
 }

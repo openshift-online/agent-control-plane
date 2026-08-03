@@ -3,6 +3,7 @@ package roleBindings
 import (
 	"net/http"
 
+	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 
 	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/openapi"
@@ -65,7 +66,8 @@ func (h roleBindingHandler) Create(w http.ResponseWriter, r *http.Request) {
 				username := auth.GetUsernameFromContext(ctx)
 				callerUserID, resolveErr := pkgrbac.ResolveUserID(g, username)
 				if resolveErr != nil {
-					return nil, errors.Forbidden("Forbidden")
+					glog.Errorf("ResolveUserID failed for role binding operation: %v", resolveErr)
+					return nil, errors.GeneralError("authorization check failed")
 				}
 				var callerRoleNames []string
 				baseQuery := func(g *gorm.DB) *gorm.DB {
@@ -219,7 +221,8 @@ func (h roleBindingHandler) Patch(w http.ResponseWriter, r *http.Request) {
 
 				callerUserID, resolveErr := pkgrbac.ResolveUserID(g, username)
 				if resolveErr != nil {
-					return nil, errors.Forbidden("Forbidden")
+					glog.Errorf("ResolveUserID failed for role binding operation: %v", resolveErr)
+					return nil, errors.GeneralError("authorization check failed")
 				}
 
 				// Fetch caller's roles scoped to the binding's project (+ global)
@@ -578,7 +581,8 @@ func (h roleBindingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 				username := auth.GetUsernameFromContext(ctx)
 				callerUserID, resolveErr := pkgrbac.ResolveUserID(g, username)
 				if resolveErr != nil {
-					return nil, errors.Forbidden("Forbidden")
+					glog.Errorf("ResolveUserID failed for role binding operation: %v", resolveErr)
+					return nil, errors.GeneralError("authorization check failed")
 				}
 
 				if binding.Scope == "credential" {

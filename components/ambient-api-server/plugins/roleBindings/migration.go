@@ -1,6 +1,8 @@
 package roleBindings
 
 import (
+	"fmt"
+
 	"gorm.io/gorm"
 
 	"github.com/go-gormigrate/gormigrate/v2"
@@ -96,21 +98,38 @@ func typedFKMigration() *gormigrate.Migration {
 func userIDKSUIDMigration() *gormigrate.Migration {
 	return &gormigrate.Migration{
 		ID: "202607290001",
-		Migrate: func(tx *gorm.DB) error {
-			return tx.Exec(`UPDATE role_bindings
-				SET user_id = u.id, updated_at = NOW()
-				FROM users u
-				WHERE role_bindings.user_id = u.username
-				  AND role_bindings.deleted_at IS NULL
-				  AND u.deleted_at IS NULL`).Error
+		Migrate: func(g *gorm.DB) error {
+			return g.Transaction(func(tx *gorm.DB) error {
+				// Guard: abort if duplicate usernames exist — the JOIN
+				// would non-deterministically pick one id per username.
+				var dupeCount int64
+				if err := tx.Raw(`SELECT COUNT(*) FROM (
+					SELECT username FROM users
+					WHERE deleted_at IS NULL
+					GROUP BY username HAVING COUNT(*) > 1
+				) dupes`).Scan(&dupeCount).Error; err != nil {
+					return err
+				}
+				if dupeCount > 0 {
+					return fmt.Errorf("cannot migrate: %d duplicate username(s) in users table", dupeCount)
+				}
+				return tx.Exec(`UPDATE role_bindings
+					SET user_id = u.id, updated_at = NOW()
+					FROM users u
+					WHERE role_bindings.user_id = u.username
+					  AND role_bindings.deleted_at IS NULL
+					  AND u.deleted_at IS NULL`).Error
+			})
 		},
-		Rollback: func(tx *gorm.DB) error {
-			return tx.Exec(`UPDATE role_bindings
-				SET user_id = u.username, updated_at = NOW()
-				FROM users u
-				WHERE role_bindings.user_id = u.id
-				  AND role_bindings.deleted_at IS NULL
-				  AND u.deleted_at IS NULL`).Error
+		Rollback: func(g *gorm.DB) error {
+			return g.Transaction(func(tx *gorm.DB) error {
+				return tx.Exec(`UPDATE role_bindings
+					SET user_id = u.username, updated_at = NOW()
+					FROM users u
+					WHERE role_bindings.user_id = u.id
+					  AND role_bindings.deleted_at IS NULL
+					  AND u.deleted_at IS NULL`).Error
+			})
 		},
 	}
 }
