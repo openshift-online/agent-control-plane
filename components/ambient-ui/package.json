@@ -62,7 +62,7 @@
     "eslint-config-next": "15.5.19",
     "jsdom": "^28.1.0",
     "tailwindcss": "^4",
-    "typescript": "^5",
+    "typescript": "^7.0.0",
     "vitest": "^4.1.8"
   },
   "overrides": {
