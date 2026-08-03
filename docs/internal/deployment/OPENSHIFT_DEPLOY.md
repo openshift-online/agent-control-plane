@@ -120,7 +120,12 @@ this, sandbox pods will fail to start due to insufficient permissions.
 oc adm policy add-scc-to-user privileged -z openshell-sandbox -n <namespace>
 ```
 
-Run this once per tenant namespace. See the
+Run this once per tenant namespace. The ACP control plane automatically creates
+the required RoleBinding for the `openshell-sandbox` service account when a
+gateway is provisioned in a namespace, so manual intervention is only needed if
+you are pre-creating namespaces before gateway provisioning.
+
+See the
 [NVIDIA OpenShell docs](https://docs.nvidia.com/openshell/kubernetes/openshift#grant-the-privileged-scc-to-sandbox-pods)
 for details.
 
