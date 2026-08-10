@@ -357,11 +357,18 @@ func (m *DBAuthorizationMiddleware) autoProvisionServiceAccount(ctx context.Cont
 		return
 	}
 
+	// Resolve the user's KSUID for role_bindings.user_id.
+	userID, resolveErr := ResolveUserID(g, username)
+	if resolveErr != nil {
+		glog.Warningf("service account user ID resolution failed for %s: %v", username, resolveErr)
+		return
+	}
+
 	// Check whether a platform:admin binding already exists.
 	var count int64
 	err := g.Table("role_bindings").
 		Joins("JOIN roles ON roles.id = role_bindings.role_id").
-		Where("role_bindings.user_id = ? AND role_bindings.deleted_at IS NULL", username).
+		Where("role_bindings.user_id = ? AND role_bindings.deleted_at IS NULL", userID).
 		Where("roles.name = ? AND roles.deleted_at IS NULL", RolePlatformAdmin).
 		Count(&count).Error
 	if err != nil {
@@ -397,7 +404,7 @@ func (m *DBAuthorizationMiddleware) autoProvisionServiceAccount(ctx context.Cont
 		ID:        api.NewID(),
 		RoleID:    roleID,
 		Scope:     string(ScopeGlobal),
-		UserID:    username,
+		UserID:    userID,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
