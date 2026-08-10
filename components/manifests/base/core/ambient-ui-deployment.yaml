@@ -58,6 +58,8 @@ spec:
             secretKeyRef:
               name: sso-credentials
               key: SSO_FRONTEND_ISSUER_URL
+        - name: FEEDBACK_SLACK_WEBHOOK_URL
+          value: ""
         resources:
           requests:
             cpu: 100m
