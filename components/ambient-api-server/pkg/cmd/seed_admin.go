@@ -39,6 +39,7 @@ func (seedRoleBinding) TableName() string { return "role_bindings" }
 
 func NewSeedAdminCommand() *cobra.Command {
 	dbConfig := config.NewDatabaseConfig()
+	setInPodDBDefaults(dbConfig)
 	var username string
 
 	cmd := &cobra.Command{
