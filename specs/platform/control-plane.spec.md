@@ -68,6 +68,7 @@ Provisions:
 
 On `phase=Stopping` → calls `deprovisionSession` (deletes pods).
 On `DELETED` → calls `cleanupSession` (deletes pod, secret, service account, service, namespace).
+On provisioning error → transitions session to `phase=Failed` via `updateSessionPhase`. A provisioning failure must never leave the session in `phase=Pending`; silent log-and-return is not acceptable.
 
 #### `internal/reconciler/project_reconciler.go` — ProjectReconciler
 

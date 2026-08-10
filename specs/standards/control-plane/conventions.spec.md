@@ -60,6 +60,7 @@ if err != nil {
 - `IsNotFound` → return `ctrl.Result{}, nil` (resource gone, no retry)
 - Transient errors → return `ctrl.Result{}, err` (triggers requeue with backoff)
 - Terminal errors → update CR status to "Failed", return `ctrl.Result{}, nil` (don't retry)
+- Async provisioning goroutines → on any error, call `updateSessionPhase(ctx, session, PhaseFailed)` before returning; never log-and-return silently
 
 ### Status Updates on Error
 

@@ -50,19 +50,19 @@ skills/
 
 ## Reconciliation State
 
-**Last analyzed**: 2026-07-18 (openshell-cli-e2e-test gap analysis)
+**Last analyzed**: 2026-07-24 (phase-failed provisioning fix + P39 DB provisioning)
 **Spec corpus**: 30 specs across 4 domains
-**Codebase commit**: 40b550a7 (squizzi/amsterdam branch)
+**Codebase commit**: 09e6045d (fix-phase branch)
 
 ### Coverage Summary
 
 | Domain | Specs | Requirements | Present | Partial | Missing | Coverage |
 |--------|-------|-------------|---------|---------|---------|----------|
-| Platform | 13 | 131 | 126 | 1 | 4 | 96.2% |
+| Platform | 13 | 132 | 128 | 1 | 3 | 96.9% |
 | Security | 6 | 55 | 47 | 3 | 5 | 85.5% |
 | UI | 7 | 70 | 62 | 6 | 2 | 88.6% |
 | CLI | 1 | 13 | 13 | 0 | 0 | 100% |
-| **TOTAL** | **30** | **269** | **248** | **10** | **11** | **92.2%** |
+| **TOTAL** | **30** | **270** | **250** | **10** | **10** | **92.6%** |
 
 ### Spec Dependency Order
 
@@ -133,7 +133,8 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | P36 | openshell-gateway | Route address discovery and API exposure | BE+CP | **done** | major | `reconcileGRPCRouteAddress()` constructs `protocol://hostname` from Gateway listener protocol. PATCHes `routeAddress` to API server. `route` (JSONB) and `route_address` (TEXT) columns in DB. CLI `gatewayAddress()` displays route address or "Not ready...". |
 | P37 | openshell-gateway | OpenShift SCC bindings | CP | **done** | major | `reconcileOpenShiftSCC()` creates RoleBinding binding `openshell-gateway-sandbox` SA to `system:openshift:scc:privileged` ClusterRole. Conditional on `r.isOpenShift` (detected via `route.openshift.io/` API group). |
 | P38 | openshell-gateway | Labels/annotations normalization to JSON string | BE+CLI | **done** | minor | PR #409: labels and annotations stored as `type: string` (JSON-encoded) instead of `type: object`. CLI `parseKeyValuePairs()` + `json.Marshal()` for create; `applyGateway` handles both string and object formats for backward compat. |
-| P39 | openshell-gateway | Gateway database provisioning (postgres/sqlite) | BE+CP | missing | major | Spec requires `database` field on Gateway (type, storageSize, image, externalSecretRef). No implementation: no DB field in model, no PostgreSQL resource provisioning (Secret, PVC, Deployment, Service), no workload type switching. |
+| P39 | openshell-gateway | Gateway database provisioning (postgres/sqlite) | BE+CP | **done** | major | Closed by PR #415 (caaf2300): `database` field on Gateway model (type, storageSize, image, externalSecretRef). PostgreSQL provisioning: Secret, PVC, Deployment, Service, NetworkPolicy. StatefulSet↔Deployment workload switch. Init container with pg_isready wait. CLI flags: --db-type, --db-storage-size, --db-image. SDKs regenerated. |
+| P44 | control-plane | provisionAsync error must transition to phase=Failed | CP | **done** | critical | `provisionAsync` now calls `r.updateSessionPhase(ctx, session, PhaseFailed)` after logging the error. Previously only logged, leaving session stuck in Pending. Driven by control-plane.spec.md and conventions.spec.md updates. |
 | P40 | openshell-gateway | Cross-cluster gateway exposure | CP | missing | major | Spec requires ExternalName Service for cross-cluster gRPC, external URL annotation. No implementation exists. |
 | P41 | openshell-gateway | Gateway route E2E test on CRC | Tests | missing | minor | Spec requires full E2E connectivity test (GRPCRoute → BackendTLSPolicy → gateway pod) on CRC/OpenShift. No test exists. |
 | P42 | project-gateway-lifecycle | Server-side gateway defaults (GATEWAY_IMAGE, OIDC_ISSUER_URL) | BE | **done** | major | `applyGatewayDefaults()` reads `GATEWAY_IMAGE` and `OIDC_ISSUER_URL` from env vars. Applies image default when empty, OIDC defaults when `gw.Oidc == nil` and issuer URL is set. |
@@ -214,7 +215,7 @@ Gaps grouped by execution wave. Each wave gates the next.
 
 **Partials** (S9, S10, S11, P1, P9) are low-severity and can be addressed opportunistically.
 
-**Missing** (P39, P40, P41) are new gaps from the consolidated openshell-gateway spec. P39 (database provisioning) and P40 (cross-cluster exposure) are major but not yet prioritized into a wave.
+**Missing** (P40, P41) are gaps from the consolidated openshell-gateway spec. P40 (cross-cluster exposure) is major but not yet prioritized into a wave. P39 closed by PR #415.
 
 ---
 
@@ -270,3 +271,4 @@ Gaps grouped by execution wave. Each wave gates the next.
 | 2026-07-16 | 40b550a7 | Wave 15 executed: P28, P29 | 92.2% | openshell-cli-e2e-test spec fully implemented. E2E test script (8 sections, 37 scenarios) and tmux demo script created. Coverage up from 91.9% to 92.2%. |
 | 2026-07-18 | (pending) | Waves 15-16 executed: P28, P29, P30 | 92.0% | SDK generator extended for action response schemas (`status`/`heartbeat` knownActions, `ResponseSchema` types). ClusterHealthSyncer reconciler (30s polling, heartbeat probing). PlacementStrategy interface + RoundRobinPlacement (role filtering, label matching, heartbeat threshold). |
 | 2026-07-20 | 922dbc40 | Spec consolidation pass | 91.6% | 3 gateway specs (gateway-provisioning, gateway-oidc, gateway-route-exposure) consolidated into openshell-gateway.spec.md (45 reqs). project-gateway-lifecycle.spec.md added (6 reqs). 13 new done entries (P31-P38, P42-P43, cert-manager, OIDC, route exposure, SCC). 3 new missing gaps (P39 database provisioning, P40 cross-cluster exposure, P41 E2E test). CI: test-local-dev-simulation removed from workflows. |
+| 2026-07-24 | 09e6045d | P39 done + P44 provisioning phase-failed fix | 92.6% | P39 closed by PR #415 (caaf2300): postgres/sqlite gateway DB provisioning across full stack. New gap P44 (provisionAsync silent log on error → leaves session Pending) identified from spec updates and immediately fixed: `r.updateSessionPhase(ctx, session, PhaseFailed)` added. Missing reduced from 11→10, present 248→250. |
