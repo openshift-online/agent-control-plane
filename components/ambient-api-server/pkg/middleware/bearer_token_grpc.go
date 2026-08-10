@@ -5,7 +5,7 @@ import (
 	"crypto/subtle"
 	"strings"
 
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"

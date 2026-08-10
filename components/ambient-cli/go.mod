@@ -9,7 +9,7 @@ require (
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
-	github.com/golang-jwt/jwt/v4 v4.5.2
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk v0.0.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.10
