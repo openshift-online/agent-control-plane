@@ -44,7 +44,12 @@
     "label": "docs"
   },
   "scripts": {
-    "paths": [".github/scripts/**", "tests/test_model_discovery.py"],
+    "paths": [
+      ".github/scripts/**",
+      "scripts/**",
+      "Makefile",
+      "tests/unit/**"
+    ],
     "label": "scripts"
   }
 }

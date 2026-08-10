@@ -1166,16 +1166,19 @@ _kind-start-port-forward:
 	@kubectl port-forward -n $(NAMESPACE) svc/ambient-api-server $(KIND_FWD_BACKEND_PORT):8000 >$(KIND_PF_DIR)/kind-pf-backend.log 2>&1 & echo $$! > $(KIND_PF_DIR)/kind-pf-backend.pid
 	@kubectl port-forward -n $(NAMESPACE) svc/ambient-ui-service $(KIND_FWD_AMBIENT_UI_PORT):3000 >$(KIND_PF_DIR)/kind-pf-ambient-ui.log 2>&1 & echo $$! > $(KIND_PF_DIR)/kind-pf-ambient-ui.pid
 	@kubectl port-forward -n $(NAMESPACE) svc/keycloak-service $(KIND_FWD_KEYCLOAK_PORT):11880 >$(KIND_PF_DIR)/kind-pf-keycloak.log 2>&1 & echo $$! > $(KIND_PF_DIR)/kind-pf-keycloak.pid
-	@# Discover and port-forward openshell gateways on deterministic ports
-	@GW_NAMESPACES=$$(kubectl get pods --all-namespaces -l app.kubernetes.io/instance=openshell-gateway -o jsonpath='{range .items[*]}{.metadata.namespace}{"\n"}{end}' 2>/dev/null | sort -u); \
-	OFFSET=0; \
-	for NS in $$GW_NAMESPACES; do \
-		PORT=$$(($(KIND_FWD_GATEWAY_BASE_PORT) + $$OFFSET)); \
+	@# Port-forward openshell gateways on deterministic, per-tenant ports.
+	@# Iterate the canonical tenant list (not "whatever pods exist right now")
+	@# so a tenant is never skipped or shifted onto another tenant's port.
+	@# Wait for each gateway StatefulSet to be Ready first to avoid racing pod startup.
+	@for NS in $(OPENSHELL_TENANTS); do \
+		kubectl get statefulset openshell-gateway -n "$$NS" >/dev/null 2>&1 || continue; \
+		PORT=$$(OPENSHELL_TENANTS="$(OPENSHELL_TENANTS)" KIND_FWD_GATEWAY_BASE_PORT=$(KIND_FWD_GATEWAY_BASE_PORT) ./scripts/lib/gateway-ports.sh port-for "$$NS"); \
+		kubectl wait --for=condition=Ready pod -l app.kubernetes.io/instance=openshell-gateway -n "$$NS" --timeout=90s >/dev/null 2>&1 || \
+			echo "$(COLOR_YELLOW)⚠$(COLOR_RESET) openshell-gateway ($$NS) not ready after 90s; forwarding anyway"; \
 		kubectl port-forward -n "$$NS" statefulset/openshell-gateway $$PORT:8080 \
 			>"$(KIND_PF_DIR)/kind-pf-openshell-$$NS.log" 2>&1 & \
 		echo $$! > "$(KIND_PF_DIR)/kind-pf-openshell-$$NS.pid"; \
 		echo "$$PORT" > "$(KIND_PF_DIR)/kind-pf-openshell-$$NS.port"; \
-		OFFSET=$$(($$OFFSET + 1)); \
 	done
 	@sleep 1
 	@FAILED=0; \
@@ -1479,12 +1482,11 @@ kind-status: check-kind ## Show all kind clusters and their port assignments
 	@if [ -n "$(KIND_HOST)" ]; then echo "  Host:     $(KIND_HOST) (remote)"; else echo "  Host:     localhost"; fi
 	@echo "  NodePort: $(KIND_HTTP_PORT) (HTTP) / $(KIND_HTTPS_PORT) (HTTPS)"
 	@echo "  Forward:  $(KIND_FWD_FRONTEND_PORT) (frontend) / $(KIND_FWD_BACKEND_PORT) (backend) / $(KIND_FWD_KEYCLOAK_PORT) (keycloak)"
-	@GW_LINE=""; OFFSET=0; \
+	@GW_LINE=""; \
 	for NS in $(OPENSHELL_TENANTS); do \
-		PORT=$$(($(KIND_FWD_GATEWAY_BASE_PORT) + $$OFFSET)); \
+		PORT=$$(OPENSHELL_TENANTS="$(OPENSHELL_TENANTS)" KIND_FWD_GATEWAY_BASE_PORT=$(KIND_FWD_GATEWAY_BASE_PORT) ./scripts/lib/gateway-ports.sh port-for "$$NS"); \
 		if [ -n "$$GW_LINE" ]; then GW_LINE="$$GW_LINE / "; fi; \
 		GW_LINE="$$GW_LINE$$PORT ($$NS)"; \
-		OFFSET=$$(($$OFFSET + 1)); \
 	done; \
 	if [ -n "$$GW_LINE" ]; then echo "  Gateways: $$GW_LINE"; fi
 	@echo ""

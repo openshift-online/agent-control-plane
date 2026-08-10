@@ -33,6 +33,10 @@ NAMESPACES=("${@:-tenant-a}")
 CERT_BASE="$HOME/.config/openshell/gateways"
 PF_DIR="${PF_DIR:-/tmp/ambient-code}"
 GATEWAY_BASE_PORT="${GATEWAY_BASE_PORT:-15080}"
+# Shared tenant->port mapping (keeps ports consistent with Makefile/kind-status).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/gateway-ports.sh
+. "$SCRIPT_DIR/lib/gateway-ports.sh"
 GW_PORTS=()
 NS_INDEX=0
 
@@ -70,8 +74,11 @@ for NS in "${NAMESPACES[@]}"; do
     rm -f "$PID_FILE" "$LOG_FILE"
   fi
 
-  # Assign a fixed local port: base + namespace index
-  PORT=$(( GATEWAY_BASE_PORT + NS_INDEX ))
+  # Canonical per-tenant port from the shared library; fall back to positional
+  # assignment for namespaces outside OPENSHELL_TENANTS (custom tenants).
+  if ! PORT=$(GATEWAY_BASE_PORT="$GATEWAY_BASE_PORT" gateway_port_for "$NS" 2>/dev/null); then
+    PORT=$(( GATEWAY_BASE_PORT + NS_INDEX ))
+  fi
   NS_INDEX=$(( NS_INDEX + 1 ))
 
   kubectl port-forward -n "$NS" statefulset/openshell-gateway "$PORT:8080" \

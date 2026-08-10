@@ -197,6 +197,9 @@ jobs:
       - name: Run tests
         run: python tests/unit/test_model_discovery.py -v
 
+      - name: Run gateway-ports unit tests
+        run: bash tests/unit/test_gateway_ports.sh
+
   summary:
     name: Unit Tests CI Gate
     runs-on: ubuntu-latest

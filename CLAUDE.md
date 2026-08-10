@@ -198,5 +198,6 @@ When both the self-review and the hook pass, apply the `ambient-code:self-review
 ## Testing
 
 - **Runner tests**: `cd components/runners/ambient-runner && python -m pytest tests/`
+- **Gateway port mapping**: `bash tests/unit/test_gateway_ports.sh`
 
 ## Convention Authority
