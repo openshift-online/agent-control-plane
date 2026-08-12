@@ -11,7 +11,6 @@ from .agent import Agent, AgentPatch
 from .application import Application, ApplicationPatch
 from .cluster import Cluster, ClusterPatch, ClusterStatusResponse
 from .credential import Credential, CredentialPatch
-from .gateway import Gateway, GatewayPatch
 from .inbox_message import InboxMessage, InboxMessagePatch
 from .policy import Policy, PolicyPatch
 from .project import Project, ProjectPatch
@@ -40,8 +39,6 @@ __all__ = [
     "ClusterStatusResponse",
     "Credential",
     "CredentialPatch",
-    "Gateway",
-    "GatewayPatch",
     "InboxMessage",
     "InboxMessagePatch",
     "Policy",

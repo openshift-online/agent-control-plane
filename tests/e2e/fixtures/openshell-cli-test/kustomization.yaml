@@ -1,5 +1,0 @@
-kind: Kustomization
-resources:
-  - project.yaml
-  - gateway.yaml
-  - test-policy.yaml

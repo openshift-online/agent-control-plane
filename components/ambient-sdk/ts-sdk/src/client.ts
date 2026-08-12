@@ -8,7 +8,6 @@ import { AgentAPI } from './agent_api';
 import { ApplicationAPI } from './application_api';
 import { ClusterAPI } from './cluster_api';
 import { CredentialAPI } from './credential_api';
-import { GatewayAPI } from './gateway_api';
 import { InboxMessageAPI } from './inbox_message_api';
 import { PolicyAPI } from './policy_api';
 import { ProjectAPI } from './project_api';
@@ -30,7 +29,6 @@ export class AmbientClient {
   readonly applications: ApplicationAPI;
   readonly clusters: ClusterAPI;
   readonly credentials: CredentialAPI;
-  readonly gateways: GatewayAPI;
   readonly inboxMessages: InboxMessageAPI;
   readonly policys: PolicyAPI;
   readonly projects: ProjectAPI;
@@ -82,7 +80,6 @@ export class AmbientClient {
     this.applications = new ApplicationAPI(this.config);
     this.clusters = new ClusterAPI(this.config);
     this.credentials = new CredentialAPI(this.config);
-    this.gateways = new GatewayAPI(this.config);
     this.inboxMessages = new InboxMessageAPI(this.config);
     this.policys = new PolicyAPI(this.config);
     this.projects = new ProjectAPI(this.config);

@@ -24,10 +24,6 @@ Behavioral rules and versioned governance for the runner component. Inherits fro
 
 Declarative agent YAML schema for ConfigMap-based agent definitions. Covers entrypoint, providers (namespace-scoped shared resources), payloads, sandbox policies, sandbox templates, and environment variables for OpenShell Gateway-managed sandboxes.
 
-### [OpenShell Gateway](openshell-gateway.spec.md)
-
-Consolidated gateway specification covering provisioning, OIDC authentication, GRPCRoute exposure, and database provisioning. Gateways are declared as `kind: Gateway` resources, applied via `acpctl apply -k`, persisted in PostgreSQL, and reconciled by the GatewayReconciler into Kubernetes gateway deployments (StatefulSet/Deployment, Service, RBAC, certgen Job). Replaces the previous ConfigMap-based `platform-config` approach.
-
 ### [Agent Configuration Reuse via Kustomize Overlays](agent-inheritance.spec.md) *(Draft)*
 
 Configuration reuse patterns using Kustomize bases and overlays for agent, provider, and policy composition. Composition happens at apply time — the control plane only sees fully-resolved ConfigMaps. Extension to the Agent Sandbox Configuration spec.
@@ -35,10 +31,6 @@ Configuration reuse patterns using Kustomize bases and overlays for agent, provi
 ### [MLflow Tracing](mlflow-tracing.spec.md)
 
 MLflow tracing of Claude SDK interactions, enabled by default when credentials are present. Covers the `mlflow` credential provider, global credential fallback, runner image CA trust, conditional autologging activation, and OPA network policy for gateway mode.
-
-### [OpenShell Sandbox Observability](openshell-sandbox-observability.spec.md)
-
-Sandbox log streaming and policy display in the session detail UI. Surfaces OpenShell gateway logs (streaming SSE) and effective sandbox policy (filesystem, network, process controls) through the control plane's gateway gRPC channel.
 
 ### [MCP Server](mcp-server.spec.md)
 
@@ -50,4 +42,4 @@ Mock LLM inference service for self-contained e2e testing in kind. Covers the mo
 
 ### Multi-Cluster Scheduling
 
-Cluster registration, placement strategy, and cross-cluster session/gateway routing. The `Cluster` Kind models registered clusters with roles (`gateway`, `workload`, `hybrid`). The `PlacementStrategy` interface determines which cluster a session runs on (default: round-robin). Gateways can be deployed to dedicated gateway clusters while sessions run on workload clusters. See [data-model.spec.md § Cluster](data-model.spec.md#cluster--multi-cluster-scheduling) and [control-plane.spec.md § ClusterReconciler](control-plane.spec.md#internal-reconciler-cluster_reconcilergo--clusterreconciler).
+Cluster registration, placement strategy, and cross-cluster session routing. The `Cluster` Kind models registered clusters with roles (`workload`, `hybrid`). The `PlacementStrategy` interface determines which cluster a session runs on (default: round-robin). See [data-model.spec.md § Cluster](data-model.spec.md#cluster--multi-cluster-scheduling) and [control-plane.spec.md § ClusterReconciler](control-plane.spec.md#internal-reconciler-cluster_reconcilergo--clusterreconciler).

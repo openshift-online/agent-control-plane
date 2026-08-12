@@ -363,11 +363,11 @@
     "realm": [
       {
         "name": "openshell-admin",
-        "description": "OpenShell gateway administrator role"
+        "description": "OpenShell administrator role"
       },
       {
         "name": "openshell-user",
-        "description": "OpenShell gateway standard user role"
+        "description": "OpenShell standard user role"
       }
     ]
   },

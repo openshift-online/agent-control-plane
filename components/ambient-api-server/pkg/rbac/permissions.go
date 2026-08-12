@@ -15,7 +15,6 @@ const (
 	ResourceRoleBinding     Resource = "role_binding"
 	ResourceCredential      Resource = "credential"
 	ResourceProvider        Resource = "provider"
-	ResourceGateway         Resource = "gateway"
 	ResourceCluster         Resource = "cluster"
 	ResourceApplication     Resource = "application"
 )
@@ -121,12 +120,6 @@ var (
 	PermProviderUpdate = Permission{ResourceProvider, ActionUpdate}
 	PermProviderDelete = Permission{ResourceProvider, ActionDelete}
 	PermProviderList   = Permission{ResourceProvider, ActionList}
-
-	PermGatewayCreate = Permission{ResourceGateway, ActionCreate}
-	PermGatewayRead   = Permission{ResourceGateway, ActionRead}
-	PermGatewayUpdate = Permission{ResourceGateway, ActionUpdate}
-	PermGatewayDelete = Permission{ResourceGateway, ActionDelete}
-	PermGatewayList   = Permission{ResourceGateway, ActionList}
 
 	PermClusterCreate = Permission{ResourceCluster, ActionCreate}
 	PermClusterRead   = Permission{ResourceCluster, ActionRead}

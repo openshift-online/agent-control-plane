@@ -7,7 +7,6 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/openapi"
-	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/gateway"
 	pkgrbac "github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/handlers"
@@ -40,9 +39,6 @@ func (h providerHandler) Create(w http.ResponseWriter, r *http.Request) {
 			projectID := mux.Vars(r)["id"]
 			if !validIDPattern.MatchString(projectID) {
 				return nil, errors.Validation("invalid project id")
-			}
-			if err := gateway.CheckEditorTier(ctx, projectID); err != nil {
-				return nil, err
 			}
 			model := ConvertProvider(provider)
 			model.ProjectId = projectID
@@ -134,9 +130,6 @@ func (h providerHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			if !validIDPattern.MatchString(projectID) || !validIDPattern.MatchString(id) {
 				return nil, errors.Validation("invalid project or provider id")
 			}
-			if err := gateway.CheckEditorTier(ctx, projectID); err != nil {
-				return nil, err
-			}
 			found, svcErr := h.provider.Get(ctx, id)
 			if svcErr != nil {
 				return nil, svcErr
@@ -184,9 +177,6 @@ func (h providerHandler) Delete(w http.ResponseWriter, r *http.Request) {
 				return nil, errors.Validation("invalid project or provider id")
 			}
 			ctx := r.Context()
-			if err := gateway.CheckEditorTier(ctx, projectID); err != nil {
-				return nil, err
-			}
 			provider, svcErr := h.provider.Get(ctx, id)
 			if svcErr != nil {
 				return nil, svcErr

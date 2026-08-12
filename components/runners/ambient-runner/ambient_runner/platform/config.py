@@ -86,7 +86,7 @@ def load_mcp_config(context: RunnerContext, cwd_path: str) -> dict | None:
     Env vars in server configs (e.g. ``${JIRA_USERNAME}``) are NOT expanded
     here — they are passed through as-is so that MCP subprocesses inherit
     values from the sandbox environment at runtime. This is critical for
-    OpenShell gateway mode where credentials are lazily resolved.
+    OpenShell sandbox mode where credentials are lazily resolved.
 
     Returns:
         Dict of MCP server configs, or None.

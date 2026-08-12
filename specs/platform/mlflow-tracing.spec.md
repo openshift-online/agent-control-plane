@@ -3,7 +3,7 @@
 **Date:** 2026-07-01
 **Last Updated:** 2026-07-10
 **Status:** Implemented
-**Related:** `runner.spec.md` — runner lifecycle and observability; `credential-binding.spec.md` — credential resolution hierarchy; `openshell-sandbox-provisioning.spec.md` — gateway credential providers and provider type mapping; `agent-sandbox-config.spec.md` — agent sandbox provider declarations
+**Related:** `runner.spec.md` — runner lifecycle and observability; `credential-binding.spec.md` — credential resolution hierarchy; `agent-sandbox-config.spec.md` — agent sandbox provider declarations
 
 ---
 
@@ -271,7 +271,7 @@ When operating in gateway mode with MLflow tracing enabled, the sandbox OPA netw
 | `observability_config.py` | Controls MLflow backend via `OBSERVABILITY_BACKENDS` env var and `MLFLOW_TRACING_ENABLED` flag | Update so `MLFLOW_TRACKING_URI` is the default-on path; `OBSERVABILITY_BACKENDS` remains supported but is not required |
 | `Dockerfile.openshell` | No Red Hat IT Root CA | Add `INTERNAL_BUILD` build arg (default `true`); when `true`, fetch CA certificate and update trust store; fail build if fetch fails |
 | `pyproject.toml` | `mlflow[kubernetes]==3.13.0` in `mlflow-observability` extra | Verify `mlflow>=3.10` constraint is satisfied (current 3.13.0 already satisfies) |
-| `openshell-sandbox-provisioning.spec.md` § Provider type mapping | Maps `jira`, `google`, `kubeconfig`, and unknown types to `generic` | Add `mlflow` → `generic` to the mapping table |
+| ~~`openshell-sandbox-provisioning.spec.md`~~ *(removed)* | Previously mapped provider types | N/A — gateway lifecycle moved to HyperShell |
 | `agent-sandbox-config.spec.md` § Provider type mapping | Maps credential types to OpenShell provider types | Add `mlflow` → `generic` to the mapping table |
 | Control plane `provider_mapping.go` | Maps ambient credential providers to OpenShell provider types; contained `MLflowNetworkPolicy()` for dynamic OPA policy generation | Add `mlflow` → `generic` entry (follows existing pattern for `jira`, `google`, `kubeconfig`); remove `MLflowNetworkPolicy()` function (superseded by static `policy.yaml` entry); remove `MLflowSandboxEnvVars()` and `MLflowProviderCredentials()` — URI and experiment name now come from CP config, not the secret |
 | OPA policy (`policy.yaml`) | Network policy sections for known endpoints | Add `_mlflow_rh` static entry with the MLflow tracking server endpoint; uses `_` prefix convention for platform-managed policies (matching `_acp_internal`) |
@@ -282,7 +282,7 @@ When operating in gateway mode with MLflow tracing enabled, the sandbox OPA netw
 
 | Spec | Amendment |
 |------|-----------|
-| `openshell-sandbox-provisioning.spec.md` | Add `mlflow` → `generic` to the provider type mapping table |
+| ~~`openshell-sandbox-provisioning.spec.md`~~ *(removed)* | N/A — gateway lifecycle moved to HyperShell |
 | `agent-sandbox-config.spec.md` | Add `mlflow` → `generic` to the provider type mapping table |
 | `runner.spec.md` | Add `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_TOKEN`, `MLFLOW_EXPERIMENT_NAME` to the environment variables table; document autologging activation in the startup sequence |
 

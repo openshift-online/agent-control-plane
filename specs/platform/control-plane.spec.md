@@ -73,10 +73,6 @@ On `DELETED` → calls `cleanupSession` (deletes pod, secret, service account, s
 
 Watches Project events via gRPC informer. Creates Kubernetes namespaces for each Project via `ensureNamespace()`, provisions runner secrets, and sets up control plane RBAC. Project = Namespace — the ProjectReconciler is the sole owner of namespace lifecycle.
 
-#### `internal/reconciler/gateway_reconciler.go` — GatewayReconciler
-
-Watches Gateway resource events via gRPC informer. Reconciles `kind: Gateway` API resources into Kubernetes gateway deployments (StatefulSet, Service, RBAC, certgen Job, NetworkPolicy) in the project namespace. Replaces the previous ConfigMap-based `internal/gateway/` package. Reuses manifest templating from `internal/gateway/manifests.go` and validation from `internal/gateway/validation.go`. See [openshell-gateway.spec.md](./openshell-gateway.spec.md) for the full specification.
-
 #### `internal/reconciler/cluster_reconciler.go` — ClusterReconciler
 
 Watches Cluster resource events via gRPC informer. Maintains the `ClusterClientPool` — a map of `cluster_id → *KubeClient` with lazy initialization. When a Cluster is added or modified, the reconciler parses the stored kubeconfig and creates (or replaces) the corresponding `KubeClient`. When a Cluster is deleted, the reconciler closes and evicts the client. The local cluster client (`_local`) is always present and initialized from the control plane's own kubeconfig.
@@ -657,8 +653,7 @@ The `ambient-control-plane` ServiceAccount does not have `delete` on `namespaces
 | Sandbox snapshots in PostgreSQL, not a log store | Snapshots are bounded (500 lines), session-scoped, and low-frequency (15s writes). PostgreSQL handles this without a new dependency. A dedicated log store would be appropriate for unbounded historical search, not for session-scoped snapshots |
 | Pre-delete final snapshot before `DeleteSandbox` | Periodic 15s snapshots provide good coverage, but the final state is most valuable for post-mortem. Fetching before delete guarantees stored data matches the live stream |
 | Snapshot errors logged, partial data preserved | Snapshot collection must never block status sync or sandbox deletion — it is best-effort. `FetchSandboxLogs` returns partial data with the error so callers can persist whatever was collected. Periodic snapshots provide redundancy for failed final snapshots |
-| Gateway as API resource, not ConfigMap | Gateway configuration lives in PostgreSQL as `kind: Gateway`, applied via `acpctl apply -k`. Eliminates the ConfigMap watcher, `initGatewayProvisioning()`, and the `internal/gateway/config.go` code path. The GatewayReconciler receives events via the same gRPC watch stream as all other resources — unified, testable, composable via kustomize |
-| ProjectReconciler owns namespace lifecycle | Project = Namespace. The ProjectReconciler creates namespaces; the GatewayReconciler deploys gateways into existing namespaces. No ConfigMap needed to declare which namespaces exist |
+| ProjectReconciler owns namespace lifecycle | Project = Namespace. The ProjectReconciler creates namespaces. No ConfigMap needed to declare which namespaces exist |
 | Shared kustomize library | The rendering engine from `acpctl apply` is extracted into a shared library consumed by both the CLI and the ApplicationReconciler, enabling unit testing without a running cluster |
 
 ---

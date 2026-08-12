@@ -18,7 +18,6 @@ import type { DomainScheduledSession } from '@/domain/types'
 import { SchedulesTable } from './_components/schedules-table'
 import { CreateScheduleSheet } from './_components/create-schedule-sheet'
 import { RunsDialog } from './_components/runs-dialog'
-import { useGatewayMode } from '@/lib/use-gateway-mode'
 import { useCurrentUserRole } from '@/hooks/use-current-user-role'
 import { canManageSchedules } from '@/domain/roles'
 
@@ -35,11 +34,10 @@ export default function SchedulesPage() {
   const [editTarget, setEditTarget] = useState<DomainScheduledSession | null>(null)
   const [runsTarget, setRunsTarget] = useState<DomainScheduledSession | null>(null)
 
-  const { enabled: gatewayMode, isLoading: gatewayLoading } = useGatewayMode()
   const { roleName, isLoading: roleLoading } = useCurrentUserRole(projectId)
 
   const schedules = data?.items ?? []
-  const showScheduleControls = !gatewayMode || canManageSchedules(roleName)
+  const showScheduleControls = canManageSchedules(roleName)
 
   function handleDelete(id: string) {
     deleteMutation.mutate(
@@ -89,7 +87,7 @@ export default function SchedulesPage() {
     )
   }
 
-  if (isLoading || gatewayLoading || roleLoading) {
+  if (isLoading || roleLoading) {
     return (
       <div className="space-y-4 p-6">
         <Skeleton className="h-8 w-48" />

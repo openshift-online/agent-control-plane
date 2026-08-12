@@ -21,13 +21,13 @@ import (
 
 var Cmd = &cobra.Command{
 	Use:   "apply",
-	Short: "Apply declarative Project, Agent, Credential, Policy, RoleBinding, Gateway, and Cluster manifests",
-	Long: `Apply Projects, Agents, Credentials, Policies, RoleBindings, Gateways, and Clusters from YAML files or a Kustomize directory.
+	Short: "Apply declarative Project, Agent, Credential, Policy, RoleBinding, and Cluster manifests",
+	Long: `Apply Projects, Agents, Credentials, Policies, RoleBindings, and Clusters from YAML files or a Kustomize directory.
 
 Mirrors kubectl apply semantics: resources are created if they do not exist,
 or patched if they do. Output reports created / configured / unchanged per resource.
 
-Supported kinds: Project, Agent, Credential, Policy, RoleBinding, Gateway, Cluster
+Supported kinds: Project, Agent, Credential, Policy, RoleBinding, Cluster
 
 File format (one or more documents separated by ---):
 
@@ -174,15 +174,6 @@ func run(cmd *cobra.Command, _ []string) error {
 			result, err = applyProvider(ctx, client, doc)
 		case "rolebinding":
 			result, err = applyRoleBinding(ctx, client, doc)
-		case "gateway":
-			gwClient := client
-			if doc.Project != "" && doc.Project != projectName {
-				gwClient, err = factory.ForProject(doc.Project)
-				if err != nil {
-					return fmt.Errorf("create client for project %s: %w", doc.Project, err)
-				}
-			}
-			result, err = applyGateway(ctx, gwClient, doc)
 		case "cluster":
 			result, err = applyCluster(ctx, client, doc)
 		default:
@@ -858,178 +849,6 @@ func seedInbox(ctx context.Context, client *sdkclient.Client, projectID, agentID
 		}
 	}
 	return nil
-}
-
-// ── Gateway ─────────────────────────────────────────────────────────────────
-
-func applyGateway(ctx context.Context, client *sdkclient.Client, doc kustomize.Resource) (applyResult, error) {
-	existing, err := client.Gateways().List(ctx, &sdktypes.ListOptions{
-		Search: fmt.Sprintf("name = '%s'", doc.Name),
-		Size:   1,
-	})
-	if err != nil {
-		return applyResult{}, fmt.Errorf("listing gateways: %w", err)
-	}
-	if existing != nil && len(existing.Items) > 0 {
-		gw := existing.Items[0]
-		patch := buildGatewayPatch(gw, doc)
-		if len(patch) == 0 {
-			return applyResult{Kind: "Gateway", Name: doc.Name, Status: "unchanged"}, nil
-		}
-		if _, err = client.Gateways().Update(ctx, gw.ID, patch); err != nil {
-			return applyResult{}, err
-		}
-		return applyResult{Kind: "Gateway", Name: doc.Name, Status: "configured"}, nil
-	}
-
-	builder := sdktypes.NewGatewayBuilder().
-		Name(doc.Name).
-		ProjectID(client.Project())
-	if len(doc.ServerDnsNames) > 0 {
-		builder = builder.ServerDnsNames(doc.ServerDnsNames)
-	}
-	if doc.Image != "" {
-		builder = builder.Image(doc.Image)
-	}
-	if doc.Config != "" {
-		builder = builder.Config(doc.Config)
-	}
-	if len(doc.Labels) > 0 {
-		builder = builder.Labels(marshalStringMap(doc.Labels))
-	}
-	if len(doc.Annotations) > 0 {
-		builder = builder.Annotations(marshalStringMap(doc.Annotations))
-	}
-	if oidc := oidcFromResource(doc); oidc != nil {
-		builder = builder.Oidc(oidc)
-	}
-	if route := routeFromResource(doc); route != nil {
-		builder = builder.Route(route)
-	}
-	if db := databaseFromResource(doc); db != nil {
-		builder = builder.Database(db)
-	}
-	gw, buildErr := builder.Build()
-	if buildErr != nil {
-		return applyResult{}, buildErr
-	}
-	if _, createErr := client.Gateways().Create(ctx, gw); createErr != nil {
-		return applyResult{}, createErr
-	}
-	return applyResult{Kind: "Gateway", Name: doc.Name, Status: "created"}, nil
-}
-
-func buildGatewayPatch(existing sdktypes.Gateway, doc kustomize.Resource) map[string]any {
-	patch := sdktypes.NewGatewayPatchBuilder()
-	changed := false
-	if doc.Image != "" && doc.Image != existing.Image {
-		patch = patch.Image(doc.Image)
-		changed = true
-	}
-	if doc.Config != "" && doc.Config != existing.Config {
-		patch = patch.Config(doc.Config)
-		changed = true
-	}
-	if len(doc.ServerDnsNames) > 0 && !stringSliceEqual(doc.ServerDnsNames, existing.ServerDnsNames) {
-		patch = patch.ServerDnsNames(doc.ServerDnsNames)
-		changed = true
-	}
-	if len(doc.Labels) > 0 && marshalStringMap(doc.Labels) != existing.Labels {
-		patch = patch.Labels(marshalStringMap(doc.Labels))
-		changed = true
-	}
-	if len(doc.Annotations) > 0 && marshalStringMap(doc.Annotations) != existing.Annotations {
-		patch = patch.Annotations(marshalStringMap(doc.Annotations))
-		changed = true
-	}
-	if oidc := oidcFromResource(doc); oidc != nil {
-		patch = patch.Oidc(oidc)
-		changed = true
-	}
-	if route := routeFromResource(doc); route != nil {
-		patch = patch.Route(route)
-		changed = true
-	} else if existing.Route != nil && len(doc.Route) == 0 {
-		patch = patch.Route(nil)
-		changed = true
-	}
-	if db := databaseFromResource(doc); db != nil {
-		patch = patch.Database(db)
-		changed = true
-	} else if existing.Database != nil && len(doc.Database) == 0 {
-		patch = patch.Database(nil)
-		changed = true
-	}
-	if !changed {
-		return nil
-	}
-	return patch.Build()
-}
-
-func oidcFromResource(doc kustomize.Resource) *sdktypes.GatewayOidc {
-	if len(doc.Oidc) == 0 {
-		return nil
-	}
-	oidc := &sdktypes.GatewayOidc{}
-	if v, ok := doc.Oidc["issuer"].(string); ok {
-		oidc.Issuer = v
-	}
-	if v, ok := doc.Oidc["audience"].(string); ok {
-		oidc.Audience = v
-	}
-	if v, ok := doc.Oidc["jwks_ttl"].(int); ok {
-		oidc.JwksTtl = v
-	}
-	if v, ok := doc.Oidc["roles_claim"].(string); ok {
-		oidc.RolesClaim = v
-	}
-	if v, ok := doc.Oidc["admin_role"].(string); ok {
-		oidc.AdminRole = v
-	}
-	if v, ok := doc.Oidc["user_role"].(string); ok {
-		oidc.UserRole = v
-	}
-	if v, ok := doc.Oidc["scopes_claim"].(string); ok {
-		oidc.ScopesClaim = v
-	}
-	if oidc.Issuer == "" {
-		return nil
-	}
-	return oidc
-}
-
-func routeFromResource(doc kustomize.Resource) *sdktypes.GatewayRoute {
-	if doc.Route == nil {
-		return nil
-	}
-	route := &sdktypes.GatewayRoute{}
-	if v, ok := doc.Route["host"].(string); ok {
-		route.Host = v
-	}
-	return route
-}
-
-func databaseFromResource(doc kustomize.Resource) *sdktypes.GatewayDatabase {
-	if len(doc.Database) == 0 {
-		return nil
-	}
-	db := &sdktypes.GatewayDatabase{}
-	if v, ok := doc.Database["type"].(string); ok {
-		db.Type = v
-	}
-	if v, ok := doc.Database["storage_size"].(string); ok {
-		db.StorageSize = v
-	}
-	if v, ok := doc.Database["image"].(string); ok {
-		db.Image = v
-	}
-	if v, ok := doc.Database["external_secret_ref"].(string); ok {
-		db.ExternalSecretRef = v
-	}
-	if db.Type == "" {
-		return nil
-	}
-	return db
 }
 
 func applyCluster(ctx context.Context, client *sdkclient.Client, doc kustomize.Resource) (applyResult, error) {

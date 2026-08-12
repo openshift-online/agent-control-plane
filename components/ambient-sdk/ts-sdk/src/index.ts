@@ -23,10 +23,6 @@ export type { Credential, CredentialList, CredentialCreateRequest, CredentialPat
 export { CredentialBuilder, CredentialPatchBuilder } from './credential';
 export { CredentialAPI } from './credential_api';
 
-export type { Gateway, GatewayList, GatewayCreateRequest, GatewayPatchRequest } from './gateway';
-export { GatewayBuilder, GatewayPatchBuilder } from './gateway';
-export { GatewayAPI } from './gateway_api';
-
 export type { InboxMessage, InboxMessageList, InboxMessageCreateRequest, InboxMessagePatchRequest } from './inbox_message';
 export { InboxMessageBuilder, InboxMessagePatchBuilder } from './inbox_message';
 export { InboxMessageAPI } from './inbox_message_api';

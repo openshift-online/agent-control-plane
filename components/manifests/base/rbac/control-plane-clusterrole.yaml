@@ -11,10 +11,10 @@ rules:
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["roles", "rolebindings"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-# ConfigMaps (read agent/provider/policy declarations from tenant namespaces)
+# ConfigMaps (watch platform-config, create/delete configs including CA bundles)
 - apiGroups: [""]
   resources: ["configmaps"]
-  verbs: ["get", "list", "watch"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
 # Session runner resources (provision/deprovision per-session workloads in project namespaces)
 - apiGroups: [""]
   resources: ["secrets", "serviceaccounts", "services", "pods"]
@@ -25,61 +25,22 @@ rules:
 - apiGroups: ["batch"]
   resources: ["jobs"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-# ConfigMaps (watch platform-config, create/delete gateway configs including CA bundles)
-- apiGroups: [""]
-  resources: ["configmaps"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
-# Deployments, StatefulSets (gateway provisioning + cleanup)
-- apiGroups: ["apps"]
-  resources: ["deployments", "statefulsets", "statefulsets/finalizers"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-# PersistentVolumeClaims (gateway database storage)
-- apiGroups: [""]
-  resources: ["persistentvolumeclaims"]
-  verbs: ["get", "list", "watch", "create", "update", "delete", "deletecollection"]
-# NetworkPolicies (gateway isolation + session cleanup)
+# NetworkPolicies (session isolation + API server access)
 - apiGroups: ["networking.k8s.io"]
   resources: ["networkpolicies"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
-# ClusterRoles and ClusterRoleBindings (gateway RBAC)
-- apiGroups: ["rbac.authorization.k8s.io"]
-  resources: ["clusterroles", "clusterrolebindings"]
-  verbs: ["create", "get", "update", "patch", "escalate", "bind"]
-# Nodes (for gateway to read node info)
+# Nodes (read node info for scheduling)
 - apiGroups: [""]
   resources: ["nodes"]
   verbs: ["get", "list", "watch"]
-# TokenReviews (for gateway authentication)
-- apiGroups: ["authentication.k8s.io"]
-  resources: ["tokenreviews"]
-  verbs: ["create"]
-# Events (for gateway to watch events)
+# Events (watch for reconciliation)
 - apiGroups: [""]
   resources: ["events"]
   verbs: ["get", "list", "watch"]
-# Gateway API (GRPCRoute + BackendTLSPolicy for gateway route exposure)
-- apiGroups: ["gateway.networking.k8s.io"]
-  resources: ["grpcroutes", "backendtlspolicies"]
-  verbs: ["get", "list", "create", "update", "patch", "delete"]
-- apiGroups: ["gateway.networking.k8s.io"]
-  resources: ["gateways"]
-  verbs: ["get", "list"]
-# OpenShift Routes (NLB passthrough Route for gateway exposure on ROSA/AWS)
+# OpenShift Routes (session access via passthrough Routes in project namespaces)
 - apiGroups: ["route.openshift.io"]
   resources: ["routes", "routes/custom-host"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-# IngressControllers (auto-detect NLB domain for passthrough Route hostnames)
-- apiGroups: ["operator.openshift.io"]
-  resources: ["ingresscontrollers"]
-  verbs: ["get"]
-# Cluster ingress config (auto-detect base domain for Gateway API hostnames)
-- apiGroups: ["config.openshift.io"]
-  resources: ["ingresses"]
-  verbs: ["get"]
-# cert-manager (TLS certificate lifecycle for gateways)
-- apiGroups: ["cert-manager.io"]
-  resources: ["issuers", "certificates"]
-  verbs: ["get", "list", "create", "update", "patch", "delete"]
 # Sandboxes (OpenShell agent CRD)
 - apiGroups: ["agents.x-k8s.io"]
   resources: ["sandboxes", "sandboxes/status"]

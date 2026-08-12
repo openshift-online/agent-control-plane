@@ -32,7 +32,7 @@ RUN pip3 install --break-system-packages --no-cache-dir uv==${UV_VERSION} pre-co
 # (uvx downloads + installs into a temp venv which spikes memory to ~9GB)
 RUN uv tool install mcp-server-fetch==2025.4.7
 
-# OpenShell supervisor binary for sandbox isolation (file mode, no Gateway required)
+# OpenShell supervisor binary for sandbox isolation
 # libcap used for setcap to grant NET_ADMIN file capability to non-root binary
 COPY --from=ghcr.io/nvidia/openshell/supervisor:0.0.92 /openshell-sandbox /openshell-sandbox
 RUN chmod +x /openshell-sandbox && \

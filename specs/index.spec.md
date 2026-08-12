@@ -26,25 +26,20 @@ Machine-readable index for autonomous reconciliation (`/reconcile` skill).
 
 | Path | Domain | Primary Entities | Components | Depends On |
 |------|--------|-----------------|------------|------------|
-| `platform/data-model.spec.md` | platform | User, Project, Agent, Inbox, Session, SessionMessage, SessionEvent, Role, RoleBinding, Credential, ScheduledSession, Application, Gateway, ProjectSettings | API, SDK, BE, CLI, CP, FE | - |
+| `platform/data-model.spec.md` | platform | User, Project, Agent, Inbox, Session, SessionMessage, SessionEvent, Role, RoleBinding, Credential, ScheduledSession, Application, ProjectSettings | API, SDK, BE, CLI, CP, FE | - |
 | `platform/control-plane.spec.md` | platform | WatchManager, Informer, KubeReconciler | CP, Runner | data-model |
 | `platform/runner.spec.md` | platform | PlatformBridge, GRPCSessionListener, GRPCMessageWriter | Runner, CP | data-model, control-plane |
 | `platform/mcp-server.spec.md` | platform | MCP tools (16) | MCP, CLI, SDK | data-model |
 | `platform/agent-sandbox-config.spec.md` | platform | Agent (sandbox fields), Provider, Policy | CP, BE, API | data-model |
-| `platform/openshell-gateway.spec.md` | platform | Gateway, GatewayReconciler, SharedKustomizeLibrary, OIDC, GRPCRoute, Database | CP, CLI, SDK, BE | control-plane, data-model |
-| `platform/openshell-sandbox-provisioning.spec.md` | platform | Sandbox | CP | gateway-provisioning, agent-sandbox-config |
 | `platform/scheduled-session-execution.spec.md` | platform | ScheduledSession | BE, API, CP | data-model |
 | `platform/session-activity-tracking.spec.md` | platform | Session (last_activity_at) | BE, API | data-model |
 | `platform/agent-inheritance.spec.md` | platform | Agent (kustomize overlays) | CP | agent-sandbox-config |
 | `platform/runner-constitution.md` | platform | Runner (governance) | Runner | runner |
-| `platform/openshell-cli-e2e-test.spec.md` | platform | E2E test (openshell CLI), Demo script | Tests, CLI | openshell-sandbox-provisioning, gateway-provisioning |
 | `security/identity-boundaries.spec.md` | security | Identity types (6) | CP, BE, Runner | - |
 | `security/sso-authentication.spec.md` | security | OIDC, JWT, BFF session | BE, FE, CLI | identity-boundaries |
 | `security/rbac-enforcement.spec.md` | security | Role, RoleBinding, Permission | BE, CP, CLI | data-model, identity-boundaries |
 | `security/credential-binding.spec.md` | security | Credential, CredentialBinding | BE, API | data-model, rbac-enforcement |
 | `security/credential-encryption.spec.md` | security | Credential (encryption) | BE | credential-binding |
-| `security/gateway-rbac-policy.spec.md` | security | Agent (gateway CRUD gating) | BE, FE | rbac-enforcement |
-| `security/openshell-sandbox.spec.md` | security | Sandbox (isolation layers) | Runner, CP | identity-boundaries |
 | `cli/credentials-tui.spec.md` | cli | Credential, CredentialBinding (TUI) | CLI | data-model, credential-binding |
 | `ui/architecture.spec.md` | ui | BFF, Navigation, Design System | FE | sso-authentication |
 | `ui/views.spec.md` | ui | Session, Agent, Credential, Schedule views | FE | data-model, architecture |

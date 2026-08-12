@@ -2,7 +2,6 @@ kind: Kustomization
 resources:
   - ../../base
   - project.yaml
-  - gateway.yaml
   - credential-vertex.yaml
   - credential-jira.yaml
   - credential-github.yaml

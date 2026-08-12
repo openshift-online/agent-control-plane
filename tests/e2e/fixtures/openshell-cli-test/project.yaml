@@ -1,3 +1,0 @@
-kind: Project
-name: e2e-openshell-oidc
-description: Ephemeral project for openshell CLI e2e test (OIDC-enabled gateway)
