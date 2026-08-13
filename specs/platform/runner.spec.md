@@ -669,7 +669,7 @@ standard and OpenShell runner images.
 
 > **Status:** Implemented — validated end-to-end on ROSA OpenShift (kernel 5.14+)
 > **Companion docs:** `docs/internal/agents/openshell-runner-adaptation.md` (implementation details), `docs/internal/agents/openshell-security-analysis.md` (threat model)
-> **Formal requirements:** `specs/security/openshell-sandbox.spec.md`
+> **Formal requirements:** *(removed — spec consolidated into HyperShell)*
 
 The runner wraps the Claude Code subprocess inside NVIDIA OpenShell's Supervisor
 binary (`openshell-sandbox` v0.0.56), applying five defense-in-depth isolation
@@ -813,7 +813,7 @@ Before configuring providers or inference, the control plane enables `providers_
 
 The gateway's privacy router uses these settings to route inference requests through the configured provider, injecting credentials transparently. In gateway mode, the control plane sets `ACP_OPENSHELL_INFERENCE=true` for **all** provider types — not only Vertex. This ensures the runner activates inference routing mode regardless of which credential backend is configured (Vertex, Anthropic, NVIDIA, OpenAI, AWS Bedrock, etc.). The control plane does NOT set `USE_VERTEX`, `CLAUDE_CODE_USE_VERTEX`, or `ANTHROPIC_VERTEX_PROJECT_ID` in the sandbox environment — per the [OpenShell Vertex AI docs](https://docs.nvidia.com/openshell/providers/google-vertex-ai), setting these flags inside sandboxes causes Claude Code to bypass the gateway proxy and attempt direct connections with credential discovery, which fails because sandboxes don't expose provider credentials. The gateway handles routing transparently via the configured provider.
 
-See `openshell-sandbox-provisioning.spec.md` § Inference Configuration via SetClusterInference and § Providers V2 Enablement for the full requirements.
+Inference configuration details were previously documented in `openshell-sandbox-provisioning.spec.md` (removed — gateway lifecycle moved to HyperShell).
 
 #### Runner-Side Inference Routing (`ACP_OPENSHELL_INFERENCE`)
 
@@ -853,7 +853,7 @@ The runner does not need to set proxy or TLS CA vars for general cluster traffic
 
 The sandbox's OPA network policy MUST include an `_acp_internal` network policy rule that whitelists the control plane and API server endpoints for the runner's Python binaries. Without this, the supervisor proxy denies all cluster-internal traffic from the runner with `DENIED FORWARD`.
 
-The runner image bundles a default `policy.yaml` (via `Dockerfile.openshell`) that includes a static `_acp_internal` entry with hardcoded `ambient-code` namespace endpoints. In gateway mode, this baked-in policy becomes the sandbox's default policy. The control plane **overwrites** the `_acp_internal` entry after sandbox creation using OpenShell's `UpdateConfig` RPC with `merge_operations` (equivalent to `openshell policy update --add-allow`) to set the correct namespace-specific endpoints. All other rules in the baked-in default policy (e.g., `claude_code_vertex`, `github_ssh_over_https`, `pypi`) are preserved. See `agent-sandbox-config.spec.md` (ACP Internal Policy Injection) and `openshell-sandbox-provisioning.spec.md` (ACP Internal Network Policy Injection) for the injection mechanism.
+The runner image bundles a default `policy.yaml` (via `Dockerfile.openshell`) that includes a static `_acp_internal` entry with hardcoded `ambient-code` namespace endpoints. In gateway mode, this baked-in policy becomes the sandbox's default policy. The control plane **overwrites** the `_acp_internal` entry after sandbox creation using OpenShell's `UpdateConfig` RPC with `merge_operations` (equivalent to `openshell policy update --add-allow`) to set the correct namespace-specific endpoints. All other rules in the baked-in default policy (e.g., `claude_code_vertex`, `github_ssh_over_https`, `pypi`) are preserved. See `agent-sandbox-config.spec.md` (ACP Internal Policy Injection) for the injection mechanism.
 
 Required endpoints (namespace varies by deployment):
 

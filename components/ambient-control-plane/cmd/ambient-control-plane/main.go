@@ -28,10 +28,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 var (
@@ -233,26 +229,6 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		}
 	}()
 
-	gatewayErrCh := make(chan error, 1)
-	kubeCfg, kubeErr := buildKubeConfig(cfg.Kubeconfig)
-	if kubeErr != nil {
-		return fmt.Errorf("build kubeconfig for gateway reconciler: %w", kubeErr)
-	}
-	gwClientset, csErr := kubernetes.NewForConfig(kubeCfg)
-	if csErr != nil {
-		return fmt.Errorf("create kubernetes clientset for gateway reconciler: %w", csErr)
-	}
-	gwDynamic, dynErr := dynamic.NewForConfig(kubeCfg)
-	if dynErr != nil {
-		return fmt.Errorf("create dynamic client for gateway reconciler: %w", dynErr)
-	}
-	gwReconciler := reconciler.NewGatewayReconciler(factory, gwDynamic, gwClientset, provisioner, log.Logger,
-		reconciler.WithAuthModeCallback(gateway.SetNamespaceAuthMode))
-	go func() {
-		gatewayErrCh <- gwReconciler.Run(ctx)
-	}()
-	log.Info().Msg("gateway reconciler enabled")
-
 	sessionReconcilers := createSessionReconcilers(cfg.Reconcilers, factory, kube, projectKube, provisioner, gateway, kubeReconcilerCfg, log.Logger, inf)
 	for _, sessionRec := range sessionReconcilers {
 		inf.RegisterHandler("sessions", sessionRec.Reconcile)
@@ -301,11 +277,6 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		return fmt.Errorf("pod status syncer: %w", podSyncErr)
 	case appRecErr := <-appReconcilerErrCh:
 		return fmt.Errorf("application reconciler: %w", appRecErr)
-	case gwErr := <-gatewayErrCh:
-		if gwErr != nil {
-			return fmt.Errorf("gateway provisioning: %w", gwErr)
-		}
-		return <-infErrCh
 	case clusterHealthErr := <-clusterHealthErrCh:
 		return fmt.Errorf("cluster health syncer: %w", clusterHealthErr)
 	}
@@ -354,13 +325,6 @@ func createSessionReconcilers(reconcilerTypes []string, factory *reconciler.SDKC
 
 	log.Info().Int("count", len(reconcilers)).Strs("types", reconcilerTypes).Msg("configured session reconcilers")
 	return reconcilers
-}
-
-func buildKubeConfig(kubeconfig string) (*rest.Config, error) {
-	if kubeconfig != "" {
-		return clientcmd.BuildConfigFromFlags("", kubeconfig)
-	}
-	return rest.InClusterConfig()
 }
 
 func loadServiceCAPool() *x509.CertPool {

@@ -15,7 +15,6 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/openapi"
-	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/gateway"
 	pkgrbac "github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/common"
 	"github.com/openshift-online/rh-trex-ai/pkg/api/presenters"
@@ -233,14 +232,9 @@ func (h sessionHandler) Stop(w http.ResponseWriter, r *http.Request) {
 		Action: func() (interface{}, *errors.ServiceError) {
 			ctx := r.Context()
 			id := mux.Vars(r)["id"]
-			sess, getErr := h.session.Get(ctx, id)
+			_, getErr := h.session.Get(ctx, id)
 			if getErr != nil {
 				return nil, getErr
-			}
-			if sess.ProjectId != nil {
-				if tierErr := gateway.CheckEditorTier(ctx, *sess.ProjectId); tierErr != nil {
-					return nil, tierErr
-				}
 			}
 			sessionModel, err := h.session.Stop(ctx, id)
 			if err != nil {
@@ -747,12 +741,6 @@ func (h sessionHandler) AGUIRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
-	if session.ProjectId != nil {
-		if tierErr := gateway.CheckEditorTier(ctx, *session.ProjectId); tierErr != nil {
-			http.Error(w, tierErr.Reason, http.StatusForbidden)
-			return
-		}
-	}
 	base := runnerBaseURL(session)
 	if base == "" {
 		http.Error(w, "session runner not available", http.StatusServiceUnavailable)
@@ -770,12 +758,6 @@ func (h sessionHandler) AGUIInterrupt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
-	if session.ProjectId != nil {
-		if tierErr := gateway.CheckEditorTier(ctx, *session.ProjectId); tierErr != nil {
-			http.Error(w, tierErr.Reason, http.StatusForbidden)
-			return
-		}
-	}
 	base := runnerBaseURL(session)
 	if base == "" {
 		http.Error(w, "session runner not available", http.StatusServiceUnavailable)
@@ -792,12 +774,6 @@ func (h sessionHandler) AGUIFeedback(w http.ResponseWriter, r *http.Request) {
 	if svcErr != nil {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
-	}
-	if session.ProjectId != nil {
-		if tierErr := gateway.CheckEditorTier(ctx, *session.ProjectId); tierErr != nil {
-			http.Error(w, tierErr.Reason, http.StatusForbidden)
-			return
-		}
 	}
 	base := runnerBaseURL(session)
 	if base == "" {
@@ -840,12 +816,6 @@ func (h sessionHandler) AGUITaskStop(w http.ResponseWriter, r *http.Request) {
 	if svcErr != nil {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
-	}
-	if session.ProjectId != nil {
-		if tierErr := gateway.CheckEditorTier(ctx, *session.ProjectId); tierErr != nil {
-			http.Error(w, tierErr.Reason, http.StatusForbidden)
-			return
-		}
 	}
 	base := runnerBaseURL(session)
 	if base == "" {

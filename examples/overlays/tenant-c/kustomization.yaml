@@ -2,4 +2,3 @@ kind: Kustomization
 resources:
   - ../../base
   - project.yaml
-  - gateway.yaml

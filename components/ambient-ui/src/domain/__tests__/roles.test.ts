@@ -6,10 +6,9 @@ import {
   isAdminTier,
   canStartSession,
   canManageSchedules,
-  canManageAgents,
 } from '../roles'
 
-describe('Gateway Mode Tier Functions', () => {
+describe('Role Tier Functions', () => {
   describe('isViewerTier', () => {
     it('returns true for viewer roles', () => {
       expect(isViewerTier(RoleName.ProjectViewer)).toBe(true)
@@ -96,16 +95,6 @@ describe('Gateway Mode Tier Functions', () => {
 
     it('returns false for null role', () => {
       expect(canManageSchedules(null)).toBe(false)
-    })
-  })
-
-  describe('canManageAgents', () => {
-    it('returns false when gateway mode is active', () => {
-      expect(canManageAgents(true)).toBe(false)
-    })
-
-    it('returns true when gateway mode is inactive', () => {
-      expect(canManageAgents(false)).toBe(true)
     })
   })
 })

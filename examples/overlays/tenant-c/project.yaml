@@ -1,10 +1,9 @@
 kind: Project
 name: tenant-c
-description: OIDC-authenticated tenant demonstrating gateway route exposure and browser-based login.
+description: OIDC-authenticated tenant demonstrating browser-based login.
 prompt: |
-  This tenant demonstrates OIDC authentication with Keycloak. The gateway
-  requires a valid JWT token for access. Use this tenant to test browser-based
-  login flows and role-based access control via the openshell CLI.
+  This tenant demonstrates OIDC authentication with Keycloak. Use this tenant
+  to test browser-based login flows and role-based access control.
 labels:
   env: dev
   auth: oidc

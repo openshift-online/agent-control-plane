@@ -13,7 +13,7 @@ import (
 	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/agents"
 	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/clusters"
 	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/credentials"
-	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/gateways"
+
 	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/inbox"
 	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/policies"
 	_ "github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/projectSettings"

@@ -13,9 +13,7 @@ import (
 var responseBytes []byte
 
 func init() {
-	responseBytes, _ = json.Marshal(platformInfoResponse{
-		GatewayMode: true,
-	})
+	responseBytes, _ = json.Marshal(platformInfoResponse{})
 
 	pkgserver.RegisterRoutes("platformInfo", func(apiV1Router *mux.Router, _ pkgserver.ServicesInterface, authMiddleware environments.JWTMiddleware, _ auth.AuthorizationMiddleware) {
 		router := apiV1Router.PathPrefix("/platform-info").Subrouter()
@@ -30,6 +28,4 @@ func handleGetPlatformInfo(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write(responseBytes)
 }
 
-type platformInfoResponse struct {
-	GatewayMode bool `json:"gateway_mode"`
-}
+type platformInfoResponse struct{}

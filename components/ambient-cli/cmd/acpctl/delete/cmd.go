@@ -35,7 +35,6 @@ Valid resource types:
   role-binding      (aliases: rolebinding, rb)
   credential        (aliases: cred)
   application       (aliases: app, apps)
-  gateway           (aliases: gateways, gw)
   cluster           (aliases: clusters, cl)
 
 Use --all / -A to delete all resources of the given type.
@@ -50,7 +49,7 @@ For sessions, active sessions are stopped before deletion.`,
 func init() {
 	Cmd.Flags().BoolVarP(&deleteArgs.yes, "yes", "y", false, "Skip confirmation prompt")
 	Cmd.Flags().BoolVarP(&deleteArgs.all, "all", "A", false, "Delete all resources of this type")
-	Cmd.Flags().StringVar(&deleteArgs.project, "project", "", "Project override (gateway)")
+	Cmd.Flags().StringVar(&deleteArgs.project, "project", "", "Project override")
 }
 
 func run(cmd *cobra.Command, cmdArgs []string) error {
@@ -150,24 +149,6 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "application/%s deleted\n", name)
 		return nil
 
-	case "gateway", "gateways", "gw":
-		gwClient := client
-		if cmd.Flags().Changed("project") {
-			factory, factoryErr := connection.NewClientFactory()
-			if factoryErr != nil {
-				return factoryErr
-			}
-			gwClient, err = factory.ForProject(deleteArgs.project)
-			if err != nil {
-				return fmt.Errorf("create client for project %q: %w", deleteArgs.project, err)
-			}
-		}
-		if err := gwClient.Gateways().Delete(ctx, name); err != nil {
-			return fmt.Errorf("delete gateway %q: %w", name, err)
-		}
-		fmt.Fprintf(cmd.OutOrStdout(), "gateway/%s deleted\n", name)
-		return nil
-
 	case "cluster", "clusters", "cl":
 		if err := client.Clusters().Delete(ctx, name); err != nil {
 			return fmt.Errorf("delete cluster %q: %w", name, err)
@@ -176,7 +157,7 @@ func run(cmd *cobra.Command, cmdArgs []string) error {
 		return nil
 
 	default:
-		return fmt.Errorf("unknown or non-deletable resource type: %s\nDeletable types: project, project-settings, session, agent, role, role-binding, credential, application, gateway, cluster", cmdArgs[0])
+		return fmt.Errorf("unknown or non-deletable resource type: %s\nDeletable types: project, project-settings, session, agent, role, role-binding, credential, application, cluster", cmdArgs[0])
 	}
 }
 

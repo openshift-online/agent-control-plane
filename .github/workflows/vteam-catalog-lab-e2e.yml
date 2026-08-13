@@ -10,7 +10,6 @@ on:
       - 'tests/e2e/vteam-catalog-lab-test.sh'
       - 'tests/infra/**'
       - 'components/manifests/**'
-      - 'scripts/setup-kind-openshell.sh'
       - 'scripts/setup-kind-sso.sh'
   workflow_dispatch: {}
 

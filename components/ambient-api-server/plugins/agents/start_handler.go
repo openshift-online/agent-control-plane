@@ -13,7 +13,6 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/api/openapi"
-	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/gateway"
 	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/inbox"
 	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/plugins/sessions"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
@@ -53,11 +52,6 @@ func (h *startHandler) Start(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	projectID := mux.Vars(r)["id"]
 	agentID := mux.Vars(r)["agent_id"]
-
-	if tierErr := gateway.CheckEditorTier(ctx, projectID); tierErr != nil {
-		handlers.HandleError(ctx, w, tierErr)
-		return
-	}
 
 	mu := &sync.Mutex{}
 	if existing, loaded := h.locks.LoadOrStore(agentID, mu); loaded {

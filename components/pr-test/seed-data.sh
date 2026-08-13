@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # seed-data.sh — seed application data into a fresh ACP instance.
 #
-# Seeds users, RBAC, projects, credentials, providers, gateways, policies,
+# Seeds users, RBAC, projects, credentials, providers, policies,
 # and agents from examples/overlays/ so that every example is proven to work.
 #
 # Runs after install-openshift.sh, before e2e-smoke.sh.
@@ -281,23 +281,7 @@ SELECT {sql_esc(prov_id)}, {sql_esc(tenant)}, {sql_esc(prov['name'])}, {sql_esc_
 WHERE NOT EXISTS (SELECT 1 FROM providers WHERE project_id = {sql_esc(tenant)} AND name = {sql_esc(prov['name'])} AND deleted_at IS NULL);""")
 sql.append('')
 
-sql.append('-- ── 8. Gateways per project ──────────────────────────────────────')
-for tenant in tenants:
-    gw_path = f'examples/overlays/{tenant}/gateway.yaml'
-    if not os.path.isfile(os.path.join(repo_root, gw_path)):
-        continue
-    gw = load_yaml(gw_path)
-    gw_id = seed_id('gw', tenant, gw['name'])
-    dns_names = gw.get('server_dns_names', [])
-    labels = gw.get('labels', {})
-    oidc = gw.get('oidc')
-    route = gw.get('route')
-    sql.append(f"""INSERT INTO gateways (id, name, project_id, image, server_dns_names, labels, oidc, route, created_at, updated_at)
-SELECT {sql_esc(gw_id)}, {sql_esc(gw['name'])}, {sql_esc(tenant)}, {sql_esc_or_null(gw.get('image'))}, {json_esc(dns_names) if dns_names else 'NULL'}, {json_esc(labels) if labels else 'NULL'}, {json_esc(oidc) if oidc else 'NULL'}, {json_esc(route) if route else 'NULL'}, NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM gateways WHERE project_id = {sql_esc(tenant)} AND name = {sql_esc(gw['name'])} AND deleted_at IS NULL);""")
-sql.append('')
-
-sql.append('-- ── 9. Policies per project ──────────────────────────────────────')
+sql.append('-- ── 8. Policies per project ──────────────────────────────────────')
 policy_files = ['permissive.yaml', 'locked-down.yaml', 'mock-llm-permissive.yaml']
 for tenant in tenants:
     if tenant not in projects:
@@ -381,8 +365,6 @@ COUNTS=$($CLI exec -n "$NAMESPACE" "$DB_POD" -- \
     SELECT 'credentials=' || COUNT(*) FROM credentials WHERE deleted_at IS NULL
     UNION ALL
     SELECT 'providers=' || COUNT(*) FROM providers WHERE deleted_at IS NULL
-    UNION ALL
-    SELECT 'gateways=' || COUNT(*) FROM gateways WHERE deleted_at IS NULL
     UNION ALL
     SELECT 'policies=' || COUNT(*) FROM policies WHERE deleted_at IS NULL
     UNION ALL

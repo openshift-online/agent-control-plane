@@ -36,7 +36,6 @@ export function getDisplayRole(roleName: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
-// Gateway mode tier classification (per gateway-rbac-policy.spec.md)
 export function isViewerTier(roleName: string | null): boolean {
   if (!roleName) return true
 
@@ -75,6 +74,3 @@ export function canManageSchedules(roleName: string | null): boolean {
   return isAdminTier(roleName) || isEditorTier(roleName)
 }
 
-export function canManageAgents(gatewayMode: boolean): boolean {
-  return !gatewayMode // Nobody can manage agents via UI when gateway mode active
-}

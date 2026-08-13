@@ -36,8 +36,6 @@ tests/
 | `rbac_e2e_test.sh` | 26-phase RBAC enforcement: isolation, escalation, binding hierarchy, sub-resources | `test-local-dev.yml` |
 | `scheduled_sessions_e2e_test.sh` | Scheduled session CRUD, suspend/resume, trigger, runs history | `test-local-dev.yml` |
 | `local-dev-test.sh` | Infrastructure validation: pods, services, RBAC, security contexts, build commands | `test-local-dev.yml` |
-| `openshell-dual-tenant.sh` | Dual-tenant gateway provisioning, sandbox CRD, concurrent sessions | `make test-openshell-dual-tenant` |
-| `gateway-e2e-test.sh` | Full agent flow: `acpctl apply -k` -> `acpctl start` -> sandbox -> LLM inference -> response | `make test-gateway-e2e` |
 | `vteam-catalog-lab-test.sh` | Markdown-driven validation for `examples/vteam-catalog/QUICKSTART.md`: extracts copy/paste blocks, rejects placeholders, applies the catalog, and verifies agents/providers | `make test-vteam-catalog-lab` |
 
 ### infra/
@@ -69,8 +67,6 @@ Cluster lifecycle scripts consumed by `make kind-up`, `make kind-down`, and CI w
 make local-test-quick          # 5-second smoke test (cluster + pods + health)
 make local-test-dev            # Infrastructure validation (local-dev-test.sh)
 make test-all                  # Quick + comprehensive + CLI tests
-make test-openshell-dual-tenant  # Dual-tenant gateway provisioning
-make test-gateway-e2e          # Full agent flow (requires running cluster + acpctl)
 make test-vteam-catalog-lab    # Validate vTeam Catalog lab markdown commands
 make test-e2e                  # Cypress UI tests
 ```

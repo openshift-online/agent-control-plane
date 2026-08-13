@@ -562,16 +562,6 @@ sudo security add-trusted-cert -d -r trustRoot \
 
 After installing the bundle, HTTPS connections to `*.apps-crc.testing` and `*.acpgw.apps-crc.testing` will work without TLS verification flags.
 
-### Running E2E Tests on CRC
-
-```bash
-# Route exposure tests (requires ACP deployed on CRC)
-./tests/e2e/route-e2e-test.sh
-
-# With skip-cleanup for debugging
-./tests/e2e/route-e2e-test.sh --skip-cleanup
-```
-
 ### CRC Troubleshooting
 
 **Resource starvation (pods in CrashLoopBackOff):**

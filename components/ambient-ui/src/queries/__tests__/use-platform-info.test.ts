@@ -14,7 +14,7 @@ describe('usePlatformInfo', () => {
   it('fetches platform info successfully', async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ gateway_mode: true }),
+      json: async () => ({}),
     } as Response)
 
     const queryClient = new QueryClient({
@@ -29,28 +29,7 @@ describe('usePlatformInfo', () => {
     const { result } = renderHook(() => usePlatformInfo(), { wrapper })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(result.current.data?.gateway_mode).toBe(true)
-  })
-
-  it('fetches platform info with gateway_mode false', async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ gateway_mode: false }),
-    } as Response)
-
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false },
-      },
-    })
-    const wrapper = ({ children }: { children: ReactNode }) => {
-      return createElement(QueryClientProvider, { client: queryClient }, children)
-    }
-
-    const { result } = renderHook(() => usePlatformInfo(), { wrapper })
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(result.current.data?.gateway_mode).toBe(false)
+    expect(result.current.data).toEqual({})
   })
 
   it('handles fetch error', async () => {

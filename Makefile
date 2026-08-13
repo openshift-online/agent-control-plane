@@ -5,7 +5,7 @@
 .PHONY: local-test local-test-dev local-test-quick test-all local-troubleshoot local-port-forward local-stop-port-forward
 .PHONY: push-all registry-login setup-hooks remove-hooks lint check-minikube check-kind check-kubectl check-local-context dev-bootstrap kind-rebuild kind-reload-ambient-ui kind-reload-ambient-control-plane kind-reload-ambient-api-server kind-reload-runner-openshell kind-load-runner kind-status kind-login kind-sso-toggle kind-setup-vertex
 .PHONY: preflight-cluster preflight dev-env dev
-.PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift test-gateway-e2e test-vteam-catalog-lab test-readme
+.PHONY: e2e-test e2e-setup e2e-clean deploy-langfuse-openshift test-vteam-catalog-lab
 .PHONY: crc-up crc-down crc-reload-component crc-reload-images
 .PHONY: unleash-port-forward unleash-status
 .PHONY: kind-port-forward kind-port-forward-stop _kind-start-port-forward _kind-print-access kind-acpctl-login kind-apply-examples
@@ -96,7 +96,6 @@ KIND_FWD_BACKEND_PORT ?= 12080
 KIND_FWD_API_SERVER_PORT ?= 13080
 KIND_FWD_AMBIENT_UI_PORT ?= 14080
 KIND_FWD_KEYCLOAK_PORT ?= 11880
-KIND_FWD_GATEWAY_BASE_PORT ?= 15080
 # Remote kind host — set to Tailscale IP/hostname of the Linux build machine.
 # When set, kubeconfig is rewritten so kubectl/port-forward work from Mac.
 KIND_HOST ?=
@@ -112,8 +111,8 @@ CLOUD_ML_REGION ?= $(shell echo $$CLOUD_ML_REGION)
 GOOGLE_APPLICATION_CREDENTIALS ?= $(or $(shell echo $$GOOGLE_APPLICATION_CREDENTIALS),$(HOME)/.config/gcloud/application_default_credentials.json)
 VERTEX_CRED ?= $(GOOGLE_APPLICATION_CREDENTIALS)
 
-# OpenShell Gateway Configuration
-# Provisions tenant namespaces with an OpenShell gateway each.
+# OpenShell Tenant Configuration
+# Provisions tenant namespaces with OpenShell sandbox support.
 # Override with OPENSHELL_TENANTS="ns1 ns2" to change the set of tenant namespaces.
 # Skip acpctl apply for specific tenants: SKIP_TENANT_SETUP="tenant-c"
 OPENSHELL_TENANTS ?= tenant-a tenant-b tenant-c vteam-product-swarm codebase-maintainers
@@ -181,9 +180,6 @@ vendor-openshell-proto: ## Vendor OpenShell proto files and regenerate Go stubs.
 
 ##@ Dependency Updates
 
-update-openshell: ## Update OpenShell to a new version (protos + images). Usage: make update-openshell VERSION=v0.0.83
-	@test -n "$(VERSION)" || (echo "Usage: make update-openshell VERSION=<tag>"; exit 1)
-	bash scripts/update-openshell.sh $(VERSION)
 
 update-agent-sandbox: ## Update agent-sandbox CRD version. Usage: make update-agent-sandbox VERSION=v0.5.1
 	@test -n "$(VERSION)" || (echo "Usage: make update-agent-sandbox VERSION=<tag>"; exit 1)
@@ -484,23 +480,9 @@ local-test-dev: ## Run local developer experience tests
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running local developer experience tests..."
 	@./tests/e2e/local-dev-test.sh $(if $(filter true,$(CI_MODE)),--ci,)
 
-test-openshell-dual-tenant: ## Test dual-tenant OpenShell gateway provisioning (requires kind-up)
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running dual-tenant OpenShell sandbox provisioning test..."
-	@API_URL="http://localhost:$(KIND_FWD_API_SERVER_PORT)" ./tests/e2e/openshell-dual-tenant.sh
-
-test-gateway-e2e: check-kubectl _kind-require-cluster ## Run full gateway e2e test (agent start → inference → response)
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running gateway e2e test..."
-	@TEST_TOKEN=$$(kubectl get secret test-user-token -n $(NAMESPACE) -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null) \
-		API_URL="http://localhost:$(KIND_FWD_API_SERVER_PORT)" ./tests/e2e/gateway-e2e-test.sh \
-		$(if $(filter true 1,$(SKIP_CLEANUP)),--skip-cleanup)
-
 test-vteam-catalog-lab: check-kubectl _kind-require-cluster ## Validate vTeam Catalog lab markdown copy/paste flow
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running vTeam Catalog lab markdown e2e test..."
 	@./tests/e2e/vteam-catalog-lab-test.sh
-
-test-readme: ## E2E-test README.md technical content (static gate always; live flow if a cluster is reachable)
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Running README e2e test..."
-	@./tests/e2e/readme-e2e-test.sh
 
 local-test-quick: check-kubectl ## Quick smoke test of local environment
 	@echo "$(COLOR_BOLD)🧪 Quick Smoke Test$(COLOR_RESET)"
@@ -934,7 +916,7 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 	fi
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for pods..."
 	@./tests/infra/wait-for-ready.sh
-	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell: gateway mode"
+	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) OpenShell: sandbox mode"
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Configuring SSO..."
 	@NAMESPACE=$(NAMESPACE) KIND_FWD_AMBIENT_UI_PORT=$(KIND_FWD_AMBIENT_UI_PORT) KIND_FWD_KEYCLOAK_PORT=$(KIND_FWD_KEYCLOAK_PORT) \
 		./scripts/setup-kind-sso.sh
@@ -945,7 +927,7 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 			echo "$(COLOR_GREEN)✓$(COLOR_RESET) Added $$KC_HOST to /etc/hosts"; \
 		else \
 			echo "$(COLOR_YELLOW)⚠$(COLOR_RESET) $$KC_HOST is not in /etc/hosts."; \
-			echo "  OIDC gateway authentication requires this hostname to resolve to localhost."; \
+			echo "  OIDC authentication requires this hostname to resolve to localhost."; \
 			printf "  Add it now? (requires sudo) [y/N] "; \
 			read -r _ans; \
 			case "$$_ans" in \
@@ -954,7 +936,7 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 					echo "$(COLOR_GREEN)✓$(COLOR_RESET) Added $$KC_HOST to /etc/hosts"; \
 					;; \
 				*) \
-					echo "  Skipped. Add it manually if OIDC gateways fail:"; \
+					echo "  Skipped. Add it manually if OIDC fails:"; \
 					echo "    echo \"127.0.0.1 $$KC_HOST\" | sudo tee -a /etc/hosts"; \
 					;; \
 			esac; \
@@ -967,16 +949,8 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Extracting test token..."
 	@KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_HTTP_PORT=$(KIND_HTTP_PORT) CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./tests/infra/extract-token.sh
 	@echo "$(COLOR_GREEN)✓$(COLOR_RESET) Kind cluster '$(KIND_CLUSTER_NAME)' ready!"
-	@# OpenShell gateway setup if requested
+	@# Tenant setup if requested
 	@if [ "$(NO_SETUP)" != "true" ]; then \
-		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Installing OpenShell gateway prerequisites ($(OPENSHELL_TENANTS))..."; \
-		NAMESPACE=$(NAMESPACE) \
-		OPENSHELL_TENANTS="$(OPENSHELL_TENANTS)" \
-		AGENT_SANDBOX_VERSION="$(AGENT_SANDBOX_VERSION)" \
-		VERTEX_CRED="$(VERTEX_CRED)" \
-		ANTHROPIC_VERTEX_PROJECT_ID="$(ANTHROPIC_VERTEX_PROJECT_ID)" \
-		CLOUD_ML_REGION="$(CLOUD_ML_REGION)" \
-		./scripts/setup-kind-openshell.sh; \
 		echo "$(COLOR_BLUE)▶$(COLOR_RESET) Building and deploying mock LLM server..."; \
 		$(MAKE) --no-print-directory kind-load-mock-llm; \
 		kubectl apply -k tests/mock-llm/manifests/ $(QUIET_REDIRECT); \
@@ -991,6 +965,19 @@ kind-up: preflight-cluster build-cli ## Start kind cluster and deploy the platfo
 		sleep 2; \
 		TOKEN=$$(kubectl get secret test-user-token -n $(NAMESPACE) -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null); \
 		$$ACPCTL login --url "http://localhost:$${PF_PORT}" --token "$$TOKEN" >/dev/null 2>&1; \
+		for ns in $(OPENSHELL_TENANTS); do \
+			if echo " $(SKIP_TENANT_SETUP) " | grep -q " $$ns "; then continue; fi; \
+			[ -f "examples/overlays/$$ns/kustomization.yaml" ] || continue; \
+			EXISTING=$$(curl -sf -H "Authorization: Bearer $$TOKEN" "http://localhost:$${PF_PORT}/api/ambient/v1/projects/$$ns" 2>/dev/null); \
+			if [ -z "$$EXISTING" ] || echo "$$EXISTING" | grep -q '"code":404'; then \
+				curl -sf -X POST \
+					-H "Authorization: Bearer $$TOKEN" \
+					-H "Content-Type: application/json" \
+					-d "{\"name\": \"$$ns\"}" \
+					"http://localhost:$${PF_PORT}/api/ambient/v1/projects" >/dev/null && \
+				echo "  $$ns: ACP project created"; \
+			fi; \
+		done; \
 		FLEET_FAILED=""; \
 		for ns in $(OPENSHELL_TENANTS); do \
 			if echo " $(SKIP_TENANT_SETUP) " | grep -q " $$ns "; then \
@@ -1127,14 +1114,6 @@ _kind-print-access:
 	@echo "  Backend:    http://localhost:$(KIND_FWD_BACKEND_PORT)"
 	@echo "  Ambient UI: http://localhost:$(KIND_FWD_AMBIENT_UI_PORT)"
 	@echo "  Keycloak:   http://localhost:$(KIND_FWD_KEYCLOAK_PORT)"
-	@for PORT_FILE in $(KIND_PF_DIR)/kind-pf-openshell-*.port; do \
-		[ -f "$$PORT_FILE" ] || continue; \
-		NS=$$(basename "$$PORT_FILE" .port | sed 's/^kind-pf-openshell-//'); \
-		PORT=$$(cat "$$PORT_FILE"); \
-		if [ -n "$$PORT" ]; then \
-			echo "  Gateway ($$NS): https://localhost:$$PORT"; \
-		fi; \
-	done
 	@echo ""
 	@echo "$(COLOR_BOLD)Default SSO users:$(COLOR_RESET)"
 	@echo "  Developer: developer / developer (ambient-users group)"
@@ -1143,19 +1122,6 @@ _kind-print-access:
 	@echo "  Get test token: kubectl get secret test-user-token -n ambient-code -o jsonpath='{.data.token}' | base64 -d"
 	@echo ""
 	@echo "  Configure CLI:      $(COLOR_BOLD)make kind-acpctl-login$(COLOR_RESET)"
-	@GW_FOUND=0; \
-	for PORT_FILE in $(KIND_PF_DIR)/kind-pf-openshell-*.port; do \
-		[ -f "$$PORT_FILE" ] || continue; \
-		NS=$$(basename "$$PORT_FILE" .port | sed 's/^kind-pf-openshell-//'); \
-		PORT=$$(cat "$$PORT_FILE"); \
-		if [ -n "$$PORT" ]; then \
-			echo "  Setup openshell:    $(COLOR_BOLD)acpctl gateway setup-cli --kubectl --project $$NS --name $$NS$(COLOR_RESET)"; \
-			GW_FOUND=1; \
-		fi; \
-	done; \
-	if [ "$$GW_FOUND" -eq 0 ]; then \
-		echo "  Setup openshell:    $(COLOR_BOLD)acpctl gateway setup-cli --kubectl --project <namespace> --name <namespace>$(COLOR_RESET)"; \
-	fi
 	@echo "  Stop port-forwards: $(COLOR_BOLD)make kind-port-forward-stop$(COLOR_RESET)"
 	@echo "  Run tests:          $(COLOR_BOLD)make test-e2e$(COLOR_RESET)"
 
@@ -1166,17 +1132,6 @@ _kind-start-port-forward:
 	@kubectl port-forward -n $(NAMESPACE) svc/ambient-api-server $(KIND_FWD_BACKEND_PORT):8000 >$(KIND_PF_DIR)/kind-pf-backend.log 2>&1 & echo $$! > $(KIND_PF_DIR)/kind-pf-backend.pid
 	@kubectl port-forward -n $(NAMESPACE) svc/ambient-ui-service $(KIND_FWD_AMBIENT_UI_PORT):3000 >$(KIND_PF_DIR)/kind-pf-ambient-ui.log 2>&1 & echo $$! > $(KIND_PF_DIR)/kind-pf-ambient-ui.pid
 	@kubectl port-forward -n $(NAMESPACE) svc/keycloak-service $(KIND_FWD_KEYCLOAK_PORT):11880 >$(KIND_PF_DIR)/kind-pf-keycloak.log 2>&1 & echo $$! > $(KIND_PF_DIR)/kind-pf-keycloak.pid
-	@# Discover and port-forward openshell gateways on deterministic ports
-	@GW_NAMESPACES=$$(kubectl get pods --all-namespaces -l app.kubernetes.io/instance=openshell-gateway -o jsonpath='{range .items[*]}{.metadata.namespace}{"\n"}{end}' 2>/dev/null | sort -u); \
-	OFFSET=0; \
-	for NS in $$GW_NAMESPACES; do \
-		PORT=$$(($(KIND_FWD_GATEWAY_BASE_PORT) + $$OFFSET)); \
-		kubectl port-forward -n "$$NS" statefulset/openshell-gateway $$PORT:8080 \
-			>"$(KIND_PF_DIR)/kind-pf-openshell-$$NS.log" 2>&1 & \
-		echo $$! > "$(KIND_PF_DIR)/kind-pf-openshell-$$NS.pid"; \
-		echo "$$PORT" > "$(KIND_PF_DIR)/kind-pf-openshell-$$NS.port"; \
-		OFFSET=$$(($$OFFSET + 1)); \
-	done
 	@sleep 1
 	@FAILED=0; \
 	for svc in frontend backend ambient-ui keycloak; do \
@@ -1186,18 +1141,6 @@ _kind-start-port-forward:
 		else \
 			echo "$(COLOR_RED)✗$(COLOR_RESET) $$svc port-forward failed to start (check $(KIND_PF_DIR)/kind-pf-$$svc.log)"; \
 			FAILED=1; \
-		fi; \
-	done; \
-	for PID_FILE in $(KIND_PF_DIR)/kind-pf-openshell-*.pid; do \
-		[ -f "$$PID_FILE" ] || continue; \
-		NS=$$(basename "$$PID_FILE" .pid | sed 's/^kind-pf-openshell-//'); \
-		if ps -p $$(cat "$$PID_FILE") >/dev/null 2>&1; then \
-			PORT=$$(cat "$(KIND_PF_DIR)/kind-pf-openshell-$$NS.port" 2>/dev/null); \
-			if [ -n "$$PORT" ]; then \
-				echo "$(COLOR_GREEN)✓$(COLOR_RESET) openshell-gateway ($$NS) -> localhost:$$PORT"; \
-			fi; \
-		else \
-			echo "$(COLOR_RED)✗$(COLOR_RESET) openshell-gateway ($$NS) port-forward failed (check $(KIND_PF_DIR)/kind-pf-openshell-$$NS.log)"; \
 		fi; \
 	done; \
 	if [ "$$FAILED" -ne 0 ]; then exit 1; fi
@@ -1216,19 +1159,6 @@ kind-port-forward-stop: ## Stop background kind port-forwarding
 			rm -f "$$PID_FILE"; \
 		fi; \
 		rm -f "$(KIND_PF_DIR)/kind-pf-$$svc.log"; \
-	done; \
-	for PID_FILE in $(KIND_PF_DIR)/kind-pf-openshell-*.pid; do \
-		[ -f "$$PID_FILE" ] || continue; \
-		NS=$$(basename "$$PID_FILE" .pid | sed 's/^kind-pf-openshell-//'); \
-		PID=$$(cat "$$PID_FILE"); \
-		if ps -p "$$PID" >/dev/null 2>&1; then \
-			kill "$$PID" 2>/dev/null || true; \
-			echo "  Stopped openshell-gateway ($$NS) port-forward (PID $$PID)"; \
-			STOPPED=1; \
-		fi; \
-		rm -f "$$PID_FILE"; \
-		rm -f "$(KIND_PF_DIR)/kind-pf-openshell-$$NS.log"; \
-		rm -f "$(KIND_PF_DIR)/kind-pf-openshell-$$NS.port"; \
 	done; \
 	if [ "$$STOPPED" -eq 1 ]; then \
 		echo "$(COLOR_GREEN)✓$(COLOR_RESET) Port forwarding stopped"; \
@@ -1479,14 +1409,6 @@ kind-status: check-kind ## Show all kind clusters and their port assignments
 	@if [ -n "$(KIND_HOST)" ]; then echo "  Host:     $(KIND_HOST) (remote)"; else echo "  Host:     localhost"; fi
 	@echo "  NodePort: $(KIND_HTTP_PORT) (HTTP) / $(KIND_HTTPS_PORT) (HTTPS)"
 	@echo "  Forward:  $(KIND_FWD_FRONTEND_PORT) (frontend) / $(KIND_FWD_BACKEND_PORT) (backend) / $(KIND_FWD_KEYCLOAK_PORT) (keycloak)"
-	@GW_LINE=""; OFFSET=0; \
-	for NS in $(OPENSHELL_TENANTS); do \
-		PORT=$$(($(KIND_FWD_GATEWAY_BASE_PORT) + $$OFFSET)); \
-		if [ -n "$$GW_LINE" ]; then GW_LINE="$$GW_LINE / "; fi; \
-		GW_LINE="$$GW_LINE$$PORT ($$NS)"; \
-		OFFSET=$$(($$OFFSET + 1)); \
-	done; \
-	if [ -n "$$GW_LINE" ]; then echo "  Gateways: $$GW_LINE"; fi
 	@echo ""
 	@CLUSTERS=$$($(if $(filter podman,$(CONTAINER_ENGINE)),KIND_EXPERIMENTAL_PROVIDER=podman) kind get clusters 2>/dev/null); \
 	if [ -z "$$CLUSTERS" ]; then \
@@ -1840,8 +1762,6 @@ crc-up: build-cli ## Deploy the platform to CRC (OpenShift Local). LOCAL_IMAGES=
 		echo "$(COLOR_RED)✗$(COLOR_RESET) Not logged in to CRC. Run: eval \$$(crc oc-env) && oc login -u kubeadmin https://api.crc.testing:6443"; \
 		exit 1; \
 	fi
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Setting up Gateway API prerequisites..."
-	@bash scripts/setup-gateway-api.sh
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Installing agent-sandbox controller $(AGENT_SANDBOX_VERSION)..."
 	@oc apply -f "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/$(AGENT_SANDBOX_VERSION)/manifest.yaml"
 	@echo "  Waiting for agent-sandbox controller..."
@@ -1865,11 +1785,6 @@ crc-up: build-cli ## Deploy the platform to CRC (OpenShift Local). LOCAL_IMAGES=
 	@oc new-project $(CRC_NAMESPACE) 2>/dev/null || oc project $(CRC_NAMESPACE)
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Applying kustomize overlay..."
 	@oc apply --validate=false -k $(CRC_OVERLAY)/
-	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Creating gateway-trusted-ca from OpenShift ingress CA..."
-	@oc get secret router-ca -n openshift-ingress-operator -o jsonpath='{.data.tls\.crt}' | \
-		base64 -d | \
-		oc create configmap gateway-trusted-ca --from-file=ca-bundle.crt=/dev/stdin \
-			-n $(CRC_NAMESPACE) --dry-run=client -o yaml | oc apply -f -
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Waiting for infrastructure pods..."
 	@for deploy in ambient-api-server-db postgresql keycloak; do \
 		echo "  Waiting for $$deploy..."; \
@@ -1940,7 +1855,7 @@ crc-up: build-cli ## Deploy the platform to CRC (OpenShift Local). LOCAL_IMAGES=
 	@echo "$(COLOR_BLUE)▶$(COLOR_RESET) Provisioning tenant namespaces ($(OPENSHELL_TENANTS))..."
 	@for ns in $(OPENSHELL_TENANTS); do \
 		oc new-project $$ns 2>/dev/null || oc project $$ns >/dev/null 2>&1 || true; \
-		oc adm policy add-scc-to-user privileged -z openshell-gateway-sandbox -n $$ns 2>/dev/null || true; \
+		oc adm policy add-scc-to-user privileged -z openshell-sandbox -n $$ns 2>/dev/null || true; \
 		oc create secret generic mock-llm-creds --namespace=$$ns \
 			--from-literal=ANTHROPIC_AUTH_TOKEN=mock-llm-token \
 			--dry-run=client -o yaml | oc apply -f - >/dev/null 2>&1; \

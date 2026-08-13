@@ -7,9 +7,7 @@
 # What this script does:
 #   1. Validates the release exists on GitHub.
 #   2. Updates the default AGENT_SANDBOX_VERSION in the Makefile.
-#   3. Updates the default in scripts/setup-kind-openshell.sh.
-#   4. Updates the version reference in README.md.
-#   5. Updates the install command in specs/platform/openshell-sandbox-provisioning.spec.md.
+#   3. Updates the version reference in README.md.
 
 set -euo pipefail
 
@@ -55,34 +53,14 @@ sed -i.bak "s|AGENT_SANDBOX_VERSION ?= $OLD_VERSION|AGENT_SANDBOX_VERSION ?= $NE
 rm -f "${MAKEFILE}.bak"
 echo "  updated AGENT_SANDBOX_VERSION in Makefile"
 
-# ── 3. Update setup-kind-openshell.sh ────────────────────────────────────────
+# ── 3. Update README.md ─────────────────────────────────────────────────────
 
-echo "=== Step 3: Updating setup-kind-openshell.sh ==="
-SETUP_SCRIPT="$REPO_ROOT/scripts/setup-kind-openshell.sh"
-if [[ -f "$SETUP_SCRIPT" ]]; then
-  sed -i.bak "s|AGENT_SANDBOX_VERSION:-$OLD_VERSION|AGENT_SANDBOX_VERSION:-$NEW_VERSION|g" "$SETUP_SCRIPT"
-  rm -f "${SETUP_SCRIPT}.bak"
-  echo "  updated default in setup-kind-openshell.sh"
-fi
-
-# ── 4. Update README.md ─────────────────────────────────────────────────────
-
-echo "=== Step 4: Updating README.md ==="
+echo "=== Step 3: Updating README.md ==="
 README="$REPO_ROOT/README.md"
 if [[ -f "$README" ]] && grep -q "$OLD_VERSION" "$README"; then
   sed -i.bak "s|$OLD_VERSION|$NEW_VERSION|g" "$README"
   rm -f "${README}.bak"
   echo "  updated version references in README.md"
-fi
-
-# ── 5. Update provisioning spec ─────────────────────────────────────────────
-
-echo "=== Step 5: Updating provisioning spec ==="
-SPEC="$REPO_ROOT/specs/platform/openshell-sandbox-provisioning.spec.md"
-if [[ -f "$SPEC" ]] && grep -q "$OLD_VERSION" "$SPEC"; then
-  sed -i.bak "s|$OLD_VERSION|$NEW_VERSION|g" "$SPEC"
-  rm -f "${SPEC}.bak"
-  echo "  updated version references in provisioning spec"
 fi
 
 # ── done ────────────────────────────────────────────────────────────────────
@@ -92,8 +70,6 @@ echo "agent-sandbox updated to $NEW_VERSION."
 echo ""
 echo "Files updated:"
 echo "  - Makefile (AGENT_SANDBOX_VERSION default)"
-echo "  - scripts/setup-kind-openshell.sh (fallback default)"
 echo "  - README.md (version references)"
-echo "  - specs/platform/openshell-sandbox-provisioning.spec.md (install command)"
 echo ""
 echo "Next: run 'make kind-up' to test with the new CRD version."

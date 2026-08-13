@@ -29,7 +29,7 @@ skills/
 │   └── dev-cluster/       # Kind cluster lifecycle for local testing
 ├── deploy/
 │   ├── deploy-cluster/    # Production OpenShift deployment
-│   └── kind/              # Kind with OpenShell gateway mode
+│   └── kind/              # Kind cluster lifecycle
 ├── plan/
 │   └── spec/              # Spec authoring (desired state)
 ├── review/
@@ -71,13 +71,11 @@ Reconciliation processes specs in this topological order:
 ```
 Layer 0 (roots):  data-model, identity-boundaries, standards/*
 Layer 1:          control-plane, sso-authentication, rbac-enforcement
-Layer 2:          runner, agent-sandbox-config, credential-binding, gateway-rbac-policy
-Layer 3:          openshell-gateway, credential-encryption, openshell-sandbox
-Layer 4:          openshell-sandbox-provisioning, agent-inheritance, project-gateway-lifecycle
-Layer 5:          scheduled-session-execution, session-activity-tracking, mcp-server
-Layer 6 (leaves): architecture, annotations, views, live-preview, project-sharing,
-                  scheduled-sessions, work-tracking-dashboard, credentials-tui,
-                  openshell-cli-e2e-test, gateway-cli
+Layer 2:          runner, agent-sandbox-config, credential-binding
+Layer 3:          credential-encryption, agent-inheritance
+Layer 4:          scheduled-session-execution, session-activity-tracking, mcp-server
+Layer 5 (leaves): architecture, annotations, views, live-preview, project-sharing,
+                  scheduled-sessions, work-tracking-dashboard, credentials-tui
 ```
 
 ---
@@ -98,16 +96,14 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | S1 | identity-boundaries | Per-session RBAC Roles with resourceNames | CP | **done** | blocker | `ensureSessionRole` creates Role+RoleBinding with `resourceNames` scoping per session SA. |
 | S2 | credential-binding | credential:token-reader grant lifecycle | CP | **done** | blocker | Already implemented: `grantTokenReaderBindings`/`revokeTokenReaderBindings` in reconciler. |
 | S3 | identity-boundaries | NetworkPolicy session isolation | CP | **done** | blocker | `ensureSessionNetworkPolicy` creates per-session NetworkPolicy restricting ingress to CP + self only. |
-| S4 | gateway-rbac | Platform-info endpoint authentication | BE | **done** | critical | Converted from `RegisterPreAuthMiddleware` to `RegisterRoutes` with `AuthenticateAccountJWT`. |
 | S5 | identity-boundaries | Cluster-internal caller validation | BE | **done** | critical | `GetToken` handler now requires `IsServiceCaller` or `IsGlobalAdmin`. |
 | S6 | sso-authentication | K8s Impersonation headers | BE | missing | major | Backend doesn't implement `Impersonate-User`/`Impersonate-Group` headers. Deferred since API server uses PostgreSQL not K8s CRs. |
 | S7 | credential-binding | Duplicate binding prevention at API level | BE | **done** | major | Already implemented: UNIQUE index `idx_role_bindings_unique` + `HandleCreateError` returns 409 Conflict. |
-| S8 | gateway-rbac | Role-to-tier enforcement in handlers | BE | **done** | major | Shared `CheckEditorTier`/`CheckAdminTier` in `pkg/gateway/`. Integrated into agent, session, scheduled session handlers. |
 | S9 | sso-authentication | API key dual-path (JWT + TokenReview) | BE | partial | major | JWT auth present. K8s TokenReview fallback for SA tokens not implemented. |
 | S10 | rbac-enforcement | gRPC watch idle timeout | BE | partial | minor | gRPC interceptor populates AuthResult but no idle timeout for watch streams. |
 | S11 | sso-authentication | E2E test auth helper | Tests | partial | minor | Keycloak client_credentials flow exists in CLI. No E2E test helper using Kind Keycloak. |
 | S12 | identity-boundaries | Build agent SA scoping | Manifests | missing | minor | `ambient-agent` SA for OpenShift build workflows not implemented. Future feature. |
-| S13 | rbac-enforcement | Provider/Gateway RBAC resource registration | BE | **done** | blocker | `provider` and `gateway` resources missing from RBAC permission system — middleware returned 404 before handler ran. Fixed: resource constants, isListEndpoint allowlist, role permissions migration. |
+| S13 | rbac-enforcement | Provider RBAC resource registration | BE | **done** | blocker | `provider` resource missing from RBAC permission system — middleware returned 404 before handler ran. Fixed: resource constants, isListEndpoint allowlist, role permissions migration. |
 | S14 | rbac-enforcement | Provider handler SQL injection + missing RBAC | BE | **done** | critical | Provider List handler used raw string concat for project filter (SQL injection). Missing `ApplyListFilter`, input validation, and editor tier check. Fixed to match gateway handler pattern. |
 
 ### Platform Gaps
@@ -115,29 +111,6 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | ID | Spec | Requirement | Layer | Status | Severity | Notes |
 |----|------|-------------|-------|--------|----------|-------|
 | P1 | data-model | Application GitOps sync engine | CP | partial | critical | Only syncs Agent kind. Missing: Project, Credential, RoleBinding, Inbox sync. No kustomize rendering, auto_sync, self_heal, per-resource status. |
-| P11 | openshell-gateway | Gateway as API Resource (DB, REST, gRPC) | BE | **done** | blocker | Gateway plugin implemented: model, DAO, service, handler, presenter, migration, mock DAO, OpenAPI spec. Project-scoped CRUD under `/projects/{id}/gateways`. RBAC tier checks, jsonb fields (server_dns_names, labels, annotations). SDKs generated (Go, Python, TypeScript). |
-| P12 | openshell-gateway | GatewayReconciler in internal/reconciler/ | CP | **done** | blocker | `gateway_reconciler.go` created with polling pattern (30s ticker). Lists all projects, lists gateways per project, reconciles via existing `ReconcileGateways`. Wired into `main.go` replacing `initGatewayProvisioning`. |
-| P13 | openshell-gateway | Shared Kustomize Library | SDK | **done** | blocker | Extracted kustomize engine from `acpctl apply/cmd.go` into `ambient-sdk/go-sdk/kustomize/kustomize.go`. Exports: Resource, PayloadDecl, InboxSeed types; LoadKustomize, LoadFile, LoadDir, ParseManifests, MergeResources, ApplyPatch, StrategicMerge functions. CLI refactored to use shared library. |
-| P14 | openshell-gateway | Elimination of ConfigMap-Based Provisioning | CP | **done** | critical | ConfigMap loading/watching functions removed from `config.go` (only type defs remain). `initGatewayProvisioning` removed from `main.go`. `setOwnerReference` removed from `reconciler.go`. `platformConfigCM` parameter eliminated from `ReconcileGateways`/`deployGateway`. `config_test.go` deleted. |
-| P15 | openshell-gateway | Gateway kind in acpctl apply | CLI | **done** | critical | Added `case "gateway"` to apply switch. `applyGateway` reconciles create/update with `buildGatewayPatch`. Resource struct includes `ServerDnsNames`, `Image`, `Config`. `strategicMerge` handles Gateway fields. |
-| P16 | openshell-gateway | Gateway Manifest Templating | CP | **done** | major | `internal/gateway/manifests.go` consumed by new `GatewayReconciler` via `gateway.LoadGatewayManifests` and `gateway.ReconcileGateways` which calls `ApplyManifestToNamespace` and `ApplyConfigOverrides`. |
-| P17 | openshell-gateway | Gateway Configuration Validation | CP | **done** | major | `internal/gateway/validation.go` consumed by `GatewayReconciler.reconcileGateway` — calls `gateway.ValidateGatewayConfig` before reconciling, skips invalid gateways with warning log. |
-| P18 | openshell-gateway | Kustomize Overlay Structure for Gateways | Examples | **done** | major | `examples/base/gateways/openshell-gateway.yaml` with `kind: Gateway`, image, server_dns_names, labels. `examples/base/gateways/kustomization.yaml`. Base kustomization updated. |
-| P19 | openshell-gateway | Gateway Deployment Failure Handling | CP | **done** | major | GatewayReconciler tracks per-gateway failures, updates `ambient.ai/reconcile-status` and `ambient.ai/last-reconciled-at` annotations on Gateway resources. Validation failures annotated as `ValidationFailed`. Reconcile loop counts and warns on partial failures. |
-| P20 | openshell-gateway | platform-config ConfigMap overlays removal | Manifests | **done** | minor | Deleted `platform-config.yaml` from `overlays/kind/` and `overlays/hcmais-dev/`. Removed references from both `kustomization.yaml` files. |
-| P31 | openshell-gateway | cert-manager TLS certificate management | CP | **done** | major | `detectCertManager()` checks for `cert-manager.io/` API group at startup. `reconcileCertManagerResources()` creates self-signed Issuer, CA Certificate, CA Issuer, server Certificate, and client Certificate. Conditional on `r.hasCertManager`. |
-| P32 | openshell-gateway | Trusted CA bundle injection | CP | **done** | major | `gateway-trusted-ca` ConfigMap copied from CP namespace to tenant namespace. `applyTrustedCAOverrides()` adds volume mount at `/etc/pki/tls/certs/ca-bundle.crt`, sets `SSL_CERT_FILE` env var. |
-| P33 | openshell-gateway | OIDC API fields and TOML injection | BE+CP | **done** | major | `GatewayOidc` struct with 7 fields (issuer, audience, jwks_ttl, roles_claim, admin_role, user_role, scopes_claim). JSONB column in DB. `ApplyConfigOverrides()` injects `[openshell.gateway.oidc]` TOML section, disables mTLS by removing `client_ca_path`. Role validation enforces both-or-neither for admin/user roles. |
-| P34 | openshell-gateway | OIDC change detection + pod restart | CP | **done** | major | `renderedConfigChanged()` diffs rendered `gateway.toml` against live ConfigMap. When changed, adds `kubectl.kubernetes.io/restartedAt` annotation to trigger rolling restart. |
-| P35 | openshell-gateway | Gateway API detection and GRPCRoute reconciliation | CP | **done** | blocker | Two-phase detection: (1) server discovery for `grpcroutes` resource, (2) networking Gateway `Accepted` condition check. `reconcileGRPCRoute()` creates/updates GRPCRoute with parent refs, hostnames, backend refs, owner references. `buildBackendTLSPolicy()` for TLS re-encryption. RBAC ClusterRole grants GRPCRoute and BackendTLSPolicy permissions. |
-| P36 | openshell-gateway | Route address discovery and API exposure | BE+CP | **done** | major | `reconcileGRPCRouteAddress()` constructs `protocol://hostname` from Gateway listener protocol. PATCHes `routeAddress` to API server. `route` (JSONB) and `route_address` (TEXT) columns in DB. CLI `gatewayAddress()` displays route address or "Not ready...". |
-| P37 | openshell-gateway | OpenShift SCC bindings | CP | **done** | major | `reconcileOpenShiftSCC()` creates RoleBinding binding `openshell-gateway-sandbox` SA to `system:openshift:scc:privileged` ClusterRole. Conditional on `r.isOpenShift` (detected via `route.openshift.io/` API group). |
-| P38 | openshell-gateway | Labels/annotations normalization to JSON string | BE+CLI | **done** | minor | PR #409: labels and annotations stored as `type: string` (JSON-encoded) instead of `type: object`. CLI `parseKeyValuePairs()` + `json.Marshal()` for create; `applyGateway` handles both string and object formats for backward compat. |
-| P39 | openshell-gateway | Gateway database provisioning (postgres/sqlite) | BE+CP | missing | major | Spec requires `database` field on Gateway (type, storageSize, image, externalSecretRef). No implementation: no DB field in model, no PostgreSQL resource provisioning (Secret, PVC, Deployment, Service), no workload type switching. |
-| P40 | openshell-gateway | Cross-cluster gateway exposure | CP | missing | major | Spec requires ExternalName Service for cross-cluster gRPC, external URL annotation. No implementation exists. |
-| P41 | openshell-gateway | Gateway route E2E test on CRC | Tests | missing | minor | Spec requires full E2E connectivity test (GRPCRoute → BackendTLSPolicy → gateway pod) on CRC/OpenShift. No test exists. |
-| P42 | project-gateway-lifecycle | Server-side gateway defaults (GATEWAY_IMAGE, OIDC_ISSUER_URL) | BE | **done** | major | `applyGatewayDefaults()` reads `GATEWAY_IMAGE` and `OIDC_ISSUER_URL` from env vars. Applies image default when empty, OIDC defaults when `gw.Oidc == nil` and issuer URL is set. |
-| P43 | project-gateway-lifecycle | acpctl gateway setup-cli | CLI | **done** | major | `gateway/setup.go` implements `acpctl gateway setup-cli [name]` with OIDC token injection, mTLS cert fetching via kubectl, `--print` and `--kubectl` (port-forward) modes. |
 | P21 | control-plane | ProjectReconciler namespace lifecycle | CP | **done** | minor | Ordering already enforced: informer `initialSync` syncs `projects` before `sessions`, and `RegisterHandler` in main.go registers ProjectReconciler first. ProjectReconciler runs `ensureNamespace()` which creates namespaces before session reconcilers attempt to use them. |
 | P22 | data-model | `acpctl apply` missing `sandbox_policy`, `sandbox_template`, `entrypoint` on Agent | CLI | **done** | critical | `sandbox_policy` added to `resource` struct, `applyAgent()` create path, and `buildAgentPatch()` update diffing. `strategicMerge()` handles kustomize overlays. All example agents wired with `sandbox_policy: permissive`. |
 | P23 | data-model | `acpctl apply` missing `Policy` as supported kind | CLI | **done** | critical | `case "policy":` added to apply dispatch switch. `applyPolicy()` implements create-or-update with spec/labels/annotations diffing. `strategicMerge()` deep-merges `Spec` keys. `permissive` example policy ships in `examples/base/policies/`. Stored JSONB specs use the upstream `filesystem_policy` key name. |
@@ -160,8 +133,6 @@ Severity: `blocker` > `critical` > `major` > `minor`
 | P28 | data-model | SDK status/heartbeat methods (Go, Python, TypeScript) | SDK | **done** | critical | Generator extended: `status` and `heartbeat` added to `knownActions`, `ResponseSchema` support for action return types. All 3 SDKs generated with `ClusterStatusResponse` type and `Status()`/`Heartbeat()` methods. |
 | P29 | control-plane | ClusterHealthSyncer periodic health checker | CP | **done** | critical | `cluster_health_syncer.go` polls cluster heartbeat endpoint on configurable interval (default 30s). Wired into `main.go` with error channel pattern. Config: `CLUSTER_HEALTH_INTERVAL`. |
 | P30 | control-plane | PlacementStrategy interface + RoundRobinPlacement | CP | **done** | critical | `internal/placement/strategy.go` with `PlacementStrategy` interface, `PlacementRequest`/`PlacementDecision` types, `RoundRobinPlacement` default. Filters by role, status, labels, heartbeat threshold. Config: `PLACEMENT_HEARTBEAT_THRESHOLD`. |
-| P28 | openshell-cli-e2e-test | E2E test script (sections 1-8) | Tests | **done** | major | `tests/e2e/openshell-cli-e2e.sh` created with 8 numbered sections. Follows `gateway-e2e-test.sh` patterns (pass/fail/skip helpers, trap cleanup, port-forward). Exercises sandbox create/list/get/exec/delete, provider CRUD, policy set/idempotent/get/list/enforcement/delete, settings global+per-sandbox, optional --cluster-validate cross-validation. |
-| P29 | openshell-cli-e2e-test | Demo script (tmux-based) | Tests | **done** | minor | Merged into e2e test. `run_cmd()` helper prints commands and output for CI visibility. Separate demo script removed. |
 
 ### UI Gaps
 
@@ -182,10 +153,7 @@ These items intentionally differ from spec. Decision needed: update spec or upda
 
 | ID | Spec | Issue | Current Code | Spec Says | Resolution |
 |----|------|-------|-------------|-----------|------------|
-| D1 | gateway-rbac | Gateway mode activation | Hardcoded `true` in `IsGatewayModeActive()` | ~~Env-var gated~~ → Always-active | **Resolved in PR #281**: Spec updated to match code (always-active). |
-| D2 | gateway-rbac | Agent CRUD gating | CRUD permitted; tests verify it is NOT blocked | ~~403 for CRUD~~ → CRUD permitted via API | **Resolved in PR #281**: Spec updated to match code. |
 | D3 | data-model | Implementation coverage matrix | Application CRUD, credential bind, Events API implemented | ~~"planned"~~ → Matrix corrected | **Resolved in PR #281**: Spec matrix updated. |
-| D4 | gateway-provisioning | ConfigMap vs API-driven gateway | ~~Code uses ConfigMap-based `platform-config`~~ | API-driven `kind: Gateway` resource | **Resolved**: Code migrated to API-driven Gateway (P11-P14). ConfigMap provisioning removed. |
 
 ---
 
@@ -214,7 +182,7 @@ Gaps grouped by execution wave. Each wave gates the next.
 
 **Partials** (S9, S10, S11, P1, P9) are low-severity and can be addressed opportunistically.
 
-**Missing** (P39, P40, P41) are new gaps from the consolidated openshell-gateway spec. P39 (database provisioning) and P40 (cross-cluster exposure) are major but not yet prioritized into a wave.
+Gateway-related gaps (P11-P20, P31-P43) removed — gateway operations now owned by HyperShell project.
 
 ---
 

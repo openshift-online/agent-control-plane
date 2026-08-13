@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from ._application_api import ApplicationAPI
     from ._cluster_api import ClusterAPI
     from ._credential_api import CredentialAPI
-    from ._gateway_api import GatewayAPI
     from ._inbox_message_api import InboxMessageAPI
     from ._policy_api import PolicyAPI
     from ._project_api import ProjectAPI
@@ -70,7 +69,6 @@ class AmbientClient:
         self._application_api: Optional[ApplicationAPI] = None
         self._cluster_api: Optional[ClusterAPI] = None
         self._credential_api: Optional[CredentialAPI] = None
-        self._gateway_api: Optional[GatewayAPI] = None
         self._inbox_message_api: Optional[InboxMessageAPI] = None
         self._policy_api: Optional[PolicyAPI] = None
         self._project_api: Optional[ProjectAPI] = None
@@ -224,13 +222,6 @@ class AmbientClient:
             from ._credential_api import CredentialAPI
             self._credential_api = CredentialAPI(self)
         return self._credential_api
-    @property
-    def gatewaies(self) -> GatewayAPI:
-        """Get the Gateway API interface."""
-        if self._gateway_api is None:
-            from ._gateway_api import GatewayAPI
-            self._gateway_api = GatewayAPI(self)
-        return self._gateway_api
     @property
     def inbox_messages(self) -> InboxMessageAPI:
         """Get the InboxMessage API interface."""

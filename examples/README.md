@@ -37,15 +37,7 @@ make kind-status
 
 Shows all access URLs, port assignments, and gateway endpoints.
 
-### 4. Connect the openshell CLI to a gateway
-
-```bash
-scripts/setup-gateway-cli.sh tenant-a
-```
-
-Extracts mTLS certificates from the cluster and registers the tenant-a gateway with the `openshell` CLI. After this, you can use `openshell` commands directly against the gateway.
-
-### 5. Run something
+### 4. Run something
 
 **Option A — Create a session via acpctl:**
 

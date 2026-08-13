@@ -38,38 +38,14 @@ make kind-port-forward
 
 Check ports with `make kind-status`.
 
-#### Handle the Gateway Race Condition
+#### Verify Tenant Namespaces
 
-There is a known race: the control plane gateway reconciler runs at startup
-before `setup-kind-openshell.sh` creates tenant namespaces. The reconciler logs
-"namespace not found, skipping" and does not retry autonomously.
-
-After `kind-up` completes, check whether the gateway deployed:
+After `kind-up` completes, verify tenant namespaces exist and sandboxes can be created:
 
 ```bash
-kubectl get statefulset -n tenant-a
-```
-
-If empty, force re-reconciliation:
-
-```bash
-kubectl annotate configmap platform-config -n ambient-code \
-  reconcile-trigger="$(date +%s)" --overwrite
-```
-
-Wait for gateway + certgen:
-
-```bash
-sleep 10
+kubectl get ns tenant-a tenant-b
 kubectl get pods -n tenant-a
-# Expect: openshell-gateway-0 Running, openshell-gateway-certgen Completed
-kubectl get secrets -n tenant-a | grep openshell
-# Expect: openshell-client-tls, openshell-server-tls, openshell-gateway-jwt-keys
 ```
-
-This is the most common failure when `kind-up` appears to succeed but sessions
-fail with `openshell-client-tls not found`. Always check and fix before
-proceeding.
 
 ### Step 2 — Login with acpctl (REQUIRED)
 
@@ -291,8 +267,6 @@ make test-openshell-dual-tenant
 
 | File | Purpose |
 |------|---------|
-| `scripts/setup-kind-openshell.sh` | Gateway prerequisites (CRD, namespaces, projects) |
-| `components/ambient-control-plane/internal/gateway/reconciler.go` | Gateway manifest deployment from platform-config |
-| `components/ambient-control-plane/internal/reconciler/kube_reconciler.go` | Session → sandbox provisioning |
+| `components/ambient-control-plane/internal/reconciler/kube_reconciler.go` | Session reconciliation + sandbox provisioning |
 | `components/ambient-control-plane/internal/openshell/tls_resolver.go` | mTLS credential resolution |
 | `components/manifests/base/platform-config.yaml` | Namespace/gateway configuration |

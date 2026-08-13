@@ -23,7 +23,6 @@ ARG GIT_COMMIT=unknown
 WORKDIR /app
 
 COPY --from=builder /workspace/ambient-control-plane/ambient-control-plane /usr/local/bin/
-COPY ambient-control-plane/manifests/ /manifests/
 
 RUN chmod +x /usr/local/bin/ambient-control-plane
 

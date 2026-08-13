@@ -11,7 +11,6 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
-	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/gateway"
 )
 
 type pushMessageRequest struct {
@@ -58,18 +57,11 @@ func (h *messageHandler) PushMessage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := mux.Vars(r)["id"]
 
-	sess, getErr := h.session.Get(ctx, id)
+	_, getErr := h.session.Get(ctx, id)
 	if getErr != nil {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
-	if sess.ProjectId != nil {
-		if tierErr := gateway.CheckEditorTier(ctx, *sess.ProjectId); tierErr != nil {
-			http.Error(w, tierErr.Reason, http.StatusForbidden)
-			return
-		}
-	}
-
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		http.Error(w, "failed to read request body", http.StatusBadRequest)

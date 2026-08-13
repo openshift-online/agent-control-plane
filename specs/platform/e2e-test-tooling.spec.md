@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-10
 **Status:** Design
-**Related:** `openshell-sandbox-provisioning.spec.md` — gateway sandbox provisioning; `agent-sandbox-config.spec.md` — agent/provider/policy schema; [PR #318](https://github.com/openshift-online/agent-control-plane/pull/318) — sandbox policy support; [PR #390](https://github.com/openshift-online/agent-control-plane/pull/390) — OpenShell CLI e2e test (reference implementation for test style)
+**Related:** `agent-sandbox-config.spec.md` — agent/provider/policy schema; [PR #318](https://github.com/openshift-online/agent-control-plane/pull/318) — sandbox policy support; [PR #390](https://github.com/openshift-online/agent-control-plane/pull/390) — OpenShell CLI e2e test (reference implementation for test style)
 **Skill:** `skills/build/full-stack-pipeline/` — wave-based implementation pipeline
 
 ---
@@ -174,7 +174,7 @@ New targets:
 - `build-mock-llm` — builds the container image from `tests/mock-llm/Dockerfile`
 - `kind-load-mock-llm` — loads the image into the kind cluster via `ctr import` (following the existing `kind-reload-component` pattern using `podman save` piped through `podman exec`)
 
-The `kind-up` target SHALL call these targets inside the `OPENSHELL_USE_GATEWAY=true` block, after `setup-kind-openshell.sh` completes:
+The `kind-up` target SHALL call these targets during cluster setup:
 1. Build the mock-llm image
 2. Load the image into kind
 3. Apply the mock-llm manifests (`kubectl apply -k tests/mock-llm/manifests/`)
@@ -260,7 +260,7 @@ The base `kustomization.yaml` SHALL include the provider, agent, and policy reso
 
 ### Requirement: Credential Secret Provisioning
 
-The `scripts/setup-kind-openshell.sh` script SHALL create a `mock-llm-creds` Kubernetes Secret in each tenant namespace during kind cluster setup. The secret provides the mock auth token that the generic provider passes through to the sandbox.
+The kind cluster setup SHALL create a `mock-llm-creds` Kubernetes Secret in each tenant namespace. The secret provides the mock auth token that the generic provider passes through to the sandbox.
 
 ```bash
 kubectl create secret generic mock-llm-creds \
@@ -273,14 +273,14 @@ The secret key `ANTHROPIC_AUTH_TOKEN` is the env var name. Because the provider 
 
 #### Scenario: Secret exists in tenant namespace
 
-- GIVEN `setup-kind-openshell.sh` has run for `tenant-a`
+- GIVEN kind cluster setup has run for `tenant-a`
 - WHEN `kubectl get secret mock-llm-creds -n tenant-a -o jsonpath='{.data}'` is executed
 - THEN the secret SHALL contain the key `ANTHROPIC_AUTH_TOKEN` with value `mock-llm-token` (base64-encoded)
 
 #### Scenario: Secret creation is idempotent
 
 - GIVEN `mock-llm-creds` already exists in `tenant-a`
-- WHEN `setup-kind-openshell.sh` runs again
+- WHEN kind cluster setup runs again
 - THEN the secret SHALL be updated without error (via `--dry-run=client | kubectl apply -f -`)
 
 ### Requirement: OpenShell Sandbox Network Policy
@@ -622,7 +622,7 @@ Each e2e test script SHALL begin with a descriptive header block documenting the
 | `Makefile` | Add `build-mock-llm`, `kind-load-mock-llm` targets; call from `kind-up` |
 | `examples/base/kustomization.yaml` | Add provider, agent, and policy resources |
 | `examples/overlays/tenant-a/kustomization.yaml` | Add credential resource |
-| `scripts/setup-kind-openshell.sh` | Create `mock-llm-creds` secret in each tenant namespace |
+| `Makefile` (kind-up target) | Create `mock-llm-creds` secret in each tenant namespace |
 
 ### Generic Provider Credential Flow
 

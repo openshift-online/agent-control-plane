@@ -193,7 +193,7 @@ func (r *ProjectReconciler) controlPlaneRBACRules() []interface{} {
 	rules := []interface{}{
 		map[string]interface{}{
 			"apiGroups": []interface{}{""},
-			"resources": []interface{}{"secrets", "serviceaccounts", "services", "persistentvolumeclaims", "configmaps"},
+			"resources": []interface{}{"secrets", "serviceaccounts", "services", "configmaps"},
 			"verbs":     []interface{}{"get", "list", "watch", "create", "update", "delete", "deletecollection"},
 		},
 		map[string]interface{}{
@@ -204,11 +204,6 @@ func (r *ProjectReconciler) controlPlaneRBACRules() []interface{} {
 		map[string]interface{}{
 			"apiGroups": []interface{}{"rbac.authorization.k8s.io"},
 			"resources": []interface{}{"roles", "rolebindings"},
-			"verbs":     []interface{}{"get", "list", "watch", "create", "update", "delete"},
-		},
-		map[string]interface{}{
-			"apiGroups": []interface{}{"apps"},
-			"resources": []interface{}{"statefulsets", "deployments"},
 			"verbs":     []interface{}{"get", "list", "watch", "create", "update", "delete"},
 		},
 		map[string]interface{}{

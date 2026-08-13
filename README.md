@@ -59,29 +59,9 @@ ACP can also provide self-service OpenShell gateway provisioning — users reque
 2. A user creates a project in ACP and requests a gateway:
    ```bash
    acpctl create project --name my-project
-   acpctl create gateway --project my-project
    ```
-3. The control plane reconciles and provisions:
-   - An OpenShell gateway pod in the project namespace
-   - cert-manager certificates for gateway TLS
-   - A GRPCRoute with BackendTLSPolicy for end-to-end encryption from the edge to the gateway
-4. The user retrieves gateway connection details and registers it with their local OpenShell CLI:
-   ```bash
-   acpctl get gateway --project my-project
-   acpctl gateway setup-cli --project my-project --print
-   ```
-5. OIDC authentication gates access — users log in through the configured identity provider
-6. Users create and manage sandboxes through the gateway:
-   ```bash
-   openshell sandbox create
-   openshell sandbox list
-   ```
-
-Each sandbox runs as an isolated pod on the cluster, with credentials managed through OpenShell providers.
-
-**POC on OpenShift:**
-
-This flow has been validated on OpenShift Local (CRC). The [gateway lifecycle demo script](components/ambient-cli/demo-gateway-lifecycle.sh) walks through the full provisioning flow in a split-pane tmux session — platform admin actions on top, user actions on the bottom. See [Setup for OpenShift Local](#setup-for-openshift-local-crc) for prerequisites.
+3. The control plane reconciles the project and connects to an OpenShell gateway for sandbox operations
+4. Users create sessions that run as sandboxes — isolated pods on the cluster, with credentials managed through OpenShell providers
 
 ## Getting Started
 
@@ -92,38 +72,15 @@ make kind-up
 make kind-login                  # port-forward services, configure acpctl, print access info
 ```
 
-Once the cluster is running, you can configure your local openshell CLI to add a gateway:
-
-```bash
-acpctl gateway setup-cli --project <namespace> --gateway-url https://localhost:<port> --kubectl
-```
-
-The gateway URL and port are printed by `make kind-login`. If you've already run `setup-cli` before, it will re-authenticate using your existing acpctl credentials instead of re-registering.
-
-To remove a gateway registration:
-
-```bash
-acpctl gateway remove-cli --project <namespace>
-```
-
 See [examples/README.md](examples/README.md) to deploy starter agents and vTeam lab environments.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md#local-development-setup) for full local development setup.
 
-### OpenShell Gateway (Kind)
+### OpenShell Sandboxes (Kind)
 
-The control plane delegates sandbox creation to an OpenShell gateway by default. `make kind-up` automatically installs all prerequisites: the tenant namespace, and the [agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) CRD (v0.5.1). ACP will automatically install configuration similar to the [OpenShell gateway Helm chart](https://github.com/NVIDIA/OpenShell/tree/main/deploy/helm/openshell) when it is configured to manage a namespace.
-
-Override defaults with:
-
-| Variable                     | Default  | Description                                                |
-| ---------------------------- | -------- | ---------------------------------------------------------- |
-| `OPENSHELL_TENANT_NAMESPACE` | `tenant` | Namespace for the gateway and sandboxes                    |
-| `AGENT_SANDBOX_VERSION`      | `v0.5.1` | Agent Sandbox CRD release (must match gateway API version) |
+The control plane delegates sandbox creation to an OpenShell gateway managed by HyperShell. `make kind-up` automatically installs prerequisites including the [agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) CRD.
 
 After the sandbox reaches Ready, the control plane executes commands inside it via the `ExecSandbox` gRPC RPC — the runner starts through exec, not the container entrypoint.
-
-See [OpenShell Sandbox Provisioning Spec](specs/platform/openshell-sandbox-provisioning.spec.md) for full details on gateway mode, CRD version compatibility, and configuration.
 
 ### Setup for OpenShift Local (CRC)
 
