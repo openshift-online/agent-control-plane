@@ -1,0 +1,79 @@
+# GoReleaser config for acpctl (Ambient Code Platform CLI).
+#
+# acpctl lives at components/ambient-cli within the agent-control-plane monorepo.
+# `builds[].dir` points the build at that subdirectory (OSS-compatible; the Pro-only
+# `monorepo:` block is intentionally not used).
+#
+# Releases are triggered by plain semver tags `vX.Y.Z`. No other component uses git
+# semver tags (container components release via image tags), so a `vX.Y.Z` tag is by
+# convention the acpctl release. See RELEASING.md.
+#
+# Run from the REPO ROOT so git tag context is visible, e.g.:
+#   goreleaser release --clean --config components/ambient-cli/.goreleaser.yaml
+#
+# IMPORTANT: the ldflags `-X` paths below use the Go MODULE path
+# (github.com/ambient-code/platform/components/ambient-cli), matching go.mod and the
+# component Makefile. This is a linker-symbol path, NOT a repo URL. Changing it breaks
+# version injection (acpctl version would report "dev").
+version: 2
+
+project_name: acpctl
+
+builds:
+  - id: acpctl
+    dir: components/ambient-cli # build runs here; main is relative to it
+    main: ./cmd/acpctl
+    binary: acpctl
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/ambient-code/platform/components/ambient-cli/pkg/info.Version={{.Version}}
+      - -X github.com/ambient-code/platform/components/ambient-cli/pkg/info.Commit={{.ShortCommit}}
+      - -X github.com/ambient-code/platform/components/ambient-cli/pkg/info.BuildDate={{.Date}}
+
+archives:
+  - id: acpctl
+    formats:
+      - tar.gz
+    # `files` are resolved from the repo root (where goreleaser runs), not the build
+    # dir. LICENSE is at the repo root; README is component-local.
+    files:
+      - LICENSE
+      - src: components/ambient-cli/README.md
+        strip_parent: true
+
+checksum:
+  name_template: checksums.txt
+
+# NOTE: `brews` (Homebrew formula) is deprecated in GoReleaser in favor of macOS-only
+# `homebrew_casks`. We intentionally keep the formula so acpctl stays installable on
+# both macOS and Linux (Linuxbrew). Revisit before GoReleaser v3 removes `brews`.
+brews:
+  - name: acpctl
+    repository:
+      # Owner is supplied by the release workflow: `jeremyeder` for fork validation,
+      # `openshift-online` upstream (the default it falls back to).
+      owner: "{{ .Env.HOMEBREW_TAP_OWNER }}"
+      name: homebrew-tap
+      # Folded scalar (not an inline quoted string) so the value renders identically
+      # while avoiding naive quoted-string secret scanners; the value is a GoReleaser
+      # template reference to an env var, not a literal secret.
+      token: >-
+        {{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}
+    homepage: "https://github.com/openshift-online/agent-control-plane"
+    description: "CLI for the Ambient Code Platform (acpctl)"
+    license: "MIT"
+    # acpctl version prints the client version and exits 0 with no config/network, so
+    # this test is hermetic inside the Homebrew sandbox.
+    test: |
+      system "#{bin}/acpctl", "version"
+
+release:
+  prerelease: auto

@@ -1,0 +1,57 @@
+name: acpctl release
+
+# Cuts an acpctl release when a semver tag like `v0.1.0` is pushed:
+# GoReleaser cross-compiles binaries, publishes a GitHub Release, and updates the
+# Homebrew formula in the tap. Triggered by tag push only (never
+# pull_request_target), per repo CI/CD conventions. See components/ambient-cli/RELEASING.md.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # create the GitHub Release via GITHUB_TOKEN
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history + tags for GoReleaser
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: components/ambient-cli/go.mod
+          # Module lives in a subdir; point the dependency cache at its go.sum
+          # (repo root has none).
+          cache-dependency-path: components/ambient-cli/go.sum
+
+      # Mint a short-lived token to push the formula to the tap via a GitHub App,
+      # per repo CI/CD conventions (no long-lived PATs). Requires an App with
+      # Contents:write on <owner>/homebrew-tap; see components/ambient-cli/RELEASING.md.
+      - name: Generate tap token
+        id: tap_token
+        uses: actions/create-github-app-token@v2 # first-party (actions/*), tag OK
+        with:
+          app-id: ${{ secrets.HOMEBREW_TAP_APP_ID }}
+          private-key: ${{ secrets.HOMEBREW_TAP_APP_PRIVATE_KEY }}
+          owner: ${{ vars.HOMEBREW_TAP_OWNER || 'openshift-online' }}
+          repositories: homebrew-tap
+
+      # Install the OSS GoReleaser binary directly (pinned) rather than the
+      # third-party goreleaser/goreleaser-action, to minimize supply-chain surface.
+      # Keep this version in sync with the one used for local dry-runs (RELEASING.md).
+      - name: Install GoReleaser (OSS)
+        run: go install github.com/goreleaser/goreleaser/v2@v2.17.1
+
+      - name: Run GoReleaser
+        # Run from the repo root so git-tag context is visible; point at the
+        # component config via --config.
+        run: goreleaser release --clean --config components/ambient-cli/.goreleaser.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Owner of the tap repo. Unset upstream → defaults to openshift-online.
+          HOMEBREW_TAP_OWNER: ${{ vars.HOMEBREW_TAP_OWNER || 'openshift-online' }}
+          # Short-lived App token (from the step above) with write access to the tap.
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ steps.tap_token.outputs.token }}

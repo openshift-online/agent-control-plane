@@ -2,6 +2,22 @@
 
 Command-line interface for the Ambient Code Platform API server. Follows the `oc`/`kubectl` verb-noun pattern (`acpctl get sessions`).
 
+## Install
+
+Homebrew (macOS and Linux):
+
+```bash
+brew install openshift-online/tap/acpctl
+```
+
+This installs a prebuilt `acpctl` binary — no Go toolchain required. Upgrade with
+`brew upgrade acpctl`.
+
+> Until the first upstream release lands, the formula is published to a personal tap
+> for validation: `brew install jeremyeder/tap/acpctl`.
+
+To build from source instead, see [Build](#build) below.
+
 ## Build
 
 ```bash
