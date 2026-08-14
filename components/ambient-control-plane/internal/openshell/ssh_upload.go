@@ -409,7 +409,7 @@ func writeRepoPayloadViaSSH(client *ssh.Client, targetPath string, tarReader io.
 	}
 	defer session.Close()
 
-	cmd := fmt.Sprintf("mkdir -p '%s' && tar xf - -C '%s'", targetPath, targetPath)
+	cmd := repoPayloadExtractCommand(targetPath)
 
 	stdin, err := session.StdinPipe()
 	if err != nil {
@@ -436,6 +436,25 @@ func writeRepoPayloadViaSSH(client *ssh.Client, targetPath string, tarReader io.
 		return fmt.Errorf("tar extraction failed: %w", err)
 	}
 	return nil
+}
+
+func repoPayloadExtractCommand(targetPath string) string {
+	return fmt.Sprintf("if [ -d '%[1]s' ] && [ ! -w '%[1]s' ]; then if chmod u+w '%[1]s' 2>/dev/null; then tar xf - -C '%[1]s'; else %[2]s; fi; else %[3]s; fi",
+		targetPath,
+		stagedRepoPayloadExtractCommand(targetPath),
+		directRepoPayloadExtractCommand(targetPath),
+	)
+}
+
+func directRepoPayloadExtractCommand(targetPath string) string {
+	return fmt.Sprintf("mkdir -p '%[1]s' && tar xf - -C '%[1]s'", targetPath)
+}
+
+func stagedRepoPayloadExtractCommand(targetPath string) string {
+	parent := filepath.Dir(targetPath)
+	base := filepath.Base(targetPath)
+	tmpPattern := fmt.Sprintf("%s/.%s.payload.XXXXXX", parent, base)
+	return fmt.Sprintf("( tmp=$(mktemp -d '%[2]s') || exit $?; cleanup() { status=$?; if [ \"$status\" -ne 0 ] && [ ! -e '%[1]s' ]; then mkdir -p '%[1]s' 2>/dev/null || true; fi; rm -rf \"$tmp\"; exit \"$status\"; }; trap cleanup EXIT HUP INT TERM; tar xf - -C \"$tmp\" && rmdir '%[1]s' && mv \"$tmp\" '%[1]s' && trap - EXIT HUP INT TERM )", targetPath, tmpPattern)
 }
 
 func uploadRepoPayload(ctx context.Context, client *ssh.Client, p Payload) error {

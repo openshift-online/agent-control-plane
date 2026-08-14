@@ -7,6 +7,8 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -304,5 +306,51 @@ func TestTarFilesystemCancellation(t *testing.T) {
 	_, err := io.ReadAll(reader)
 	if err == nil {
 		t.Error("expected error from cancelled context, got nil")
+	}
+}
+
+func TestStagedRepoPayloadExtractCommand_ReplacesEmptyTarget(t *testing.T) {
+	// Given: the sandbox image/PVC already contains an empty target directory
+	// that the sandbox user can remove through its writable parent but cannot
+	// write into directly.
+	fs := memfs.New()
+	if err := fs.MkdirAll("/.ambient/workflows", 0o755); err != nil {
+		t.Fatalf("create .ambient/workflows: %v", err)
+	}
+	if err := fs.MkdirAll("/.claude/agents", 0o755); err != nil {
+		t.Fatalf("create .claude/agents: %v", err)
+	}
+	if err := billyutil.WriteFile(fs, "/.ambient/workflows/code-review.json", []byte("{}"), 0o644); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+	if err := billyutil.WriteFile(fs, "/.claude/agents/code-reviewer.md", []byte("review"), 0o644); err != nil {
+		t.Fatalf("write agent: %v", err)
+	}
+
+	root := t.TempDir()
+	target := filepath.Join(root, "session-config")
+	if err := os.Mkdir(target, 0o555); err != nil {
+		t.Fatalf("create unwritable target: %v", err)
+	}
+
+	reader := tarFilesystem(context.Background(), fs)
+	defer reader.Close()
+
+	// When: the repo payload extraction command receives the tar stream.
+	cmd := exec.Command("sh", "-c", stagedRepoPayloadExtractCommand(target))
+	cmd.Stdin = reader
+	out, err := cmd.CombinedOutput()
+
+	// Then: extraction succeeds and writes nested dot-directory content.
+	if err != nil {
+		t.Fatalf("extract repo payload: %v\n%s", err, out)
+	}
+	for _, path := range []string{
+		filepath.Join(target, ".ambient", "workflows", "code-review.json"),
+		filepath.Join(target, ".claude", "agents", "code-reviewer.md"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected extracted file %s: %v", path, err)
+		}
 	}
 }
