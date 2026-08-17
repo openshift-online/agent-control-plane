@@ -13,6 +13,7 @@ import {
   Settings,
   Moon,
   Sun,
+  GraduationCap,
 } from 'lucide-react'
 import { useSessions } from '@/queries/use-sessions'
 import { getAttentionItems } from '@/app/(dashboard)/[projectId]/_components/dashboard-helpers'
@@ -53,6 +54,10 @@ const configNavItems: readonly NavItem[] = [
 
 const projectNavItems: readonly NavItem[] = [
   { label: 'Settings', icon: Settings, href: 'settings' },
+]
+
+const learnNavItems: readonly NavItem[] = [
+  { label: 'Learn', icon: GraduationCap, href: '/learn', global: true },
 ]
 
 function NavGroup({
@@ -152,6 +157,7 @@ export function AppSidebar({ projectId, effectiveProjectId }: AppSidebarProps) {
         <NavGroup label="Operate" items={operateNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} badgeCounts={operateBadges} />
         <NavGroup label="Config" items={configNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
         <NavGroup label="Project" items={projectNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
+        <NavGroup label="Resources" items={learnNavItems} effectiveProjectId={effectiveProjectId} pathname={pathname} />
       </SidebarContent>
 
       <SidebarFooter>
