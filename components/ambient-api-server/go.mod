@@ -106,7 +106,7 @@ require (
 	github.com/openshift-online/ocm-api-model/clientapi v0.0.458 // indirect
 	github.com/openshift-online/ocm-api-model/model v0.0.459 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
+	github.com/power-devops/perfstat v0.0.0-20260805114148-88456608a4f6 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.66.1 // indirect
