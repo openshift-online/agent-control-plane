@@ -2,7 +2,7 @@ module github.com/openshift-online/agent-control-plane/components/ambient-sdk/go
 
 go 1.25.0
 
-toolchain go1.26.4
+toolchain go1.27.0
 
 require (
 	github.com/openshift-online/agent-control-plane/components/ambient-api-server v0.0.0
