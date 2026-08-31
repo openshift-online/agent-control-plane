@@ -19,7 +19,7 @@ repos:
 
   # ── Python (ruff) ────────────────────────────────────────────────────
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.12
+    rev: v0.16.5
     hooks:
       - id: ruff-format
         files: ^(components/runners/|scripts/)
