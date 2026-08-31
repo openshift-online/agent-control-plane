@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi9/go-toolset:1.25 AS entrypoint-builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.26.7-1787774815 AS entrypoint-builder
 
 USER 0
 WORKDIR /build
@@ -11,7 +11,7 @@ RUN go mod edit -replace github.com/openshift-online/agent-control-plane/compone
     CGO_ENABLED=0 go build -o /credential-entrypoint .
 
 # Build github-mcp-server from source at a pinned tag.
-FROM registry.access.redhat.com/ubi9/go-toolset:1.25 AS mcp-builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.26.7-1787774815 AS mcp-builder
 
 ARG GITHUB_MCP_VERSION=v1.3.0
 
