@@ -69,7 +69,7 @@ jobs:
 
     - name: Cleanup Diskspace
       id: cleanup
-      uses: kubeflow/pipelines/.github/actions/github-disk-cleanup@67a73cf809f7c76fee33c749f302f2bceedd8fab # 2.16.1
+      uses: kubeflow/pipelines/.github/actions/github-disk-cleanup@3487bc4c1ab141e76b2f8d9bba71f2b1d54a964f # 2.17.1
       if: (!cancelled())
 
     - name: Cache kubectl and kind
