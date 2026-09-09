@@ -13,6 +13,7 @@ import (
 type SessionDao interface {
 	Get(ctx context.Context, id string) (*Session, error)
 	Create(ctx context.Context, session *Session) (*Session, error)
+	AgentModel(ctx context.Context, projectID, agentID string) (string, error)
 	Replace(ctx context.Context, session *Session) (*Session, error)
 	Delete(ctx context.Context, id string) error
 	FindByIDs(ctx context.Context, ids []string) (SessionList, error)
@@ -50,6 +51,20 @@ func (d *sqlSessionDao) Create(ctx context.Context, session *Session) (*Session,
 		return nil, err
 	}
 	return session, nil
+}
+
+// AgentModel reads only the model in the session's project. A local projection
+// avoids an import cycle between the agent start handler and session service.
+func (d *sqlSessionDao) AgentModel(ctx context.Context, projectID, agentID string) (string, error) {
+	var agent struct {
+		LlmModel string
+	}
+	if err := (*d.sessionFactory).New(ctx).Table("agents").Select("llm_model").
+		Where("id = ? AND project_id = ? AND deleted_at IS NULL", agentID, projectID).
+		Take(&agent).Error; err != nil {
+		return "", err
+	}
+	return agent.LlmModel, nil
 }
 
 func (d *sqlSessionDao) Replace(ctx context.Context, session *Session) (*Session, error) {

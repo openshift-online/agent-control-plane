@@ -263,8 +263,8 @@ func (s *sqlScheduledSessionService) createSessionFromSchedule(
 		CreatedByUserId:          ss.CreatedByUserId,
 		SourceScheduledSessionId: &ss.ID,
 		ScheduledFor:             &scheduledFor,
+		StopOnRunFinished:        stopVal,
 	}
-	_ = stopVal // stop_on_run_finished is on the Session model but not yet wired to runner behavior
 
 	created, createErr := s.sessionSvc.Create(ctx, sess)
 	if createErr != nil {

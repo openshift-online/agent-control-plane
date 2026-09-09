@@ -80,6 +80,18 @@ func (s *sqlSessionService) Get(ctx context.Context, id string) (*Session, *erro
 }
 
 func (s *sqlSessionService) Create(ctx context.Context, session *Session) (*Session, *errors.ServiceError) {
+	if (session.LlmModel == nil || *session.LlmModel == "") && session.AgentId != nil && *session.AgentId != "" {
+		if session.ProjectId == nil || *session.ProjectId == "" {
+			return nil, errors.Validation("project_id is required for an agent session")
+		}
+		model, err := s.sessionDao.AgentModel(ctx, *session.ProjectId, *session.AgentId)
+		if err != nil {
+			return nil, services.HandleGetError("Agent", "id", *session.AgentId, err)
+		}
+		if model != "" {
+			session.LlmModel = &model
+		}
+	}
 	session, err := s.sessionDao.Create(ctx, session)
 	if err != nil {
 		return nil, services.HandleCreateError("Session", err)
