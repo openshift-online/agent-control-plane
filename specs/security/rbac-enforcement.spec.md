@@ -588,3 +588,9 @@ the caller has no matching resources.
 | Proxy routes out of scope | Routes forwarded by the proxy plugin to external backends are outside the scope of ambient-api-server RBAC. Those backends handle their own authorization. |
 
 ---
+
+### Runner transport permission checks
+
+The control plane MUST check the authenticated user's current session permission before it opens a runner HTTP relay. The API exposes side-effect-free checks at `/sessions/{id}/runner/access`, with the same HTTP method, role evaluation, and session scope as the public runner operation. Task stop uses `POST /sessions/{id}/runner/access/stop` to require `session:stop`.
+
+The control plane MUST derive the permission from the native operation. Native `POST /content/write` requires `session:update`, as does the public file PUT operation. A user with only `project:viewer` MUST NOT write files, run tasks, send feedback, or stop tasks through the direct control plane endpoint. A failed permission check MUST prevent all native gateway access. Request headers MUST NOT override the permission.

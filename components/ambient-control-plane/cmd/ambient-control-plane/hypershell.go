@@ -86,7 +86,7 @@ func runHypershellMode(ctx context.Context, cfg *config.ControlPlaneConfig) erro
 	watchManager.RegisterSessionHandler(func(context.Context, watcher.SessionWatchEvent) error { runtime.Notify(); return nil })
 	watchManager.RegisterProjectHandler(func(context.Context, watcher.ProjectWatchEvent) error { runtime.Notify(); return nil })
 
-	server, err := tokenserver.New(cfg.CPTokenListenAddr, cpTokens, key, log.Logger, tokenserver.WithGateway(gateway), tokenserver.WithSessionValidator(runtime.ValidateRunner), tokenserver.WithSandboxAuthorizer(runtime.AuthorizeSandbox))
+	server, err := tokenserver.New(cfg.CPTokenListenAddr, cpTokens, key, log.Logger, tokenserver.WithGateway(gateway), tokenserver.WithSessionValidator(runtime.ValidateRunner), tokenserver.WithSandboxAuthorizer(runtime.AuthorizeSandbox), tokenserver.WithRunnerAuthorizer(runtime.AuthorizeRunner))
 	if err != nil {
 		return err
 	}

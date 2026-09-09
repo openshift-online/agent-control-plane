@@ -57,11 +57,12 @@ func (h *sandboxHandler) handleRunnerProxy(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	bearer, err := extractBearerToken(r)
-	if err != nil || h.authorize == nil {
+	if err != nil || h.authorizeRunner == nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	target, err := h.authorize(r.Context(), bearer, sessionID, name)
+	accessMethod, accessAction := runnerAccessOperation(r.Method, runnerPath)
+	target, err := h.authorizeRunner(r.Context(), bearer, sessionID, name, accessMethod, accessAction)
 	if err != nil || target == "" {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
@@ -108,4 +109,22 @@ func (h *sandboxHandler) handleRunnerProxy(w http.ResponseWriter, r *http.Reques
 		h.logger.Debug().Msg("runner proxy response does not support write deadlines")
 	}
 	proxy.ServeHTTP(w, r)
+}
+
+// RunnerAuthorizer checks the API role binding before runner transport access.
+type RunnerAuthorizer func(ctx context.Context, bearer, sessionID, sandboxName, method, action string) (string, error)
+
+func runnerAccessOperation(method, runnerPath string) (string, string) {
+	if method == http.MethodOptions {
+		return http.MethodGet, ""
+	}
+	// The public file PUT endpoint maps to the native content writer's POST.
+	if method == http.MethodPost && runnerPath == "/content/write" {
+		return http.MethodPut, ""
+	}
+	parts := strings.Split(strings.Trim(runnerPath, "/"), "/")
+	if method == http.MethodPost && len(parts) == 3 && parts[0] == "tasks" && parts[2] == "stop" {
+		return method, "stop"
+	}
+	return method, ""
 }

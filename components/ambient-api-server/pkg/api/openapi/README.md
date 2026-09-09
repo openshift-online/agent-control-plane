@@ -157,6 +157,13 @@ Class | Method | HTTP request | Description
 *DefaultAPI* | [**ApiAmbientV1SessionsIdMessagesGet**](docs/DefaultAPI.md#apiambientv1sessionsidmessagesget) | **Get** /api/ambient/v1/sessions/{id}/messages | List or stream session messages
 *DefaultAPI* | [**ApiAmbientV1SessionsIdMessagesPost**](docs/DefaultAPI.md#apiambientv1sessionsidmessagespost) | **Post** /api/ambient/v1/sessions/{id}/messages | Push a message to a session
 *DefaultAPI* | [**ApiAmbientV1SessionsIdPatch**](docs/DefaultAPI.md#apiambientv1sessionsidpatch) | **Patch** /api/ambient/v1/sessions/{id} | Update an session
+*DefaultAPI* | [**ApiAmbientV1SessionsIdRunnerAccessDelete**](docs/DefaultAPI.md#apiambientv1sessionsidrunneraccessdelete) | **Delete** /api/ambient/v1/sessions/{id}/runner/access | Check session delete permission for runner access
+*DefaultAPI* | [**ApiAmbientV1SessionsIdRunnerAccessGet**](docs/DefaultAPI.md#apiambientv1sessionsidrunneraccessget) | **Get** /api/ambient/v1/sessions/{id}/runner/access | Check session read permission for runner access
+*DefaultAPI* | [**ApiAmbientV1SessionsIdRunnerAccessHead**](docs/DefaultAPI.md#apiambientv1sessionsidrunneraccesshead) | **Head** /api/ambient/v1/sessions/{id}/runner/access | Check session read permission for runner access
+*DefaultAPI* | [**ApiAmbientV1SessionsIdRunnerAccessPatch**](docs/DefaultAPI.md#apiambientv1sessionsidrunneraccesspatch) | **Patch** /api/ambient/v1/sessions/{id}/runner/access | Check session update permission for runner access
+*DefaultAPI* | [**ApiAmbientV1SessionsIdRunnerAccessPost**](docs/DefaultAPI.md#apiambientv1sessionsidrunneraccesspost) | **Post** /api/ambient/v1/sessions/{id}/runner/access | Check session create permission for runner access
+*DefaultAPI* | [**ApiAmbientV1SessionsIdRunnerAccessPut**](docs/DefaultAPI.md#apiambientv1sessionsidrunneraccessput) | **Put** /api/ambient/v1/sessions/{id}/runner/access | Check session update permission for runner access
+*DefaultAPI* | [**ApiAmbientV1SessionsIdRunnerAccessStopPost**](docs/DefaultAPI.md#apiambientv1sessionsidrunneraccessstoppost) | **Post** /api/ambient/v1/sessions/{id}/runner/access/stop | Check session stop permission for runner access
 *DefaultAPI* | [**ApiAmbientV1SessionsIdStartPost**](docs/DefaultAPI.md#apiambientv1sessionsidstartpost) | **Post** /api/ambient/v1/sessions/{id}/start | Start a session
 *DefaultAPI* | [**ApiAmbientV1SessionsIdStatusPatch**](docs/DefaultAPI.md#apiambientv1sessionsidstatuspatch) | **Patch** /api/ambient/v1/sessions/{id}/status | Update session status fields
 *DefaultAPI* | [**ApiAmbientV1SessionsIdStopPost**](docs/DefaultAPI.md#apiambientv1sessionsidstoppost) | **Post** /api/ambient/v1/sessions/{id}/stop | Stop a session

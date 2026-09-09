@@ -18,6 +18,176 @@ servers:
 security:
 - Bearer: []
 paths:
+  /api/ambient/v1/sessions/{id}/runner/access:
+    delete:
+      description: Checks the authenticated caller's session role and scope. Does
+        not change the session or contact its runner. A successful result applies
+        only to this request.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Access is allowed
+        "401":
+          description: User authentication is required
+        "403":
+          description: The caller does not have the required session permission
+        "404":
+          description: The session does not exist
+        "500":
+          description: The permission check failed
+      security:
+      - Bearer: []
+      summary: Check session delete permission for runner access
+    get:
+      description: Checks the authenticated caller's session role and scope. Does
+        not change the session or contact its runner. A successful result applies
+        only to this request.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Access is allowed
+        "401":
+          description: User authentication is required
+        "403":
+          description: The caller does not have the required session permission
+        "404":
+          description: The session does not exist
+        "500":
+          description: The permission check failed
+      security:
+      - Bearer: []
+      summary: Check session read permission for runner access
+    head:
+      description: Checks the authenticated caller's session role and scope. Does
+        not change the session or contact its runner. A successful result applies
+        only to this request.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Access is allowed
+        "401":
+          description: User authentication is required
+        "403":
+          description: The caller does not have the required session permission
+        "404":
+          description: The session does not exist
+        "500":
+          description: The permission check failed
+      security:
+      - Bearer: []
+      summary: Check session read permission for runner access
+    patch:
+      description: Checks the authenticated caller's session role and scope. Does
+        not change the session or contact its runner. A successful result applies
+        only to this request.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Access is allowed
+        "401":
+          description: User authentication is required
+        "403":
+          description: The caller does not have the required session permission
+        "404":
+          description: The session does not exist
+        "500":
+          description: The permission check failed
+      security:
+      - Bearer: []
+      summary: Check session update permission for runner access
+    post:
+      description: Checks the authenticated caller's session role and scope. Does
+        not change the session or contact its runner. A successful result applies
+        only to this request.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Access is allowed
+        "401":
+          description: User authentication is required
+        "403":
+          description: The caller does not have the required session permission
+        "404":
+          description: The session does not exist
+        "500":
+          description: The permission check failed
+      security:
+      - Bearer: []
+      summary: Check session create permission for runner access
+    put:
+      description: Checks the authenticated caller's session role and scope. Does
+        not change the session or contact its runner. A successful result applies
+        only to this request.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Access is allowed
+        "401":
+          description: User authentication is required
+        "403":
+          description: The caller does not have the required session permission
+        "404":
+          description: The session does not exist
+        "500":
+          description: The permission check failed
+      security:
+      - Bearer: []
+      summary: Check session update permission for runner access
+  /api/ambient/v1/sessions/{id}/runner/access/stop:
+    post:
+      description: Checks the authenticated caller's session role and scope. Does
+        not change the session or contact its runner. A successful result applies
+        only to this request.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Access is allowed
+        "401":
+          description: User authentication is required
+        "403":
+          description: The caller does not have the required session permission
+        "404":
+          description: The session does not exist
+        "500":
+          description: The permission check failed
+      security:
+      - Bearer: []
+      summary: Check session stop permission for runner access
   /api/ambient/v1/runtime/sessions:
     get:
       description: Requires the configured control plane service identity.

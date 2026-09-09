@@ -53,8 +53,8 @@ func TestRunnerProxyUsesAuthorizedBindingAndPreservesRequest(t *testing.T) {
 		return (&net.Dialer{}).DialContext(ctx, "tcp", strings.TrimPrefix(runner.URL, "http://"))
 	}}
 	h := newTestSandboxHandler(gw)
-	h.authorize = func(_ context.Context, bearer, session, name string) (string, error) {
-		if bearer != "test-sandbox-token" || session != "session-a" || name != "sandbox-a" {
+	h.authorizeRunner = func(_ context.Context, bearer, session, name, method, action string) (string, error) {
+		if bearer != "test-sandbox-token" || session != "session-a" || name != "sandbox-a" || method != http.MethodPut || action != "" {
 			t.Fatal("wrong user authorization inputs")
 		}
 		return "gateway-a/workspace-a", nil
@@ -95,7 +95,9 @@ func TestRunnerProxyRejectsBeforeDial(t *testing.T) {
 				return nil, errors.New("unexpected dial")
 			}}
 			h := newTestSandboxHandler(gw)
-			h.authorize = func(context.Context, string, string, string) (string, error) { return "gateway", tc.authorizeErr }
+			h.authorizeRunner = func(context.Context, string, string, string, string, string) (string, error) {
+				return "gateway", tc.authorizeErr
+			}
 			r := httptest.NewRequest(http.MethodGet, tc.path, nil)
 			if tc.auth {
 				withTestAuth(r)
@@ -116,6 +118,7 @@ func TestRunnerProxyConnectionFailureIsNotEmptySuccess(t *testing.T) {
 		return nil, errors.New("private upstream detail")
 	}}
 	h := newTestSandboxHandler(gw)
+	h.authorizeRunner = func(context.Context, string, string, string, string, string) (string, error) { return "gateway", nil }
 	w := httptest.NewRecorder()
 	h.handleRunnerProxy(w, withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/sandbox-a/runner/session-a/files", nil)))
 	if w.Code != 502 || strings.Contains(w.Body.String(), "private") {
@@ -134,5 +137,39 @@ func TestRunnerProxyAcceptsNativeRunnerRoutes(t *testing.T) {
 		if _, _, _, ok := runnerProxyPath("/sandbox/sandbox-a/runner/session-a" + route); ok {
 			t.Errorf("unrelated route %q accepted", route)
 		}
+	}
+}
+
+func TestRunnerProxyUsesOperationPermissionBeforeNativeAccess(t *testing.T) {
+	for _, tc := range []struct{ method, path, permissionMethod, action string }{
+		{"GET", "/content", "GET", ""},
+		{"OPTIONS", "/content", "GET", ""},
+		{"POST", "/content/write", "PUT", ""},
+		{"PUT", "/workspace/file", "PUT", ""},
+		{"DELETE", "/content/delete", "DELETE", ""},
+		{"POST", "/", "POST", ""},
+		{"POST", "/tasks/task-a/stop", "POST", "stop"},
+		{"POST", "/feedback", "POST", ""},
+	} {
+		t.Run(tc.method+tc.path, func(t *testing.T) {
+			gw := &runnerProxyGateway{mockSandboxGateway: mockSandboxGateway{getSandboxFn: func(context.Context, string, string) (*pb.SandboxResponse, error) {
+				t.Fatal("denied user reached native gateway")
+				return nil, nil
+			}}}
+			h := newTestSandboxHandler(gw)
+			h.authorizeRunner = func(_ context.Context, bearer, session, sandbox, method, action string) (string, error) {
+				if method != tc.permissionMethod || action != tc.action {
+					t.Fatalf("permission=%s/%s", method, action)
+				}
+				return "", errors.New("viewer denied")
+			}
+			req := withTestAuth(httptest.NewRequest(tc.method, "/sandbox/sandbox-a/runner/session-a"+tc.path, nil))
+			req.Header.Set("X-Runner-Action", "read")
+			w := httptest.NewRecorder()
+			h.handleRunnerProxy(w, req)
+			if w.Code != http.StatusForbidden {
+				t.Fatalf("status=%d", w.Code)
+			}
+		})
 	}
 }

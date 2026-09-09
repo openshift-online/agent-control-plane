@@ -133,6 +133,8 @@ func init() {
 		sessionsRouter.HandleFunc("", sessionHandler.List).Methods(http.MethodGet)
 		sessionsRouter.HandleFunc("/phase_counts", sessionHandler.PhaseCounts).Methods(http.MethodGet)
 		sessionsRouter.HandleFunc("/{id}", sessionHandler.Get).Methods(http.MethodGet)
+		sessionsRouter.HandleFunc("/{id}/runner/access", sessionHandler.RunnerAccess).Methods(http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete)
+		sessionsRouter.HandleFunc("/{id}/runner/access/stop", sessionHandler.RunnerAccess).Methods(http.MethodPost)
 		sessionsRouter.HandleFunc("", sessionHandler.Create).Methods(http.MethodPost)
 		sessionsRouter.HandleFunc("/{id}", sessionHandler.Patch).Methods(http.MethodPatch)
 		sessionsRouter.HandleFunc("/{id}/status", sessionHandler.PatchStatus).Methods(http.MethodPatch)

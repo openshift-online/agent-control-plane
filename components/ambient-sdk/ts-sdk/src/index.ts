@@ -5,6 +5,8 @@
 
 export { AmbientClient } from './client';
 export { RuntimeAPI } from './runtime_api';
+export { checkRunnerAccess } from './runner_access';
+export type { RunnerAccessMethod } from './runner_access';
 export type { AmbientClientConfig, ListOptions, RequestOptions, ObjectReference, ListMeta, APIError } from './base';
 export { AmbientAPIError, buildQueryString } from './base';
 

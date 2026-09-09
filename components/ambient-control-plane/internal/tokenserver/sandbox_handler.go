@@ -26,9 +26,10 @@ type SandboxGateway interface {
 type SandboxAuthorizer func(ctx context.Context, bearer, sessionID, sandboxName string) (gatewayTarget string, err error)
 
 type sandboxHandler struct {
-	gateway   SandboxGateway
-	logger    zerolog.Logger
-	authorize SandboxAuthorizer
+	gateway         SandboxGateway
+	logger          zerolog.Logger
+	authorize       SandboxAuthorizer
+	authorizeRunner RunnerAuthorizer
 }
 
 func (h *sandboxHandler) requireAuth(w http.ResponseWriter, r *http.Request, name string) (string, bool) {

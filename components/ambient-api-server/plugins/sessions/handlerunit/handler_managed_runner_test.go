@@ -161,7 +161,10 @@ func TestManagedRunnerListEnvelopes(t *testing.T) {
 
 func TestManagedRunnerFailuresAreNotEmptySuccess(t *testing.T) {
 	calls := 0
-	session, router := managedRunnerHarness(t, func(w http.ResponseWriter, r *http.Request) { calls++; http.Error(w, "unavailable", 503) })
+	session, router := managedRunnerHarness(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	})
 	for _, route := range []string{"workspace", "files", "git/status", "agui/events", "mcp/status"} {
 		path := fmt.Sprintf("/api/ambient/v1/sessions/%s/%s", session.ID, route)
 		rr := httptest.NewRecorder()

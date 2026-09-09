@@ -306,7 +306,7 @@ func startTokenServer(ctx context.Context, cfg *config.ControlPlaneConfig, token
 		return fmt.Errorf("parsing CP token private key: %w", err)
 	}
 	identity := reconciler.NewLegacyRunnerIdentity(reconciler.NewSDKClientFactory(cfg.APIServerURL, tokenProvider, log.Logger), privKey)
-	opts := []tokenserver.Option{tokenserver.WithSessionValidator(identity.ValidateRunner), tokenserver.WithSandboxAuthorizer(identity.AuthorizeSandbox)}
+	opts := []tokenserver.Option{tokenserver.WithSessionValidator(identity.ValidateRunner), tokenserver.WithSandboxAuthorizer(identity.AuthorizeSandbox), tokenserver.WithRunnerAuthorizer(identity.AuthorizeRunner)}
 	if gateway != nil {
 		opts = append(opts, tokenserver.WithGateway(gateway))
 	}
