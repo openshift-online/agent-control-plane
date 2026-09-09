@@ -1,7 +1,8 @@
 # jshell deployment evidence
 
 This record covers infrastructure preparation. ACP session approval tests are
-still required. All cluster commands used this explicit context:
+still required. The final revision table below takes precedence over earlier
+observations in this record. All cluster commands used this explicit context:
 
 `default/api-jshell-8u58-p3-openshiftapps-com:443/johnsell`
 
@@ -224,3 +225,52 @@ initial event and is not suitable for a cleanup snapshot.
 The gateway and console are still Pending for memory. Live session execution,
 credential rotation and revocation, recovery, and cleanup proof remain pending.
 The UI must be restored before this deployment is offered for user approval.
+
+
+## Current revision record
+
+ACP review: [PR 482](https://github.com/openshift-online/agent-control-plane/pull/482).
+Hypershell review: [PR 260](https://github.com/openshift-online/hypershell/pull/260).
+Both PRs remain drafts until live session checks pass.
+
+| Image | Source commit | SHA-256 digest |
+| --- | --- | --- |
+| ACP API | `95264f99` | `feb8319e05e94e0fc7a83cac53fff9ad4d4b7cf89f1429a306dcb8d44e936305` |
+| ACP control plane | `c8ac1505` | `ecefdc3484119fc7010780c6f8248c4154b42de36ad5145ce00ddaa232508c4d` |
+| ACP UI | `95264f99` | `a3868c1dd976c1865b87d14f731c41217254e5fe51be114e785ccf372d9ca185` |
+| ACP runner | `95264f99` | `0d677d416128d4aa6bbed07d76c0c5f37f7e8b5e03d6ceb98106b6544762736d` |
+| Hypershell API | `e66e994` | `704126e10a001faa577af3003fc40dec6ba92e7f2b17b10934364c2842d79ab5` |
+| Hypershell control plane | `05abc20` | `2a53e48d38f2c853817fd5fbaf17ccf57ec315917b77b5e1f7daa47f0be7dd4b` |
+
+All image builds used a Git archive of the stated commit. The later control
+plane commits contain the SDK allocation fix and the gateway TOML fix. The
+runtime source for the other images did not change after their builds.
+
+Deployment changes through ACP commit `eabc942b` give each migration container
+its own temporary directory. The server and migration no longer create the
+same glog filename. The test ACP API requests 48Mi and retains its 1Gi limit.
+Its observed memory use was 21Mi. The default API request remains 64Mi.
+
+The ACP API and control plane are Ready with zero restarts. Project and session
+watch streams connected over verified TLS at 17:04:39 UTC on 2026-09-09.
+REST authentication, public gRPC certificate verification, HTTP/2 negotiation,
+and the runner image pull grant pass. The UI has its final image but remains
+scaled to zero because the cluster lacks capacity.
+
+The first gateway process rejected `credential_drivers` inside the OIDC TOML
+section. Hypershell commit `b9c136e` puts this setting in the gateway table and
+adds a structural regression test. The final Hypershell controller includes
+this fix. Live parsed configuration has the setting in the correct table.
+
+
+The corrected gateway replica has not started. During replacement of the failed
+replica, another pending workload used the released memory. The test gateway's
+console was temporarily scaled to zero, but Hypershell restored its desired
+replica count. No workload in the other gateway namespace was changed. The
+corrected gateway and test console are now Pending for memory.
+
+A fourth worker is required for further live checks. The current OCM identity
+cannot change this cluster's worker pool. The user was asked to increase the
+pool from three to four workers or supply an OCM login with cluster access.
+Gateway authentication, sandbox execution, credential convergence, recovery,
+and cleanup remain unproven. The ACP UI must be restored after capacity is added.

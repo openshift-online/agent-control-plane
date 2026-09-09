@@ -20,7 +20,8 @@ Hypershell worktree: `/home/jsell/code/hypershell-acp-integration`.
 | UI, CLI, and SDK changes | Implemented; all three UI audit passes complete |
 | Hypershell and ACP deployment | APIs and databases ready; gateway awaits capacity |
 | Live session, isolation, rotation, recovery, and cleanup tests | Pending |
-| PR and user approval test instructions | Pending |
+| PRs | ACP #482 and Hypershell #260 open as drafts |
+| User approval deployment | Pending worker capacity and live proof |
 
 API contract: Project and Session runtime fields are read-only to users. The
 control plane uses authenticated runtime endpoints. Runtime inventory includes
@@ -82,3 +83,14 @@ values. Runner startup preserves the proxy and CA settings from OpenShell.
 
 The UI is temporarily scaled to zero to release memory for the gateway database.
 It must be restored before the deployment is ready for user approval.
+
+ACP draft PR: https://github.com/openshift-online/agent-control-plane/pull/482.
+Hypershell draft PR: https://github.com/openshift-online/hypershell/pull/260.
+
+The deployed ACP control plane uses `c8ac1505`; its API, UI, and runner images
+use `95264f99`. The deployed Hypershell API uses `e66e994`, and its control plane
+uses `05abc20`. See the deployment evidence for image digests. Both APIs and
+control planes are ready. The UI remains paused. The corrected gateway remains
+Pending because another workload used the memory released by its failed
+replica. No live sandbox has run. A fourth worker is the remaining prerequisite
+for live verification; the current OCM login cannot change this worker pool.
