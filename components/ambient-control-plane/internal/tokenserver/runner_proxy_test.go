@@ -122,3 +122,17 @@ func TestRunnerProxyConnectionFailureIsNotEmptySuccess(t *testing.T) {
 		t.Fatalf("response=%d %q", w.Code, w.Body.String())
 	}
 }
+
+func TestRunnerProxyAcceptsNativeRunnerRoutes(t *testing.T) {
+	for _, route := range []string{"/", "/interrupt", "/feedback", "/capabilities", "/tasks", "/tasks/task-a/output", "/events/session-a", "/content/list"} {
+		_, _, got, ok := runnerProxyPath("/sandbox/sandbox-a/runner/session-a" + route)
+		if !ok || got != route {
+			t.Errorf("native route %q rejected", route)
+		}
+	}
+	for _, route := range []string{"/interrupt/private", "/feedback/private", "/capabilities/private", "/token", "/env"} {
+		if _, _, _, ok := runnerProxyPath("/sandbox/sandbox-a/runner/session-a" + route); ok {
+			t.Errorf("unrelated route %q accepted", route)
+		}
+	}
+}

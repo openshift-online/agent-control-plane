@@ -38,7 +38,12 @@ func runnerProxyPath(raw string) (name, sessionID, runnerPath string, ok bool) {
 	// destination or unrelated runner administration path is accepted.
 	root := strings.SplitN(parts[3], "/", 2)[0]
 	switch root {
-	case "events", "agui", "workspace", "files", "content", "git", "repos", "mcp", "oauth":
+	case "", "interrupt", "feedback", "capabilities":
+		if runnerPath != "/"+root {
+			return "", "", "", false
+		}
+		return parts[0], parts[2], runnerPath, true
+	case "tasks", "events", "agui", "workspace", "files", "content", "git", "repos", "mcp", "oauth":
 		return parts[0], parts[2], runnerPath, true
 	default:
 		return "", "", "", false
