@@ -360,16 +360,18 @@ func TestManagedUploadUsesTargetCredentialsForSSHAndForwarding(t *testing.T) {
 
 func TestManagedEndpointAndTargetKey(t *testing.T) {
 	for input, expected := range map[string]string{
-		"https://gateway.example":      "dns:///gateway.example:443",
-		"grpcs://gateway.example":      "dns:///gateway.example:443",
-		"gateway.example:8443":         "dns:///gateway.example:8443",
-		"https://gateway.example:8443": "dns:///gateway.example:8443",
-		"grpcs://gateway.example:443":  "dns:///gateway.example:443",
-		"grpcs://gateway.example:8443": "dns:///gateway.example:8443",
-		"[::1]:443":                    "dns:///[::1]:443",
-		"https://[::1]":                "dns:///[::1]:443",
-		"grpcs://[2001:db8::1]":        "dns:///[2001:db8::1]:443",
-		"grpcs://[2001:db8::1]:8443":   "dns:///[2001:db8::1]:8443",
+		"https://gateway.example":       "dns:///gateway.example:443",
+		"grpcs://gateway.example":       "dns:///gateway.example:443",
+		"gateway.example:8443":          "dns:///gateway.example:8443",
+		"https://gateway.example:8443":  "dns:///gateway.example:8443",
+		"grpcs://gateway.example:443":   "dns:///gateway.example:443",
+		"grpcs://gateway.example:8443":  "dns:///gateway.example:8443",
+		"https://gateway.example:8443/": "dns:///gateway.example:8443",
+		"grpcs://gateway.example/":      "dns:///gateway.example:443",
+		"[::1]:443":                     "dns:///[::1]:443",
+		"https://[::1]":                 "dns:///[::1]:443",
+		"grpcs://[2001:db8::1]":         "dns:///[2001:db8::1]:443",
+		"grpcs://[2001:db8::1]:8443":    "dns:///[2001:db8::1]:8443",
 	} {
 		t.Run(input, func(t *testing.T) {
 			got, err := normalizeGatewayEndpoint(input)
@@ -382,7 +384,7 @@ func TestManagedEndpointAndTargetKey(t *testing.T) {
 		"https://user:password@gateway.example", "https://gateway.example/path", "https://gateway.example?token=secret",
 		"dns:///gateway.example", "gateway.example", "gateway.example:0", "http://gateway.example", "grpc://gateway.example:443",
 		"grpcs://user:password@gateway.example", "grpcs://user@gateway.example", "grpcs://gateway.example/path",
-		"grpcs://gateway.example/", "https://gateway.example/", "grpcs://gateway.example/%2f", "grpcs://gateway.example?token=secret",
+		"grpcs://gateway.example//", "https://gateway.example/%2f", "grpcs://gateway.example/%2f", "grpcs://gateway.example?token=secret",
 		"grpcs://gateway.example?", "grpcs://gateway.example#fragment", "grpcs://gateway.example#", "grpcs:///gateway.example",
 		"grpcs://gateway.example:", "grpcs://gateway.example:0", "grpcs://gateway.example:65536", "grpcs://gateway.example:abc",
 		"grpcs://[::1]:", "grpcs://::1", " grpcs://gateway.example", "grpcs://gateway.example\n", "grpcs://",
