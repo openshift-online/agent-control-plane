@@ -50,7 +50,8 @@ func (r *ManagedReconciler) reconcileManagedSession(ctx context.Context, sdk *sd
 			}
 			return nil
 		}
-		_, err := r.patchSession(ctx, sdk, s, map[string]interface{}{"runtime_backend": ManagedBackend, "gateway_id": p.GatewayID, "gateway_workspace": stableRuntimeName("session-", s.ID), "sandbox_name": stableRuntimeName("acp-", s.ID), "gateway_endpoint": p.GatewayEndpoint, "gateway_credential_id": p.GatewayCredentialID, "runtime_status": "Pending"})
+		workspace, sandbox := managedSessionResourceNames(s.ID)
+		_, err := r.patchSession(ctx, sdk, s, map[string]interface{}{"runtime_backend": ManagedBackend, "gateway_id": p.GatewayID, "gateway_workspace": workspace, "sandbox_name": sandbox, "gateway_endpoint": p.GatewayEndpoint, "gateway_credential_id": p.GatewayCredentialID, "runtime_status": "Pending"})
 		return err
 	}
 	if s.GatewayID != p.GatewayID {

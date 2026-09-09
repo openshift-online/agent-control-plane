@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base32"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -298,6 +300,14 @@ func runtimeNotFound(err error) bool {
 func stableRuntimeName(prefix, value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return prefix + hex.EncodeToString(sum[:16])
+}
+
+// OpenShell limits routable workspace and sandbox names to 19 characters.
+// Keep 80 hash bits and separate resource prefixes within that limit.
+func managedSessionResourceNames(sessionID string) (workspace, sandbox string) {
+	sum := sha256.Sum256([]byte(sessionID))
+	suffix := strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(sum[:10]))
+	return "ws-" + suffix, "sb-" + suffix
 }
 
 func (r *ManagedReconciler) patchProject(ctx context.Context, sdk *sdkclient.Client, p types.Project, fields map[string]interface{}) (*types.Project, error) {

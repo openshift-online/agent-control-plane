@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +22,54 @@ import (
 	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 	"github.com/rs/zerolog"
 )
+
+func TestManagedSessionBindingUsesRoutableNamesBeforeGatewayRequest(t *testing.T) {
+	seen := map[string]string{}
+	validName := regexp.MustCompile(`^[a-z][a-z0-9-]{0,17}[a-z0-9]$`)
+	for _, id := range []string{"3J6CUL5MoYr2eykRRkgSktf4IYE", "3J6CUSoEhn9Zj2akpxAHEwkcWmk", strings.Repeat("long-session-", 40), "session/with spaces"} {
+		t.Run(id, func(t *testing.T) {
+			var patch map[string]interface{}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if req.Method != http.MethodPatch {
+					t.Errorf("unexpected method %s", req.Method)
+				}
+				if err := json.NewDecoder(req.Body).Decode(&patch); err != nil {
+					t.Error(err)
+				}
+				if err := json.NewEncoder(w).Encode(types.Session{ObjectReference: types.ObjectReference{ID: id}}); err != nil {
+					t.Error(err)
+				}
+			}))
+			defer server.Close()
+			sdk, err := sdkclient.NewServiceClient(server.URL, "test-service-identity-value")
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := &ManagedReconciler{sessions: map[string]types.Session{}}
+			project := types.Project{GatewayID: "gateway", GatewayStatus: "Ready"}
+			for range 2 {
+				// The gateway is nil: persist both names before any remote request.
+				if err := r.reconcileManagedSession(context.Background(), sdk, project, types.Session{ObjectReference: types.ObjectReference{ID: id}}); err != nil {
+					t.Fatal(err)
+				}
+				for _, field := range []string{"gateway_workspace", "sandbox_name"} {
+					name, ok := patch[field].(string)
+					if !ok || len(name) > 19 || !validName.MatchString(name) || strings.Contains(name, "--") {
+						t.Fatalf("invalid routable %s: %v", field, patch[field])
+					}
+					if owner, exists := seen[name]; exists && owner != id+field {
+						t.Fatalf("name collision for %s", field)
+					}
+					seen[name] = id + field
+				}
+			}
+			workspace, sandbox := managedSessionResourceNames(id)
+			if patch["gateway_workspace"] != workspace || patch["sandbox_name"] != sandbox {
+				t.Fatal("resource names changed across reconciliation")
+			}
+		})
+	}
+}
 
 func TestManagedBindingIsPersistedBeforeGatewayRequest(t *testing.T) {
 	var patch map[string]interface{}
