@@ -582,15 +582,19 @@ func (h sessionHandler) StreamRunnerEvents(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if session.KubeCrName == nil || session.KubeNamespace == nil {
+	base := runnerBaseURL(session)
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
+	if base == "" {
 		http.Error(w, "session has no associated runner pod", http.StatusNotFound)
 		return
 	}
-
-	runnerURL := fmt.Sprintf(
-		"http://session-%s.%s.svc.cluster.local:8001/events/%s",
-		strings.ToLower(*session.KubeCrName), *session.KubeNamespace, *session.KubeCrName,
-	)
+	eventID := session.ID
+	if !isManagedRunner(session) && session.KubeCrName != nil {
+		eventID = *session.KubeCrName
+	}
+	runnerURL := base + "/events/" + url.PathEscape(eventID)
 
 	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, runnerURL, nil)
 	if reqErr != nil {
@@ -599,10 +603,13 @@ func (h sessionHandler) StreamRunnerEvents(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	req.Header.Set("Accept", "text/event-stream")
+	if !prepareRunnerRequest(w, r, req, session) {
+		return
+	}
 
 	resp, doErr := EventsHTTPClient.Do(req)
 	if doErr != nil {
-		glog.Warningf("StreamRunnerEvents: upstream unreachable for session %s: %v", id, doErr)
+		glog.Warningf("StreamRunnerEvents: upstream unreachable for session %s", id)
 		http.Error(w, "runner not reachable", http.StatusBadGateway)
 		return
 	}
@@ -643,6 +650,12 @@ func (h sessionHandler) StreamRunnerEvents(w http.ResponseWriter, r *http.Reques
 
 // runnerBaseURL returns the base URL of the runner pod for a session, or "".
 func runnerBaseURL(session *Session) string {
+	if isManagedRunner(session) {
+		if session.SandboxName == nil || *session.SandboxName == "" || session.ID == "" || ControlPlaneURL == "" {
+			return ""
+		}
+		return strings.TrimRight(ControlPlaneURL, "/") + "/sandbox/" + url.PathEscape(*session.SandboxName) + "/runner/" + url.PathEscape(session.ID)
+	}
 	if session.KubeCrName == nil || session.KubeNamespace == nil {
 		return ""
 	}
@@ -650,12 +663,39 @@ func runnerBaseURL(session *Session) string {
 		strings.ToLower(*session.KubeCrName), *session.KubeNamespace)
 }
 
+func isManagedRunner(session *Session) bool {
+	return session.RuntimeBackend != nil && *session.RuntimeBackend == "hypershell"
+}
+
+func managedRunnerUnavailable(w http.ResponseWriter, session *Session, base string) bool {
+	if isManagedRunner(session) && base == "" {
+		http.Error(w, "session runner not available", http.StatusServiceUnavailable)
+		return true
+	}
+	return false
+}
+
+func prepareRunnerRequest(w http.ResponseWriter, original, upstream *http.Request, session *Session) bool {
+	upstream.URL.RawQuery = original.URL.RawQuery
+	if !isManagedRunner(session) {
+		return true
+	}
+	userToken, err := auth.TokenFromContext(original.Context())
+	if err != nil || userToken == nil || userToken.Raw == "" {
+		http.Error(w, "authenticated user token required", http.StatusUnauthorized)
+		return false
+	}
+	upstream.Header.Set("Authorization", "Bearer "+userToken.Raw)
+	upstream.Header.Del("Cookie")
+	return true
+}
+
 // proxyToRunner proxies an HTTP request to the runner and writes the response.
-// Returns false if the runner is unreachable (caller should write a stub response).
-func proxyToRunner(w http.ResponseWriter, r *http.Request, runnerURL string) bool {
+// Returns false only for an unavailable legacy runner. Managed failures are explicit.
+func proxyToRunner(w http.ResponseWriter, r *http.Request, session *Session, runnerURL string) bool {
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, runnerURL, r.Body)
 	if err != nil {
-		glog.Errorf("proxyToRunner: build request to %s: %v", runnerURL, err)
+		glog.Errorf("proxyToRunner: build request for session %s", session.ID)
 		http.Error(w, "failed to build runner request", http.StatusInternalServerError)
 		return true
 	}
@@ -664,13 +704,30 @@ func proxyToRunner(w http.ResponseWriter, r *http.Request, runnerURL string) boo
 			req.Header.Add(k, v)
 		}
 	}
+	if !prepareRunnerRequest(w, r, req, session) {
+		return true
+	}
+
+	if isManagedRunner(session) {
+		if !adaptManagedRunnerRequest(w, req, session) {
+			return true
+		}
+	}
 
 	resp, doErr := EventsHTTPClient.Do(req)
 	if doErr != nil {
-		glog.V(4).Infof("proxyToRunner: runner unreachable at %s: %v", runnerURL, doErr)
+		glog.V(4).Infof("proxyToRunner: runner unreachable for session %s", session.ID)
+		if isManagedRunner(session) {
+			http.Error(w, "control plane not reachable", http.StatusBadGateway)
+			return true
+		}
 		return false
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	if isManagedRunner(session) && adaptManagedRunnerResponse(w, req, resp) {
+		return true
+	}
 
 	for k, vals := range resp.Header {
 		for _, v := range vals {
@@ -678,7 +735,13 @@ func proxyToRunner(w http.ResponseWriter, r *http.Request, runnerURL string) boo
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
+	var destination io.Writer = w
+	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+		destination = runnerStreamWriter{w}
+	}
+	if _, copyErr := io.Copy(destination, resp.Body); copyErr != nil {
+		glog.V(4).Infof("proxyToRunner: response interrupted for session %s", session.ID)
+	}
 	return true
 }
 
@@ -694,6 +757,9 @@ func (h sessionHandler) AGUIEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	base := runnerBaseURL(session)
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
 	if base == "" {
 		// No runner: emit an empty SSE stream that closes immediately.
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -702,16 +768,35 @@ func (h sessionHandler) AGUIEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/agui/events", nil)
+	eventURL := base + "/agui/events"
+	if isManagedRunner(session) {
+		eventURL = base + "/events/" + url.PathEscape(session.ID)
+	}
+	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, eventURL, nil)
+	if reqErr != nil {
+		http.Error(w, "failed to build runner request", http.StatusInternalServerError)
+		return
+	}
 	req.Header.Set("Accept", "text/event-stream")
+	if !prepareRunnerRequest(w, r, req, session) {
+		return
+	}
 	resp, doErr := EventsHTTPClient.Do(req)
 	if doErr != nil {
+		if isManagedRunner(session) {
+			http.Error(w, "control plane not reachable", http.StatusBadGateway)
+			return
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if isManagedRunner(session) && resp.StatusCode != http.StatusOK {
+		http.Error(w, "runner event stream not available", resp.StatusCode)
+		return
+	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -744,11 +829,14 @@ func (h sessionHandler) AGUIRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := runnerBaseURL(session)
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
 	if base == "" {
 		http.Error(w, "session runner not available", http.StatusServiceUnavailable)
 		return
 	}
-	proxyToRunner(w, r, base+"/agui/run")
+	proxyToRunner(w, r, session, base+"/agui/run")
 }
 
 // AGUIInterrupt proxies an AG-UI interrupt to the runner.
@@ -761,11 +849,14 @@ func (h sessionHandler) AGUIInterrupt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := runnerBaseURL(session)
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
 	if base == "" {
 		http.Error(w, "session runner not available", http.StatusServiceUnavailable)
 		return
 	}
-	proxyToRunner(w, r, base+"/agui/interrupt")
+	proxyToRunner(w, r, session, base+"/agui/interrupt")
 }
 
 // AGUIFeedback proxies AG-UI feedback to the runner.
@@ -778,11 +869,14 @@ func (h sessionHandler) AGUIFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := runnerBaseURL(session)
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
 	if base == "" {
 		http.Error(w, "session runner not available", http.StatusServiceUnavailable)
 		return
 	}
-	proxyToRunner(w, r, base+"/agui/feedback")
+	proxyToRunner(w, r, session, base+"/agui/feedback")
 }
 
 // AGUITasks lists background tasks from the runner, or returns an empty list.
@@ -795,13 +889,16 @@ func (h sessionHandler) AGUITasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := runnerBaseURL(session)
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
 	if base == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"tasks":[],"total":0}`))
 		return
 	}
-	if !proxyToRunner(w, r, base+"/agui/tasks") {
+	if !proxyToRunner(w, r, session, base+"/agui/tasks") {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"tasks":[],"total":0}`))
@@ -820,11 +917,14 @@ func (h sessionHandler) AGUITaskStop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := runnerBaseURL(session)
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
 	if base == "" {
 		http.Error(w, "session runner not available", http.StatusServiceUnavailable)
 		return
 	}
-	proxyToRunner(w, r, base+"/agui/tasks/"+taskID+"/stop")
+	proxyToRunner(w, r, session, base+"/agui/tasks/"+taskID+"/stop")
 }
 
 // AGUITaskOutput proxies a task output request to the runner.
@@ -839,11 +939,14 @@ func (h sessionHandler) AGUITaskOutput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := runnerBaseURL(session)
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
 	if base == "" {
 		http.Error(w, "session runner not available", http.StatusServiceUnavailable)
 		return
 	}
-	proxyToRunner(w, r, base+"/agui/tasks/"+taskID+"/output")
+	proxyToRunner(w, r, session, base+"/agui/tasks/"+taskID+"/output")
 }
 
 // AGUICapabilities returns the runner's capabilities, or a stub if unavailable.
@@ -856,7 +959,10 @@ func (h sessionHandler) AGUICapabilities(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	base := runnerBaseURL(session)
-	if base == "" || !proxyToRunner(w, r, base+"/agui/capabilities") {
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
+	if base == "" || !proxyToRunner(w, r, session, base+"/agui/capabilities") {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"framework":"unknown"}`))
@@ -873,7 +979,10 @@ func (h sessionHandler) MCPStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := runnerBaseURL(session)
-	if base == "" || !proxyToRunner(w, r, base+"/mcp/status") {
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
+	if base == "" || !proxyToRunner(w, r, session, base+"/mcp/status") {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"servers":[],"totalCount":0}`))
@@ -894,7 +1003,10 @@ func (h sessionHandler) WorkspaceList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := runnerBaseURL(session)
-	if base == "" || !proxyToRunner(w, r, base+"/workspace") {
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
+	if base == "" || !proxyToRunner(w, r, session, base+"/workspace") {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"files":[]}`))
@@ -913,11 +1025,14 @@ func (h sessionHandler) WorkspaceFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := runnerBaseURL(session)
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
 	if base == "" {
 		http.Error(w, "session runner not available", http.StatusServiceUnavailable)
 		return
 	}
-	proxyToRunner(w, r, base+"/workspace/"+filePath)
+	proxyToRunner(w, r, session, base+"/workspace/"+url.PathEscape(filePath))
 }
 
 // ---------------------------------------------------------------------------
@@ -934,7 +1049,10 @@ func (h sessionHandler) FilesList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := runnerBaseURL(session)
-	if base == "" || !proxyToRunner(w, r, base+"/files") {
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
+	if base == "" || !proxyToRunner(w, r, session, base+"/files") {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"files":[]}`))
@@ -953,11 +1071,14 @@ func (h sessionHandler) FilesFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := runnerBaseURL(session)
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
 	if base == "" {
 		http.Error(w, "session runner not available", http.StatusServiceUnavailable)
 		return
 	}
-	proxyToRunner(w, r, base+"/files/"+filePath)
+	proxyToRunner(w, r, session, base+"/files/"+url.PathEscape(filePath))
 }
 
 // ---------------------------------------------------------------------------
@@ -974,7 +1095,10 @@ func (h sessionHandler) GitStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := runnerBaseURL(session)
-	if base == "" || !proxyToRunner(w, r, base+"/git/status") {
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
+	if base == "" || !proxyToRunner(w, r, session, base+"/git/status") {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"modified":[],"staged":[],"untracked":[]}`))
@@ -991,11 +1115,14 @@ func (h sessionHandler) GitConfigureRemote(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	base := runnerBaseURL(session)
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
 	if base == "" {
 		http.Error(w, "session runner not available", http.StatusServiceUnavailable)
 		return
 	}
-	proxyToRunner(w, r, base+"/git/configure-remote")
+	proxyToRunner(w, r, session, base+"/git/configure-remote")
 }
 
 // GitBranches proxies git branch listing from the runner, or returns an empty stub.
@@ -1008,7 +1135,10 @@ func (h sessionHandler) GitBranches(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := runnerBaseURL(session)
-	if base == "" || !proxyToRunner(w, r, base+"/git/branches") {
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
+	if base == "" || !proxyToRunner(w, r, session, base+"/git/branches") {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`[]`))
@@ -1029,7 +1159,10 @@ func (h sessionHandler) ReposStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base := runnerBaseURL(session)
-	if base == "" || !proxyToRunner(w, r, base+"/repos/status") {
+	if managedRunnerUnavailable(w, session, base) {
+		return
+	}
+	if base == "" || !proxyToRunner(w, r, session, base+"/repos/status") {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`[]`))
