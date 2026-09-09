@@ -119,26 +119,20 @@ def _load_ca_cert(ca_cert_file: str | None) -> bytes:
 
 
 def _build_channel(
-    grpc_url: str, token: str, use_tls: bool = False, ca_cert_file: str | None = None
+    grpc_url: str, use_tls: bool = False, ca_cert_file: str | None = None
 ) -> grpc.Channel:
-    """Build a gRPC channel with optional TLS and bearer token call credentials."""
+    """Build transport; session RPC wrappers supply one bearer header per call."""
     logger.info(
-        "[GRPC CHANNEL] Building channel: url=%s tls=%s token_present=%s ca_cert=%s",
+        "[GRPC CHANNEL] Building channel: url=%s tls=%s ca_cert=%s",
         grpc_url,
         use_tls,
-        bool(token),
         ca_cert_file,
     )
     if use_tls:
-        call_creds = grpc.access_token_call_credentials(token) if token else None
         ca_cert = _load_ca_cert(ca_cert_file)
         channel_creds = grpc.ssl_channel_credentials(root_certificates=ca_cert)
-        if call_creds:
-            logger.info("[GRPC CHANNEL] Using TLS + bearer token credentials")
-            return grpc.secure_channel(
-                grpc_url, grpc.composite_channel_credentials(channel_creds, call_creds)
-            )
-        logger.info("[GRPC CHANNEL] Using TLS-only credentials (no token)")
+        # The RPC wrappers add Authorization on both TLS and explicit local
+        # plaintext transports. Adding channel call credentials duplicates it.
         return grpc.secure_channel(grpc_url, channel_creds)
     logger.info("[GRPC CHANNEL] Using insecure channel (no TLS)")
     return grpc.insecure_channel(grpc_url)
@@ -219,7 +213,7 @@ class AmbientGRPCClient:
         if self._channel is None:
             logger.info("[GRPC CHANNEL] Creating new channel to %s", self._grpc_url)
             self._channel = _build_channel(
-                self._grpc_url, self._token, self._use_tls, self._ca_cert_file
+                self._grpc_url, self._use_tls, self._ca_cert_file
             )
             logger.info("[GRPC CHANNEL] Channel created successfully")
         return self._channel

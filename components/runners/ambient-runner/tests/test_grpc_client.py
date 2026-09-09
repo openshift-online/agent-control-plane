@@ -325,7 +325,7 @@ def test_grpc_handshake_uses_combined_trust(tls_certificates, issuer):
         )
         server.start()
         try:
-            with _build_channel(f"localhost:{port}", "", True, additional) as channel:
+            with _build_channel(f"localhost:{port}", True, additional) as channel:
                 call = channel.unary_unary("/proof.TLS/Ping")
                 if issuer == "untrusted":
                     with pytest.raises(grpc.RpcError) as caught:
@@ -361,3 +361,92 @@ def test_grpc_service_ca_adds_to_native_trust(tls_certificates, monkeypatch):
     )
     roots = x509.load_pem_x509_certificates(_load_ca_cert(None))
     assert {"CN=native", "CN=acp"} <= {root.subject.rfc4514_string() for root in roots}
+
+
+@pytest.mark.parametrize("use_tls", [True, False])
+def test_session_rpcs_send_one_bearer_before_and_after_refresh(
+    tls_certificates, monkeypatch, use_tls
+):
+    """Exercise the complete client path; duplicate metadata is rejected by ACP."""
+    seen = []
+
+    def accept(request, context):
+        values = [
+            item.value
+            for item in context.invocation_metadata()
+            if item.key == "authorization"
+        ]
+        seen.append(values)
+        if len(values) != 1:
+            context.abort(grpc.StatusCode.UNAUTHENTICATED, "ambiguous authorization")
+        return b""
+
+    def watch(request, context):
+        yield accept(request, context)
+
+    certificate = tls_certificates["acp"]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        server = grpc.server(pool)
+        server.add_generic_rpc_handlers(
+            (
+                grpc.method_handlers_generic_handler(
+                    "ambient.v1.SessionService",
+                    {
+                        "PushSessionMessage": grpc.unary_unary_rpc_method_handler(
+                            accept
+                        ),
+                        "PushSessionEvent": grpc.unary_unary_rpc_method_handler(accept),
+                        "WatchSessionMessages": grpc.unary_stream_rpc_method_handler(
+                            watch
+                        ),
+                    },
+                ),
+            )
+        )
+        if use_tls:
+            port = server.add_secure_port(
+                "127.0.0.1:0",
+                grpc.ssl_server_credentials(
+                    (
+                        (
+                            certificate["key"].read_bytes(),
+                            certificate["cert"].read_bytes(),
+                        ),
+                    )
+                ),
+            )
+        else:
+            port = server.add_insecure_port("127.0.0.1:0")
+        server.start()
+        refreshed = "acp-runner-v1.refreshed.signature"
+        monkeypatch.setattr(
+            "ambient_runner._grpc_client._fetch_token_from_cp", lambda *_: refreshed
+        )
+        client = AmbientGRPCClient(
+            f"localhost:{port}",
+            TEST_RUNNER_IDENTITY,
+            use_tls,
+            str(certificate["ca"]),
+            cp_token_url="https://cp.example/token",
+        )
+        try:
+            for index, expected in enumerate((TEST_RUNNER_IDENTITY, refreshed)):
+                if index:
+                    client.reconnect()
+                assert (
+                    client.session_messages.push("session-a", "assistant", "proof")
+                    is not None
+                )
+                assert (
+                    client.session_events.push("session-a", "RUN_STARTED", "{}")
+                    is not None
+                )
+                assert (
+                    len(list(client.session_messages.watch("session-a", timeout=3)))
+                    == 1
+                )
+                assert seen[index * 3 : (index + 1) * 3] == [[f"Bearer {expected}"]] * 3
+            assert len(seen) == 6
+        finally:
+            client.close()
+            server.stop(0).wait(timeout=3)
