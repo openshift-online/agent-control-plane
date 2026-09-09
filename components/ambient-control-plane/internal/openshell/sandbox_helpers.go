@@ -20,6 +20,12 @@ func SandboxPhaseString(phase pb.SandboxPhase) string {
 		return "error"
 	case pb.SandboxPhase_SANDBOX_PHASE_DELETING:
 		return "deleting"
+	case pb.SandboxPhase_SANDBOX_PHASE_STOPPING:
+		return "stopping"
+	case pb.SandboxPhase_SANDBOX_PHASE_STOPPED:
+		return "stopped"
+	case pb.SandboxPhase_SANDBOX_PHASE_STARTING:
+		return "starting"
 	default:
 		return "unknown"
 	}

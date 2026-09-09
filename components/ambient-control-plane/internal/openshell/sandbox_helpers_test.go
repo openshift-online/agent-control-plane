@@ -17,6 +17,11 @@ func TestSandboxPhaseString(t *testing.T) {
 		{pb.SandboxPhase_SANDBOX_PHASE_PROVISIONING, "provisioning"},
 		{pb.SandboxPhase_SANDBOX_PHASE_ERROR, "error"},
 		{pb.SandboxPhase_SANDBOX_PHASE_DELETING, "deleting"},
+		{pb.SandboxPhase_SANDBOX_PHASE_STOPPING, "stopping"},
+		{pb.SandboxPhase_SANDBOX_PHASE_STOPPED, "stopped"},
+		{pb.SandboxPhase_SANDBOX_PHASE_STARTING, "starting"},
+		{pb.SandboxPhase_SANDBOX_PHASE_UNSPECIFIED, "unknown"},
+		{pb.SandboxPhase_SANDBOX_PHASE_UNKNOWN, "unknown"},
 		{pb.SandboxPhase(999), "unknown"},
 	}
 	for _, tt := range tests {
