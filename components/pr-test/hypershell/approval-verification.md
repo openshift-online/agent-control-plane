@@ -1,9 +1,9 @@
 # Approval verification
 
 This checklist preserves the scope of the Hypershell resource assessment.
-The deployment is not ready for approval until each required live check has
-recorded evidence. Local tests establish component behavior; they do not prove
-that the complete deployed path works.
+The Haiku path is ready for user testing. Final approval still requires the
+remaining distinct-model check, which the current Vertex policy blocks. Local
+tests establish component behavior; they do not prove the deployed path.
 
 Use the explicit jshell context from the deployment README. Use only the test
 ACP and Hypershell resources. Record IDs, image digests, request status codes,
@@ -38,15 +38,15 @@ prove isolation between different credential values or cloud identities.
 | Credential revocation | Remove one required binding or revoke its credential. Confirm the affected session stops and its old runtime access is rejected. Confirm the other session still works. | Passed: native stop, unexpired access denied, bootstrap exchange 403, A still answered |
 | Token and account expiry | Verify short-lived gateway token renewal and rejection after expiry. Verify account replacement before expiry, invalidation of the old account, and recovery if the one-time secret response is lost. | Passed; failure states used controlled API setup |
 | Cross-boundary denial | A user from one workspace must not access the other workspace's session, logs, files, or credentials. A runner token must not access another session or an old execution generation. | Passed: human, native gateway, and scoped runner access; revoked capabilities and old unexpired generation denied |
-| Lost creation response | Interrupt the caller after a remote create succeeds but before ACP records the response. Reconciliation must adopt one resource through the external reference and must not create a duplicate. | Pending |
+| Lost creation response | Interrupt the caller after a remote create succeeds but before ACP records the response. Reconciliation must adopt one resource through the external reference and must not create a duplicate. | Passed: remote201 discarded before headers, CP restarted, original gateway adopted |
 | ACP restart during launch | Replace the test control-plane pod during launch. Verify one runner process for the stored generation, no repeated initial task, and delivery of queued messages after recovery. | Passed: one runner process, stable generation, two queued replies once and in order |
 | Hypershell outage | Stop only the isolated test Hypershell API for a bounded test, then restore it. ACP must retain resource identity, report pending work, and recover without duplicates. | Passed for gateway identity and project cleanup |
 | Endpoint and certificate change | Change only a test gateway endpoint or certificate through its owner. Verify connection refresh, trusted TLS, and rejection of an untrusted endpoint. | Passed: endpoint refresh, certificate serial/SAN change, invalid IP rejection; CA root rotation not tested |
 | Stop and resume | Write a file and record its digest. Stop through the native sandbox lifecycle, resume, and verify the same file, retained artifacts, and correct message sequence. | Passed: same runtime IDs, exact file digest, saved cursor76, replies80/84 |
-| Cleanup during an outage | Request session and workspace deletion while the remote service is unavailable. State must remain pending. After recovery, verify sandbox, providers, session workspace, gateway accounts, gateway namespace, and owned storage cleanup. | Partial: gateway, account, credential, and storage cleanup pass; live session remains |
-| Snapshots and user operations | Read policy and logs, use supported file/terminal/proxy operations, then stop or delete. Verify retained policy/log snapshots and that failures do not falsely report cleanup success. | Partial: API file CRUD, native commands, policy, logs, and snapshots pass; UI binary fix awaits rollout |
+| Cleanup during an outage | Request session and workspace deletion while the remote service is unavailable. State must remain pending. After recovery, verify sandbox, providers, session workspace, gateway accounts, gateway namespace, and owned storage cleanup. | Passed: session/provider/workspace and project/account/credential/storage removed after recovery |
+| Snapshots and user operations | Read policy and logs, use supported file/terminal/proxy operations, then stop or delete. Verify retained policy/log snapshots and that failures do not falsely report cleanup success. | Passed: API/native operations and snapshots; browser binary file matched all 4096 bytes and denied anonymous write |
 | All session entry points | Create sessions through UI, CLI, SDK, agent start, and schedule. Each must use the same managed binding path. | Passed: UI, CLI, Go SDK, agent start, and actual schedule timer |
-| User approval | Restore the ACP UI. Leave a ready workspace and usable session. Supply the HTTPS URL, username, private password file location, and the completed evidence record. | Pending; UI restored |
+| User approval | Restore the ACP UI. Leave a ready workspace and usable session. Supply the HTTPS URL, username, private password file location, and the completed evidence record. | Passed: fresh login, binary file test, same saved session resumed with a 24-hour timeout and fresh reply |
 
 ## Existing local coverage
 

@@ -19,9 +19,9 @@ Hypershell worktree: `/home/jsell/code/hypershell-acp-integration`.
 | Legacy runner identity and TLS callbacks | Implemented and tested |
 | UI, CLI, and SDK changes | Implemented; all three UI audit passes complete |
 | Hypershell and ACP deployment | APIs, gateways, sandboxes, and UI run |
-| Live session, isolation, rotation, recovery, and cleanup tests | Real agent, rotation, revocation, resume, and account checks pass; fault recovery proof in progress |
+| Live session, isolation, rotation, recovery, and cleanup tests | All live checks pass except distinct models, blocked by Vertex policy |
 | PRs | ACP #482 and Hypershell #260 open as drafts |
-| User approval deployment | Pending complete live proof |
+| User approval deployment | Ready for user testing; distinct-model proof remains blocked |
 
 API contract: Project and Session runtime fields are read-only to users. The
 control plane uses authenticated runtime endpoints. Runtime inventory includes

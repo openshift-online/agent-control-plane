@@ -3,8 +3,9 @@
 ACP and Hypershell run on jshell. Two ACP workspaces have separate managed
 OpenShell gateways. Native sandbox execution, account recovery, image access,
 and resource cleanup pass. A real Haiku agent task returned its result through
-ACP. The approval checklist records the remaining recovery checks and the external
-Sonnet model restriction.
+ACP. All live checklist items pass except concurrent distinct-model inference,
+which the current Vertex organization policy blocks. The deployment is ready
+for user testing; both PRs remain drafts for final approval.
 
 ACP review: [PR 482](https://github.com/openshift-online/agent-control-plane/pull/482).
 Hypershell review: [PR 260](https://github.com/openshift-online/hypershell/pull/260).
@@ -113,6 +114,14 @@ Removing that grant restored cross-project denial. A file whose name contained
 spaces and `#` retained its bytes through the API and native-backed proxy.
 All temporary grants and file fixtures were removed.
 
+The final UI image passed a signed-in browser binary transfer. Upload and
+download preserved all 4,096 bytes, including every byte value. The SHA-256 was
+`c8f5d0341d54d951a71b136e6e2afcb14d11ed8489a7ae126a8fee0df6ecf193`.
+An anonymous write returned HTTP 401 and left the file unchanged. Normal browser
+deletion removed the fixture; the next GET returned HTTP 404. All 456 UI tests,
+TypeScript, focused lint, and the production build pass. The final source
+review confirmed the exact native route permissions and binary proxy fix.
+
 ## Sandbox and storage checks
 
 Native sandbox creation, command execution, stop, and deletion pass. The native
@@ -163,7 +172,35 @@ Normal cleanup then removed the gateway and database namespaces, image pull
 grant, PVC-backed volume, and protected ACP credential. The main project kept
 the same gateway, account, and credential before, during, and after the outage.
 
-## Agent execution and remaining proof
+A second fault test discarded a successful remote gateway creation response
+before ACP received its headers. Hypershell had created gateway
+`3J6SXn3YeM5tQyYYsC1SLIFH4a4`. ACP stored the external reference but no gateway,
+account, or credential ID. The ACP control plane was replaced while retries
+remained blocked. After release, it adopted the same gateway ID and reached
+Ready. Normal project deletion completed. The temporary TLS proxy was removed,
+the original endpoint was restored, and both existing project bindings and
+all configured image references stayed unchanged.
+
+The session cleanup outage test used a separate gateway with a running Haiku
+session. Its native API returned `UNAVAILABLE` while the gateway was stopped.
+ACP retained the deletion record and runtime IDs through four samples over
+20 seconds. After restoration, native sandbox, provider, and workspace lookups
+all returned `NOT_FOUND` at 19:00:58 UTC. The main session returned a fresh reply
+before and after the outage; both existing sessions kept their identities.
+
+The native delete completed before the restarted gateway's watch began. The
+pinned gateway recovered the missed event through its periodic sweep: a
+300-second grace period from resource creation, then a 60-second sweep interval.
+These values are in the pinned
+[compute constants](https://github.com/opendatahub-io/openshell/blob/681c9b2d8b9887f230cee4871bdbdbc9a362dfc8/crates/openshell-server/src/compute/mod.rs#L285-L290).
+The measured delay is part of the native recovery contract. ACP kept cleanup
+pending through that interval. No source change or manual deletion was needed.
+Normal project deletion completed at 19:01:16 UTC. Final checks at 19:01:32
+confirmed removal of both namespaces, both volumes, the image pull grant,
+source and gateway credentials, agent and binding, gateway account, and
+Hypershell gateway/database records. Both ACP deletion records report `Deleted`.
+
+## Agent execution and user testing
 
 The current Haiku session is `3J6PgDamt4dr2yiSE23p4J5oKP6` in
 `jshell-hypershell-test`. Its sandbox is
@@ -173,6 +210,12 @@ The current Haiku session is `3J6PgDamt4dr2yiSE23p4J5oKP6` in
 `ACP_HYPERSHELL_HAIKU_OK`. Native command execution verified the file, and ACP
 stored the assistant reply, tool messages, and 13 task events. The sandbox uses
 the configured runner image and has zero pod restarts.
+
+For user testing, the main session was stopped and resumed through ACP with a
+24-hour timeout. Its sandbox, workspace, and proof file remained unchanged.
+The new execution generation is `c7e5695e85737a6532aec618b7b5e54d`.
+A fresh message at sequence 102 received `ACP_APPROVAL_READY` at sequence 104.
+The isolation session was then stopped through ACP; native status is `Stopped`.
 
 Live probes found two callback issues: the runner replaced native proxy roots
 with ACP roots, and the native TLS proxy did not negotiate HTTP/2 for gRPC.
@@ -279,3 +322,14 @@ aws iam delete-role \
 ```
 
 These commands undo the repair and stop CSI storage operations. They were not run.
+
+## Review and test status
+
+The final code revision is `c9cb00a4`; later commits update this evidence only.
+The mechanical PR review gate passes. CodeRabbit CLI was unavailable, so that
+optional review was skipped. Independent source review found two proxy defects;
+both fixes passed regression tests and live verification. API tests used
+PostgreSQL with role authorization enabled. Control-plane tests, race checks,
+vet, compatible lint, runner TLS/identity tests, and CLI/SDK checks pass.
+GitHub and Konflux checks continue on pushes; this record does not claim that
+all external checks pass.
