@@ -109,6 +109,18 @@ func (r *ManagedReconciler) reconcileManagedSession(ctx context.Context, sdk *sd
 	if _, err := r.gateway.UpdateConfig(ctx, target, &openshellpb.UpdateConfigRequest{Global: true, SettingKey: "providers_v2_enabled", SettingValue: &sandboxpb.SettingValue{Value: &sandboxpb.SettingValue_BoolValue{BoolValue: true}}}); err != nil {
 		return fmt.Errorf("enable credential providers: %w", err)
 	}
+	existingSandbox, lookupErr := r.gateway.GetSandbox(ctx, target, s.SandboxName)
+	if lookupErr != nil && status.Code(lookupErr) != codes.NotFound {
+		return lookupErr
+	}
+	if lookupErr == nil {
+		if err := validateManagedSandbox(s, existingSandbox); err != nil {
+			return err
+		}
+	}
+	if status.Code(lookupErr) == codes.NotFound && s.Phase == PhaseRunning {
+		return fmt.Errorf("running sandbox is missing; explicit session restart is required")
+	}
 	plan, err := ReconcileManagedProviders(ctx, projectSDK, r.gateway, target, s, agent)
 	if err != nil {
 		// Invalidate the runner identity before requesting a stop. The next
@@ -170,13 +182,10 @@ func (r *ManagedReconciler) reconcileManagedSession(ctx context.Context, sdk *sd
 	if err != nil {
 		return err
 	}
-	if sandbox == nil || sandbox.Sandbox == nil || sandbox.Sandbox.Metadata == nil {
-		return fmt.Errorf("gateway returned an incomplete sandbox")
+	if err := validateManagedSandbox(s, sandbox); err != nil {
+		return err
 	}
 	id := sandbox.Sandbox.Metadata.Id
-	if sandbox.Sandbox.Metadata.Labels["ambient-code.io/session-id"] != s.ID || sandbox.Sandbox.Metadata.Labels[LabelProjectID] != s.ProjectID {
-		return fmt.Errorf("sandbox ownership labels do not match session")
-	}
 	if id != s.SandboxID {
 		_, err := r.patchSession(ctx, sdk, s, map[string]interface{}{"sandbox_id": id})
 		return err
@@ -397,6 +406,11 @@ func (r *ManagedReconciler) stopManagedSession(ctx context.Context, sdk *sdkclie
 	if err != nil && status.Code(err) != codes.NotFound {
 		return err
 	}
+	if err == nil {
+		if err := validateManagedSandbox(s, response); err != nil {
+			return err
+		}
+	}
 	if err == nil && response.Sandbox.GetStatus().GetPhase() != openshellpb.SandboxPhase_SANDBOX_PHASE_STOPPED {
 		_, err = r.gateway.StopSandbox(ctx, target, s.SandboxName)
 		return err
@@ -415,8 +429,11 @@ func (r *ManagedReconciler) deleteManagedSession(ctx context.Context, sdk *sdkcl
 		return err
 	}
 	target := openshell.TargetKey(s.GatewayID, s.GatewayWorkspace)
-	_, err := r.gateway.GetSandbox(ctx, target, s.SandboxName)
+	response, err := r.gateway.GetSandbox(ctx, target, s.SandboxName)
 	if err == nil {
+		if err := validateManagedSandbox(s, response); err != nil {
+			return err
+		}
 		if err := r.gateway.DeleteSandbox(ctx, target, s.SandboxName); err != nil {
 			return err
 		}
@@ -434,4 +451,18 @@ func (r *ManagedReconciler) deleteManagedSession(ctx context.Context, sdk *sdkcl
 	}
 	_, err = r.patchSession(ctx, sdk, s, map[string]interface{}{"runtime_status": "Deleted", "runner_generation": "", "runtime_error": ""})
 	return err
+}
+
+func validateManagedSandbox(s types.Session, response *openshellpb.SandboxResponse) error {
+	meta := response.GetSandbox().GetMetadata()
+	if meta.GetId() == "" {
+		return fmt.Errorf("gateway returned an incomplete sandbox")
+	}
+	if meta.GetLabels()["ambient-code.io/session-id"] != s.ID || meta.GetLabels()[LabelProjectID] != s.ProjectID {
+		return fmt.Errorf("sandbox ownership labels do not match session")
+	}
+	if s.SandboxID != "" && meta.GetId() != s.SandboxID {
+		return fmt.Errorf("sandbox identity does not match session")
+	}
+	return nil
 }

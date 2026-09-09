@@ -55,6 +55,7 @@ type ManagedReconciler struct {
 	projects   map[string]types.Project
 	sessions   map[string]types.Session
 	tokens     map[string]managedTokenCache
+	wake       chan struct{}
 }
 
 func NewManagedReconciler(factory *SDKClientFactory, hs *hypershell.Client, cfg *config.HypershellConfig, runnerCfg KubeReconcilerConfig, key *rsa.PrivateKey, logger zerolog.Logger) (*ManagedReconciler, error) {
@@ -72,7 +73,7 @@ func NewManagedReconciler(factory *SDKClientFactory, hs *hypershell.Client, cfg 
 			return nil, fmt.Errorf("managed CA bundle has no certificates")
 		}
 	}
-	return &ManagedReconciler{factory: factory, hs: hs, cfg: cfg, runnerCfg: runnerCfg, privateKey: key, logger: logger.With().Str("component", "hypershell-runtime").Logger(), tlsConfig: &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: pool}, caPEM: ca, projects: make(map[string]types.Project), sessions: make(map[string]types.Session), tokens: make(map[string]managedTokenCache)}, nil
+	return &ManagedReconciler{factory: factory, hs: hs, cfg: cfg, runnerCfg: runnerCfg, privateKey: key, logger: logger.With().Str("component", "hypershell-runtime").Logger(), tlsConfig: &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: pool}, caPEM: ca, projects: make(map[string]types.Project), sessions: make(map[string]types.Session), tokens: make(map[string]managedTokenCache), wake: make(chan struct{}, 1)}, nil
 }
 
 func (r *ManagedReconciler) SetGateway(g *openshell.GatewayClient) { r.gateway = g }
@@ -165,6 +166,14 @@ func (r *ManagedReconciler) AuthorizeSandbox(ctx context.Context, bearer, sessio
 	return openshell.TargetKey(s.GatewayID, s.GatewayWorkspace), nil
 }
 
+// Notify coalesces watch events. Inventory remains the recovery source after gaps.
+func (r *ManagedReconciler) Notify() {
+	select {
+	case r.wake <- struct{}{}:
+	default:
+	}
+}
+
 func (r *ManagedReconciler) Run(ctx context.Context) error {
 	if r.gateway == nil {
 		return fmt.Errorf("managed gateway client is required")
@@ -179,6 +188,7 @@ func (r *ManagedReconciler) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
+		case <-r.wake:
 		}
 	}
 }
@@ -226,7 +236,10 @@ func (r *ManagedReconciler) sweep(ctx context.Context) error {
 		if p.RuntimeBackend != "" && p.RuntimeBackend != ManagedBackend {
 			continue
 		}
-		if err := r.reconcileProject(ctx, sdk, p); err != nil {
+		opCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+		err := r.reconcileProject(opCtx, sdk, p)
+		cancel()
+		if err != nil {
 			failures = append(failures, fmt.Errorf("workspace %s: %w", p.ID, err))
 			r.mu.RLock()
 			current := r.projects[p.ID]
@@ -248,7 +261,10 @@ func (r *ManagedReconciler) sweep(ctx context.Context) error {
 			failures = append(failures, fmt.Errorf("session %s has no workspace record", s.ID))
 			continue
 		}
-		if err := r.reconcileManagedSession(ctx, sdk, p, s); err != nil {
+		opCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		err := r.reconcileManagedSession(opCtx, sdk, p, s)
+		cancel()
+		if err != nil {
 			failures = append(failures, fmt.Errorf("session %s: %w", s.ID, err))
 			r.mu.RLock()
 			current := r.sessions[s.ID]
@@ -263,7 +279,10 @@ func (r *ManagedReconciler) sweep(ctx context.Context) error {
 	}
 	for _, p := range projects {
 		if p.RuntimeDeleted && p.RuntimeBackend == ManagedBackend {
-			if err := r.deleteManagedProject(ctx, sdk, p, sessions); err != nil {
+			opCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+			err := r.deleteManagedProject(opCtx, sdk, p, sessions)
+			cancel()
+			if err != nil {
 				failures = append(failures, fmt.Errorf("delete workspace %s: %w", p.ID, err))
 			}
 		}
@@ -446,8 +465,35 @@ func (r *ManagedReconciler) deleteOrphanGatewayCredentials(ctx context.Context, 
 }
 
 func (r *ManagedReconciler) deleteManagedProject(ctx context.Context, sdk *sdkclient.Client, p types.Project, sessions map[string]types.Session) error {
+	if p.GatewayInstanceID != "" && p.GatewayInstanceID != r.cfg.InstanceID {
+		return fmt.Errorf("workspace belongs to another Hypershell instance")
+	}
 	if p.GatewayStatus == "Deleted" {
 		return nil
+	}
+	if p.GatewayID == "" && p.GatewayExternalReference != "" {
+		deletion, err := r.hs.GatewayDeletion(ctx, p.GatewayExternalReference)
+		if err == nil {
+			if deletion.GatewayID == "" || deletion.ExternalReference != p.GatewayExternalReference {
+				return fmt.Errorf("gateway deletion does not match workspace")
+			}
+			_, err = r.patchProject(ctx, sdk, p, map[string]interface{}{"gateway_id": deletion.GatewayID, "gateway_status": "DeletionRequested"})
+			return err
+		}
+		if !hypershell.IsNotFound(err) {
+			return err
+		}
+		// Replay the durable create key even during deletion. A timed-out create
+		// may still be in flight; a list miss cannot prove that no resource exists.
+		gateway, err := r.hs.CreateGateway(ctx, "acp-"+p.Name, p.GatewayExternalReference, r.cfg.GatewayTemplate)
+		if err != nil {
+			return err
+		}
+		if gateway.ID == "" || gateway.ExternalReference != p.GatewayExternalReference {
+			return fmt.Errorf("recovered gateway does not match workspace")
+		}
+		_, err = r.patchProject(ctx, sdk, p, map[string]interface{}{"gateway_id": gateway.ID, "gateway_status": "Deleting"})
+		return err
 	}
 	if p.GatewayStatus == "DeletionRequested" {
 		status, err := r.hs.GatewayDeletion(ctx, p.GatewayExternalReference)
@@ -466,6 +512,30 @@ func (r *ManagedReconciler) deleteManagedProject(ctx context.Context, sdk *sdkcl
 	for _, s := range sessions {
 		if s.ProjectID == p.ID && s.RuntimeStatus != "Deleted" && s.GatewayID != "" {
 			return nil
+		}
+	}
+	if p.GatewayID != "" {
+		accounts, err := r.hs.ListAccounts(ctx, p.GatewayID)
+		if err != nil && !hypershell.IsNotFound(err) {
+			return err
+		}
+		accountName := stableRuntimeName("acp-", p.GatewayExternalReference)
+		for _, account := range accounts {
+			if account.Name != accountName {
+				continue
+			}
+			if account.Status != "revoked" && account.Status != "expired" {
+				done, err := r.hs.RevokeAccount(ctx, p.GatewayID, account.ID)
+				if err != nil {
+					return err
+				}
+				if !done {
+					return fmt.Errorf("gateway credential revocation is pending")
+				}
+			}
+			if err := r.deleteOrphanGatewayCredentials(ctx, sdk, p.GatewayID, account.ID); err != nil {
+				return err
+			}
 		}
 	}
 	if p.GatewayAccountID != "" {
