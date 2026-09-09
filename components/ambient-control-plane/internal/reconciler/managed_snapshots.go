@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell"
+	policypb "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/sandbox/v1"
 	pb "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 	sdkclient "github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/client"
 	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
@@ -76,7 +79,27 @@ func (r *ManagedReconciler) saveManagedSnapshot(ctx context.Context, sdk *sdkcli
 	}
 	snapshotCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	patch, err := openshell.BuildSnapshotPatch(response.GetSandbox())
+	policy, err := r.gateway.GetSandboxPolicyStatus(snapshotCtx, target, s.SandboxName)
+	if err != nil {
+		return nil, fmt.Errorf("collect managed sandbox policy: %w", err)
+	}
+	if policy.GetRevision().GetPolicy() == nil {
+		return nil, fmt.Errorf("gateway returned no authored sandbox policy")
+	}
+	// GetSandbox retains the creation-time policy. Save the current authored
+	// revision after callback or user policy changes, without copying secrets.
+	sandbox := proto.Clone(response.GetSandbox()).(*pb.Sandbox)
+	if sandbox.Spec == nil {
+		sandbox.Spec = &pb.SandboxSpec{}
+	}
+	sandbox.Spec.Policy = proto.Clone(policy.GetRevision().GetPolicy()).(*policypb.SandboxPolicy)
+	if policy.GetRevision().GetVersion() > 0 {
+		if sandbox.Status == nil {
+			sandbox.Status = &pb.SandboxStatus{}
+		}
+		sandbox.Status.CurrentPolicyVersion = policy.GetRevision().GetVersion()
+	}
+	patch, err := openshell.BuildSnapshotPatch(sandbox)
 	if err != nil {
 		return nil, fmt.Errorf("build managed sandbox snapshot: %w", err)
 	}

@@ -47,6 +47,9 @@ and phase check. An empty log buffer SHALL be a valid snapshot, including when
 the sandbox never became Ready. A failed RPC or database write SHALL keep cleanup
 pending. ACP SHALL preserve a saved snapshot when a stopped sandbox has no logs.
 An already deleted sandbox SHALL NOT require another snapshot.
+Policy inspection and snapshots SHALL read the current authored policy revision
+from the gateway. They SHALL NOT use the stale creation-time policy after an
+update. A failed policy lookup SHALL keep cleanup pending.
 A Degraded gateway SHALL block new session work but SHALL NOT block attempts to
 stop terminal sessions. ACP SHALL validate the gateway binding and refresh its
 connection settings before these cleanup attempts.

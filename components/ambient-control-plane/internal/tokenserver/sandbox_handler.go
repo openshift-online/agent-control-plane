@@ -20,6 +20,11 @@ type SandboxGateway interface {
 	WatchSandbox(ctx context.Context, namespace string, req *pb.WatchSandboxRequest) (pb.OpenShell_WatchSandboxClient, error)
 }
 
+// SandboxPolicyGateway supplies the current authored policy revision.
+type SandboxPolicyGateway interface {
+	GetSandboxPolicyStatus(context.Context, string, string) (*pb.GetSandboxPolicyStatusResponse, error)
+}
+
 // SandboxAuthorizer validates a user bearer token with the API server. It must
 // verify session access and sandbox name, and return the session gateway target.
 // The request namespace is never used as an authorization decision.
@@ -82,6 +87,18 @@ func (h *sandboxHandler) handlePolicy(w http.ResponseWriter, r *http.Request) {
 
 	policy := sbx.GetSpec().GetPolicy()
 	status := sbx.GetStatus()
+	var revision *pb.SandboxPolicyRevision
+	var activeVersion uint32
+	if gateway, ok := h.gateway.(SandboxPolicyGateway); ok {
+		current, err := gateway.GetSandboxPolicyStatus(r.Context(), namespace, name)
+		if err != nil || current.GetRevision().GetPolicy() == nil {
+			http.Error(w, "failed to get sandbox policy", http.StatusBadGateway)
+			return
+		}
+		revision = current.GetRevision()
+		policy = revision.GetPolicy()
+		activeVersion = current.GetActiveVersion()
+	}
 
 	result := map[string]interface{}{
 		"version":         policy.GetVersion(),
@@ -92,6 +109,11 @@ func (h *sandboxHandler) handlePolicy(w http.ResponseWriter, r *http.Request) {
 		"policy":          openshell.PolicyToMap(policy),
 	}
 
+	if revision != nil {
+		result["hash"] = revision.GetPolicyHash()
+		result["config_revision"] = fmt.Sprintf("%d", revision.GetVersion())
+		result["active_version"] = activeVersion
+	}
 	w.Header().Set("Content-Type", "application/json")
 	if encErr := json.NewEncoder(w).Encode(result); encErr != nil {
 		h.logger.Warn().Err(encErr).Msg("sandbox policy: failed to write response")

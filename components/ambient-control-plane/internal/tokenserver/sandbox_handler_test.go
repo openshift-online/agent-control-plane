@@ -387,3 +387,44 @@ func TestSandboxAuthorizationCannotSelectAnotherGateway(t *testing.T) {
 		t.Fatal("missing authorizer accepted")
 	}
 }
+
+type currentPolicyGateway struct {
+	*mockSandboxGateway
+	policy *pb.GetSandboxPolicyStatusResponse
+	err    error
+}
+
+func (g *currentPolicyGateway) GetSandboxPolicyStatus(context.Context, string, string) (*pb.GetSandboxPolicyStatusResponse, error) {
+	return g.policy, g.err
+}
+
+func TestPolicyEndpointUsesCurrentAuthoredRevision(t *testing.T) {
+	gw := &currentPolicyGateway{mockSandboxGateway: &mockSandboxGateway{getSandboxFn: func(context.Context, string, string) (*pb.SandboxResponse, error) {
+		return makeSandboxResponse("sandbox-id", "sandbox-a"), nil
+	}}, policy: &pb.GetSandboxPolicyStatusResponse{Revision: &pb.SandboxPolicyRevision{Version: 9, PolicyHash: "current-hash", Policy: &sbv1.SandboxPolicy{Version: 1, NetworkPolicies: map[string]*sbv1.NetworkPolicyRule{"current": {Name: "current-rule"}}}}, ActiveVersion: 8}}
+	h := newTestSandboxHandler(gw)
+	w := httptest.NewRecorder()
+	h.handlePolicy(w, withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/sandbox-a/policy?session_id=session-a", nil)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d", w.Code)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result["config_revision"] != "9" || result["hash"] != "current-hash" || result["active_version"] != float64(8) || !strings.Contains(w.Body.String(), "current-rule") {
+		t.Fatalf("stale policy response: %s", w.Body.String())
+	}
+}
+
+func TestPolicyEndpointDoesNotHideCurrentPolicyFailure(t *testing.T) {
+	gw := &currentPolicyGateway{mockSandboxGateway: &mockSandboxGateway{getSandboxFn: func(context.Context, string, string) (*pb.SandboxResponse, error) {
+		return makeSandboxResponse("sandbox-id", "sandbox-a"), nil
+	}}, err: fmt.Errorf("private upstream failure")}
+	h := newTestSandboxHandler(gw)
+	w := httptest.NewRecorder()
+	h.handlePolicy(w, withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/sandbox-a/policy?session_id=session-a", nil)))
+	if w.Code != http.StatusBadGateway || strings.Contains(w.Body.String(), "private") {
+		t.Fatalf("response=%d %s", w.Code, w.Body.String())
+	}
+}

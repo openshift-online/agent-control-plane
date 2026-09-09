@@ -31,6 +31,8 @@ type managedSnapshotServer struct {
 	sandbox              *pb.Sandbox
 	logError, patchError bool
 	emptyLogs            bool
+	policyError          bool
+	currentPolicy        *policypb.SandboxPolicy
 	logs                 []*pb.SandboxLogLine
 	patchAttempts        int
 	calls                []string
@@ -44,6 +46,21 @@ func (s *managedSnapshotServer) GetSandbox(context.Context, *pb.GetSandboxReques
 		return nil, status.Error(codes.NotFound, "sandbox not found")
 	}
 	return &pb.SandboxResponse{Sandbox: s.sandbox}, nil
+}
+func (s *managedSnapshotServer) GetSandboxPolicyStatus(_ context.Context, req *pb.GetSandboxPolicyStatusRequest) (*pb.GetSandboxPolicyStatusResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if req.Name != "sandbox" || req.Workspace != "workspace" {
+		return nil, status.Error(codes.InvalidArgument, "wrong policy binding")
+	}
+	if s.policyError {
+		return nil, status.Error(codes.Unavailable, "policy unavailable")
+	}
+	policy := s.currentPolicy
+	if policy == nil {
+		policy = s.sandbox.GetSpec().GetPolicy()
+	}
+	return &pb.GetSandboxPolicyStatusResponse{Revision: &pb.SandboxPolicyRevision{Policy: policy}}, nil
 }
 func (s *managedSnapshotServer) GetSandboxLogs(_ context.Context, req *pb.GetSandboxLogsRequest) (*pb.GetSandboxLogsResponse, error) {
 	s.mu.Lock()
@@ -503,5 +520,31 @@ func TestManagedLogSnapshotAcceptsExactAPILimit(t *testing.T) {
 	}
 	if len(data) != 2*1024*1024 || strings.Contains(string(data), "omitted_entries") {
 		t.Fatal("snapshot at exact API byte limit was truncated")
+	}
+}
+
+func TestManagedSnapshotUsesCurrentPolicyAndRetainsCreationPolicy(t *testing.T) {
+	r, sdk, server, target := newManagedSnapshotTest(t)
+	server.currentPolicy = &policypb.SandboxPolicy{Version: 9, NetworkPolicies: map[string]*policypb.NetworkPolicyRule{"changed": {Name: "current-rule"}}}
+	response := &pb.SandboxResponse{Sandbox: server.sandbox}
+	if _, err := r.saveManagedSnapshot(context.Background(), sdk, server.session, target, response); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(server.session.SandboxPolicySnapshot, "current-rule") {
+		t.Fatal("snapshot kept the creation-time policy")
+	}
+	if response.Sandbox.Spec.Policy.Version != 4 {
+		t.Fatal("snapshot changed the shared sandbox response")
+	}
+}
+
+func TestManagedPolicySnapshotFailureKeepsCleanupPending(t *testing.T) {
+	r, sdk, server, target := newManagedSnapshotTest(t)
+	server.policyError = true
+	if err := r.stopManagedSession(context.Background(), sdk, server.session, target); err == nil {
+		t.Fatal("policy failure was ignored")
+	}
+	if len(server.calls) != 0 || server.patchAttempts != 0 {
+		t.Fatalf("cleanup advanced after policy failure: %v", server.calls)
 	}
 }
