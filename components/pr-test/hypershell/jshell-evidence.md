@@ -86,8 +86,9 @@ ACP commit `e8fd4b35`; the control plane image comes from `49d41e39`. Final ACP
 source changes require another image build before approval tests.
 
 The jshell and Keycloak HTTPS certificates pass system trust verification.
-The ACP manifest uses a reencrypt Route for public gRPC and a service-issued
-certificate for the API gRPC listener. The token callback uses an HTTPS Route.
+The ACP manifest uses a passthrough Route for public gRPC and a dedicated
+certificate with public and internal DNS names. The REST API uses a reencrypt
+Route. The token callback uses an HTTPS Route.
 
 The three worker nodes have limited memory request capacity. Only the new test
 workload requests were reduced. Two concurrent agent sessions can require more
@@ -116,4 +117,31 @@ unrelated workload requests.
 
 The Keycloak realm has no identity provider. Existing human usernames are
 `admin`, `developer`, and `platform-admin`. There is no `johnsell` realm user.
-A personal login still needs an identity broker or a dedicated realm user.
+A dedicated `johnsell` user was then created with the `hypershell-users` role.
+Its password is in the private local file `johnsell-password`.
+
+
+## TLS configuration
+
+The default OpenShift ingress certificate does not negotiate HTTP/2 for a
+reencrypt Route. A dedicated `acp-hypershell-test-ca` ClusterIssuer signs the
+ACP public gRPC certificate. Its private key remains in the cert-manager
+namespace. ACP mounts only a public trust bundle. Each Hypershell gateway
+server must use this issuer through `GATEWAY_SERVER_TLS_CLUSTER_ISSUER`.
+
+The rh-trex-ai 0.0.31 legacy `--grpc-enable-tls` flag alone leaves gRPC
+plaintext. The deployment enables the enhanced TLS settings for REST and gRPC:
+`--enable-tls=true`, `--tls-cert-file`, `--tls-key-file`, and
+`--tls-auto-detect-kubernetes=false`. The last setting prevents automatic
+Kubernetes client TLS configuration from replacing the server certificate.
+The control plane uses HTTPS for the internal API URL and mounts merged roots
+through `SSL_CERT_FILE`, `CA_CERT_FILE`, and `HYPERSHELL_CA_CERT_FILE`.
+The last variable supplies the gateway trust and runner CA payload. The UI
+uses the same public trust ConfigMap through `NODE_EXTRA_CA_CERTS`.
+
+
+The public gRPC handshake then passed certificate verification and negotiated
+ALPN `h2`. A `grpcurl` reflection request without a token returned
+`Unauthenticated`, which proves that the public TLS path reached the protected
+gRPC server. The control plane resumed successful runtime inventory requests
+over HTTPS.

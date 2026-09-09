@@ -159,3 +159,18 @@ Before applying ACP, include the namespace's `openshift-service-ca.crt`
 ConfigMap value as `service_ca` in its JSON configuration. The renderer sets the
 public gRPC Route's destination CA from this value. `setup-secrets.py` creates
 the runner keypair before the API mounts its public key.
+
+
+For public gRPC on an OpenShift default ingress certificate, use a dedicated
+certificate and passthrough Route. The default ingress certificate does not
+permit HTTP/2 on a reencrypt Route. Run `setup-tls.py config.json` with
+`ACP_OC_CONTEXT` set. This creates a dedicated test ClusterIssuer and an ACP
+server certificate. It puts the public CA and system roots in a ConfigMap.
+The CA private key stays in the cert-manager namespace. Set Hypershell
+`GATEWAY_SERVER_TLS_CLUSTER_ISSUER` to `<ACP namespace>-test-ca` so each gateway
+server uses the same trusted issuer. The control plane supplies this trust
+bundle to runner startup. Browser UI and token Routes keep public certificates.
+
+The operator must renew the trust ConfigMap after CA rotation. This script is
+for the review deployment; a production installation needs a managed trust
+bundle and certificate rotation process.

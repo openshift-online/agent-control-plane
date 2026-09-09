@@ -7,7 +7,9 @@ OC="$SCRIPT_DIR/oc.sh"
 python3 - "$CONFIG" <<'CHECK'
 import json, sys
 config = json.load(open(sys.argv[1]))
-if not config.get('service_ca'):
+if not config.get('api_tls'):
+    raise SystemExit('Run setup-tls.py to configure verified API and gRPC TLS')
+if config.get('grpc_route_termination') != 'passthrough' and not config.get('service_ca'):
     raise SystemExit('Set service_ca to the namespace service CA before applying')
 if any('REPLACE' in value for value in config['images'].values()):
     raise SystemExit('Replace example image references with built image digests')

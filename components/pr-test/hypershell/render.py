@@ -24,6 +24,7 @@ def render(config):
     issuer = config['oidc_issuer'].rstrip('/')
     images = config['images']
     cp_client = config['cp_client_id']
+    api_scheme = 'https' if config.get('api_tls') else 'http'
     ui_client = config['ui_client_id']
     ui_host = f'ambient-ui-{namespace}.{domain}'
     api_host = f'ambient-api-server-{namespace}.{domain}'
@@ -107,7 +108,7 @@ def render(config):
         [{'name': 'db', 'secret': {'secretName': 'ambient-api-server-db'}},
          {'name': 'service', 'secret': {'secretName': 'ambient-api-server'}},
          {'name': 'auth', 'configMap': {'name': 'ambient-api-server-auth'}},
-         {'name': 'grpc-tls', 'secret': {'secretName': 'ambient-api-server-tls'}},
+         {'name': 'grpc-tls', 'secret': {'secretName': config.get('grpc_tls_secret', 'ambient-api-server-tls')}},
          {'name': 'runner-key', 'secret': {'secretName': 'ambient-cp-token-keypair', 'items': [{'key': 'public.pem', 'path': 'public.pem'}]}}],
         ['/usr/local/bin/ambient-api-server', 'serve'] + db_args + [
             '--enable-jwt=true', '--enable-authz=true',
@@ -119,6 +120,11 @@ def render(config):
             '--grpc-enable-tls=true', '--grpc-tls-cert-file=/secrets/grpc-tls/tls.crt',
             '--grpc-tls-key-file=/secrets/grpc-tls/tls.key', '--enable-db-debug=false', '--alsologtostderr'],
         {'httpGet': {'path': '/healthcheck', 'port': 4434}})
+    if config.get('api_tls'):
+        api['spec']['template']['spec']['containers'][0]['command'] += [
+            '--enable-tls=true', '--tls-cert-file=/secrets/grpc-tls/tls.crt',
+            '--tls-key-file=/secrets/grpc-tls/tls.key', '--tls-min-version=1.2',
+            '--tls-auto-detect-kubernetes=false']
     api['spec']['template']['spec']['initContainers'] = [{
         'name': 'migrate', 'image': images['api_server'],
         'command': ['/usr/local/bin/ambient-api-server', 'migrate'] + db_args,
@@ -130,7 +136,7 @@ def render(config):
 
     cp_env = [env('MODE', 'kube'), env('PLATFORM_MODE', 'standard'),
         env('NAMESPACE', namespace), env('CP_RUNTIME_NAMESPACE', namespace),
-        env('AMBIENT_API_SERVER_URL', f'http://ambient-api-server.{namespace}.svc:8000'),
+        env('AMBIENT_API_SERVER_URL', f'{api_scheme}://ambient-api-server.{namespace}.svc:8000'),
         env('AMBIENT_GRPC_SERVER_ADDR', f'ambient-api-server.{namespace}.svc:9000'),
         env('AMBIENT_GRPC_USE_TLS', 'true'), env('OIDC_TOKEN_URL', f'{issuer}/protocol/openid-connect/token'),
         env('OIDC_CLIENT_ID', cp_client),
@@ -144,8 +150,15 @@ def render(config):
     # records to support Secret references without writing credentials to config.
     overrides = {entry['name']: entry for entry in config['control_plane_env']}
     cp_env = [overrides.pop(entry['name'], entry) for entry in cp_env] + list(overrides.values())
+    cp_mounts, cp_volumes = [], []
+    if config.get('runtime_ca_configmap'):
+        cp_env += [env('HYPERSHELL_CA_CERT_FILE', '/etc/acp-trust/ca-bundle.pem'),
+                   env('CA_CERT_FILE', '/etc/acp-trust/ca-bundle.pem'),
+                   env('SSL_CERT_FILE', '/etc/acp-trust/ca-bundle.pem')]
+        cp_mounts = [mount('runtime-ca', '/etc/acp-trust', True)]
+        cp_volumes = [{'name': 'runtime-ca', 'configMap': {'name': config['runtime_ca_configmap']}}]
     deployment('ambient-control-plane', images['control_plane'], cp_env, [8080],
-        probe={'tcpSocket': {'port': 8080}})
+        mounts=cp_mounts, volumes=cp_volumes, probe={'tcpSocket': {'port': 8080}})
     service('ambient-control-plane', [('token', 8080)])
     add('Role', 'ambient-control-plane', api='rbac.authorization.k8s.io/v1', rules=[
         {'apiGroups': [''], 'resources': ['secrets', 'configmaps'],
@@ -154,8 +167,8 @@ def render(config):
         subjects=[{'kind': 'ServiceAccount', 'name': 'ambient-control-plane', 'namespace': namespace}],
         roleRef={'apiGroup': 'rbac.authorization.k8s.io', 'kind': 'Role', 'name': 'ambient-control-plane'})
 
-    deployment('ambient-ui', images['ui'], [env('NODE_ENV', 'production'),
-        env('API_SERVER_URL', 'http://ambient-api-server:8000'),
+    ui = deployment('ambient-ui', images['ui'], [env('NODE_ENV', 'production'),
+        env('API_SERVER_URL', f'{api_scheme}://ambient-api-server.{namespace}.svc:8000'),
         env('CONTROL_PLANE_URL', 'http://ambient-control-plane:8080'),
         env('SSO_ISSUER_URL', issuer), env('SSO_FRONTEND_ISSUER_URL', issuer),
         env('SSO_CLIENT_ID', ui_client), env('SSO_AUDIENCE', ui_client),
@@ -164,18 +177,28 @@ def render(config):
         secret_env('SESSION_SECRET', 'sso-credentials', 'SESSION_SECRET')], [3000],
         [mount('cache', '/app/.next/cache')], [{'name': 'cache', 'emptyDir': {}}],
         probe={'httpGet': {'path': '/api/healthz', 'port': 3000}})
+    if config.get('runtime_ca_configmap'):
+        ui['spec']['template']['spec']['containers'][0]['env'].append(env('NODE_EXTRA_CA_CERTS', '/etc/acp-trust/ca-bundle.pem'))
+        ui['spec']['template']['spec']['containers'][0]['volumeMounts'] += cp_mounts
+        ui['spec']['template']['spec']['volumes'] += cp_volumes
     service('ambient-ui', [('http', 3000)])
     for name, host, port in [('ambient-ui', ui_host, 'http'),
                              ('ambient-api-server', api_host, 'api'),
                              ('ambient-control-plane', cp_host, 'token')]:
-        add('Route', name, {'host': host, 'to': {'kind': 'Service', 'name': name},
+        route = add('Route', name, {'host': host, 'to': {'kind': 'Service', 'name': name},
             'port': {'targetPort': port}, 'tls': {'termination': 'edge',
             'insecureEdgeTerminationPolicy': 'Redirect'}}, api='route.openshift.io/v1')
-    add('Route', 'ambient-api-grpc', {'host': grpc_host,
+        if name == 'ambient-api-server' and config.get('api_tls'):
+            route['spec']['tls']['termination'] = 'reencrypt'
+            route['spec']['tls']['destinationCACertificate'] = config['api_tls_ca']
+    grpc_route = add('Route', 'ambient-api-grpc', {'host': grpc_host,
         'to': {'kind': 'Service', 'name': 'ambient-api-server'}, 'port': {'targetPort': 'grpc'},
         'tls': {'termination': 'reencrypt', 'insecureEdgeTerminationPolicy': 'Redirect',
                 **({'destinationCACertificate': config['service_ca']} if config.get('service_ca') else {})}},
         api='route.openshift.io/v1')
+    if config.get('grpc_route_termination') == 'passthrough':
+        grpc_route['spec']['tls'] = {'termination': 'passthrough', 'insecureEdgeTerminationPolicy': 'None'}
+    grpc_route['metadata']['annotations'] = {'haproxy.router.openshift.io/timeout': '3600s'}
     return {'apiVersion': 'v1', 'kind': 'List', 'items': items}
 
 
