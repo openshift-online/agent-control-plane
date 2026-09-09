@@ -63,7 +63,7 @@ func (d *sqlSessionDao) Replace(ctx context.Context, session *Session) (*Session
 		}
 		omit = append(omit, field)
 	}
-	result := g2.Model(session).Where("runtime_version = ?", session.RuntimeVersion).Select("*").Omit(omit...).Updates(session)
+	result := g2.Model(session).Where("runtime_version = ?", session.RuntimeVersion).Where("(COALESCE(runtime_backend, '') = '' OR COALESCE(gateway_id, '') = '' OR project_id = ?)", session.ProjectId).Select("*").Omit(omit...).Updates(session)
 	if result.Error != nil {
 		db.MarkForRollback(ctx, result.Error)
 		return nil, result.Error

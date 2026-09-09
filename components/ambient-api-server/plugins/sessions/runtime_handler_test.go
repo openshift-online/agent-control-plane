@@ -28,6 +28,9 @@ func TestRuntimeUserWriteCannotReplaceBindingOrUndelete(t *testing.T) {
 			if !strings.HasPrefix(actual, "UPDATE") || !strings.Contains(actual, "runtime_version = $") || !strings.Contains(actual, `"deleted_at" IS NULL`) {
 				return fmt.Errorf("missing guarded update: %s", actual)
 			}
+			if !strings.Contains(actual, "COALESCE(runtime_backend") || !strings.Contains(actual, "COALESCE(gateway_id") || !strings.Contains(actual, "OR project_id = $") {
+				return fmt.Errorf("missing bound identity guard: %s", actual)
+			}
 			assignments := strings.Split(actual, " WHERE ")[0]
 			for _, field := range []string{"runtime_version", "gateway_id", "runtime_backend", "gateway_credential_id", "deleted_at"} {
 				if strings.Contains(assignments, `"`+field+`"=`) {

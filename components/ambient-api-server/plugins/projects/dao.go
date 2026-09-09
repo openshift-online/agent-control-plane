@@ -54,7 +54,7 @@ func (d *sqlProjectDao) Replace(ctx context.Context, project *Project) (*Project
 	for field := range runtimeFields {
 		omit = append(omit, field)
 	}
-	result := g2.Model(project).Where("runtime_version = ?", project.RuntimeVersion).Select("*").Omit(omit...).Updates(project)
+	result := g2.Model(project).Where("runtime_version = ?", project.RuntimeVersion).Where("(COALESCE(runtime_backend, '') = '' OR COALESCE(gateway_id, '') = '' OR name = ?)", project.Name).Select("*").Omit(omit...).Updates(project)
 	if result.Error != nil {
 		db.MarkForRollback(ctx, result.Error)
 		return nil, result.Error
