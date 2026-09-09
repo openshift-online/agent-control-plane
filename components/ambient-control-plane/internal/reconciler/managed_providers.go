@@ -27,6 +27,12 @@ const managedSessionAnnotation = "ambient-code.io/session-id"
 const managedSourceVersionAnnotation = "ambient-code.io/source-version"
 const managedRuntimeInputsAnnotation = "ambient-code.io/runtime-inputs-sha256"
 
+// OpenShell keeps provider metadata immutable on update. Mutable ACP state uses
+// reserved nonsecret config keys, separate from provider driver settings.
+const managedProviderStatePrefix = "acp.internal/"
+const managedSourceVersionConfig = managedProviderStatePrefix + "source-version"
+const managedRuntimeInputsConfig = managedProviderStatePrefix + "runtime-inputs-sha256"
+
 // ErrBindingsChanged requires the caller to stop runtime access if a provider
 // cannot be removed. A failed authorization lookup must also stop active access.
 var ErrBindingsChanged = errors.New("managed credential access changed")
@@ -316,11 +322,11 @@ func reconcileManagedProviders(ctx context.Context, gateway managedProviderGatew
 			provider.data.Metadata.Id = current.GetMetadata().GetId()
 			provider.data.Metadata.ResourceVersion = current.GetMetadata().GetResourceVersion()
 			sourceVersion := provider.data.Metadata.Annotations[managedSourceVersionAnnotation]
-			runtimeInputsChanged := current.GetMetadata().GetAnnotations()[managedRuntimeInputsAnnotation] != provider.data.Metadata.Annotations[managedRuntimeInputsAnnotation] || current.GetType() != provider.data.Type
+			runtimeInputsChanged := managedProviderState(current, managedRuntimeInputsConfig, managedRuntimeInputsAnnotation) != provider.data.Config[managedRuntimeInputsConfig] || current.GetType() != provider.data.Type
 			if session.Phase == PhaseRunning && runtimeInputsChanged {
 				return nil, fmt.Errorf("%w: restart the session to load changed credential settings", ErrBindingsChanged)
 			}
-			needsUpdate = sourceVersion == "" || current.GetMetadata().GetAnnotations()[managedSourceVersionAnnotation] != sourceVersion || !maps.Equal(current.GetConfig(), provider.data.Config) || runtimeInputsChanged
+			needsUpdate = sourceVersion == "" || managedProviderState(current, managedSourceVersionConfig, managedSourceVersionAnnotation) != sourceVersion || !maps.Equal(current.GetConfig(), provider.data.Config) || runtimeInputsChanged
 		}
 		if err := reconcileManagedProfile(ctx, gateway, target, provider.profile); err != nil {
 			return nil, err
@@ -341,6 +347,12 @@ func reconcileManagedProviders(ctx context.Context, gateway managedProviderGatew
 		}
 		if exists {
 			if needsUpdate {
+				// Native UpdateProvider merges maps. Empty values remove old keys.
+				for key := range existing.GetProvider().GetConfig() {
+					if _, keep := provider.data.Config[key]; !keep {
+						provider.data.Config[key] = ""
+					}
+				}
 				_, err = gateway.UpdateProvider(ctx, target, &pb.UpdateProviderRequest{Provider: provider.data, CredentialExpiresAtMs: provider.data.CredentialExpiresAtMs})
 			}
 		} else {
@@ -391,7 +403,36 @@ func reconcileManagedProviders(ctx context.Context, gateway managedProviderGatew
 	return plan, nil
 }
 
+func managedProviderState(provider *datapb.Provider, configKey, legacyAnnotation string) string {
+	if value, exists := provider.GetConfig()[configKey]; exists {
+		return value
+	}
+	return provider.GetMetadata().GetAnnotations()[legacyAnnotation]
+}
+
+func rejectManagedProviderStateOverride(agent *types.Agent, credential managedCredential) error {
+	if agent != nil {
+		for key := range agent.Environment {
+			if strings.HasPrefix(key, managedProviderStatePrefix) {
+				return fmt.Errorf("agent environment cannot set reserved provider state")
+			}
+		}
+	}
+	var annotations map[string]json.RawMessage
+	if json.Unmarshal([]byte(credential.Credential.Annotations), &annotations) == nil {
+		for key := range annotations {
+			if strings.HasPrefix(key, managedProviderStatePrefix) {
+				return fmt.Errorf("credential annotations cannot set reserved provider state")
+			}
+		}
+	}
+	return nil
+}
+
 func buildManagedProvider(session types.Session, agent *types.Agent, credential managedCredential) (managedProvider, error) {
+	if err := rejectManagedProviderStateOverride(agent, credential); err != nil {
+		return managedProvider{}, err
+	}
 	kind := normalizeManagedProvider(credential.Credential.Provider)
 	name := managedProviderName(session.ID, credential.Credential.ID)
 	version := ""
@@ -468,7 +509,17 @@ func buildManagedProvider(session types.Session, agent *types.Agent, credential 
 		return result, fmt.Errorf("encode managed credential settings: %w", err)
 	}
 	digest := sha256.Sum256(runtimeInputs)
-	result.data.Metadata.Annotations[managedRuntimeInputsAnnotation] = hex.EncodeToString(digest[:])
+	fingerprint := hex.EncodeToString(digest[:])
+	result.data.Metadata.Annotations[managedRuntimeInputsAnnotation] = fingerprint
+	for key := range result.data.Config {
+		if strings.HasPrefix(key, managedProviderStatePrefix) {
+			return result, fmt.Errorf("provider driver cannot set reserved provider state")
+		}
+	}
+	// Add reconciliation state after hashing runtime inputs: source rotation must
+	// not change the runner environment or require a session restart.
+	result.data.Config[managedSourceVersionConfig] = version
+	result.data.Config[managedRuntimeInputsConfig] = fingerprint
 	return result, nil
 }
 

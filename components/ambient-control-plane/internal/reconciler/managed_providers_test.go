@@ -150,14 +150,53 @@ func (g *managedFakeGateway) CreateProvider(ctx context.Context, target string, 
 	g.scope(target)
 	name := r.Provider.Metadata.Name
 	g.providers[name] = proto.Clone(r.Provider).(*datapb.Provider)
+	if g.providers[name].Credentials == nil {
+		g.providers[name].Credentials = map[string]string{}
+	}
 	g.operations = append(g.operations, "create:"+name)
 	return &pb.ProviderResponse{Provider: g.providers[name]}, nil
 }
 func (g *managedFakeGateway) UpdateProvider(ctx context.Context, target string, r *pb.UpdateProviderRequest) (*pb.ProviderResponse, error) {
 	g.scope(target)
-	g.providers[r.Provider.Metadata.Name] = proto.Clone(r.Provider).(*datapb.Provider)
+	current := g.providers[r.Provider.Metadata.Name]
+	if current == nil {
+		return nil, status.Error(codes.NotFound, "missing")
+	}
+	if r.Provider.Metadata.ResourceVersion != current.Metadata.ResourceVersion {
+		return nil, status.Error(codes.Aborted, "stale")
+	}
+	if current.Config == nil {
+		current.Config = map[string]string{}
+	}
+	if current.Credentials == nil {
+		current.Credentials = map[string]string{}
+	}
+	if current.CredentialExpiresAtMs == nil {
+		current.CredentialExpiresAtMs = map[string]int64{}
+	}
+	for key, value := range r.CredentialExpiresAtMs {
+		if value == 0 {
+			delete(current.CredentialExpiresAtMs, key)
+		} else {
+			current.CredentialExpiresAtMs[key] = value
+		}
+	}
+	// Match pinned OpenShell: metadata is immutable; maps merge, and empty
+	// values remove keys. A replacement fake hid the live rotation failure.
+	for _, pair := range []struct{ current, update map[string]string }{
+		{current.Config, r.Provider.Config}, {current.Credentials, r.Provider.Credentials},
+	} {
+		for key, value := range pair.update {
+			if value == "" {
+				delete(pair.current, key)
+			} else {
+				pair.current[key] = value
+			}
+		}
+	}
+	current.Metadata.ResourceVersion++
 	g.operations = append(g.operations, "update:"+r.Provider.Metadata.Name)
-	return &pb.ProviderResponse{Provider: r.Provider}, nil
+	return &pb.ProviderResponse{Provider: proto.Clone(current).(*datapb.Provider)}, nil
 }
 func (g *managedFakeGateway) DeleteProvider(ctx context.Context, target, name string) error {
 	g.scope(target)
@@ -222,6 +261,11 @@ func (g *managedFakeGateway) ConfigureProviderRefresh(ctx context.Context, targe
 func (g *managedFakeGateway) RotateProviderCredential(ctx context.Context, target string, r *pb.RotateProviderCredentialRequest) (*pb.RotateProviderCredentialResponse, error) {
 	g.scope(target)
 	g.operations = append(g.operations, "rotate:"+r.Provider)
+	provider := g.providers[r.Provider]
+	if provider.CredentialExpiresAtMs == nil {
+		provider.CredentialExpiresAtMs = map[string]int64{}
+	}
+	provider.CredentialExpiresAtMs[r.CredentialKey] = time.Now().Add(time.Hour).UnixMilli()
 	return &pb.RotateProviderCredentialResponse{}, nil
 }
 
@@ -404,5 +448,105 @@ func TestManagedProviderSettingsRequireRestart(t *testing.T) {
 	}
 	if plan.Environment["JIRA_EMAIL"] != "new@example.com" {
 		t.Fatal("restart did not load changed settings")
+	}
+}
+
+func TestManagedProviderRotationConvergesWithImmutableMetadata(t *testing.T) {
+	session := managedTestSession()
+	credential := managedTestCredential("vertex")
+	created := time.Now().Add(-time.Hour)
+	credential.Credential.UpdatedAt = &created
+	credential.Token = `{"type":"authorized_user","client_id":"client","client_secret":"secret","refresh_token":"refresh","account":"user@example.com"}`
+	credential.Credential.Annotations = `{"vertex_project_id":"project-a","vertex_region":"global"}`
+	gateway := &managedFakeGateway{providers: map[string]*datapb.Provider{}}
+	plan, err := reconcileManagedProviders(context.Background(), gateway, "gateway-a/session-a", session, nil, []managedCredential{credential})
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := plan.Names[0]
+	before := proto.Clone(gateway.providers[name]).(*datapb.Provider)
+	// Existing deployed providers have only immutable annotations. Migration must
+	// update state once without treating the new keys as runner config changes.
+	delete(gateway.providers[name].Config, managedSourceVersionConfig)
+	delete(gateway.providers[name].Config, managedRuntimeInputsConfig)
+	gateway.providers[name].Config["OLD_DRIVER_SETTING"] = "obsolete"
+	session.Phase = PhaseRunning
+	rotated := created.Add(time.Minute)
+	credential.Credential.UpdatedAt = &rotated
+	credential.Token = strings.Replace(credential.Token, `"refresh_token":"refresh"`, `"refresh_token":"replacement"`, 1)
+	gateway.operations = nil
+	if _, err := reconcileManagedProviders(context.Background(), gateway, gateway.target, session, nil, []managedCredential{credential}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(gateway.operations, []string{"update:" + name, "refresh:" + name, "rotate:" + name}) {
+		t.Fatalf("rotation operations: %v", gateway.operations)
+	}
+	current := gateway.providers[name]
+	if current.Metadata.Annotations[managedSourceVersionAnnotation] != before.Metadata.Annotations[managedSourceVersionAnnotation] {
+		t.Fatal("test server changed immutable metadata")
+	}
+	if current.Config[managedSourceVersionConfig] != rotated.UTC().Format(time.RFC3339Nano) {
+		t.Fatal("mutable source version did not converge")
+	}
+	if current.Config[managedRuntimeInputsConfig] != before.Config[managedRuntimeInputsConfig] {
+		t.Fatal("source rotation changed runner fingerprint")
+	}
+	if _, exists := current.Config["OLD_DRIVER_SETTING"]; exists {
+		t.Fatal("native map merge retained obsolete config")
+	}
+	gateway.operations = nil
+	for range 2 {
+		if _, err := reconcileManagedProviders(context.Background(), gateway, gateway.target, session, nil, []managedCredential{credential}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("settled provider kept updating: %v", gateway.operations)
+	}
+}
+
+func TestManagedProviderStateCannotBeOverridden(t *testing.T) {
+	for _, key := range []string{managedSourceVersionConfig, managedRuntimeInputsConfig, managedProviderStatePrefix + "future"} {
+		t.Run(key, func(t *testing.T) {
+			credential := managedTestCredential("github")
+			agent := &types.Agent{Environment: map[string]string{key: "forged"}}
+			if _, err := buildManagedProvider(managedTestSession(), agent, credential); err == nil {
+				t.Fatal("agent state override accepted")
+			}
+			annotations, err := json.Marshal(map[string]string{key: "forged"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			credential.Credential.Annotations = string(annotations)
+			if _, err := buildManagedProvider(managedTestSession(), nil, credential); err == nil {
+				t.Fatal("credential state override accepted")
+			}
+		})
+	}
+}
+
+func TestManagedProviderFingerprintUsesOnlyDriverInputs(t *testing.T) {
+	credential := managedTestCredential("github")
+	first := time.Now().Add(-time.Minute)
+	credential.Credential.UpdatedAt = &first
+	a, err := buildManagedProvider(managedTestSession(), nil, credential)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := first.Add(time.Second)
+	credential.Credential.UpdatedAt = &second
+	credential.Token = testReplacementProviderValue
+	b, err := buildManagedProvider(managedTestSession(), nil, credential)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.data.Config[managedSourceVersionConfig] == b.data.Config[managedSourceVersionConfig] {
+		t.Fatal("test did not change source version")
+	}
+	if a.data.Config[managedRuntimeInputsConfig] != b.data.Config[managedRuntimeInputsConfig] {
+		t.Fatal("mutable state entered runtime fingerprint")
+	}
+	if !reflect.DeepEqual(a.env, b.env) {
+		t.Fatal("state or credentials entered runner environment")
 	}
 }
