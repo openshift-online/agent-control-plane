@@ -157,6 +157,13 @@ Class | Method | HTTP request | Description
 *DefaultAPI* | [**ApiAmbientV1SessionsIdMessagesGet**](docs/DefaultAPI.md#apiambientv1sessionsidmessagesget) | **Get** /api/ambient/v1/sessions/{id}/messages | List or stream session messages
 *DefaultAPI* | [**ApiAmbientV1SessionsIdMessagesPost**](docs/DefaultAPI.md#apiambientv1sessionsidmessagespost) | **Post** /api/ambient/v1/sessions/{id}/messages | Push a message to a session
 *DefaultAPI* | [**ApiAmbientV1SessionsIdPatch**](docs/DefaultAPI.md#apiambientv1sessionsidpatch) | **Patch** /api/ambient/v1/sessions/{id} | Update an session
+*DefaultAPI* | [**ApiAmbientV1SessionsIdRunnerAccessDelete**](docs/DefaultAPI.md#apiambientv1sessionsidrunneraccessdelete) | **Delete** /api/ambient/v1/sessions/{id}/runner/access | Check session delete permission for runner access
+*DefaultAPI* | [**ApiAmbientV1SessionsIdRunnerAccessGet**](docs/DefaultAPI.md#apiambientv1sessionsidrunneraccessget) | **Get** /api/ambient/v1/sessions/{id}/runner/access | Check session read permission for runner access
+*DefaultAPI* | [**ApiAmbientV1SessionsIdRunnerAccessHead**](docs/DefaultAPI.md#apiambientv1sessionsidrunneraccesshead) | **Head** /api/ambient/v1/sessions/{id}/runner/access | Check session read permission for runner access
+*DefaultAPI* | [**ApiAmbientV1SessionsIdRunnerAccessPatch**](docs/DefaultAPI.md#apiambientv1sessionsidrunneraccesspatch) | **Patch** /api/ambient/v1/sessions/{id}/runner/access | Check session update permission for runner access
+*DefaultAPI* | [**ApiAmbientV1SessionsIdRunnerAccessPost**](docs/DefaultAPI.md#apiambientv1sessionsidrunneraccesspost) | **Post** /api/ambient/v1/sessions/{id}/runner/access | Check session create permission for runner access
+*DefaultAPI* | [**ApiAmbientV1SessionsIdRunnerAccessPut**](docs/DefaultAPI.md#apiambientv1sessionsidrunneraccessput) | **Put** /api/ambient/v1/sessions/{id}/runner/access | Check session update permission for runner access
+*DefaultAPI* | [**ApiAmbientV1SessionsIdRunnerAccessStopPost**](docs/DefaultAPI.md#apiambientv1sessionsidrunneraccessstoppost) | **Post** /api/ambient/v1/sessions/{id}/runner/access/stop | Check session stop permission for runner access
 *DefaultAPI* | [**ApiAmbientV1SessionsIdStartPost**](docs/DefaultAPI.md#apiambientv1sessionsidstartpost) | **Post** /api/ambient/v1/sessions/{id}/start | Start a session
 *DefaultAPI* | [**ApiAmbientV1SessionsIdStatusPatch**](docs/DefaultAPI.md#apiambientv1sessionsidstatuspatch) | **Patch** /api/ambient/v1/sessions/{id}/status | Update session status fields
 *DefaultAPI* | [**ApiAmbientV1SessionsIdStopPost**](docs/DefaultAPI.md#apiambientv1sessionsidstoppost) | **Post** /api/ambient/v1/sessions/{id}/stop | Stop a session
@@ -170,6 +177,10 @@ Class | Method | HTTP request | Description
 *DefaultAPI* | [**GetClusterStatus**](docs/DefaultAPI.md#getclusterstatus) | **Get** /api/ambient/v1/clusters/{cluster_id}/status | Get cluster health status
 *DefaultAPI* | [**HeartbeatCluster**](docs/DefaultAPI.md#heartbeatcluster) | **Post** /api/ambient/v1/clusters/{cluster_id}/heartbeat | Trigger manual health check
 *DefaultAPI* | [**ListClusters**](docs/DefaultAPI.md#listclusters) | **Get** /api/ambient/v1/clusters | List clusters
+*DefaultAPI* | [**ListRuntimeProjects**](docs/DefaultAPI.md#listruntimeprojects) | **Get** /api/ambient/v1/runtime/projects | List runtime records, including deleted records
+*DefaultAPI* | [**ListRuntimeSessions**](docs/DefaultAPI.md#listruntimesessions) | **Get** /api/ambient/v1/runtime/sessions | List runtime records, including deleted records
+*DefaultAPI* | [**PatchRuntimeProject**](docs/DefaultAPI.md#patchruntimeproject) | **Patch** /api/ambient/v1/runtime/projects/{id} | Update runtime fields with a version check
+*DefaultAPI* | [**PatchRuntimeSession**](docs/DefaultAPI.md#patchruntimesession) | **Patch** /api/ambient/v1/runtime/sessions/{id} | Update runtime fields with a version check
 *DefaultAPI* | [**RegisterCluster**](docs/DefaultAPI.md#registercluster) | **Post** /api/ambient/v1/clusters | Register a new cluster
 *DefaultAPI* | [**UpdateCluster**](docs/DefaultAPI.md#updatecluster) | **Patch** /api/ambient/v1/clusters/{cluster_id} | Update a cluster
 
@@ -208,6 +219,7 @@ Class | Method | HTTP request | Description
  - [ProjectHomeAgent](docs/ProjectHomeAgent.md)
  - [ProjectList](docs/ProjectList.md)
  - [ProjectPatchRequest](docs/ProjectPatchRequest.md)
+ - [ProjectRuntimePatch](docs/ProjectRuntimePatch.md)
  - [ProjectSettings](docs/ProjectSettings.md)
  - [ProjectSettingsList](docs/ProjectSettingsList.md)
  - [ProjectSettingsPatchRequest](docs/ProjectSettingsPatchRequest.md)
@@ -232,6 +244,7 @@ Class | Method | HTTP request | Description
  - [SessionMessage](docs/SessionMessage.md)
  - [SessionMessagePushRequest](docs/SessionMessagePushRequest.md)
  - [SessionPatchRequest](docs/SessionPatchRequest.md)
+ - [SessionRuntimePatch](docs/SessionRuntimePatch.md)
  - [SessionStatusPatchRequest](docs/SessionStatusPatchRequest.md)
  - [StartRequest](docs/StartRequest.md)
  - [StartResponse](docs/StartResponse.md)

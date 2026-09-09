@@ -3,8 +3,10 @@ package tokenserver
 import (
 	"context"
 	"crypto/rsa"
+	"crypto/tls"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -21,15 +23,35 @@ const (
 )
 
 type Server struct {
-	srv    *http.Server
-	logger zerolog.Logger
+	srv         *http.Server
+	logger      zerolog.Logger
+	tlsCertFile string
+	tlsKeyFile  string
 }
 
 // Option configures optional server behavior.
 type Option func(*serverConfig)
 
 type serverConfig struct {
-	gateway SandboxGateway
+	gateway         SandboxGateway
+	validate        SessionValidator
+	authorize       SandboxAuthorizer
+	authorizeRunner RunnerAuthorizer
+}
+
+// WithSessionValidator enables scoped runner token exchange.
+func WithSessionValidator(validate SessionValidator) Option {
+	return func(c *serverConfig) { c.validate = validate }
+}
+
+// WithSandboxAuthorizer verifies a user token and returns its authorized gateway.
+func WithSandboxAuthorizer(authorize SandboxAuthorizer) Option {
+	return func(c *serverConfig) { c.authorize = authorize }
+}
+
+// WithRunnerAuthorizer checks the caller's permission for the runner operation.
+func WithRunnerAuthorizer(authorize RunnerAuthorizer) Option {
+	return func(c *serverConfig) { c.authorizeRunner = authorize }
 }
 
 // WithGateway injects an OpenShell gateway client for sandbox observability endpoints.
@@ -49,12 +71,21 @@ func New(
 		o(&cfg)
 	}
 
+	certFile, keyFile := os.Getenv("CP_TOKEN_TLS_CERT_FILE"), os.Getenv("CP_TOKEN_TLS_KEY_FILE")
+	if (certFile == "") != (keyFile == "") {
+		return nil, fmt.Errorf("CP token TLS requires both certificate and key files")
+	}
+	if certFile != "" {
+		if _, err := tls.LoadX509KeyPair(certFile, keyFile); err != nil {
+			return nil, fmt.Errorf("load CP token TLS certificate: %w", err)
+		}
+	}
 	componentLogger := logger.With().Str("component", "tokenserver").Logger()
 
 	h := &handler{
-		tokenProvider: tokenProvider,
-		privateKey:    privateKey,
-		logger:        componentLogger,
+		validate:   cfg.validate,
+		privateKey: privateKey,
+		logger:     componentLogger,
 	}
 
 	mux := http.NewServeMux()
@@ -63,12 +94,15 @@ func New(
 
 	if cfg.gateway != nil {
 		sbx := &sandboxHandler{
-			gateway:    cfg.gateway,
-			logger:     componentLogger,
-			privateKey: privateKey,
+			gateway:         cfg.gateway,
+			logger:          componentLogger,
+			authorize:       cfg.authorize,
+			authorizeRunner: cfg.authorizeRunner,
 		}
 		mux.HandleFunc("/sandbox/", func(w http.ResponseWriter, r *http.Request) {
 			switch {
+			case strings.Contains(r.URL.Path, "/runner/"):
+				sbx.handleRunnerProxy(w, r)
 			case strings.HasSuffix(r.URL.Path, "/policy"):
 				sbx.handlePolicy(w, r)
 			case strings.HasSuffix(r.URL.Path, "/logs"):
@@ -83,12 +117,15 @@ func New(
 	return &Server{
 		srv: &http.Server{
 			Addr:         listenAddr,
+			TLSConfig:    &tls.Config{MinVersion: tls.VersionTLS12},
 			Handler:      mux,
 			ReadTimeout:  readTimeout,
 			WriteTimeout: writeTimeout,
 			IdleTimeout:  idleTimeout,
 		},
-		logger: componentLogger,
+		logger:      componentLogger,
+		tlsCertFile: certFile,
+		tlsKeyFile:  keyFile,
 	}, nil
 }
 
@@ -96,7 +133,13 @@ func (s *Server) Start(ctx context.Context) error {
 	errCh := make(chan error, 1)
 	go func() {
 		s.logger.Info().Str("addr", s.srv.Addr).Msg("token server listening")
-		if err := s.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if s.tlsCertFile != "" {
+			err = s.srv.ListenAndServeTLS(s.tlsCertFile, s.tlsKeyFile)
+		} else {
+			err = s.srv.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
 	}()

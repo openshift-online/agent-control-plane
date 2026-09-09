@@ -86,6 +86,10 @@ spec:
           image: quay.io/ambient_code/acp_api_server:latest
           imagePullPolicy: Always
           env:
+            - name: AMBIENT_RUNNER_PUBLIC_KEY_FILE
+              value: /configs/runner/public.pem
+            - name: CONTROL_PLANE_URL
+              value: https://ambient-control-plane.ambient-code--runtime-int.svc:8080
             - name: AMBIENT_ENV
               value: production
             - name: GRPC_SERVICE_ACCOUNT
@@ -112,6 +116,9 @@ spec:
               mountPath: /secrets/service
             - name: auth-config
               mountPath: /configs/authentication
+            - name: runner-public-key
+              mountPath: /configs/runner
+              readOnly: true
           resources:
             requests:
               cpu: 200m
@@ -123,14 +130,14 @@ spec:
             httpGet:
               path: /api/ambient
               port: 8000
-              scheme: HTTP
+              scheme: HTTPS
             initialDelaySeconds: 15
             periodSeconds: 5
           readinessProbe:
             httpGet:
               path: /healthcheck
               port: 4434
-              scheme: HTTP
+              scheme: HTTPS
               httpHeaders:
                 - name: User-Agent
                   value: Probe
@@ -143,6 +150,12 @@ spec:
               drop:
                 - ALL
       volumes:
+        - name: runner-public-key
+          secret:
+            secretName: ambient-cp-token-keypair
+            items:
+              - key: public.pem
+                path: public.pem
         - name: db-secrets
           secret:
             secretName: ambient-api-server-db

@@ -11,6 +11,18 @@ func projectToProto(p *Project) *pb.Project {
 	}
 
 	return &pb.Project{
+		RuntimeBackend:           p.RuntimeBackend,
+		GatewayId:                p.GatewayId,
+		GatewayInstanceId:        p.GatewayInstanceId,
+		GatewayEndpoint:          p.GatewayEndpoint,
+		GatewayStatus:            p.GatewayStatus,
+		GatewayError:             p.GatewayError,
+		GatewayCredentialId:      p.GatewayCredentialId,
+		GatewayAccountId:         p.GatewayAccountId,
+		GatewayAccountExpiresAt:  p.GatewayAccountExpiresAt,
+		GatewayExternalReference: p.GatewayExternalReference,
+		RuntimeDeleted:           p.DeletedAt.Valid,
+		RuntimeVersion:           p.RuntimeVersion,
 		Metadata: &pb.ObjectReference{
 			Id:        p.ID,
 			CreatedAt: timestamppb.New(p.CreatedAt),

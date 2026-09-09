@@ -37,11 +37,11 @@ spec:
                   name: ambient-control-plane-token
                   key: token
             - name: AMBIENT_API_SERVER_URL
-              value: "http://ambient-api-server.ambient-code--runtime-int.svc:8000"
+              value: "https://ambient-api-server.ambient-code--runtime-int.svc:8000"
             - name: AMBIENT_GRPC_SERVER_ADDR
               value: "ambient-api-server.ambient-code--runtime-int.svc:9000"
             - name: AMBIENT_GRPC_USE_TLS
-              value: "false"
+              value: "true"
             - name: MODE
               value: "kube"
             - name: PLATFORM_MODE
@@ -80,8 +80,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: CP_TOKEN_TLS_CERT_FILE
+              value: /etc/cp-tls/tls.crt
+            - name: CP_TOKEN_TLS_KEY_FILE
+              value: /etc/cp-tls/tls.key
             - name: CP_TOKEN_URL
-              value: "http://ambient-control-plane.ambient-code--ambient-s0.svc:8080/token"
+              value: "https://ambient-control-plane.ambient-code--runtime-int.svc:8080/token"
             - name: MCP_IMAGE
               value: "quay.io/ambient_code/acp_mcp:latest"
             - name: GITHUB_MCP_IMAGE
@@ -93,6 +97,9 @@ spec:
             - name: GOOGLE_MCP_IMAGE
               value: "quay.io/ambient_code/acp_credential_google:latest"
           volumeMounts:
+            - name: cp-tls
+              mountPath: /etc/cp-tls
+              readOnly: true
             - name: project-kube-token
               mountPath: /var/run/secrets/project-kube
               readOnly: true
@@ -107,6 +114,9 @@ spec:
               cpu: 200m
               memory: 256Mi
       volumes:
+        - name: cp-tls
+          secret:
+            secretName: ambient-control-plane-tls
         - name: project-kube-token
           secret:
             secretName: ambient-control-plane-token

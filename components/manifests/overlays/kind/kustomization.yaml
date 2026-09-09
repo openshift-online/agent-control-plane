@@ -23,6 +23,12 @@ resources:
 
 # Patches for e2e environment
 patches:
+- path: control-plane-ui-dev-patch.yaml
+  target:
+    group: apps
+    kind: Deployment
+    name: ambient-ui
+    version: v1
 - path: ambient-api-server-dev-patch.yaml
   target:
     group: apps

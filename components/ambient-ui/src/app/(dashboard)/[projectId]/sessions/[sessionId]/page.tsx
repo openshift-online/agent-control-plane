@@ -22,6 +22,7 @@ import { ResourcesTab } from './_components/resources-tab'
 import { ConfigTab } from './_components/config-tab'
 import { OpenShellTab } from './_components/openshell-tab'
 import { SessionConditions } from './_components/session-conditions'
+import { RuntimeStatus } from '@/components/runtime-status'
 
 export default function SessionDetailPage() {
   const { sessionId } = useParams<{ projectId: string; sessionId: string }>()
@@ -59,41 +60,44 @@ export default function SessionDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <SessionHeader session={session} />
+      <RuntimeStatus runtime={session.runtime} label="Session sandbox" />
       {session.phase !== 'Running' && session.conditions.length > 0 && (
         <SessionConditions conditions={session.conditions} />
       )}
-      <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList className="w-full *:flex-1">
-          <TabsTrigger value="overview">
-            <LayoutDashboard className="size-4 mr-1.5" /> Overview
-          </TabsTrigger>
-          <TabsTrigger value="logs">
-            <ScrollText className="size-4 mr-1.5" /> Logs
-          </TabsTrigger>
-          {session.kubeNamespace && (
-            <TabsTrigger value="openshell">
-              <ShieldCheck className="size-4 mr-1.5" /> OpenShell
+      <Tabs className="min-w-0" value={activeTab} onValueChange={handleTabChange}>
+        <div className="min-w-0 overflow-x-auto">
+          <TabsList className="min-w-full w-max *:shrink-0 *:flex-1">
+            <TabsTrigger value="overview">
+              <LayoutDashboard className="size-4 mr-1.5" /> Overview
             </TabsTrigger>
-          )}
-          <TabsTrigger value="resources">
-            <FolderGit2 className="size-4 mr-1.5" /> Resources
-          </TabsTrigger>
-          <TabsTrigger value="config">
-            <Settings className="size-4 mr-1.5" /> Config
-          </TabsTrigger>
-          <TabsTrigger value="chat">
-            <MessageSquare className="size-4 mr-1.5" /> Chat
-          </TabsTrigger>
-        </TabsList>
+            <TabsTrigger value="logs">
+              <ScrollText className="size-4 mr-1.5" /> Logs
+            </TabsTrigger>
+            {(session.runtime?.sandboxName || session.kubeNamespace) && (
+              <TabsTrigger value="openshell">
+                <ShieldCheck className="size-4 mr-1.5" /> OpenShell
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="resources">
+              <FolderGit2 className="size-4 mr-1.5" /> Resources
+            </TabsTrigger>
+            <TabsTrigger value="config">
+              <Settings className="size-4 mr-1.5" /> Config
+            </TabsTrigger>
+            <TabsTrigger value="chat">
+              <MessageSquare className="size-4 mr-1.5" /> Chat
+            </TabsTrigger>
+          </TabsList>
+        </div>
         <TabsContent value="overview">
           <OverviewTab session={session} />
         </TabsContent>
         <TabsContent value="logs">
           <LogsTab session={session} />
         </TabsContent>
-        {session.kubeNamespace && (
+        {(session.runtime?.sandboxName || session.kubeNamespace) && (
           <TabsContent value="openshell">
             <OpenShellTab session={session} />
           </TabsContent>

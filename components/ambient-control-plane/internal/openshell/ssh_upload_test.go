@@ -3,6 +3,7 @@ package openshell
 import (
 	"archive/tar"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-git/go-billy/v5"
 	"github.com/go-git/go-billy/v5/memfs"
 	billyutil "github.com/go-git/go-billy/v5/util"
 )
@@ -81,19 +83,19 @@ func TestGrpcConnBuffering(t *testing.T) {
 func TestTarFilesystem(t *testing.T) {
 	fs := memfs.New()
 
-	fs.MkdirAll("/src", 0o755)
-	billyutil.WriteFile(fs, "/README.md", []byte("hello"), 0o644)
-	billyutil.WriteFile(fs, "/src/main.go", []byte("package main"), 0o644)
+	requireUploadNoError(t, fs.MkdirAll("/src", 0o755))
+	requireUploadNoError(t, billyutil.WriteFile(fs, "/README.md", []byte("hello"), 0o644))
+	requireUploadNoError(t, billyutil.WriteFile(fs, "/src/main.go", []byte("package main"), 0o644))
 
 	// .git directory should be excluded
-	fs.MkdirAll("/.git/objects", 0o755)
-	billyutil.WriteFile(fs, "/.git/HEAD", []byte("ref: refs/heads/main"), 0o644)
+	requireUploadNoError(t, fs.MkdirAll("/.git/objects", 0o755))
+	requireUploadNoError(t, billyutil.WriteFile(fs, "/.git/HEAD", []byte("ref: refs/heads/main"), 0o644))
 
 	// Empty subdirectory
-	fs.MkdirAll("/empty", 0o755)
+	requireUploadNoError(t, fs.MkdirAll("/empty", 0o755))
 
 	reader := tarFilesystem(context.Background(), fs)
-	defer reader.Close()
+	defer func() { requireUploadNoError(t, reader.Close()) }()
 	tr := tar.NewReader(reader)
 
 	var files []string
@@ -266,7 +268,7 @@ func TestLimitedFS(t *testing.T) {
 			t.Fatalf("open: %v", err)
 		}
 		_, err = f.Write(data)
-		f.Close()
+		requireUploadNoError(t, f.Close())
 		if err == nil {
 			t.Fatal("expected error when exceeding limit, got nil")
 		}
@@ -277,12 +279,15 @@ func TestLimitedFS(t *testing.T) {
 
 	t.Run("cumulative across files", func(t *testing.T) {
 		fs := newLimitedFS(memfs.New(), 100)
-		f1, _ := fs.Create("/a.txt")
-		f1.Write(make([]byte, 60))
-		f1.Close()
-		f2, _ := fs.Create("/b.txt")
-		_, err := f2.Write(make([]byte, 60))
-		f2.Close()
+		f1, err := fs.Create("/a.txt")
+		requireUploadNoError(t, err)
+		_, err = f1.Write(make([]byte, 60))
+		requireUploadNoError(t, err)
+		requireUploadNoError(t, f1.Close())
+		f2, err := fs.Create("/b.txt")
+		requireUploadNoError(t, err)
+		_, err = f2.Write(make([]byte, 60))
+		requireUploadNoError(t, f2.Close())
 		if err == nil {
 			t.Fatal("expected error when cumulative writes exceed limit, got nil")
 		}
@@ -292,17 +297,56 @@ func TestLimitedFS(t *testing.T) {
 func TestTarFilesystemCancellation(t *testing.T) {
 	fs := memfs.New()
 	for i := range 100 {
-		billyutil.WriteFile(fs, fmt.Sprintf("/file%d.txt", i), []byte("data"), 0o644)
+		requireUploadNoError(t, billyutil.WriteFile(fs, fmt.Sprintf("/file%d.txt", i), []byte("data"), 0o644))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
 	reader := tarFilesystem(ctx, fs)
-	defer reader.Close()
+	defer func() { requireUploadNoError(t, reader.Close()) }()
 
 	_, err := io.ReadAll(reader)
 	if err == nil {
 		t.Error("expected error from cancelled context, got nil")
+	}
+}
+
+func requireUploadNoError(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+type closeErrorFilesystem struct {
+	billy.Filesystem
+	closeErr error
+}
+
+func (fs closeErrorFilesystem) Open(path string) (billy.File, error) {
+	file, err := fs.Filesystem.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	return closeErrorFile{File: file, closeErr: fs.closeErr}, nil
+}
+
+type closeErrorFile struct {
+	billy.File
+	closeErr error
+}
+
+func (file closeErrorFile) Close() error { return errors.Join(file.File.Close(), file.closeErr) }
+
+func TestTarFilesystemReportsFileCloseFailure(t *testing.T) {
+	fs := memfs.New()
+	requireUploadNoError(t, billyutil.WriteFile(fs, "/data", []byte("payload"), 0o600))
+	closeErr := errors.New("file close failed")
+	reader := tarFilesystem(context.Background(), closeErrorFilesystem{Filesystem: fs, closeErr: closeErr})
+	defer func() { requireUploadNoError(t, reader.Close()) }()
+	_, err := io.ReadAll(reader)
+	if !errors.Is(err, closeErr) {
+		t.Fatalf("tar stream lost close failure: %v", err)
 	}
 }

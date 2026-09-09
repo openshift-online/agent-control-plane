@@ -8,6 +8,18 @@ import (
 )
 
 type Session struct {
+	GatewayId           *string `json:"gateway_id,omitempty"`
+	GatewayWorkspace    *string `json:"gateway_workspace,omitempty"`
+	SandboxId           *string `json:"sandbox_id,omitempty"`
+	SandboxName         *string `json:"sandbox_name,omitempty"`
+	RuntimeBackend      *string `json:"runtime_backend,omitempty"`
+	RunnerGeneration    *string `json:"runner_generation,omitempty"`
+	GatewayEndpoint     *string `json:"gateway_endpoint,omitempty"`
+	GatewayCredentialId *string `json:"gateway_credential_id,omitempty"`
+	RuntimeStatus       *string `json:"runtime_status,omitempty"`
+	RuntimeError        *string `json:"runtime_error,omitempty"`
+	RuntimeDeleted      bool    `json:"runtime_deleted" gorm:"-"`
+	RuntimeVersion      int64   `json:"runtime_version" gorm:"not null;default:0"`
 	api.Meta
 	Name            string  `json:"name"`
 	RepoUrl         *string `json:"repo_url"`

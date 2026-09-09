@@ -2,7 +2,6 @@ package tokenserver
 
 import (
 	"context"
-	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,31 +20,40 @@ type SandboxGateway interface {
 	WatchSandbox(ctx context.Context, namespace string, req *pb.WatchSandboxRequest) (pb.OpenShell_WatchSandboxClient, error)
 }
 
-type sandboxHandler struct {
-	gateway    SandboxGateway
-	logger     zerolog.Logger
-	privateKey *rsa.PrivateKey
+// SandboxPolicyGateway supplies the current authored policy revision.
+type SandboxPolicyGateway interface {
+	GetSandboxPolicyStatus(context.Context, string, string) (*pb.GetSandboxPolicyStatusResponse, error)
 }
 
-func (h *sandboxHandler) requireAuth(w http.ResponseWriter, r *http.Request) bool {
-	ciphertext, err := extractBearerToken(r)
-	if err != nil {
+// SandboxAuthorizer validates a user bearer token with the API server. It must
+// verify session access and sandbox name, and return the session gateway target.
+// The request namespace is never used as an authorization decision.
+type SandboxAuthorizer func(ctx context.Context, bearer, sessionID, sandboxName string) (gatewayTarget string, err error)
+
+type sandboxHandler struct {
+	gateway         SandboxGateway
+	logger          zerolog.Logger
+	authorize       SandboxAuthorizer
+	authorizeRunner RunnerAuthorizer
+}
+
+func (h *sandboxHandler) requireAuth(w http.ResponseWriter, r *http.Request, name string) (string, bool) {
+	bearer, err := extractBearerToken(r)
+	if err != nil || h.authorize == nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return false
+		return "", false
 	}
-	if h.privateKey != nil {
-		handler := &handler{privateKey: h.privateKey}
-		sessionID, decErr := handler.decryptSessionID(ciphertext)
-		if decErr != nil {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return false
-		}
-		if !isValidSessionID(sessionID) {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return false
-		}
+	sessionID := r.URL.Query().Get("session_id")
+	if sessionID == "" {
+		http.Error(w, "session_id required", http.StatusBadRequest)
+		return "", false
 	}
-	return true
+	target, err := h.authorize(r.Context(), bearer, sessionID, name)
+	if err != nil || target == "" {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return "", false
+	}
+	return target, true
 }
 
 func (h *sandboxHandler) handlePolicy(w http.ResponseWriter, r *http.Request) {
@@ -54,20 +62,13 @@ func (h *sandboxHandler) handlePolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.requireAuth(w, r) {
-		return
-	}
-
 	name, namespace := parseSandboxPath(r.URL.Path, "policy")
 	if name == "" {
 		http.Error(w, "sandbox name required", http.StatusBadRequest)
 		return
 	}
-	if ns := r.URL.Query().Get("namespace"); ns != "" {
-		namespace = ns
-	}
-	if namespace == "" {
-		http.Error(w, "namespace query parameter required", http.StatusBadRequest)
+	namespace, authorized := h.requireAuth(w, r, name)
+	if !authorized {
 		return
 	}
 
@@ -86,6 +87,18 @@ func (h *sandboxHandler) handlePolicy(w http.ResponseWriter, r *http.Request) {
 
 	policy := sbx.GetSpec().GetPolicy()
 	status := sbx.GetStatus()
+	var revision *pb.SandboxPolicyRevision
+	var activeVersion uint32
+	if gateway, ok := h.gateway.(SandboxPolicyGateway); ok {
+		current, err := gateway.GetSandboxPolicyStatus(r.Context(), namespace, name)
+		if err != nil || current.GetRevision().GetPolicy() == nil {
+			http.Error(w, "failed to get sandbox policy", http.StatusBadGateway)
+			return
+		}
+		revision = current.GetRevision()
+		policy = revision.GetPolicy()
+		activeVersion = current.GetActiveVersion()
+	}
 
 	result := map[string]interface{}{
 		"version":         policy.GetVersion(),
@@ -96,6 +109,11 @@ func (h *sandboxHandler) handlePolicy(w http.ResponseWriter, r *http.Request) {
 		"policy":          openshell.PolicyToMap(policy),
 	}
 
+	if revision != nil {
+		result["hash"] = revision.GetPolicyHash()
+		result["config_revision"] = fmt.Sprintf("%d", revision.GetVersion())
+		result["active_version"] = activeVersion
+	}
 	w.Header().Set("Content-Type", "application/json")
 	if encErr := json.NewEncoder(w).Encode(result); encErr != nil {
 		h.logger.Warn().Err(encErr).Msg("sandbox policy: failed to write response")
@@ -108,20 +126,13 @@ func (h *sandboxHandler) handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.requireAuth(w, r) {
-		return
-	}
-
 	name, namespace := parseSandboxPath(r.URL.Path, "logs")
 	if name == "" {
 		http.Error(w, "sandbox name required", http.StatusBadRequest)
 		return
 	}
-	if ns := r.URL.Query().Get("namespace"); ns != "" {
-		namespace = ns
-	}
-	if namespace == "" {
-		http.Error(w, "namespace query parameter required", http.StatusBadRequest)
+	namespace, authorized := h.requireAuth(w, r, name)
+	if !authorized {
 		return
 	}
 

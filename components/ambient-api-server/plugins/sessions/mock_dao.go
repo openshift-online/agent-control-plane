@@ -30,6 +30,10 @@ func (d *sessionDaoMock) Create(ctx context.Context, session *Session) (*Session
 	return session, nil
 }
 
+func (d *sessionDaoMock) AgentModel(context.Context, string, string) (string, error) {
+	return "", gorm.ErrRecordNotFound
+}
+
 func (d *sessionDaoMock) Replace(ctx context.Context, session *Session) (*Session, error) {
 	for i, s := range d.sessions {
 		if s.ID == session.ID {

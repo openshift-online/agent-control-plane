@@ -10,6 +10,12 @@
   - name: auth-config
     configMap:
       name: ambient-api-server-auth
+  - name: runner-public-key
+    secret:
+      secretName: ambient-cp-token-keypair
+      items:
+      - key: public.pem
+        path: public.pem
   - name: tmp
     emptyDir: {}
 - op: replace
@@ -23,6 +29,9 @@
     readOnly: true
   - name: auth-config
     mountPath: /configs/authentication
+    readOnly: true
+  - name: runner-public-key
+    mountPath: /configs/runner
     readOnly: true
 - op: replace
   path: /spec/template/spec/containers/0/command
@@ -38,6 +47,7 @@
   - --enable-authz=false
   - --jwk-cert-file=/configs/authentication/jwks.json
   - --enable-https=false
+  - --enable-tls=false
   - --enable-grpc=true
   - --grpc-enable-tls=false
   - --api-server-bindaddress=:8000

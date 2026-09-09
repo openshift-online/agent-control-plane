@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-import base64
 import json
 import logging
 import os
+import ssl
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Optional
+from typing import Self
 
 import grpc
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
 
 from ambient_runner.platform.utils import set_bot_token
 
@@ -22,7 +20,7 @@ logger = logging.getLogger(__name__)
 _ENV_GRPC_URL = "AMBIENT_GRPC_URL"
 _ENV_TOKEN = "BOT_TOKEN"
 _ENV_CP_TOKEN_URL = "AMBIENT_CP_TOKEN_URL"
-_ENV_CP_TOKEN_PUBLIC_KEY = "AMBIENT_CP_TOKEN_PUBLIC_KEY"
+_ENV_BOOTSTRAP_TOKEN_NAME = "AMBIENT_RUNNER_BOOTSTRAP_TOKEN"
 _ENV_SESSION_ID = "SESSION_ID"
 _ENV_USE_TLS = "AMBIENT_GRPC_USE_TLS"
 _ENV_CA_CERT = "AMBIENT_GRPC_CA_CERT_FILE"
@@ -35,27 +33,6 @@ _CP_TOKEN_FETCH_ATTEMPTS = 30
 _CP_TOKEN_FETCH_TIMEOUT = 10
 
 
-def _decode_public_key(value: str) -> str:
-    """Decode base64-encoded PEM or return raw PEM as-is."""
-    if not value or value.startswith("-----"):
-        return value
-    return base64.b64decode(value).decode()
-
-
-def _encrypt_session_id(public_key_pem: str, session_id: str) -> str:
-    """RSA-OAEP encrypt session_id with the CP public key, return base64-encoded ciphertext."""
-    public_key = serialization.load_pem_public_key(public_key_pem.encode())
-    ciphertext = public_key.encrypt(
-        session_id.encode(),
-        padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None,
-        ),
-    )
-    return base64.b64encode(ciphertext).decode()
-
-
 def _validate_cp_token_url(url: str) -> None:
     """Reject non-http(s) or credential-bearing URLs to prevent exfiltration."""
     parsed = urllib.parse.urlparse(url)
@@ -66,94 +43,96 @@ def _validate_cp_token_url(url: str) -> None:
         or parsed.password is not None
     ):
         raise RuntimeError(
-            f"invalid CP token URL (must be http/https with no credentials): {url!r}"
+            "invalid CP token URL (must be http/https with no credentials)"
         )
 
 
-def _fetch_token_from_cp(
-    cp_token_url: str, public_key_pem: str, session_id: str
-) -> str:
-    """Fetch a fresh API token from the CP /token endpoint.
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise RuntimeError("CP token endpoint redirects are not permitted")
 
-    Encrypts the session ID with the CP public key and sends it as a Bearer token.
-    Retries up to _CP_TOKEN_FETCH_ATTEMPTS times with exponential backoff.
-    """
+
+def _fetch_token_from_cp(cp_token_url: str, bootstrap_token: str) -> str:
+    """Exchange a session capability for a short-lived runner access token."""
     _validate_cp_token_url(cp_token_url)
-
-    bearer = _encrypt_session_id(public_key_pem, session_id)
-
-    last_err: Exception = RuntimeError("no attempts made")
+    if not bootstrap_token:
+        raise RuntimeError("AMBIENT_RUNNER_BOOTSTRAP_TOKEN is required")
+    if (
+        urllib.parse.urlparse(cp_token_url).scheme != "https"
+        and os.getenv("AMBIENT_ALLOW_INSECURE_RUNNER_TRANSPORT") != "true"
+    ):
+        raise RuntimeError("runner token exchange requires HTTPS")
+    ca_file = os.getenv("AMBIENT_CP_CA_CERT_FILE") or None
+    context = _tls_context(ca_file, "configured CP")
+    opener = urllib.request.build_opener(
+        _NoRedirect(), urllib.request.HTTPSHandler(context=context)
+    )
     for attempt in range(_CP_TOKEN_FETCH_ATTEMPTS):
-        if attempt > 0:
-            logger.warning(
-                "[GRPC CLIENT] CP token fetch attempt %d/%d failed, retrying in 2s: %s",
-                attempt,
-                _CP_TOKEN_FETCH_ATTEMPTS,
-                last_err,
-            )
+        if attempt:
             time.sleep(2)
         try:
             req = urllib.request.Request(
                 cp_token_url,
-                headers={"Authorization": f"Bearer {bearer}"},
+                headers={"Authorization": f"Bearer {bootstrap_token}"},
             )
-            with urllib.request.urlopen(req, timeout=_CP_TOKEN_FETCH_TIMEOUT) as resp:
-                body = json.loads(resp.read())
+            with opener.open(req, timeout=_CP_TOKEN_FETCH_TIMEOUT) as resp:
+                body = json.loads(resp.read(16384))
             token = body.get("token", "")
-            if not token:
-                raise RuntimeError("CP /token response missing 'token' field")
-            logger.info("[GRPC CLIENT] Fetched fresh API token from CP token endpoint")
+            if not isinstance(token, str) or not token.startswith("acp-runner-v1."):
+                raise RuntimeError("CP response has no scoped runner token")
             set_bot_token(token)
             return token
-        except urllib.error.HTTPError as e:
-            resp_body = ""
-            try:
-                resp_body = e.read().decode(errors="replace")
-            except Exception:
-                pass
-            last_err = RuntimeError(f"CP /token HTTP {e.code}: {resp_body}")
-        except Exception as e:
-            last_err = e
-
-    raise RuntimeError(
-        f"CP token endpoint unreachable after {_CP_TOKEN_FETCH_ATTEMPTS} attempts: {last_err}"
-    ) from last_err
+        except urllib.error.HTTPError as exc:
+            if exc.code < 500:
+                raise RuntimeError(
+                    f"CP token exchange rejected: HTTP {exc.code}"
+                ) from None
+        except urllib.error.URLError:
+            pass
+    raise RuntimeError("CP token endpoint unavailable")
 
 
-def _load_ca_cert(ca_cert_file: Optional[str]) -> Optional[bytes]:
-    """Load CA cert from explicit path, then service-ca fallback, then None."""
-    candidates = [ca_cert_file, _SERVICE_CA_PATH]
-    for path in candidates:
-        if path and os.path.exists(path):
-            try:
-                with open(path, "rb") as f:
-                    return f.read()
-            except OSError:
-                pass
-    return None
+def _tls_context(ca_cert_file: str | None, source: str) -> ssl.SSLContext:
+    """Add the ACP CA to default trust, including the sandbox proxy CA."""
+    context = ssl.create_default_context()
+    if ca_cert_file:
+        try:
+            context.load_verify_locations(cafile=ca_cert_file)
+        except OSError as exc:
+            raise RuntimeError(
+                f"{source} CA file cannot be read or is invalid"
+            ) from exc
+    return context
+
+
+def _load_ca_cert(ca_cert_file: str | None) -> bytes:
+    """Export native, system, and ACP trust for gRPC's separate TLS library."""
+    source = "configured gRPC"
+    if not ca_cert_file and os.path.exists(_SERVICE_CA_PATH):
+        ca_cert_file = _SERVICE_CA_PATH
+        source = "service"
+    context = _tls_context(ca_cert_file, source)
+    certificates = context.get_ca_certs(binary_form=True)
+    if not certificates:
+        raise RuntimeError("gRPC CA trust store is empty")
+    return "".join(ssl.DER_cert_to_PEM_cert(cert) for cert in certificates).encode()
 
 
 def _build_channel(
-    grpc_url: str, token: str, use_tls: bool = False, ca_cert_file: Optional[str] = None
+    grpc_url: str, use_tls: bool = False, ca_cert_file: str | None = None
 ) -> grpc.Channel:
-    """Build a gRPC channel with optional TLS and bearer token call credentials."""
+    """Build transport; session RPC wrappers supply one bearer header per call."""
     logger.info(
-        "[GRPC CHANNEL] Building channel: url=%s tls=%s token_present=%s ca_cert=%s",
+        "[GRPC CHANNEL] Building channel: url=%s tls=%s ca_cert=%s",
         grpc_url,
         use_tls,
-        bool(token),
         ca_cert_file,
     )
     if use_tls:
-        call_creds = grpc.access_token_call_credentials(token) if token else None
         ca_cert = _load_ca_cert(ca_cert_file)
         channel_creds = grpc.ssl_channel_credentials(root_certificates=ca_cert)
-        if call_creds:
-            logger.info("[GRPC CHANNEL] Using TLS + bearer token credentials")
-            return grpc.secure_channel(
-                grpc_url, grpc.composite_channel_credentials(channel_creds, call_creds)
-            )
-        logger.info("[GRPC CHANNEL] Using TLS-only credentials (no token)")
+        # The RPC wrappers add Authorization on both TLS and explicit local
+        # plaintext transports. Adding channel call credentials duplicates it.
         return grpc.secure_channel(grpc_url, channel_creds)
     logger.info("[GRPC CHANNEL] Using insecure channel (no TLS)")
     return grpc.insecure_channel(grpc_url)
@@ -171,7 +150,7 @@ class AmbientGRPCClient:
         grpc_url: str,
         token: str,
         use_tls: bool = False,
-        ca_cert_file: Optional[str] = None,
+        ca_cert_file: str | None = None,
         cp_token_url: str = "",
     ) -> None:
         self._grpc_url = grpc_url
@@ -179,9 +158,9 @@ class AmbientGRPCClient:
         self._use_tls = use_tls
         self._ca_cert_file = ca_cert_file
         self._cp_token_url = cp_token_url
-        self._channel: Optional[grpc.Channel] = None
-        self._session_messages: Optional["SessionMessagesAPI"] = None  # noqa: F821
-        self._session_events: Optional["SessionEventsAPI"] = None  # noqa: F821
+        self._channel: grpc.Channel | None = None
+        self._session_messages: SessionMessagesAPI | None = None  # noqa: F821
+        self._session_events: SessionEventsAPI | None = None  # noqa: F821
 
     @classmethod
     def from_env(cls) -> AmbientGRPCClient:
@@ -191,22 +170,14 @@ class AmbientGRPCClient:
         use_tls = os.environ.get(_ENV_USE_TLS, "").lower() in ("true", "1", "yes")
         ca_cert_file = os.environ.get(_ENV_CA_CERT)
         if cp_token_url:
-            public_key_pem = _decode_public_key(
-                os.environ.get(_ENV_CP_TOKEN_PUBLIC_KEY, "")
+            if (
+                not use_tls
+                and os.getenv("AMBIENT_ALLOW_INSECURE_RUNNER_TRANSPORT") != "true"
+            ):
+                raise RuntimeError("runner gRPC connection requires TLS")
+            token = _fetch_token_from_cp(
+                cp_token_url, os.environ.get(_ENV_BOOTSTRAP_TOKEN_NAME, "")
             )
-            session_id = os.environ.get(_ENV_SESSION_ID, "")
-            if not public_key_pem:
-                raise RuntimeError(
-                    "AMBIENT_CP_TOKEN_PUBLIC_KEY env var is required when AMBIENT_CP_TOKEN_URL is set"
-                )
-            if not session_id:
-                raise RuntimeError(
-                    "SESSION_ID env var is required when AMBIENT_CP_TOKEN_URL is set"
-                )
-            logger.info(
-                "[GRPC CLIENT] Fetching token from CP endpoint: url=%s", cp_token_url
-            )
-            token = _fetch_token_from_cp(cp_token_url, public_key_pem, session_id)
         else:
             token = os.environ.get(_ENV_TOKEN, "")
             logger.info("[GRPC CLIENT] Using BOT_TOKEN env var (local dev mode)")
@@ -227,12 +198,8 @@ class AmbientGRPCClient:
     def reconnect(self) -> None:
         """Close the existing channel and rebuild with a fresh token from the CP endpoint."""
         if self._cp_token_url:
-            public_key_pem = _decode_public_key(
-                os.environ.get(_ENV_CP_TOKEN_PUBLIC_KEY, "")
-            )
-            session_id = os.environ.get(_ENV_SESSION_ID, "")
             fresh_token = _fetch_token_from_cp(
-                self._cp_token_url, public_key_pem, session_id
+                self._cp_token_url, os.environ.get(_ENV_BOOTSTRAP_TOKEN_NAME, "")
             )
         else:
             fresh_token = os.environ.get(_ENV_TOKEN, "")
@@ -246,13 +213,13 @@ class AmbientGRPCClient:
         if self._channel is None:
             logger.info("[GRPC CHANNEL] Creating new channel to %s", self._grpc_url)
             self._channel = _build_channel(
-                self._grpc_url, self._token, self._use_tls, self._ca_cert_file
+                self._grpc_url, self._use_tls, self._ca_cert_file
             )
             logger.info("[GRPC CHANNEL] Channel created successfully")
         return self._channel
 
     @property
-    def session_messages(self) -> "SessionMessagesAPI":  # noqa: F821
+    def session_messages(self) -> SessionMessagesAPI:  # noqa: F821
         if self._session_messages is None:
             logger.info("[GRPC CLIENT] Creating SessionMessagesAPI stub")
             from ._session_messages_api import SessionMessagesAPI
@@ -264,7 +231,7 @@ class AmbientGRPCClient:
         return self._session_messages
 
     @property
-    def session_events(self) -> "SessionEventsAPI":  # noqa: F821
+    def session_events(self) -> SessionEventsAPI:  # noqa: F821
         if self._session_events is None:
             logger.info("[GRPC CLIENT] Creating SessionEventsAPI stub")
             from ._session_events_api import SessionEventsAPI
@@ -282,7 +249,7 @@ class AmbientGRPCClient:
             self._session_messages = None
             self._session_events = None
 
-    def __enter__(self) -> AmbientGRPCClient:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *args: object) -> None:

@@ -18,6 +18,324 @@ servers:
 security:
 - Bearer: []
 paths:
+  /api/ambient/v1/sessions/{id}/runner/access:
+    delete:
+      description: Checks the authenticated caller's session role and scope. Does
+        not change the session or contact its runner. A successful result applies
+        only to this request.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Access is allowed
+        "401":
+          description: User authentication is required
+        "403":
+          description: The caller does not have the required session permission
+        "404":
+          description: The session does not exist
+        "500":
+          description: The permission check failed
+      security:
+      - Bearer: []
+      summary: Check session delete permission for runner access
+    get:
+      description: Checks the authenticated caller's session role and scope. Does
+        not change the session or contact its runner. A successful result applies
+        only to this request.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Access is allowed
+        "401":
+          description: User authentication is required
+        "403":
+          description: The caller does not have the required session permission
+        "404":
+          description: The session does not exist
+        "500":
+          description: The permission check failed
+      security:
+      - Bearer: []
+      summary: Check session read permission for runner access
+    head:
+      description: Checks the authenticated caller's session role and scope. Does
+        not change the session or contact its runner. A successful result applies
+        only to this request.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Access is allowed
+        "401":
+          description: User authentication is required
+        "403":
+          description: The caller does not have the required session permission
+        "404":
+          description: The session does not exist
+        "500":
+          description: The permission check failed
+      security:
+      - Bearer: []
+      summary: Check session read permission for runner access
+    patch:
+      description: Checks the authenticated caller's session role and scope. Does
+        not change the session or contact its runner. A successful result applies
+        only to this request.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Access is allowed
+        "401":
+          description: User authentication is required
+        "403":
+          description: The caller does not have the required session permission
+        "404":
+          description: The session does not exist
+        "500":
+          description: The permission check failed
+      security:
+      - Bearer: []
+      summary: Check session update permission for runner access
+    post:
+      description: Checks the authenticated caller's session role and scope. Does
+        not change the session or contact its runner. A successful result applies
+        only to this request.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Access is allowed
+        "401":
+          description: User authentication is required
+        "403":
+          description: The caller does not have the required session permission
+        "404":
+          description: The session does not exist
+        "500":
+          description: The permission check failed
+      security:
+      - Bearer: []
+      summary: Check session create permission for runner access
+    put:
+      description: Checks the authenticated caller's session role and scope. Does
+        not change the session or contact its runner. A successful result applies
+        only to this request.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Access is allowed
+        "401":
+          description: User authentication is required
+        "403":
+          description: The caller does not have the required session permission
+        "404":
+          description: The session does not exist
+        "500":
+          description: The permission check failed
+      security:
+      - Bearer: []
+      summary: Check session update permission for runner access
+  /api/ambient/v1/sessions/{id}/runner/access/stop:
+    post:
+      description: Checks the authenticated caller's session role and scope. Does
+        not change the session or contact its runner. A successful result applies
+        only to this request.
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Access is allowed
+        "401":
+          description: User authentication is required
+        "403":
+          description: The caller does not have the required session permission
+        "404":
+          description: The session does not exist
+        "500":
+          description: The permission check failed
+      security:
+      - Bearer: []
+      summary: Check session stop permission for runner access
+  /api/ambient/v1/runtime/sessions:
+    get:
+      description: Requires the configured control plane service identity.
+      operationId: listRuntimeSessions
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionList"
+          description: Runtime inventory
+        "403":
+          description: Requires the control plane service identity
+      security:
+      - Bearer: []
+      summary: "List runtime records, including deleted records"
+  /api/ambient/v1/runtime/sessions/{id}:
+    patch:
+      description: Requires the configured control plane service identity. Deleted
+        records remain deleted. Omitted fields stay unchanged.
+      operationId: patchRuntimeSession
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionRuntimePatch"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+          description: Updated runtime record
+        "403":
+          description: Requires the control plane service identity
+        "404":
+          description: Record does not exist
+        "409":
+          description: Version or expected phase changed
+      security:
+      - Bearer: []
+      summary: Update runtime fields with a version check
+  /api/ambient/v1/runtime/projects:
+    get:
+      description: Requires the configured control plane service identity.
+      operationId: listRuntimeProjects
+      parameters:
+      - description: Page number of record list when record list exceeds specified
+          page size
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Maximum number of records to return
+        explode: true
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 100
+          minimum: 0
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectList"
+          description: Runtime inventory
+        "403":
+          description: Requires the control plane service identity
+      security:
+      - Bearer: []
+      summary: "List runtime records, including deleted records"
+  /api/ambient/v1/runtime/projects/{id}:
+    patch:
+      description: Requires the configured control plane service identity. Deleted
+        records remain deleted. Omitted fields stay unchanged.
+      operationId: patchRuntimeProject
+      parameters:
+      - description: The id of record
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectRuntimePatch"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+          description: Updated runtime record
+        "403":
+          description: Requires the control plane service identity
+        "404":
+          description: Record does not exist
+        "409":
+          description: Version or expected phase changed
+      security:
+      - Bearer: []
+      summary: Update runtime fields with a version check
   /api/ambient/v1/sessions:
     get:
       parameters:
@@ -5425,6 +5743,43 @@ components:
       allOf:
       - $ref: "#/components/schemas/ObjectReference"
       - properties:
+          gateway_id:
+            readOnly: true
+            type: string
+          gateway_workspace:
+            readOnly: true
+            type: string
+          sandbox_id:
+            readOnly: true
+            type: string
+          sandbox_name:
+            readOnly: true
+            type: string
+          runtime_backend:
+            readOnly: true
+            type: string
+          runner_generation:
+            readOnly: true
+            type: string
+          gateway_endpoint:
+            readOnly: true
+            type: string
+          gateway_credential_id:
+            readOnly: true
+            type: string
+          runtime_status:
+            readOnly: true
+            type: string
+          runtime_error:
+            readOnly: true
+            type: string
+          runtime_deleted:
+            readOnly: true
+            type: boolean
+          runtime_version:
+            format: int64
+            readOnly: true
+            type: integer
           name:
             type: string
           repo_url:
@@ -5538,43 +5893,55 @@ components:
       example:
         workflow_id: workflow_id
         completion_time: 2000-01-23T04:56:07.000+00:00
+        runtime_version: 5
         agent_id: agent_id
-        created_at: 2000-01-23T04:56:07.000+00:00
         source_scheduled_session_id: source_scheduled_session_id
         scheduled_for: 2000-01-23T04:56:07.000+00:00
         annotations: annotations
         sandbox_logs_snapshot: sandbox_logs_snapshot
         reconciled_workflow: reconciled_workflow
-        sandbox_policy_snapshot: sandbox_policy_snapshot
-        timeout: 5
-        stop_on_run_finished: true
+        gateway_id: gateway_id
+        gateway_credential_id: gateway_credential_id
         environment_variables: environment_variables
-        kube_cr_uid: kube_cr_uid
-        sdk_restart_count: 7
-        updated_at: 2000-01-23T04:56:07.000+00:00
+        gateway_endpoint: gateway_endpoint
+        sdk_restart_count: 9
         project_id: project_id
-        last_activity_at: 2000-01-23T04:56:07.000+00:00
         parent_session_id: parent_session_id
         id: id
         href: href
         phase: phase
         repo_url: repo_url
-        llm_model: llm_model
-        resource_overrides: resource_overrides
         kind: kind
-        llm_temperature: 5.637376656633329
-        assigned_user_id: assigned_user_id
+        llm_temperature: 2.3021358869347655
         created_by_user_id: created_by_user_id
-        llm_max_tokens: 2
+        llm_max_tokens: 7
         labels: labels
         reconciled_repos: reconciled_repos
         start_time: 2000-01-23T04:56:07.000+00:00
-        sdk_session_id: sdk_session_id
-        bot_account_name: bot_account_name
         repos: repos
+        sandbox_id: sandbox_id
         name: name
         kube_cr_name: kube_cr_name
         conditions: conditions
+        runner_generation: runner_generation
+        created_at: 2000-01-23T04:56:07.000+00:00
+        runtime_status: runtime_status
+        sandbox_policy_snapshot: sandbox_policy_snapshot
+        timeout: 5
+        stop_on_run_finished: true
+        kube_cr_uid: kube_cr_uid
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        last_activity_at: 2000-01-23T04:56:07.000+00:00
+        runtime_deleted: true
+        runtime_error: runtime_error
+        llm_model: llm_model
+        runtime_backend: runtime_backend
+        resource_overrides: resource_overrides
+        gateway_workspace: gateway_workspace
+        assigned_user_id: assigned_user_id
+        sdk_session_id: sdk_session_id
+        bot_account_name: bot_account_name
+        sandbox_name: sandbox_name
         kube_namespace: kube_namespace
         prompt: prompt
     SessionList:
@@ -5594,84 +5961,108 @@ components:
         items:
         - workflow_id: workflow_id
           completion_time: 2000-01-23T04:56:07.000+00:00
+          runtime_version: 5
           agent_id: agent_id
-          created_at: 2000-01-23T04:56:07.000+00:00
           source_scheduled_session_id: source_scheduled_session_id
           scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
           sandbox_logs_snapshot: sandbox_logs_snapshot
           reconciled_workflow: reconciled_workflow
-          sandbox_policy_snapshot: sandbox_policy_snapshot
-          timeout: 5
-          stop_on_run_finished: true
+          gateway_id: gateway_id
+          gateway_credential_id: gateway_credential_id
           environment_variables: environment_variables
-          kube_cr_uid: kube_cr_uid
-          sdk_restart_count: 7
-          updated_at: 2000-01-23T04:56:07.000+00:00
+          gateway_endpoint: gateway_endpoint
+          sdk_restart_count: 9
           project_id: project_id
-          last_activity_at: 2000-01-23T04:56:07.000+00:00
           parent_session_id: parent_session_id
           id: id
           href: href
           phase: phase
           repo_url: repo_url
-          llm_model: llm_model
-          resource_overrides: resource_overrides
           kind: kind
-          llm_temperature: 5.637376656633329
-          assigned_user_id: assigned_user_id
+          llm_temperature: 2.3021358869347655
           created_by_user_id: created_by_user_id
-          llm_max_tokens: 2
+          llm_max_tokens: 7
           labels: labels
           reconciled_repos: reconciled_repos
           start_time: 2000-01-23T04:56:07.000+00:00
-          sdk_session_id: sdk_session_id
-          bot_account_name: bot_account_name
           repos: repos
+          sandbox_id: sandbox_id
           name: name
           kube_cr_name: kube_cr_name
           conditions: conditions
+          runner_generation: runner_generation
+          created_at: 2000-01-23T04:56:07.000+00:00
+          runtime_status: runtime_status
+          sandbox_policy_snapshot: sandbox_policy_snapshot
+          timeout: 5
+          stop_on_run_finished: true
+          kube_cr_uid: kube_cr_uid
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          last_activity_at: 2000-01-23T04:56:07.000+00:00
+          runtime_deleted: true
+          runtime_error: runtime_error
+          llm_model: llm_model
+          runtime_backend: runtime_backend
+          resource_overrides: resource_overrides
+          gateway_workspace: gateway_workspace
+          assigned_user_id: assigned_user_id
+          sdk_session_id: sdk_session_id
+          bot_account_name: bot_account_name
+          sandbox_name: sandbox_name
           kube_namespace: kube_namespace
           prompt: prompt
         - workflow_id: workflow_id
           completion_time: 2000-01-23T04:56:07.000+00:00
+          runtime_version: 5
           agent_id: agent_id
-          created_at: 2000-01-23T04:56:07.000+00:00
           source_scheduled_session_id: source_scheduled_session_id
           scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
           sandbox_logs_snapshot: sandbox_logs_snapshot
           reconciled_workflow: reconciled_workflow
-          sandbox_policy_snapshot: sandbox_policy_snapshot
-          timeout: 5
-          stop_on_run_finished: true
+          gateway_id: gateway_id
+          gateway_credential_id: gateway_credential_id
           environment_variables: environment_variables
-          kube_cr_uid: kube_cr_uid
-          sdk_restart_count: 7
-          updated_at: 2000-01-23T04:56:07.000+00:00
+          gateway_endpoint: gateway_endpoint
+          sdk_restart_count: 9
           project_id: project_id
-          last_activity_at: 2000-01-23T04:56:07.000+00:00
           parent_session_id: parent_session_id
           id: id
           href: href
           phase: phase
           repo_url: repo_url
-          llm_model: llm_model
-          resource_overrides: resource_overrides
           kind: kind
-          llm_temperature: 5.637376656633329
-          assigned_user_id: assigned_user_id
+          llm_temperature: 2.3021358869347655
           created_by_user_id: created_by_user_id
-          llm_max_tokens: 2
+          llm_max_tokens: 7
           labels: labels
           reconciled_repos: reconciled_repos
           start_time: 2000-01-23T04:56:07.000+00:00
-          sdk_session_id: sdk_session_id
-          bot_account_name: bot_account_name
           repos: repos
+          sandbox_id: sandbox_id
           name: name
           kube_cr_name: kube_cr_name
           conditions: conditions
+          runner_generation: runner_generation
+          created_at: 2000-01-23T04:56:07.000+00:00
+          runtime_status: runtime_status
+          sandbox_policy_snapshot: sandbox_policy_snapshot
+          timeout: 5
+          stop_on_run_finished: true
+          kube_cr_uid: kube_cr_uid
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          last_activity_at: 2000-01-23T04:56:07.000+00:00
+          runtime_deleted: true
+          runtime_error: runtime_error
+          llm_model: llm_model
+          runtime_backend: runtime_backend
+          resource_overrides: resource_overrides
+          gateway_workspace: gateway_workspace
+          assigned_user_id: assigned_user_id
+          sdk_session_id: sdk_session_id
+          bot_account_name: bot_account_name
+          sandbox_name: sandbox_name
           kube_namespace: kube_namespace
           prompt: prompt
     SessionPatchRequest:
@@ -5776,6 +6167,43 @@ components:
       allOf:
       - $ref: "#/components/schemas/ObjectReference"
       - properties:
+          runtime_backend:
+            readOnly: true
+            type: string
+          gateway_id:
+            readOnly: true
+            type: string
+          gateway_instance_id:
+            readOnly: true
+            type: string
+          gateway_endpoint:
+            readOnly: true
+            type: string
+          gateway_status:
+            readOnly: true
+            type: string
+          gateway_error:
+            readOnly: true
+            type: string
+          gateway_credential_id:
+            readOnly: true
+            type: string
+          gateway_account_id:
+            readOnly: true
+            type: string
+          gateway_account_expires_at:
+            readOnly: true
+            type: string
+          gateway_external_reference:
+            readOnly: true
+            type: string
+          runtime_deleted:
+            readOnly: true
+            type: boolean
+          runtime_version:
+            format: int64
+            readOnly: true
+            type: integer
           name:
             type: string
           description:
@@ -5800,16 +6228,28 @@ components:
         - name
         type: object
       example:
-        updated_at: 2000-01-23T04:56:07.000+00:00
+        gateway_account_id: gateway_account_id
+        runtime_backend: runtime_backend
+        runtime_version: 5
         kind: kind
-        name: name
         created_at: 2000-01-23T04:56:07.000+00:00
         description: description
         annotations: annotations
+        gateway_id: gateway_id
+        labels: labels
+        gateway_credential_id: gateway_credential_id
+        gateway_endpoint: gateway_endpoint
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        gateway_status: gateway_status
+        gateway_external_reference: gateway_external_reference
+        runtime_deleted: true
+        name: name
+        gateway_account_expires_at: gateway_account_expires_at
         id: id
         href: href
+        gateway_instance_id: gateway_instance_id
+        gateway_error: gateway_error
         prompt: prompt
-        labels: labels
         status: status
     ProjectList:
       allOf:
@@ -5826,27 +6266,51 @@ components:
         kind: kind
         page: 0
         items:
-        - updated_at: 2000-01-23T04:56:07.000+00:00
+        - gateway_account_id: gateway_account_id
+          runtime_backend: runtime_backend
+          runtime_version: 5
           kind: kind
-          name: name
           created_at: 2000-01-23T04:56:07.000+00:00
           description: description
           annotations: annotations
+          gateway_id: gateway_id
+          labels: labels
+          gateway_credential_id: gateway_credential_id
+          gateway_endpoint: gateway_endpoint
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          gateway_status: gateway_status
+          gateway_external_reference: gateway_external_reference
+          runtime_deleted: true
+          name: name
+          gateway_account_expires_at: gateway_account_expires_at
           id: id
           href: href
+          gateway_instance_id: gateway_instance_id
+          gateway_error: gateway_error
           prompt: prompt
-          labels: labels
           status: status
-        - updated_at: 2000-01-23T04:56:07.000+00:00
+        - gateway_account_id: gateway_account_id
+          runtime_backend: runtime_backend
+          runtime_version: 5
           kind: kind
-          name: name
           created_at: 2000-01-23T04:56:07.000+00:00
           description: description
           annotations: annotations
+          gateway_id: gateway_id
+          labels: labels
+          gateway_credential_id: gateway_credential_id
+          gateway_endpoint: gateway_endpoint
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          gateway_status: gateway_status
+          gateway_external_reference: gateway_external_reference
+          runtime_deleted: true
+          name: name
+          gateway_account_expires_at: gateway_account_expires_at
           id: id
           href: href
+          gateway_instance_id: gateway_instance_id
+          gateway_error: gateway_error
           prompt: prompt
-          labels: labels
           status: status
     ProjectPatchRequest:
       example:
@@ -6631,84 +7095,108 @@ components:
         items:
         - workflow_id: workflow_id
           completion_time: 2000-01-23T04:56:07.000+00:00
+          runtime_version: 5
           agent_id: agent_id
-          created_at: 2000-01-23T04:56:07.000+00:00
           source_scheduled_session_id: source_scheduled_session_id
           scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
           sandbox_logs_snapshot: sandbox_logs_snapshot
           reconciled_workflow: reconciled_workflow
-          sandbox_policy_snapshot: sandbox_policy_snapshot
-          timeout: 5
-          stop_on_run_finished: true
+          gateway_id: gateway_id
+          gateway_credential_id: gateway_credential_id
           environment_variables: environment_variables
-          kube_cr_uid: kube_cr_uid
-          sdk_restart_count: 7
-          updated_at: 2000-01-23T04:56:07.000+00:00
+          gateway_endpoint: gateway_endpoint
+          sdk_restart_count: 9
           project_id: project_id
-          last_activity_at: 2000-01-23T04:56:07.000+00:00
           parent_session_id: parent_session_id
           id: id
           href: href
           phase: phase
           repo_url: repo_url
-          llm_model: llm_model
-          resource_overrides: resource_overrides
           kind: kind
-          llm_temperature: 5.637376656633329
-          assigned_user_id: assigned_user_id
+          llm_temperature: 2.3021358869347655
           created_by_user_id: created_by_user_id
-          llm_max_tokens: 2
+          llm_max_tokens: 7
           labels: labels
           reconciled_repos: reconciled_repos
           start_time: 2000-01-23T04:56:07.000+00:00
-          sdk_session_id: sdk_session_id
-          bot_account_name: bot_account_name
           repos: repos
+          sandbox_id: sandbox_id
           name: name
           kube_cr_name: kube_cr_name
           conditions: conditions
+          runner_generation: runner_generation
+          created_at: 2000-01-23T04:56:07.000+00:00
+          runtime_status: runtime_status
+          sandbox_policy_snapshot: sandbox_policy_snapshot
+          timeout: 5
+          stop_on_run_finished: true
+          kube_cr_uid: kube_cr_uid
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          last_activity_at: 2000-01-23T04:56:07.000+00:00
+          runtime_deleted: true
+          runtime_error: runtime_error
+          llm_model: llm_model
+          runtime_backend: runtime_backend
+          resource_overrides: resource_overrides
+          gateway_workspace: gateway_workspace
+          assigned_user_id: assigned_user_id
+          sdk_session_id: sdk_session_id
+          bot_account_name: bot_account_name
+          sandbox_name: sandbox_name
           kube_namespace: kube_namespace
           prompt: prompt
         - workflow_id: workflow_id
           completion_time: 2000-01-23T04:56:07.000+00:00
+          runtime_version: 5
           agent_id: agent_id
-          created_at: 2000-01-23T04:56:07.000+00:00
           source_scheduled_session_id: source_scheduled_session_id
           scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
           sandbox_logs_snapshot: sandbox_logs_snapshot
           reconciled_workflow: reconciled_workflow
-          sandbox_policy_snapshot: sandbox_policy_snapshot
-          timeout: 5
-          stop_on_run_finished: true
+          gateway_id: gateway_id
+          gateway_credential_id: gateway_credential_id
           environment_variables: environment_variables
-          kube_cr_uid: kube_cr_uid
-          sdk_restart_count: 7
-          updated_at: 2000-01-23T04:56:07.000+00:00
+          gateway_endpoint: gateway_endpoint
+          sdk_restart_count: 9
           project_id: project_id
-          last_activity_at: 2000-01-23T04:56:07.000+00:00
           parent_session_id: parent_session_id
           id: id
           href: href
           phase: phase
           repo_url: repo_url
-          llm_model: llm_model
-          resource_overrides: resource_overrides
           kind: kind
-          llm_temperature: 5.637376656633329
-          assigned_user_id: assigned_user_id
+          llm_temperature: 2.3021358869347655
           created_by_user_id: created_by_user_id
-          llm_max_tokens: 2
+          llm_max_tokens: 7
           labels: labels
           reconciled_repos: reconciled_repos
           start_time: 2000-01-23T04:56:07.000+00:00
-          sdk_session_id: sdk_session_id
-          bot_account_name: bot_account_name
           repos: repos
+          sandbox_id: sandbox_id
           name: name
           kube_cr_name: kube_cr_name
           conditions: conditions
+          runner_generation: runner_generation
+          created_at: 2000-01-23T04:56:07.000+00:00
+          runtime_status: runtime_status
+          sandbox_policy_snapshot: sandbox_policy_snapshot
+          timeout: 5
+          stop_on_run_finished: true
+          kube_cr_uid: kube_cr_uid
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          last_activity_at: 2000-01-23T04:56:07.000+00:00
+          runtime_deleted: true
+          runtime_error: runtime_error
+          llm_model: llm_model
+          runtime_backend: runtime_backend
+          resource_overrides: resource_overrides
+          gateway_workspace: gateway_workspace
+          assigned_user_id: assigned_user_id
+          sdk_session_id: sdk_session_id
+          bot_account_name: bot_account_name
+          sandbox_name: sandbox_name
           kube_namespace: kube_namespace
           prompt: prompt
     StartRequest:
@@ -6724,43 +7212,55 @@ components:
         session:
           workflow_id: workflow_id
           completion_time: 2000-01-23T04:56:07.000+00:00
+          runtime_version: 5
           agent_id: agent_id
-          created_at: 2000-01-23T04:56:07.000+00:00
           source_scheduled_session_id: source_scheduled_session_id
           scheduled_for: 2000-01-23T04:56:07.000+00:00
           annotations: annotations
           sandbox_logs_snapshot: sandbox_logs_snapshot
           reconciled_workflow: reconciled_workflow
-          sandbox_policy_snapshot: sandbox_policy_snapshot
-          timeout: 5
-          stop_on_run_finished: true
+          gateway_id: gateway_id
+          gateway_credential_id: gateway_credential_id
           environment_variables: environment_variables
-          kube_cr_uid: kube_cr_uid
-          sdk_restart_count: 7
-          updated_at: 2000-01-23T04:56:07.000+00:00
+          gateway_endpoint: gateway_endpoint
+          sdk_restart_count: 9
           project_id: project_id
-          last_activity_at: 2000-01-23T04:56:07.000+00:00
           parent_session_id: parent_session_id
           id: id
           href: href
           phase: phase
           repo_url: repo_url
-          llm_model: llm_model
-          resource_overrides: resource_overrides
           kind: kind
-          llm_temperature: 5.637376656633329
-          assigned_user_id: assigned_user_id
+          llm_temperature: 2.3021358869347655
           created_by_user_id: created_by_user_id
-          llm_max_tokens: 2
+          llm_max_tokens: 7
           labels: labels
           reconciled_repos: reconciled_repos
           start_time: 2000-01-23T04:56:07.000+00:00
-          sdk_session_id: sdk_session_id
-          bot_account_name: bot_account_name
           repos: repos
+          sandbox_id: sandbox_id
           name: name
           kube_cr_name: kube_cr_name
           conditions: conditions
+          runner_generation: runner_generation
+          created_at: 2000-01-23T04:56:07.000+00:00
+          runtime_status: runtime_status
+          sandbox_policy_snapshot: sandbox_policy_snapshot
+          timeout: 5
+          stop_on_run_finished: true
+          kube_cr_uid: kube_cr_uid
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          last_activity_at: 2000-01-23T04:56:07.000+00:00
+          runtime_deleted: true
+          runtime_error: runtime_error
+          llm_model: llm_model
+          runtime_backend: runtime_backend
+          resource_overrides: resource_overrides
+          gateway_workspace: gateway_workspace
+          assigned_user_id: assigned_user_id
+          sdk_session_id: sdk_session_id
+          bot_account_name: bot_account_name
+          sandbox_name: sandbox_name
           kube_namespace: kube_namespace
           prompt: prompt
         start_prompt: start_prompt
@@ -7939,6 +8439,125 @@ components:
         last_heartbeat_at:
           format: date-time
           type: string
+      type: object
+    SessionRuntimePatch:
+      additionalProperties: false
+      example:
+        runner_generation: runner_generation
+        phase: phase
+        runtime_backend: runtime_backend
+        completion_time: 2000-01-23T04:56:07.000+00:00
+        runtime_version: 0
+        gateway_workspace: gateway_workspace
+        runtime_status: runtime_status
+        reconciled_workflow: reconciled_workflow
+        gateway_id: gateway_id
+        reconciled_repos: reconciled_repos
+        expected_phase: expected_phase
+        snapshots: snapshots
+        gateway_credential_id: gateway_credential_id
+        kube_cr_uid: kube_cr_uid
+        start_time: 2000-01-23T04:56:07.000+00:00
+        gateway_endpoint: gateway_endpoint
+        sdk_session_id: sdk_session_id
+        sandbox_id: sandbox_id
+        sandbox_name: sandbox_name
+        kube_cr_name: kube_cr_name
+        runtime_error: runtime_error
+        kube_namespace: kube_namespace
+      properties:
+        runtime_version:
+          format: int64
+          minimum: 0
+          type: integer
+        gateway_id:
+          type: string
+        gateway_workspace:
+          type: string
+        sandbox_id:
+          type: string
+        sandbox_name:
+          type: string
+        runtime_backend:
+          type: string
+        runner_generation:
+          type: string
+        gateway_endpoint:
+          type: string
+        gateway_credential_id:
+          type: string
+        runtime_status:
+          type: string
+        runtime_error:
+          type: string
+        expected_phase:
+          type: string
+        phase:
+          type: string
+        kube_cr_name:
+          type: string
+        kube_cr_uid:
+          type: string
+        kube_namespace:
+          type: string
+        snapshots:
+          type: string
+        sdk_session_id:
+          type: string
+        reconciled_repos:
+          type: string
+        reconciled_workflow:
+          type: string
+        start_time:
+          format: date-time
+          type: string
+        completion_time:
+          format: date-time
+          type: string
+      required:
+      - runtime_version
+      type: object
+    ProjectRuntimePatch:
+      additionalProperties: false
+      example:
+        gateway_credential_id: gateway_credential_id
+        gateway_endpoint: gateway_endpoint
+        gateway_account_id: gateway_account_id
+        runtime_backend: runtime_backend
+        runtime_version: 0
+        gateway_status: gateway_status
+        gateway_external_reference: gateway_external_reference
+        gateway_account_expires_at: gateway_account_expires_at
+        gateway_instance_id: gateway_instance_id
+        gateway_error: gateway_error
+        gateway_id: gateway_id
+      properties:
+        runtime_version:
+          format: int64
+          minimum: 0
+          type: integer
+        runtime_backend:
+          type: string
+        gateway_id:
+          type: string
+        gateway_instance_id:
+          type: string
+        gateway_endpoint:
+          type: string
+        gateway_status:
+          type: string
+        gateway_error:
+          type: string
+        gateway_credential_id:
+          type: string
+        gateway_account_id:
+          type: string
+        gateway_account_expires_at:
+          type: string
+        gateway_external_reference:
+          type: string
+      required:
+      - runtime_version
       type: object
     Payload:
       example:

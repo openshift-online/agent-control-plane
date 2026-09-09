@@ -9,9 +9,7 @@ spec:
       - name: ambient-ui
         env:
         - name: API_SERVER_URL
-          value: "https://ambient-api-server:8000"
-        - name: NODE_TLS_REJECT_UNAUTHORIZED
-          value: "0"
+          value: "https://ambient-api-server.ambient-code.svc:8000"
         - name: NODE_ENV
           value: "production"
         - name: AUTH_MODE

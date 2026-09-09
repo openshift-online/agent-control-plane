@@ -52,6 +52,16 @@ func main() {
 	}
 	zerolog.SetGlobalLevel(level)
 
+	if backend := os.Getenv("ACP_RUNTIME_BACKEND"); backend != "" && backend != "kubernetes" {
+		if backend != "hypershell" {
+			log.Fatal().Str("backend", backend).Msg("unknown resource backend")
+		}
+		if err := runHypershellMode(ctx, cfg); err != nil {
+			log.Fatal().Err(err).Msg("Hypershell runtime failed")
+		}
+		return
+	}
+
 	log.Info().
 		Str("version", version).
 		Str("build_time", buildTime).
@@ -131,6 +141,12 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 	log.Info().Str("namespace", cfg.CPRuntimeNamespace).Msg("CP token keypair ready")
 
 	factory := reconciler.NewSDKClientFactory(cfg.APIServerURL, tokenProvider, log.Logger)
+	runnerKey, err := keypair.ParsePrivateKey(kp.PrivateKeyPEM)
+	if err != nil {
+		return fmt.Errorf("parse runner signing key: %w", err)
+	}
+	runnerIdentity := reconciler.NewLegacyRunnerIdentity(factory, runnerKey)
+
 	kubeReconcilerCfg := reconciler.KubeReconcilerConfig{
 		RunnerImage:                     cfg.RunnerImage,
 		RunnerGRPCURL:                   cfg.GRPCServerAddr,
@@ -153,6 +169,8 @@ func runKubeMode(ctx context.Context, cfg *config.ControlPlaneConfig) error {
 		CPRuntimeNamespace:              cfg.CPRuntimeNamespace,
 		CPTokenURL:                      cfg.CPTokenURL,
 		CPTokenPublicKey:                string(kp.PublicKeyPEM),
+		RunnerIdentity:                  runnerIdentity,
+		AllowInsecureRunnerTransport:    os.Getenv("AMBIENT_ALLOW_INSECURE_RUNNER_TRANSPORT") == "true",
 		HTTPProxy:                       cfg.HTTPProxy,
 		HTTPSProxy:                      cfg.HTTPSProxy,
 		NoProxy:                         cfg.NoProxy,
@@ -287,7 +305,8 @@ func startTokenServer(ctx context.Context, cfg *config.ControlPlaneConfig, token
 	if err != nil {
 		return fmt.Errorf("parsing CP token private key: %w", err)
 	}
-	var opts []tokenserver.Option
+	identity := reconciler.NewLegacyRunnerIdentity(reconciler.NewSDKClientFactory(cfg.APIServerURL, tokenProvider, log.Logger), privKey)
+	opts := []tokenserver.Option{tokenserver.WithSessionValidator(identity.ValidateRunner), tokenserver.WithSandboxAuthorizer(identity.AuthorizeSandbox), tokenserver.WithRunnerAuthorizer(identity.AuthorizeRunner)}
 	if gateway != nil {
 		opts = append(opts, tokenserver.WithGateway(gateway))
 	}

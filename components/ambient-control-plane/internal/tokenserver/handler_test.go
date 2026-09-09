@@ -6,157 +6,108 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/runnerauth"
 	"github.com/rs/zerolog"
 )
 
-type staticTokenProvider struct{ token string }
-
-func (s *staticTokenProvider) Token(_ context.Context) (string, error) {
-	return s.token, nil
-}
-
-func newTestHandler(t *testing.T) (*handler, *rsa.PrivateKey) {
-	t.Helper()
-	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
+func TestTokenExchangeScopeAndRevocation(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		t.Fatalf("generating RSA key: %v", err)
+		t.Fatal(err)
 	}
-	h := &handler{
-		tokenProvider: &staticTokenProvider{token: "test-api-token"},
-		privateKey:    privKey,
-		logger:        zerolog.Nop(),
-	}
-	return h, privKey
-}
-
-func encryptSessionID(t *testing.T, pubKey *rsa.PublicKey, sessionID string) string {
-	t.Helper()
-	ciphertext, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, pubKey, []byte(sessionID), nil)
-	if err != nil {
-		t.Fatalf("encrypting session ID: %v", err)
-	}
-	return base64.StdEncoding.EncodeToString(ciphertext)
-}
-
-func TestHandleToken_Success(t *testing.T) {
-	h, privKey := newTestHandler(t)
-	bearer := encryptSessionID(t, &privKey.PublicKey, "abc123session")
-
-	req := httptest.NewRequest(http.MethodGet, "/token", nil)
-	req.Header.Set("Authorization", "Bearer "+bearer)
-	rr := httptest.NewRecorder()
-
-	h.handleToken(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Errorf("status: got %d, want %d — body: %s", rr.Code, http.StatusOK, rr.Body.String())
-	}
-}
-
-func TestHandleToken_MissingAuthHeader(t *testing.T) {
-	h, _ := newTestHandler(t)
-	req := httptest.NewRequest(http.MethodGet, "/token", nil)
-	rr := httptest.NewRecorder()
-
-	h.handleToken(rr, req)
-
-	if rr.Code != http.StatusUnauthorized {
-		t.Errorf("status: got %d, want %d", rr.Code, http.StatusUnauthorized)
-	}
-}
-
-func TestHandleToken_WrongBearerScheme(t *testing.T) {
-	h, _ := newTestHandler(t)
-	req := httptest.NewRequest(http.MethodGet, "/token", nil)
-	req.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
-	rr := httptest.NewRecorder()
-
-	h.handleToken(rr, req)
-
-	if rr.Code != http.StatusUnauthorized {
-		t.Errorf("status: got %d, want %d", rr.Code, http.StatusUnauthorized)
-	}
-}
-
-func TestHandleToken_InvalidBase64(t *testing.T) {
-	h, _ := newTestHandler(t)
-	req := httptest.NewRequest(http.MethodGet, "/token", nil)
-	req.Header.Set("Authorization", "Bearer not-valid-base64!!!")
-	rr := httptest.NewRecorder()
-
-	h.handleToken(rr, req)
-
-	if rr.Code != http.StatusUnauthorized {
-		t.Errorf("status: got %d, want %d", rr.Code, http.StatusUnauthorized)
-	}
-}
-
-func TestHandleToken_WrongKey(t *testing.T) {
-	h, _ := newTestHandler(t)
-
-	otherKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("generating other RSA key: %v", err)
-	}
-	bearer := encryptSessionID(t, &otherKey.PublicKey, "abc123session")
-
-	req := httptest.NewRequest(http.MethodGet, "/token", nil)
-	req.Header.Set("Authorization", "Bearer "+bearer)
-	rr := httptest.NewRecorder()
-
-	h.handleToken(rr, req)
-
-	if rr.Code != http.StatusUnauthorized {
-		t.Errorf("status: got %d, want %d", rr.Code, http.StatusUnauthorized)
-	}
-}
-
-func TestHandleToken_MethodNotAllowed(t *testing.T) {
-	h, _ := newTestHandler(t)
-	req := httptest.NewRequest(http.MethodPost, "/token", nil)
-	rr := httptest.NewRecorder()
-
-	h.handleToken(rr, req)
-
-	if rr.Code != http.StatusMethodNotAllowed {
-		t.Errorf("status: got %d, want %d", rr.Code, http.StatusMethodNotAllowed)
-	}
-}
-
-func TestIsValidSessionID(t *testing.T) {
-	cases := []struct {
-		id    string
-		valid bool
-	}{
-		{"abc12345", true},
-		{"3BurtLWQNFMLp61XAGFKILYiHoN", true},
-		{"short", false},
-		{"has space", false},
-		{"has\nnewline", false},
-		{"", false},
-	}
-	for _, tc := range cases {
-		got := isValidSessionID(tc.id)
-		if got != tc.valid {
-			t.Errorf("isValidSessionID(%q) = %v, want %v", tc.id, got, tc.valid)
+	revoked := false
+	h := &handler{privateKey: key, logger: zerolog.Nop(), validate: func(ctx context.Context, c runnerauth.Claims) error {
+		if revoked || c.SessionID != "session-a" || c.ProjectID != "project-a" || c.Generation != "run-a" || c.SandboxName != "sandbox-a" {
+			return fmt.Errorf("revoked")
 		}
+		return nil
+	}}
+	bootstrap, err := IssueBootstrap(key, "session-a", "project-a", "sandbox-a", "run-a", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := func(token string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/token", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		out := httptest.NewRecorder()
+		h.handleToken(out, req)
+		return out
+	}
+	out := call(bootstrap)
+	if out.Code != http.StatusOK {
+		t.Fatalf("exchange: %d", out.Code)
+	}
+	var response tokenResponse
+	if err := json.Unmarshal(out.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	claims, err := runnerauth.Verify(&key.PublicKey, response.Token, "access", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims.SessionID != "session-a" || claims.ProjectID != "project-a" || claims.Generation != "run-a" || claims.ExpiresAt-claims.IssuedAt > 300 {
+		t.Fatalf("wrong access scope: %+v", claims)
+	}
+	if call(response.Token).Code != http.StatusUnauthorized {
+		t.Fatal("access token used as refresh token")
+	}
+	revoked = true
+	if call(bootstrap).Code != http.StatusForbidden {
+		t.Fatal("revoked run refreshed token")
+	}
+	revoked = false
+	other, _ := IssueBootstrap(key, "session-b", "project-a", "sandbox-a", "run-a", time.Hour)
+	if call(other).Code != http.StatusForbidden {
+		t.Fatal("cross-session capability accepted")
+	}
+	legacy, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, &key.PublicKey, []byte("session-a"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if call(base64.StdEncoding.EncodeToString(legacy)).Code != http.StatusUnauthorized {
+		t.Fatal("public-key encrypted session ID accepted")
+	}
+	h.validate = nil
+	if call(bootstrap).Code != http.StatusUnauthorized {
+		t.Fatal("missing session validator accepted")
 	}
 }
 
-func TestDecryptSessionID_RoundTrip(t *testing.T) {
-	h, privKey := newTestHandler(t)
-	want := "my-session-id-xyz"
-	bearer := encryptSessionID(t, &privKey.PublicKey, want)
-
-	got, err := h.decryptSessionID(bearer)
+func TestCapabilitiesRejectForgeryExpiryAndWrongPurpose(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		t.Fatalf("decryptSessionID() error: %v", err)
+		t.Fatal(err)
 	}
-	if got != want {
-		t.Errorf("decryptSessionID() = %q, want %q", got, want)
+	other, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := IssueBootstrap(key, "session-a", "project-a", "sandbox-a", "run-a", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name           string
+		key            *rsa.PublicKey
+		token, purpose string
+		now            time.Time
+	}{
+		{"wrong key", &other.PublicKey, token, "bootstrap", time.Now()},
+		{"expired", &key.PublicKey, token, "bootstrap", time.Now().Add(2 * time.Minute)},
+		{"wrong purpose", &key.PublicKey, token, "access", time.Now()},
+		{"tampered", &key.PublicKey, token + "x", "bootstrap", time.Now()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := runnerauth.Verify(tc.key, tc.token, tc.purpose, tc.now); err == nil {
+				t.Fatal("invalid capability accepted")
+			}
+		})
 	}
 }

@@ -1,353 +1,452 @@
 from __future__ import annotations
 
-import base64
 import json
 import os
+import ssl
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from threading import Thread
+
+import grpc
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
+import urllib.error
 from unittest.mock import MagicMock, patch
 
 import pytest
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from ambient_runner._grpc_client import (
-    _decode_public_key,
-    _encrypt_session_id,
+    AmbientGRPCClient,
     _fetch_token_from_cp,
+    _NoRedirect,
     _validate_cp_token_url,
 )
 
 
-def generate_keypair():
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    private_pem = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.TraditionalOpenSSL,
-        encryption_algorithm=serialization.NoEncryption(),
-    ).decode()
-    public_pem = (
-        private_key.public_key()
-        .public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+EMPTY_CACHE_VALUE = ""
+TEST_RUNNER_IDENTITY = "acp-runner-v1.access.signature"
+
+
+@pytest.fixture(autouse=True)
+def token_cache():
+    from ambient_runner.platform import utils
+
+    utils._cp_fetched_token = EMPTY_CACHE_VALUE
+    yield
+    utils._cp_fetched_token = EMPTY_CACHE_VALUE
+
+
+def response(token=None):
+    if token is None:
+        token = TEST_RUNNER_IDENTITY
+    result = MagicMock()
+    result.read.return_value = json.dumps({"token": token}).encode()
+    result.__enter__.return_value = result
+    result.__exit__.return_value = False
+    return result
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["", "file:///tmp/token", "ftp://cp/token", "http://u:p@cp/token", "http:///token"],
+)
+def test_invalid_callback_urls(url):
+    with pytest.raises(RuntimeError, match="invalid CP token URL"):
+        _validate_cp_token_url(url)
+
+
+def test_exchange_sends_capability_and_caches_scoped_token():
+    from ambient_runner.platform.utils import get_bot_token
+
+    with patch("urllib.request.build_opener") as build:
+        build.return_value.open.return_value = response()
+        token = _fetch_token_from_cp("https://cp.example/token", "bootstrap-capability")
+        request = build.return_value.open.call_args.args[0]
+        assert request.get_header("Authorization") == "Bearer bootstrap-capability"
+    assert token == "acp-runner-v1.access.signature"
+    assert get_bot_token() == token
+
+
+def test_missing_capability_cannot_use_public_session_id():
+    with pytest.raises(RuntimeError, match="BOOTSTRAP_TOKEN is required"):
+        _fetch_token_from_cp("https://cp.example/token", "")
+
+
+def test_token_exchange_requires_tls():
+    with (
+        patch.dict(os.environ, {"AMBIENT_ALLOW_INSECURE_RUNNER_TRANSPORT": ""}),
+        pytest.raises(RuntimeError, match="requires HTTPS"),
+    ):
+        _fetch_token_from_cp("http://cp.example/token", "bootstrap-capability")
+
+
+def test_redirects_do_not_forward_capability():
+    with pytest.raises(RuntimeError, match="redirects are not permitted"):
+        _NoRedirect().redirect_request(
+            None, None, 302, "", {}, "https://attacker.example"
         )
-        .decode()
+
+
+def test_exchange_rejects_broad_token_response():
+    with patch("urllib.request.build_opener") as build:
+        build.return_value.open.return_value = response("service-token")
+        with pytest.raises(RuntimeError, match="no scoped runner token"):
+            _fetch_token_from_cp("https://cp.example/token", "bootstrap-capability")
+
+
+@pytest.mark.parametrize("code", [401, 403])
+def test_revocation_does_not_retry_or_show_response_body(code):
+    error = urllib.error.HTTPError(
+        "https://cp.example/token", code, "secret", None, None
     )
-    return private_key, private_pem, public_pem
+    with patch("urllib.request.build_opener") as build:
+        build.return_value.open.side_effect = error
+        with pytest.raises(RuntimeError, match=f"HTTP {code}") as caught:
+            _fetch_token_from_cp("https://cp.example/token", "bootstrap-capability")
+        assert "secret" not in str(caught.value)
+        assert build.return_value.open.call_count == 1
 
 
-class TestValidateCPTokenURL:
-    def test_valid_http(self):
-        _validate_cp_token_url("http://ambient-control-plane.svc:8080/token")
-
-    def test_valid_https(self):
-        _validate_cp_token_url("https://ambient-control-plane.svc:8080/token")
-
-    def test_rejects_ftp(self):
-        with pytest.raises(RuntimeError, match="invalid CP token URL"):
-            _validate_cp_token_url("ftp://example.com/token")
-
-    def test_rejects_file(self):
-        with pytest.raises(RuntimeError, match="invalid CP token URL"):
-            _validate_cp_token_url("file:///etc/passwd")
-
-    def test_rejects_credentials_in_url(self):
-        with pytest.raises(RuntimeError, match="invalid CP token URL"):
-            _validate_cp_token_url("http://user:pass@example.com/token")
-
-    def test_rejects_empty(self):
-        with pytest.raises(RuntimeError, match="invalid CP token URL"):
-            _validate_cp_token_url("")
-
-    def test_rejects_no_host(self):
-        with pytest.raises(RuntimeError, match="invalid CP token URL"):
-            _validate_cp_token_url("http:///token")
+def test_transient_connection_failure_retries():
+    with patch("urllib.request.build_opener") as build, patch("time.sleep"):
+        build.return_value.open.side_effect = [
+            urllib.error.URLError("refused"),
+            response(),
+        ]
+        _fetch_token_from_cp("https://cp.example/token", "bootstrap-capability")
+        assert build.return_value.open.call_count == 2
 
 
-class TestEncryptSessionID:
-    def test_produces_base64_ciphertext(self):
-        _, _, public_pem = generate_keypair()
-        result = _encrypt_session_id(public_pem, "my-session-id")
-        decoded = base64.b64decode(result)
-        assert len(decoded) > 0
+def test_configured_ca_is_used():
+    with (
+        patch.dict(os.environ, {"AMBIENT_CP_CA_CERT_FILE": "/tmp/ca.pem"}),
+        patch("ssl.create_default_context") as tls,
+        patch("urllib.request.build_opener") as build,
+    ):
+        build.return_value.open.return_value = response()
+        _fetch_token_from_cp("https://cp.example/token", "bootstrap-capability")
+        tls.assert_called_once_with()
+        tls.return_value.load_verify_locations.assert_called_once_with(
+            cafile="/tmp/ca.pem"
+        )
 
-    def test_decryptable_with_private_key(self):
-        private_key, _, public_pem = generate_keypair()
-        session_id = "3BurtLWQNFMLp61XAGFKILYiHoN"
 
-        ciphertext_b64 = _encrypt_session_id(public_pem, session_id)
-        ciphertext = base64.b64decode(ciphertext_b64)
+def test_reconnect_refreshes_with_same_scoped_capability():
+    env = {
+        "AMBIENT_GRPC_URL": "api.example:443",
+        "AMBIENT_GRPC_USE_TLS": "true",
+        "AMBIENT_CP_TOKEN_URL": "https://cp.example/token",
+        "AMBIENT_RUNNER_BOOTSTRAP_TOKEN": "bootstrap-capability",
+    }
+    with (
+        patch.dict(os.environ, env, clear=True),
+        patch("urllib.request.build_opener") as build,
+    ):
+        build.return_value.open.side_effect = [
+            response(),
+            response("acp-runner-v1.refreshed.signature"),
+        ]
+        client = AmbientGRPCClient.from_env()
+        client.reconnect()
+        assert client._token == "acp-runner-v1.refreshed.signature"
+        for call in build.return_value.open.call_args_list:
+            assert (
+                call.args[0].get_header("Authorization")
+                == "Bearer bootstrap-capability"
+            )
 
-        plaintext = private_key.decrypt(
-            ciphertext,
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None,
+
+def test_failed_refresh_has_no_cached_token_fallback():
+    from ambient_runner.platform.utils import refresh_bot_token, set_bot_token
+
+    set_bot_token("old-token")
+    with (
+        patch.dict(
+            os.environ, {"AMBIENT_CP_TOKEN_URL": "https://cp.example/token"}, clear=True
+        ),
+        pytest.raises(RuntimeError, match="BOOTSTRAP_TOKEN is required"),
+    ):
+        refresh_bot_token()
+
+
+def test_explicit_missing_ca_fails_closed(tmp_path):
+    from ambient_runner._grpc_client import _load_ca_cert
+
+    with pytest.raises(RuntimeError, match="CA file cannot be read"):
+        _load_ca_cert(str(tmp_path / "missing.pem"))
+
+
+def test_token_url_error_does_not_echo_credentials():
+    from ambient_runner._grpc_client import _validate_cp_token_url
+
+    with pytest.raises(RuntimeError) as error:
+        _validate_cp_token_url("https://name:private-value@example.com/token")
+    assert "private-value" not in str(error.value)
+
+
+@pytest.fixture
+def tls_certificates(tmp_path, monkeypatch):
+    """Issue distinct native, ACP, and untrusted certificates for real TLS."""
+    certificates = {}
+    now = datetime.now(timezone.utc)
+    for name in ("native", "acp", "untrusted"):
+        ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, name)])
+        ca = (
+            x509.CertificateBuilder()
+            .subject_name(issuer)
+            .issuer_name(issuer)
+            .public_key(ca_key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - timedelta(minutes=1))
+            .not_valid_after(now + timedelta(hours=1))
+            .add_extension(x509.BasicConstraints(ca=True, path_length=None), True)
+            .sign(ca_key, hashes.SHA256())
+        )
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        leaf = (
+            x509.CertificateBuilder()
+            .subject_name(
+                x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
+            )
+            .issuer_name(issuer)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - timedelta(minutes=1))
+            .not_valid_after(now + timedelta(hours=1))
+            .add_extension(
+                x509.SubjectAlternativeName([x509.DNSName("localhost")]), False
+            )
+            .sign(ca_key, hashes.SHA256())
+        )
+        paths = {}
+        for kind, data in (
+            ("ca", ca.public_bytes(serialization.Encoding.PEM)),
+            ("cert", leaf.public_bytes(serialization.Encoding.PEM)),
+            (
+                "key",
+                key.private_bytes(
+                    serialization.Encoding.PEM,
+                    serialization.PrivateFormat.PKCS8,
+                    serialization.NoEncryption(),
+                ),
+            ),
+        ):
+            path = tmp_path / f"{name}-{kind}.pem"
+            path.write_bytes(data)
+            paths[kind] = path
+        certificates[name] = paths
+    monkeypatch.setenv("SSL_CERT_FILE", str(certificates["native"]["ca"]))
+    monkeypatch.setenv("AMBIENT_CP_CA_CERT_FILE", str(certificates["acp"]["ca"]))
+    monkeypatch.setenv("NO_PROXY", "localhost,127.0.0.1")
+    monkeypatch.setenv("no_proxy", "localhost,127.0.0.1")
+    monkeypatch.setattr("ambient_runner._grpc_client._CP_TOKEN_FETCH_ATTEMPTS", 1)
+    return certificates
+
+
+@contextmanager
+def token_tls_server(certificates):
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(json.dumps({"token": TEST_RUNNER_IDENTITY}).encode())
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(certificates["cert"], certificates["key"])
+    server.socket = context.wrap_socket(server.socket, server_side=True)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"https://localhost:{server.server_port}/token"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+@pytest.mark.parametrize("issuer", ["native", "acp"])
+def test_token_exchange_trusts_native_and_additional_ca(tls_certificates, issuer):
+    with token_tls_server(tls_certificates[issuer]) as url:
+        assert _fetch_token_from_cp(url, "bootstrap-capability") == TEST_RUNNER_IDENTITY
+
+
+def test_token_exchange_rejects_untrusted_ca(tls_certificates):
+    with token_tls_server(tls_certificates["untrusted"]) as url:
+        with pytest.raises(RuntimeError, match="endpoint unavailable"):
+            _fetch_token_from_cp(url, "bootstrap-capability")
+
+
+def test_token_exchange_still_checks_hostname(tls_certificates):
+    with token_tls_server(tls_certificates["native"]) as url:
+        with pytest.raises(RuntimeError, match="endpoint unavailable"):
+            _fetch_token_from_cp(
+                url.replace("localhost", "127.0.0.1"), "bootstrap-capability"
+            )
+
+
+@pytest.mark.parametrize("issuer", ["native", "acp", "untrusted"])
+def test_grpc_handshake_uses_combined_trust(tls_certificates, issuer):
+    from ambient_runner._grpc_client import _build_channel, _load_ca_cert
+
+    additional = str(tls_certificates["acp"]["ca"])
+    roots = x509.load_pem_x509_certificates(_load_ca_cert(additional))
+    subjects = {root.subject.rfc4514_string() for root in roots}
+    assert {"CN=native", "CN=acp"} <= subjects
+    assert "CN=untrusted" not in subjects
+    certificate = tls_certificates[issuer]
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        server = grpc.server(pool)
+        server.add_generic_rpc_handlers(
+            (
+                grpc.method_handlers_generic_handler(
+                    "proof.TLS",
+                    {
+                        "Ping": grpc.unary_unary_rpc_method_handler(
+                            lambda data, ctx: data
+                        )
+                    },
+                ),
+            )
+        )
+        port = server.add_secure_port(
+            "127.0.0.1:0",
+            grpc.ssl_server_credentials(
+                ((certificate["key"].read_bytes(), certificate["cert"].read_bytes()),)
             ),
         )
-        assert plaintext.decode() == session_id
+        server.start()
+        try:
+            with _build_channel(f"localhost:{port}", True, additional) as channel:
+                call = channel.unary_unary("/proof.TLS/Ping")
+                if issuer == "untrusted":
+                    with pytest.raises(grpc.RpcError) as caught:
+                        call(b"proof", timeout=3)
+                    assert caught.value.code() == grpc.StatusCode.UNAVAILABLE
+                else:
+                    assert call(b"proof", timeout=3) == b"proof"
+        finally:
+            server.stop(0).wait(timeout=3)
 
-    def test_different_ciphertexts_for_same_input(self):
-        _, _, public_pem = generate_keypair()
-        result1 = _encrypt_session_id(public_pem, "session-abc")
-        result2 = _encrypt_session_id(public_pem, "session-abc")
-        assert result1 != result2
 
-    def test_invalid_public_key_raises(self):
-        with pytest.raises(Exception):
-            _encrypt_session_id("not a pem key", "session-id")
+@pytest.mark.parametrize("contents", [b"", b"not a certificate"])
+def test_invalid_additional_ca_fails_before_connection(tmp_path, monkeypatch, contents):
+    from ambient_runner._grpc_client import _load_ca_cert
+
+    path = tmp_path / "invalid.pem"
+    path.write_bytes(contents)
+    monkeypatch.setenv("AMBIENT_CP_CA_CERT_FILE", str(path))
+    with patch("urllib.request.build_opener") as opener:
+        with pytest.raises(RuntimeError, match="CA file cannot be read or is invalid"):
+            _fetch_token_from_cp("https://cp.example/token", "bootstrap-capability")
+        opener.assert_not_called()
+    with pytest.raises(RuntimeError, match="CA file cannot be read or is invalid"):
+        _load_ca_cert(str(path))
 
 
-class TestFetchTokenFromCP:
-    def _mock_successful_response(self, token: str = "api-token-xyz"):
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({"token": token}).encode()
-        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-        mock_resp.__exit__ = MagicMock(return_value=False)
-        return mock_resp
+def test_grpc_service_ca_adds_to_native_trust(tls_certificates, monkeypatch):
+    from ambient_runner._grpc_client import _load_ca_cert
 
-    def test_success(self):
-        _, _, public_pem = generate_keypair()
-        mock_resp = self._mock_successful_response("test-api-token")
+    monkeypatch.setattr(
+        "ambient_runner._grpc_client._SERVICE_CA_PATH",
+        str(tls_certificates["acp"]["ca"]),
+    )
+    roots = x509.load_pem_x509_certificates(_load_ca_cert(None))
+    assert {"CN=native", "CN=acp"} <= {root.subject.rfc4514_string() for root in roots}
 
-        with patch("urllib.request.urlopen", return_value=mock_resp):
-            token = _fetch_token_from_cp(
-                "http://cp.svc:8080/token", public_pem, "session-12345678"
+
+@pytest.mark.parametrize("use_tls", [True, False])
+def test_session_rpcs_send_one_bearer_before_and_after_refresh(
+    tls_certificates, monkeypatch, use_tls
+):
+    """Exercise the complete client path; duplicate metadata is rejected by ACP."""
+    seen = []
+
+    def accept(request, context):
+        values = [
+            item.value
+            for item in context.invocation_metadata()
+            if item.key == "authorization"
+        ]
+        seen.append(values)
+        if len(values) != 1:
+            context.abort(grpc.StatusCode.UNAUTHENTICATED, "ambiguous authorization")
+        return b""
+
+    def watch(request, context):
+        yield accept(request, context)
+
+    certificate = tls_certificates["acp"]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        server = grpc.server(pool)
+        server.add_generic_rpc_handlers(
+            (
+                grpc.method_handlers_generic_handler(
+                    "ambient.v1.SessionService",
+                    {
+                        "PushSessionMessage": grpc.unary_unary_rpc_method_handler(
+                            accept
+                        ),
+                        "PushSessionEvent": grpc.unary_unary_rpc_method_handler(accept),
+                        "WatchSessionMessages": grpc.unary_stream_rpc_method_handler(
+                            watch
+                        ),
+                    },
+                ),
             )
-
-        assert token == "test-api-token"
-
-    def test_sends_encrypted_bearer(self):
-        _, _, public_pem = generate_keypair()
-        mock_resp = self._mock_successful_response()
-        captured_req = {}
-
-        def fake_urlopen(req, timeout=None):
-            captured_req["req"] = req
-            return mock_resp
-
-        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
-            _fetch_token_from_cp("http://cp.svc:8080/token", public_pem, "session-abc")
-
-        auth = captured_req["req"].get_header("Authorization")
-        assert auth.startswith("Bearer ")
-        b64_part = auth[len("Bearer ") :]
-        decoded = base64.b64decode(b64_part)
-        assert len(decoded) > 0
-
-    def test_retries_on_failure_then_succeeds(self):
-        _, _, public_pem = generate_keypair()
-        mock_resp = self._mock_successful_response()
-        import urllib.error
-
-        call_count = [0]
-
-        def fake_urlopen(req, timeout=None):
-            call_count[0] += 1
-            if call_count[0] < 3:
-                raise urllib.error.URLError("connection refused")
-            return mock_resp
-
-        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
-            with patch("time.sleep"):
-                token = _fetch_token_from_cp(
-                    "http://cp.svc:8080/token", public_pem, "session-12345678"
+        )
+        if use_tls:
+            port = server.add_secure_port(
+                "127.0.0.1:0",
+                grpc.ssl_server_credentials(
+                    (
+                        (
+                            certificate["key"].read_bytes(),
+                            certificate["cert"].read_bytes(),
+                        ),
+                    )
+                ),
+            )
+        else:
+            port = server.add_insecure_port("127.0.0.1:0")
+        server.start()
+        refreshed = "acp-runner-v1.refreshed.signature"
+        monkeypatch.setattr(
+            "ambient_runner._grpc_client._fetch_token_from_cp", lambda *_: refreshed
+        )
+        client = AmbientGRPCClient(
+            f"localhost:{port}",
+            TEST_RUNNER_IDENTITY,
+            use_tls,
+            str(certificate["ca"]),
+            cp_token_url="https://cp.example/token",
+        )
+        try:
+            for index, expected in enumerate((TEST_RUNNER_IDENTITY, refreshed)):
+                if index:
+                    client.reconnect()
+                assert (
+                    client.session_messages.push("session-a", "assistant", "proof")
+                    is not None
                 )
-
-        assert token == "api-token-xyz"
-        assert call_count[0] == 3
-
-    def test_raises_after_all_attempts_fail(self):
-        _, _, public_pem = generate_keypair()
-        import urllib.error
-
-        with patch(
-            "urllib.request.urlopen", side_effect=urllib.error.URLError("refused")
-        ):
-            with patch("time.sleep"):
-                with pytest.raises(RuntimeError, match="CP token endpoint unreachable"):
-                    _fetch_token_from_cp(
-                        "http://cp.svc:8080/token", public_pem, "session-12345678"
-                    )
-
-    def test_includes_http_error_body_in_exception(self):
-        _, _, public_pem = generate_keypair()
-        import urllib.error
-
-        err_body = b"unauthorized: invalid token"
-        http_err = urllib.error.HTTPError(
-            url="http://cp.svc:8080/token",
-            code=401,
-            msg="Unauthorized",
-            hdrs=None,
-            fp=MagicMock(read=MagicMock(return_value=err_body)),
-        )
-
-        with patch("urllib.request.urlopen", side_effect=http_err):
-            with patch("time.sleep"):
-                with pytest.raises(RuntimeError, match="CP /token HTTP 401"):
-                    _fetch_token_from_cp(
-                        "http://cp.svc:8080/token", public_pem, "session-12345678"
-                    )
-
-    def test_raises_on_missing_token_field(self):
-        _, _, public_pem = generate_keypair()
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({"other": "field"}).encode()
-        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-        mock_resp.__exit__ = MagicMock(return_value=False)
-
-        with patch("urllib.request.urlopen", return_value=mock_resp):
-            with patch("time.sleep"):
-                with pytest.raises(RuntimeError, match="missing 'token' field"):
-                    _fetch_token_from_cp(
-                        "http://cp.svc:8080/token", public_pem, "session-12345678"
-                    )
-
-
-class TestSetBotTokenIntegration:
-    def test_get_bot_token_returns_cp_fetched_token_after_successful_fetch(self):
-        import ambient_runner.platform.utils as utils
-
-        utils._cp_fetched_token = ""
-
-        _, _, public_pem = generate_keypair()
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps(
-            {"token": "oidc-token-for-api-calls"}
-        ).encode()
-        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-        mock_resp.__exit__ = MagicMock(return_value=False)
-
-        assert utils.get_bot_token() == "", (
-            "get_bot_token() must be empty before any CP fetch"
-        )
-
-        with patch("urllib.request.urlopen", return_value=mock_resp):
-            _fetch_token_from_cp(
-                "http://cp.svc:8080/token", public_pem, "session-12345678"
-            )
-
-        assert utils.get_bot_token() == "oidc-token-for-api-calls", (
-            "get_bot_token() must return the CP-fetched token so backend API credential "
-            "calls are authenticated — regression for HTTP 401 on credential refresh"
-        )
-        utils._cp_fetched_token = ""
-
-    def test_fetch_from_cp_calls_set_bot_token(self):
-        from cryptography.hazmat.primitives.asymmetric import rsa as _rsa
-
-        private_key = _rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        public_pem = (
-            private_key.public_key()
-            .public_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo,
-            )
-            .decode()
-        )
-
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps(
-            {"token": "oidc-api-token-abc"}
-        ).encode()
-        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-        mock_resp.__exit__ = MagicMock(return_value=False)
-
-        import ambient_runner.platform.utils as utils
-
-        utils._cp_fetched_token = ""
-
-        with patch("urllib.request.urlopen", return_value=mock_resp):
-            _fetch_token_from_cp(
-                "http://cp.svc:8080/token", public_pem, "session-12345678"
-            )
-
-        assert utils.get_bot_token() == "oidc-api-token-abc"
-        utils._cp_fetched_token = ""
-
-
-class TestFromEnvIntegration:
-    def test_uses_encrypted_session_id_when_cp_token_url_set(self):
-        _, _, public_pem = generate_keypair()
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({"token": "env-token"}).encode()
-        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-        mock_resp.__exit__ = MagicMock(return_value=False)
-
-        env = {
-            "AMBIENT_GRPC_URL": "localhost:9000",
-            "AMBIENT_CP_TOKEN_URL": "http://cp.svc:8080/token",
-            "AMBIENT_CP_TOKEN_PUBLIC_KEY": public_pem,
-            "SESSION_ID": "session-test-1234",
-            "AMBIENT_GRPC_USE_TLS": "false",
-        }
-
-        with patch.dict(os.environ, env, clear=False):
-            with patch("urllib.request.urlopen", return_value=mock_resp):
-                from ambient_runner._grpc_client import AmbientGRPCClient
-
-                client = AmbientGRPCClient.from_env()
-
-        assert client._token == "env-token"
-
-    def test_falls_back_to_bot_token_when_no_cp_url(self):
-        env = {
-            "AMBIENT_GRPC_URL": "localhost:9000",
-            "BOT_TOKEN": "static-bot-token",
-            "AMBIENT_GRPC_USE_TLS": "false",
-        }
-        env_without_cp = {k: v for k, v in env.items()}
-
-        with patch.dict(os.environ, env_without_cp, clear=False):
-            with patch.dict(os.environ, {"AMBIENT_CP_TOKEN_URL": ""}, clear=False):
-                from ambient_runner._grpc_client import AmbientGRPCClient
-
-                client = AmbientGRPCClient.from_env()
-
-        assert client._token == "static-bot-token"
-
-
-class TestDecodePublicKey:
-    def test_raw_pem_returned_as_is(self):
-        _, _, public_pem = generate_keypair()
-        assert _decode_public_key(public_pem) == public_pem
-
-    def test_base64_encoded_pem_decoded(self):
-        _, _, public_pem = generate_keypair()
-        encoded = base64.b64encode(public_pem.encode()).decode()
-        assert _decode_public_key(encoded) == public_pem
-
-    def test_empty_string_returned_as_is(self):
-        assert _decode_public_key("") == ""
-
-    def test_base64_key_works_with_encrypt(self):
-        _, _, public_pem = generate_keypair()
-        encoded = base64.b64encode(public_pem.encode()).decode()
-        decoded = _decode_public_key(encoded)
-        result = _encrypt_session_id(decoded, "test-session")
-        assert len(result) > 0
-
-    def test_from_env_with_base64_key(self):
-        _, _, public_pem = generate_keypair()
-        encoded = base64.b64encode(public_pem.encode()).decode()
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({"token": "b64-token"}).encode()
-        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-        mock_resp.__exit__ = MagicMock(return_value=False)
-
-        env = {
-            "AMBIENT_GRPC_URL": "localhost:9000",
-            "AMBIENT_CP_TOKEN_URL": "http://cp.svc:8080/token",
-            "AMBIENT_CP_TOKEN_PUBLIC_KEY": encoded,
-            "SESSION_ID": "session-test-b64",
-            "AMBIENT_GRPC_USE_TLS": "false",
-        }
-
-        with patch.dict(os.environ, env, clear=False):
-            with patch("urllib.request.urlopen", return_value=mock_resp):
-                from ambient_runner._grpc_client import AmbientGRPCClient
-
-                client = AmbientGRPCClient.from_env()
-
-        assert client._token == "b64-token"
+                assert (
+                    client.session_events.push("session-a", "RUN_STARTED", "{}")
+                    is not None
+                )
+                assert (
+                    len(list(client.session_messages.watch("session-a", timeout=3)))
+                    == 1
+                )
+                assert seen[index * 3 : (index + 1) * 3] == [[f"Bearer {expected}"]] * 3
+            assert len(seen) == 6
+        finally:
+            client.close()
+            server.stop(0).wait(timeout=3)

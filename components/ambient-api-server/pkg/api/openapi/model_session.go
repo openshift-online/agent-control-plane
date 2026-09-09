@@ -23,14 +23,26 @@ var _ MappedNullable = &Session{}
 
 // Session struct for Session
 type Session struct {
-	Id        *string    `json:"id,omitempty"`
-	Kind      *string    `json:"kind,omitempty"`
-	Href      *string    `json:"href,omitempty"`
-	CreatedAt *time.Time `json:"created_at,omitempty"`
-	UpdatedAt *time.Time `json:"updated_at,omitempty"`
-	Name      string     `json:"name"`
-	RepoUrl   *string    `json:"repo_url,omitempty"`
-	Prompt    *string    `json:"prompt,omitempty"`
+	Id                  *string    `json:"id,omitempty"`
+	Kind                *string    `json:"kind,omitempty"`
+	Href                *string    `json:"href,omitempty"`
+	CreatedAt           *time.Time `json:"created_at,omitempty"`
+	UpdatedAt           *time.Time `json:"updated_at,omitempty"`
+	GatewayId           *string    `json:"gateway_id,omitempty"`
+	GatewayWorkspace    *string    `json:"gateway_workspace,omitempty"`
+	SandboxId           *string    `json:"sandbox_id,omitempty"`
+	SandboxName         *string    `json:"sandbox_name,omitempty"`
+	RuntimeBackend      *string    `json:"runtime_backend,omitempty"`
+	RunnerGeneration    *string    `json:"runner_generation,omitempty"`
+	GatewayEndpoint     *string    `json:"gateway_endpoint,omitempty"`
+	GatewayCredentialId *string    `json:"gateway_credential_id,omitempty"`
+	RuntimeStatus       *string    `json:"runtime_status,omitempty"`
+	RuntimeError        *string    `json:"runtime_error,omitempty"`
+	RuntimeDeleted      *bool      `json:"runtime_deleted,omitempty"`
+	RuntimeVersion      *int64     `json:"runtime_version,omitempty"`
+	Name                string     `json:"name"`
+	RepoUrl             *string    `json:"repo_url,omitempty"`
+	Prompt              *string    `json:"prompt,omitempty"`
 	// Set from authentication token. Cannot be set or modified via API.
 	CreatedByUserId *string  `json:"created_by_user_id,omitempty"`
 	AssignedUserId  *string  `json:"assigned_user_id,omitempty"`
@@ -253,6 +265,390 @@ func (o *Session) HasUpdatedAt() bool {
 // SetUpdatedAt gets a reference to the given time.Time and assigns it to the UpdatedAt field.
 func (o *Session) SetUpdatedAt(v time.Time) {
 	o.UpdatedAt = &v
+}
+
+// GetGatewayId returns the GatewayId field value if set, zero value otherwise.
+func (o *Session) GetGatewayId() string {
+	if o == nil || IsNil(o.GatewayId) {
+		var ret string
+		return ret
+	}
+	return *o.GatewayId
+}
+
+// GetGatewayIdOk returns a tuple with the GatewayId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetGatewayIdOk() (*string, bool) {
+	if o == nil || IsNil(o.GatewayId) {
+		return nil, false
+	}
+	return o.GatewayId, true
+}
+
+// HasGatewayId returns a boolean if a field has been set.
+func (o *Session) HasGatewayId() bool {
+	if o != nil && !IsNil(o.GatewayId) {
+		return true
+	}
+
+	return false
+}
+
+// SetGatewayId gets a reference to the given string and assigns it to the GatewayId field.
+func (o *Session) SetGatewayId(v string) {
+	o.GatewayId = &v
+}
+
+// GetGatewayWorkspace returns the GatewayWorkspace field value if set, zero value otherwise.
+func (o *Session) GetGatewayWorkspace() string {
+	if o == nil || IsNil(o.GatewayWorkspace) {
+		var ret string
+		return ret
+	}
+	return *o.GatewayWorkspace
+}
+
+// GetGatewayWorkspaceOk returns a tuple with the GatewayWorkspace field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetGatewayWorkspaceOk() (*string, bool) {
+	if o == nil || IsNil(o.GatewayWorkspace) {
+		return nil, false
+	}
+	return o.GatewayWorkspace, true
+}
+
+// HasGatewayWorkspace returns a boolean if a field has been set.
+func (o *Session) HasGatewayWorkspace() bool {
+	if o != nil && !IsNil(o.GatewayWorkspace) {
+		return true
+	}
+
+	return false
+}
+
+// SetGatewayWorkspace gets a reference to the given string and assigns it to the GatewayWorkspace field.
+func (o *Session) SetGatewayWorkspace(v string) {
+	o.GatewayWorkspace = &v
+}
+
+// GetSandboxId returns the SandboxId field value if set, zero value otherwise.
+func (o *Session) GetSandboxId() string {
+	if o == nil || IsNil(o.SandboxId) {
+		var ret string
+		return ret
+	}
+	return *o.SandboxId
+}
+
+// GetSandboxIdOk returns a tuple with the SandboxId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetSandboxIdOk() (*string, bool) {
+	if o == nil || IsNil(o.SandboxId) {
+		return nil, false
+	}
+	return o.SandboxId, true
+}
+
+// HasSandboxId returns a boolean if a field has been set.
+func (o *Session) HasSandboxId() bool {
+	if o != nil && !IsNil(o.SandboxId) {
+		return true
+	}
+
+	return false
+}
+
+// SetSandboxId gets a reference to the given string and assigns it to the SandboxId field.
+func (o *Session) SetSandboxId(v string) {
+	o.SandboxId = &v
+}
+
+// GetSandboxName returns the SandboxName field value if set, zero value otherwise.
+func (o *Session) GetSandboxName() string {
+	if o == nil || IsNil(o.SandboxName) {
+		var ret string
+		return ret
+	}
+	return *o.SandboxName
+}
+
+// GetSandboxNameOk returns a tuple with the SandboxName field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetSandboxNameOk() (*string, bool) {
+	if o == nil || IsNil(o.SandboxName) {
+		return nil, false
+	}
+	return o.SandboxName, true
+}
+
+// HasSandboxName returns a boolean if a field has been set.
+func (o *Session) HasSandboxName() bool {
+	if o != nil && !IsNil(o.SandboxName) {
+		return true
+	}
+
+	return false
+}
+
+// SetSandboxName gets a reference to the given string and assigns it to the SandboxName field.
+func (o *Session) SetSandboxName(v string) {
+	o.SandboxName = &v
+}
+
+// GetRuntimeBackend returns the RuntimeBackend field value if set, zero value otherwise.
+func (o *Session) GetRuntimeBackend() string {
+	if o == nil || IsNil(o.RuntimeBackend) {
+		var ret string
+		return ret
+	}
+	return *o.RuntimeBackend
+}
+
+// GetRuntimeBackendOk returns a tuple with the RuntimeBackend field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetRuntimeBackendOk() (*string, bool) {
+	if o == nil || IsNil(o.RuntimeBackend) {
+		return nil, false
+	}
+	return o.RuntimeBackend, true
+}
+
+// HasRuntimeBackend returns a boolean if a field has been set.
+func (o *Session) HasRuntimeBackend() bool {
+	if o != nil && !IsNil(o.RuntimeBackend) {
+		return true
+	}
+
+	return false
+}
+
+// SetRuntimeBackend gets a reference to the given string and assigns it to the RuntimeBackend field.
+func (o *Session) SetRuntimeBackend(v string) {
+	o.RuntimeBackend = &v
+}
+
+// GetRunnerGeneration returns the RunnerGeneration field value if set, zero value otherwise.
+func (o *Session) GetRunnerGeneration() string {
+	if o == nil || IsNil(o.RunnerGeneration) {
+		var ret string
+		return ret
+	}
+	return *o.RunnerGeneration
+}
+
+// GetRunnerGenerationOk returns a tuple with the RunnerGeneration field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetRunnerGenerationOk() (*string, bool) {
+	if o == nil || IsNil(o.RunnerGeneration) {
+		return nil, false
+	}
+	return o.RunnerGeneration, true
+}
+
+// HasRunnerGeneration returns a boolean if a field has been set.
+func (o *Session) HasRunnerGeneration() bool {
+	if o != nil && !IsNil(o.RunnerGeneration) {
+		return true
+	}
+
+	return false
+}
+
+// SetRunnerGeneration gets a reference to the given string and assigns it to the RunnerGeneration field.
+func (o *Session) SetRunnerGeneration(v string) {
+	o.RunnerGeneration = &v
+}
+
+// GetGatewayEndpoint returns the GatewayEndpoint field value if set, zero value otherwise.
+func (o *Session) GetGatewayEndpoint() string {
+	if o == nil || IsNil(o.GatewayEndpoint) {
+		var ret string
+		return ret
+	}
+	return *o.GatewayEndpoint
+}
+
+// GetGatewayEndpointOk returns a tuple with the GatewayEndpoint field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetGatewayEndpointOk() (*string, bool) {
+	if o == nil || IsNil(o.GatewayEndpoint) {
+		return nil, false
+	}
+	return o.GatewayEndpoint, true
+}
+
+// HasGatewayEndpoint returns a boolean if a field has been set.
+func (o *Session) HasGatewayEndpoint() bool {
+	if o != nil && !IsNil(o.GatewayEndpoint) {
+		return true
+	}
+
+	return false
+}
+
+// SetGatewayEndpoint gets a reference to the given string and assigns it to the GatewayEndpoint field.
+func (o *Session) SetGatewayEndpoint(v string) {
+	o.GatewayEndpoint = &v
+}
+
+// GetGatewayCredentialId returns the GatewayCredentialId field value if set, zero value otherwise.
+func (o *Session) GetGatewayCredentialId() string {
+	if o == nil || IsNil(o.GatewayCredentialId) {
+		var ret string
+		return ret
+	}
+	return *o.GatewayCredentialId
+}
+
+// GetGatewayCredentialIdOk returns a tuple with the GatewayCredentialId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetGatewayCredentialIdOk() (*string, bool) {
+	if o == nil || IsNil(o.GatewayCredentialId) {
+		return nil, false
+	}
+	return o.GatewayCredentialId, true
+}
+
+// HasGatewayCredentialId returns a boolean if a field has been set.
+func (o *Session) HasGatewayCredentialId() bool {
+	if o != nil && !IsNil(o.GatewayCredentialId) {
+		return true
+	}
+
+	return false
+}
+
+// SetGatewayCredentialId gets a reference to the given string and assigns it to the GatewayCredentialId field.
+func (o *Session) SetGatewayCredentialId(v string) {
+	o.GatewayCredentialId = &v
+}
+
+// GetRuntimeStatus returns the RuntimeStatus field value if set, zero value otherwise.
+func (o *Session) GetRuntimeStatus() string {
+	if o == nil || IsNil(o.RuntimeStatus) {
+		var ret string
+		return ret
+	}
+	return *o.RuntimeStatus
+}
+
+// GetRuntimeStatusOk returns a tuple with the RuntimeStatus field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetRuntimeStatusOk() (*string, bool) {
+	if o == nil || IsNil(o.RuntimeStatus) {
+		return nil, false
+	}
+	return o.RuntimeStatus, true
+}
+
+// HasRuntimeStatus returns a boolean if a field has been set.
+func (o *Session) HasRuntimeStatus() bool {
+	if o != nil && !IsNil(o.RuntimeStatus) {
+		return true
+	}
+
+	return false
+}
+
+// SetRuntimeStatus gets a reference to the given string and assigns it to the RuntimeStatus field.
+func (o *Session) SetRuntimeStatus(v string) {
+	o.RuntimeStatus = &v
+}
+
+// GetRuntimeError returns the RuntimeError field value if set, zero value otherwise.
+func (o *Session) GetRuntimeError() string {
+	if o == nil || IsNil(o.RuntimeError) {
+		var ret string
+		return ret
+	}
+	return *o.RuntimeError
+}
+
+// GetRuntimeErrorOk returns a tuple with the RuntimeError field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetRuntimeErrorOk() (*string, bool) {
+	if o == nil || IsNil(o.RuntimeError) {
+		return nil, false
+	}
+	return o.RuntimeError, true
+}
+
+// HasRuntimeError returns a boolean if a field has been set.
+func (o *Session) HasRuntimeError() bool {
+	if o != nil && !IsNil(o.RuntimeError) {
+		return true
+	}
+
+	return false
+}
+
+// SetRuntimeError gets a reference to the given string and assigns it to the RuntimeError field.
+func (o *Session) SetRuntimeError(v string) {
+	o.RuntimeError = &v
+}
+
+// GetRuntimeDeleted returns the RuntimeDeleted field value if set, zero value otherwise.
+func (o *Session) GetRuntimeDeleted() bool {
+	if o == nil || IsNil(o.RuntimeDeleted) {
+		var ret bool
+		return ret
+	}
+	return *o.RuntimeDeleted
+}
+
+// GetRuntimeDeletedOk returns a tuple with the RuntimeDeleted field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetRuntimeDeletedOk() (*bool, bool) {
+	if o == nil || IsNil(o.RuntimeDeleted) {
+		return nil, false
+	}
+	return o.RuntimeDeleted, true
+}
+
+// HasRuntimeDeleted returns a boolean if a field has been set.
+func (o *Session) HasRuntimeDeleted() bool {
+	if o != nil && !IsNil(o.RuntimeDeleted) {
+		return true
+	}
+
+	return false
+}
+
+// SetRuntimeDeleted gets a reference to the given bool and assigns it to the RuntimeDeleted field.
+func (o *Session) SetRuntimeDeleted(v bool) {
+	o.RuntimeDeleted = &v
+}
+
+// GetRuntimeVersion returns the RuntimeVersion field value if set, zero value otherwise.
+func (o *Session) GetRuntimeVersion() int64 {
+	if o == nil || IsNil(o.RuntimeVersion) {
+		var ret int64
+		return ret
+	}
+	return *o.RuntimeVersion
+}
+
+// GetRuntimeVersionOk returns a tuple with the RuntimeVersion field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Session) GetRuntimeVersionOk() (*int64, bool) {
+	if o == nil || IsNil(o.RuntimeVersion) {
+		return nil, false
+	}
+	return o.RuntimeVersion, true
+}
+
+// HasRuntimeVersion returns a boolean if a field has been set.
+func (o *Session) HasRuntimeVersion() bool {
+	if o != nil && !IsNil(o.RuntimeVersion) {
+		return true
+	}
+
+	return false
+}
+
+// SetRuntimeVersion gets a reference to the given int64 and assigns it to the RuntimeVersion field.
+func (o *Session) SetRuntimeVersion(v int64) {
+	o.RuntimeVersion = &v
 }
 
 // GetName returns the Name field value
@@ -1423,6 +1819,42 @@ func (o Session) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.UpdatedAt) {
 		toSerialize["updated_at"] = o.UpdatedAt
+	}
+	if !IsNil(o.GatewayId) {
+		toSerialize["gateway_id"] = o.GatewayId
+	}
+	if !IsNil(o.GatewayWorkspace) {
+		toSerialize["gateway_workspace"] = o.GatewayWorkspace
+	}
+	if !IsNil(o.SandboxId) {
+		toSerialize["sandbox_id"] = o.SandboxId
+	}
+	if !IsNil(o.SandboxName) {
+		toSerialize["sandbox_name"] = o.SandboxName
+	}
+	if !IsNil(o.RuntimeBackend) {
+		toSerialize["runtime_backend"] = o.RuntimeBackend
+	}
+	if !IsNil(o.RunnerGeneration) {
+		toSerialize["runner_generation"] = o.RunnerGeneration
+	}
+	if !IsNil(o.GatewayEndpoint) {
+		toSerialize["gateway_endpoint"] = o.GatewayEndpoint
+	}
+	if !IsNil(o.GatewayCredentialId) {
+		toSerialize["gateway_credential_id"] = o.GatewayCredentialId
+	}
+	if !IsNil(o.RuntimeStatus) {
+		toSerialize["runtime_status"] = o.RuntimeStatus
+	}
+	if !IsNil(o.RuntimeError) {
+		toSerialize["runtime_error"] = o.RuntimeError
+	}
+	if !IsNil(o.RuntimeDeleted) {
+		toSerialize["runtime_deleted"] = o.RuntimeDeleted
+	}
+	if !IsNil(o.RuntimeVersion) {
+		toSerialize["runtime_version"] = o.RuntimeVersion
 	}
 	toSerialize["name"] = o.Name
 	if !IsNil(o.RepoUrl) {

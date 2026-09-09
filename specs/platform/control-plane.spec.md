@@ -579,6 +579,14 @@ After policy extraction, the CP calls `GatewayClient.FetchSandboxLogs()` — a m
 
 The tail line count is defined as the exported constant `openshell.LogTailLines` to keep it consistent across the periodic syncer and pre-delete final snapshot.
 
+For Hypershell sessions, the CP uses the finite `GetSandboxLogs` request before
+stop or deletion. The log snapshot keeps the newest entries within 2 MiB. If
+entries exceed this limit, the snapshot includes a warning with the omitted
+entry count. The CP does not truncate the policy snapshot. The runtime API
+accepts up to 2 MiB for each snapshot field and keeps the 16 KiB limit for other
+runtime fields. Both snapshots use one version-checked write. A failed write
+keeps cleanup pending.
+
 ### Pre-Delete Final Snapshot
 
 In `deprovisionSessionSandbox()`, a final snapshot of both logs and policy is taken **before** `DeleteSandbox` is called. This guarantees the stored data matches the live SSE stream for normal stop flows:

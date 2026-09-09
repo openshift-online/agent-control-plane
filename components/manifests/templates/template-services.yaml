@@ -150,6 +150,10 @@ objects:
             image: ${IMAGE_AMBIENT_API_SERVER}:${IMAGE_TAG}
             imagePullPolicy: Always
             env:
+              - name: AMBIENT_RUNNER_PUBLIC_KEY_FILE
+                value: /configs/runner/public.pem
+              - name: CONTROL_PLANE_URL
+                value: https://ambient-control-plane.${NAMESPACE}.svc:8080
               - name: AMBIENT_ENV
                 value: production
               - name: GRPC_SERVICE_ACCOUNT
@@ -186,7 +190,18 @@ objects:
               - --enable-jwt=true
               - --enable-authz=true
               - --jwk-cert-file=/configs/authentication/jwks.json
-              - --enable-https=false
+              - --enable-https=true
+              - --https-cert-file=/etc/tls/tls.crt
+              - --https-key-file=/etc/tls/tls.key
+              - --enable-tls=true
+              - --tls-min-version=1.2
+              - --tls-cert-file=/etc/tls/tls.crt
+              - --tls-key-file=/etc/tls/tls.key
+              - --tls-auto-detect-kubernetes=false
+              - --enable-health-check-https=true
+              - --grpc-enable-tls=true
+              - --grpc-tls-cert-file=/etc/tls/tls.crt
+              - --grpc-tls-key-file=/etc/tls/tls.key
               - --enable-grpc=true
               - --api-server-bindaddress=:8000
               - --metrics-server-bindaddress=:4433
@@ -223,6 +238,12 @@ objects:
                 mountPath: /secrets/service
               - name: auth-config
                 mountPath: /configs/authentication
+              - name: runner-public-key
+                mountPath: /configs/runner
+                readOnly: true
+              - name: tls-certs
+                mountPath: /etc/tls
+                readOnly: true
               - name: tmp
                 mountPath: /tmp
             resources:
@@ -236,14 +257,14 @@ objects:
               httpGet:
                 path: /api/ambient
                 port: 8000
-                scheme: HTTP
+                scheme: HTTPS
               initialDelaySeconds: 15
               periodSeconds: 5
             readinessProbe:
               httpGet:
                 path: /healthcheck
                 port: 4434
-                scheme: HTTP
+                scheme: HTTPS
                 httpHeaders:
                   - name: User-Agent
                     value: Probe
@@ -256,6 +277,15 @@ objects:
                 drop:
                   - ALL
         volumes:
+          - name: runner-public-key
+            secret:
+              secretName: ambient-cp-token-keypair
+              items:
+                - key: public.pem
+                  path: public.pem
+          - name: tls-certs
+            secret:
+              secretName: ambient-api-server-tls
           - name: db-secrets
             secret:
               secretName: ${DB_SECRET_NAME}
@@ -272,6 +302,8 @@ objects:
   kind: Service
   metadata:
     name: ambient-api-server
+    annotations:
+      service.beta.openshift.io/serving-cert-secret-name: ambient-api-server-tls
     namespace: ${NAMESPACE}
     labels:
       app: ambient-api-server
@@ -351,15 +383,19 @@ objects:
                     name: ambient-control-plane-oidc
                     key: client-secret
               - name: AMBIENT_API_SERVER_URL
-                value: "http://ambient-api-server.${NAMESPACE}.svc:8000"
+                value: "https://ambient-api-server.${NAMESPACE}.svc:8000"
               - name: AMBIENT_GRPC_SERVER_ADDR
                 value: "ambient-api-server.${NAMESPACE}.svc:9000"
               - name: AMBIENT_GRPC_USE_TLS
-                value: "false"
+                value: "true"
               - name: MCP_API_SERVER_URL
-                value: "http://ambient-api-server.${NAMESPACE}.svc:8000"
+                value: "https://ambient-api-server.${NAMESPACE}.svc:8000"
+              - name: CP_TOKEN_TLS_CERT_FILE
+                value: /etc/cp-tls/tls.crt
+              - name: CP_TOKEN_TLS_KEY_FILE
+                value: /etc/cp-tls/tls.key
               - name: CP_TOKEN_URL
-                value: "http://ambient-control-plane.${NAMESPACE}.svc:8080/token"
+                value: "https://ambient-control-plane.${NAMESPACE}.svc:8080/token"
               - name: CP_RUNTIME_NAMESPACE
                 valueFrom:
                   fieldRef:
@@ -403,6 +439,9 @@ objects:
               - name: MLFLOW_CREDENTIAL_SECRET_NAMESPACE
                 value: ${NAMESPACE}
             volumeMounts:
+              - name: cp-tls
+                mountPath: /etc/cp-tls
+                readOnly: true
               - name: vertex-credentials
                 mountPath: /app/vertex
                 readOnly: true
@@ -420,6 +459,9 @@ objects:
                 drop:
                   - ALL
         volumes:
+          - name: cp-tls
+            secret:
+              secretName: ambient-control-plane-tls
           - name: vertex-credentials
             secret:
               secretName: ambient-vertex
@@ -429,6 +471,8 @@ objects:
   kind: Service
   metadata:
     name: ambient-control-plane
+    annotations:
+      service.beta.openshift.io/serving-cert-secret-name: ambient-control-plane-tls
     namespace: ${NAMESPACE}
     labels:
       app: ambient-control-plane
@@ -473,7 +517,7 @@ objects:
               - name: NODE_ENV
                 value: production
               - name: API_SERVER_URL
-                value: "http://ambient-api-server:8000"
+                value: "https://ambient-api-server.${NAMESPACE}.svc:8000"
               - name: SSO_ISSUER_URL
                 valueFrom:
                   secretKeyRef:
@@ -498,8 +542,10 @@ objects:
                 value: ${SSO_REDIRECT_URI}
               - name: NEXT_PUBLIC_PREVIEW_ALLOWED_HOSTS
                 value: ${PREVIEW_ALLOWED_HOSTS}
+              - name: NODE_EXTRA_CA_CERTS
+                value: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
               - name: CONTROL_PLANE_URL
-                value: http://ambient-control-plane:8080
+                value: https://ambient-control-plane.${NAMESPACE}.svc:8080
             ports:
               - name: http
                 containerPort: 3000
@@ -578,7 +624,7 @@ objects:
     port:
       targetPort: api
     tls:
-      termination: edge
+      termination: reencrypt
       insecureEdgeTerminationPolicy: Redirect
 
 - apiVersion: route.openshift.io/v1

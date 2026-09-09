@@ -229,3 +229,41 @@ class TestSetupSdkAuthentication:
         _, use_vertex, model = await setup_sdk_authentication(ctx)
         assert use_vertex is False
         assert model == "claude-sonnet-4-5"  # plain model name, not Vertex ID
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("proxy", ["http://127.0.0.1:3128", "http://10.200.0.1:8080"])
+async def test_inference_keeps_supervisor_transport(monkeypatch, proxy):
+    supplied = {
+        "HTTPS_PROXY": proxy,
+        "https_proxy": proxy,
+        "grpc_proxy": proxy,
+        "SSL_CERT_FILE": "/etc/openshell-tls/ca-bundle.pem",
+        "REQUESTS_CA_BUNDLE": "/etc/openshell-tls/ca-bundle.pem",
+        "NODE_EXTRA_CA_CERTS": "/etc/openshell-tls/custom-ca.pem",
+    }
+    for key, value in supplied.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "unused")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://inference.local")
+    context = _make_context(ACP_OPENSHELL_INFERENCE="true")
+    _, use_vertex, _ = await setup_sdk_authentication(context)
+    assert use_vertex is False
+    assert {key: os.environ[key] for key in supplied} == supplied
+
+
+@pytest.mark.asyncio
+async def test_inference_defaults_for_legacy_supervisor(monkeypatch):
+    defaults = {
+        "HTTPS_PROXY": "http://10.200.0.1:3128",
+        "SSL_CERT_FILE": "/etc/openshell-tls/openshell-ca.pem",
+        "REQUESTS_CA_BUNDLE": "/etc/openshell-tls/openshell-ca.pem",
+        "NODE_EXTRA_CA_CERTS": "/etc/openshell-tls/openshell-ca.pem",
+    }
+    for key in defaults:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "unused")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://inference.local")
+    context = _make_context(ACP_OPENSHELL_INFERENCE="true")
+    await setup_sdk_authentication(context)
+    assert {key: os.environ[key] for key in defaults} == defaults

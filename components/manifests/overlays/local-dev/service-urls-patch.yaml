@@ -1,0 +1,45 @@
+# Match the Service names after the vteam- prefix is applied.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server
+spec:
+  template:
+    spec:
+      containers:
+      - name: api-server
+        env:
+        - name: CONTROL_PLANE_URL
+          value: https://vteam-ambient-control-plane.vteam-dev.svc:8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-control-plane
+spec:
+  template:
+    spec:
+      containers:
+      - name: ambient-control-plane
+        env:
+        - name: AMBIENT_API_SERVER_URL
+          value: https://vteam-ambient-api-server.vteam-dev.svc:8000
+        - name: AMBIENT_GRPC_SERVER_ADDR
+          value: vteam-ambient-api-server.vteam-dev.svc:9000
+        - name: CP_TOKEN_URL
+          value: https://vteam-ambient-control-plane.vteam-dev.svc:8080/token
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-ui
+spec:
+  template:
+    spec:
+      containers:
+      - name: ambient-ui
+        env:
+        - name: API_SERVER_URL
+          value: https://vteam-ambient-api-server.vteam-dev.svc:8000
+        - name: CONTROL_PLANE_URL
+          value: https://vteam-ambient-control-plane.vteam-dev.svc:8080

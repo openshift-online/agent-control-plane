@@ -262,6 +262,7 @@ func printProjectTable(printer *output.Printer, projects []sdktypes.Project) err
 		{Name: "NAME", Width: 30},
 		{Name: "DESCRIPTION", Width: 50},
 		{Name: "AGE", Width: 10},
+		{Name: "GATEWAY", Width: 20},
 	}
 
 	table := output.NewTable(printer.Writer(), columns)
@@ -272,7 +273,7 @@ func printProjectTable(printer *output.Printer, projects []sdktypes.Project) err
 		if p.CreatedAt != nil {
 			age = output.FormatAge(time.Since(*p.CreatedAt))
 		}
-		table.WriteRow(p.Name, p.Description, age)
+		table.WriteRow(p.Name, p.Description, age, p.GatewayStatus)
 	}
 	return nil
 }

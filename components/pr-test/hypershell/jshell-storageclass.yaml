@@ -1,0 +1,12 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: acp-hypershell-gp3
+provisioner: ebs.csi.aws.com
+parameters:
+  encrypted: "true"
+  type: gp3
+  tagSpecification_1: red-hat-managed=true
+allowVolumeExpansion: true
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer

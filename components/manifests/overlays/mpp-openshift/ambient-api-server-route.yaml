@@ -17,7 +17,7 @@ spec:
   port:
     targetPort: api
   tls:
-    termination: edge
+    termination: reencrypt
     insecureEdgeTerminationPolicy: Redirect
 ---
 apiVersion: route.openshift.io/v1

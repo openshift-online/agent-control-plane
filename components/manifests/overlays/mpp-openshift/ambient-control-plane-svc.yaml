@@ -2,6 +2,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ambient-control-plane
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: ambient-control-plane-tls
   namespace: ambient-code--runtime-int
   labels:
     app: ambient-control-plane

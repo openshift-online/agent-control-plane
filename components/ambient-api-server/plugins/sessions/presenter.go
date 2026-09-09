@@ -48,6 +48,18 @@ func ConvertSession(session openapi.Session) *Session {
 func PresentSession(session *Session) openapi.Session {
 	reference := presenters.PresentReference(session.ID, session)
 	return openapi.Session{
+		GatewayId:                session.GatewayId,
+		GatewayWorkspace:         session.GatewayWorkspace,
+		SandboxId:                session.SandboxId,
+		SandboxName:              session.SandboxName,
+		RuntimeBackend:           session.RuntimeBackend,
+		RunnerGeneration:         session.RunnerGeneration,
+		GatewayEndpoint:          session.GatewayEndpoint,
+		GatewayCredentialId:      session.GatewayCredentialId,
+		RuntimeStatus:            session.RuntimeStatus,
+		RuntimeError:             session.RuntimeError,
+		RuntimeDeleted:           openapi.PtrBool(session.DeletedAt.Valid),
+		RuntimeVersion:           openapi.PtrInt64(session.RuntimeVersion),
 		Id:                       reference.Id,
 		Kind:                     reference.Kind,
 		Href:                     reference.Href,

@@ -138,6 +138,28 @@ func TestScheduler_PollsAndFires(t *testing.T) {
 	}
 }
 
+func TestScheduledSessionPreservesStopOnRunFinished(t *testing.T) {
+	for _, requested := range []*bool{nil, boolPointer(true), boolPointer(false)} {
+		for _, timer := range []bool{false, true} {
+			now := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+			scheduler, _, _ := setupScheduler(t, clock.NewFakeClock(now))
+			creator := "user-1"
+			ss := makeSchedule("stop-setting", "proof", "* * * * *", "UTC", true, &now, &creator)
+			ss.StopOnRunFinished = requested
+			created, err := scheduler.svc.createSessionFromSchedule(context.Background(), ss, now, timer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := requested == nil || *requested
+			if created.StopOnRunFinished == nil || *created.StopOnRunFinished != want {
+				t.Fatalf("timer=%t requested=%v: stop_on_run_finished=%v, want %t", timer, requested, created.StopOnRunFinished, want)
+			}
+		}
+	}
+}
+
+func boolPointer(value bool) *bool { return &value }
+
 func TestScheduler_AdvancesNextRunAt(t *testing.T) {
 	now := time.Date(2026, 6, 24, 9, 0, 0, 0, time.UTC)
 	clk := clock.NewFakeClock(now)

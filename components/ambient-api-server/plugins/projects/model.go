@@ -6,6 +6,18 @@ import (
 )
 
 type Project struct {
+	RuntimeBackend           *string `json:"runtime_backend,omitempty"`
+	GatewayId                *string `json:"gateway_id,omitempty"`
+	GatewayInstanceId        *string `json:"gateway_instance_id,omitempty"`
+	GatewayEndpoint          *string `json:"gateway_endpoint,omitempty"`
+	GatewayStatus            *string `json:"gateway_status,omitempty"`
+	GatewayError             *string `json:"gateway_error,omitempty"`
+	GatewayCredentialId      *string `json:"gateway_credential_id,omitempty"`
+	GatewayAccountId         *string `json:"gateway_account_id,omitempty"`
+	GatewayAccountExpiresAt  *string `json:"gateway_account_expires_at,omitempty"`
+	GatewayExternalReference *string `json:"gateway_external_reference,omitempty"`
+	RuntimeDeleted           bool    `json:"runtime_deleted" gorm:"-"`
+	RuntimeVersion           int64   `json:"runtime_version" gorm:"not null;default:0"`
 	api.Meta
 	Name        string  `json:"name" gorm:"uniqueIndex;not null"`
 	Description *string `json:"description"`

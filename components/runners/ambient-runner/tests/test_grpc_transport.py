@@ -13,23 +13,22 @@ Coverage targets:
 import asyncio
 import json
 import uuid
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from tests.conftest import (
-    async_event_stream,
-    make_run_finished,
-    make_text_content,
-    make_text_start,
-)
 
 from ambient_runner.bridges.claude.grpc_transport import (
     GRPCMessageWriter,
     GRPCSessionListener,
     _synthesize_run_error,
 )
-
+from tests.conftest import (
+    async_event_stream,
+    make_run_finished,
+    make_text_content,
+    make_text_start,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -644,3 +643,118 @@ class TestSynthesizeRunError:
         await asyncio.sleep(0.2)
 
         assert "boom" in push_error_calls
+
+
+@pytest.mark.asyncio
+async def test_durable_resume_processes_old_queued_messages_without_replaying(
+    cursor_path, monkeypatch
+):
+    from datetime import datetime
+
+    from ambient_runner.platform.message_cursor import MessageCursor
+
+    cursor = MessageCursor.from_env("s-1")
+    assert cursor is not None
+    cursor.accept(4)
+    monkeypatch.setenv("IS_RESUME", "true")
+    monkeypatch.setenv("RESUME_AFTER_SEQ", "999")
+    messages = [
+        _make_session_message("user", "already accepted", seq=4),
+        _make_session_message("user", "queued while stopped", seq=5),
+        _make_session_message("user", "duplicate delivery", seq=5),
+    ]
+    for message in messages:
+        message.created_at = datetime(2000, 1, 1, tzinfo=UTC)
+    client = _make_grpc_client(messages)
+    listener = GRPCSessionListener(_make_bridge(), "s-1", "localhost:9000")
+    listener._grpc_client = client
+    received = []
+    accepted = asyncio.Event()
+
+    async def handle(message):
+        # The cursor is already durable when dispatch begins.
+        assert json.loads(cursor_path.read_text())["last_seq"] == message.seq
+        received.append(message.payload)
+        accepted.set()
+
+    listener._handle_user_message = handle
+    task = asyncio.create_task(listener._listen_loop())
+    try:
+        await asyncio.wait_for(accepted.wait(), timeout=2)
+        await asyncio.sleep(0.05)
+        assert received == ["queued while stopped"]
+        client.session_messages.watch.assert_called_once_with("s-1", after_seq=4)
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+
+@pytest.mark.asyncio
+async def test_initial_api_user_message_uses_the_same_durable_acceptance(cursor_path):
+    listener = GRPCSessionListener(_make_bridge(), "s-1", "localhost:9000")
+    listener._grpc_client = _make_grpc_client(
+        [
+            _make_session_message("user", "initial task", seq=1),
+        ]
+    )
+    accepted = asyncio.Event()
+
+    async def handle(message):
+        assert json.loads(cursor_path.read_text())["last_seq"] == 1
+        accepted.set()
+
+    listener._handle_user_message = handle
+    task = asyncio.create_task(listener._listen_loop())
+    try:
+        await asyncio.wait_for(accepted.wait(), timeout=2)
+        assert listener._message_cursor.last_seq == 1
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+
+@pytest.mark.asyncio
+async def test_cursor_write_failure_stops_before_message_dispatch(
+    cursor_path, monkeypatch
+):
+    from ambient_runner.platform.message_cursor import MessageCursorError
+
+    listener = GRPCSessionListener(_make_bridge(), "s-1", "localhost:9000")
+    listener._grpc_client = _make_grpc_client(
+        [
+            _make_session_message("user", "must not execute", seq=1),
+        ]
+    )
+    listener._handle_user_message = AsyncMock()
+
+    def fail_replace(*_args):
+        raise OSError("storage unavailable")
+
+    monkeypatch.setattr(
+        "ambient_runner.platform.message_cursor.os.replace", fail_replace
+    )
+    with pytest.raises(MessageCursorError, match="Execution stopped before dispatch"):
+        await asyncio.wait_for(listener._listen_loop(), timeout=2)
+    listener._handle_user_message.assert_not_called()
+    assert json.loads(cursor_path.read_text())["last_seq"] == 0
+    listener._grpc_client.close.assert_called_once()
+
+
+def test_corrupt_cursor_fails_before_listener_start(cursor_path):
+    from ambient_runner.platform.message_cursor import MessageCursorError
+
+    cursor_path.parent.mkdir()
+    cursor_path.write_text("corrupt cursor")
+    with pytest.raises(MessageCursorError, match="cursor is corrupt"):
+        GRPCSessionListener(_make_bridge(), "s-1", "localhost:9000")
+
+
+@pytest.fixture
+def cursor_path(tmp_path, monkeypatch):
+    path = tmp_path / ".acp-runtime" / "message-cursor.json"
+    monkeypatch.setenv("WORKSPACE_PATH", str(tmp_path))
+    monkeypatch.setenv("ACP_MESSAGE_CURSOR_FILE", str(path))
+    monkeypatch.delenv("IS_RESUME", raising=False)
+    return path

@@ -9,6 +9,18 @@ Name | Type | Description | Notes
 **Href** | Pointer to **string** |  | [optional] 
 **CreatedAt** | Pointer to **time.Time** |  | [optional] 
 **UpdatedAt** | Pointer to **time.Time** |  | [optional] 
+**GatewayId** | Pointer to **string** |  | [optional] [readonly] 
+**GatewayWorkspace** | Pointer to **string** |  | [optional] [readonly] 
+**SandboxId** | Pointer to **string** |  | [optional] [readonly] 
+**SandboxName** | Pointer to **string** |  | [optional] [readonly] 
+**RuntimeBackend** | Pointer to **string** |  | [optional] [readonly] 
+**RunnerGeneration** | Pointer to **string** |  | [optional] [readonly] 
+**GatewayEndpoint** | Pointer to **string** |  | [optional] [readonly] 
+**GatewayCredentialId** | Pointer to **string** |  | [optional] [readonly] 
+**RuntimeStatus** | Pointer to **string** |  | [optional] [readonly] 
+**RuntimeError** | Pointer to **string** |  | [optional] [readonly] 
+**RuntimeDeleted** | Pointer to **bool** |  | [optional] [readonly] 
+**RuntimeVersion** | Pointer to **int64** |  | [optional] [readonly] 
 **Name** | **string** |  | 
 **RepoUrl** | Pointer to **string** |  | [optional] 
 **Prompt** | Pointer to **string** |  | [optional] 
@@ -189,6 +201,306 @@ SetUpdatedAt sets UpdatedAt field to given value.
 `func (o *Session) HasUpdatedAt() bool`
 
 HasUpdatedAt returns a boolean if a field has been set.
+
+### GetGatewayId
+
+`func (o *Session) GetGatewayId() string`
+
+GetGatewayId returns the GatewayId field if non-nil, zero value otherwise.
+
+### GetGatewayIdOk
+
+`func (o *Session) GetGatewayIdOk() (*string, bool)`
+
+GetGatewayIdOk returns a tuple with the GatewayId field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetGatewayId
+
+`func (o *Session) SetGatewayId(v string)`
+
+SetGatewayId sets GatewayId field to given value.
+
+### HasGatewayId
+
+`func (o *Session) HasGatewayId() bool`
+
+HasGatewayId returns a boolean if a field has been set.
+
+### GetGatewayWorkspace
+
+`func (o *Session) GetGatewayWorkspace() string`
+
+GetGatewayWorkspace returns the GatewayWorkspace field if non-nil, zero value otherwise.
+
+### GetGatewayWorkspaceOk
+
+`func (o *Session) GetGatewayWorkspaceOk() (*string, bool)`
+
+GetGatewayWorkspaceOk returns a tuple with the GatewayWorkspace field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetGatewayWorkspace
+
+`func (o *Session) SetGatewayWorkspace(v string)`
+
+SetGatewayWorkspace sets GatewayWorkspace field to given value.
+
+### HasGatewayWorkspace
+
+`func (o *Session) HasGatewayWorkspace() bool`
+
+HasGatewayWorkspace returns a boolean if a field has been set.
+
+### GetSandboxId
+
+`func (o *Session) GetSandboxId() string`
+
+GetSandboxId returns the SandboxId field if non-nil, zero value otherwise.
+
+### GetSandboxIdOk
+
+`func (o *Session) GetSandboxIdOk() (*string, bool)`
+
+GetSandboxIdOk returns a tuple with the SandboxId field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetSandboxId
+
+`func (o *Session) SetSandboxId(v string)`
+
+SetSandboxId sets SandboxId field to given value.
+
+### HasSandboxId
+
+`func (o *Session) HasSandboxId() bool`
+
+HasSandboxId returns a boolean if a field has been set.
+
+### GetSandboxName
+
+`func (o *Session) GetSandboxName() string`
+
+GetSandboxName returns the SandboxName field if non-nil, zero value otherwise.
+
+### GetSandboxNameOk
+
+`func (o *Session) GetSandboxNameOk() (*string, bool)`
+
+GetSandboxNameOk returns a tuple with the SandboxName field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetSandboxName
+
+`func (o *Session) SetSandboxName(v string)`
+
+SetSandboxName sets SandboxName field to given value.
+
+### HasSandboxName
+
+`func (o *Session) HasSandboxName() bool`
+
+HasSandboxName returns a boolean if a field has been set.
+
+### GetRuntimeBackend
+
+`func (o *Session) GetRuntimeBackend() string`
+
+GetRuntimeBackend returns the RuntimeBackend field if non-nil, zero value otherwise.
+
+### GetRuntimeBackendOk
+
+`func (o *Session) GetRuntimeBackendOk() (*string, bool)`
+
+GetRuntimeBackendOk returns a tuple with the RuntimeBackend field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetRuntimeBackend
+
+`func (o *Session) SetRuntimeBackend(v string)`
+
+SetRuntimeBackend sets RuntimeBackend field to given value.
+
+### HasRuntimeBackend
+
+`func (o *Session) HasRuntimeBackend() bool`
+
+HasRuntimeBackend returns a boolean if a field has been set.
+
+### GetRunnerGeneration
+
+`func (o *Session) GetRunnerGeneration() string`
+
+GetRunnerGeneration returns the RunnerGeneration field if non-nil, zero value otherwise.
+
+### GetRunnerGenerationOk
+
+`func (o *Session) GetRunnerGenerationOk() (*string, bool)`
+
+GetRunnerGenerationOk returns a tuple with the RunnerGeneration field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetRunnerGeneration
+
+`func (o *Session) SetRunnerGeneration(v string)`
+
+SetRunnerGeneration sets RunnerGeneration field to given value.
+
+### HasRunnerGeneration
+
+`func (o *Session) HasRunnerGeneration() bool`
+
+HasRunnerGeneration returns a boolean if a field has been set.
+
+### GetGatewayEndpoint
+
+`func (o *Session) GetGatewayEndpoint() string`
+
+GetGatewayEndpoint returns the GatewayEndpoint field if non-nil, zero value otherwise.
+
+### GetGatewayEndpointOk
+
+`func (o *Session) GetGatewayEndpointOk() (*string, bool)`
+
+GetGatewayEndpointOk returns a tuple with the GatewayEndpoint field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetGatewayEndpoint
+
+`func (o *Session) SetGatewayEndpoint(v string)`
+
+SetGatewayEndpoint sets GatewayEndpoint field to given value.
+
+### HasGatewayEndpoint
+
+`func (o *Session) HasGatewayEndpoint() bool`
+
+HasGatewayEndpoint returns a boolean if a field has been set.
+
+### GetGatewayCredentialId
+
+`func (o *Session) GetGatewayCredentialId() string`
+
+GetGatewayCredentialId returns the GatewayCredentialId field if non-nil, zero value otherwise.
+
+### GetGatewayCredentialIdOk
+
+`func (o *Session) GetGatewayCredentialIdOk() (*string, bool)`
+
+GetGatewayCredentialIdOk returns a tuple with the GatewayCredentialId field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetGatewayCredentialId
+
+`func (o *Session) SetGatewayCredentialId(v string)`
+
+SetGatewayCredentialId sets GatewayCredentialId field to given value.
+
+### HasGatewayCredentialId
+
+`func (o *Session) HasGatewayCredentialId() bool`
+
+HasGatewayCredentialId returns a boolean if a field has been set.
+
+### GetRuntimeStatus
+
+`func (o *Session) GetRuntimeStatus() string`
+
+GetRuntimeStatus returns the RuntimeStatus field if non-nil, zero value otherwise.
+
+### GetRuntimeStatusOk
+
+`func (o *Session) GetRuntimeStatusOk() (*string, bool)`
+
+GetRuntimeStatusOk returns a tuple with the RuntimeStatus field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetRuntimeStatus
+
+`func (o *Session) SetRuntimeStatus(v string)`
+
+SetRuntimeStatus sets RuntimeStatus field to given value.
+
+### HasRuntimeStatus
+
+`func (o *Session) HasRuntimeStatus() bool`
+
+HasRuntimeStatus returns a boolean if a field has been set.
+
+### GetRuntimeError
+
+`func (o *Session) GetRuntimeError() string`
+
+GetRuntimeError returns the RuntimeError field if non-nil, zero value otherwise.
+
+### GetRuntimeErrorOk
+
+`func (o *Session) GetRuntimeErrorOk() (*string, bool)`
+
+GetRuntimeErrorOk returns a tuple with the RuntimeError field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetRuntimeError
+
+`func (o *Session) SetRuntimeError(v string)`
+
+SetRuntimeError sets RuntimeError field to given value.
+
+### HasRuntimeError
+
+`func (o *Session) HasRuntimeError() bool`
+
+HasRuntimeError returns a boolean if a field has been set.
+
+### GetRuntimeDeleted
+
+`func (o *Session) GetRuntimeDeleted() bool`
+
+GetRuntimeDeleted returns the RuntimeDeleted field if non-nil, zero value otherwise.
+
+### GetRuntimeDeletedOk
+
+`func (o *Session) GetRuntimeDeletedOk() (*bool, bool)`
+
+GetRuntimeDeletedOk returns a tuple with the RuntimeDeleted field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetRuntimeDeleted
+
+`func (o *Session) SetRuntimeDeleted(v bool)`
+
+SetRuntimeDeleted sets RuntimeDeleted field to given value.
+
+### HasRuntimeDeleted
+
+`func (o *Session) HasRuntimeDeleted() bool`
+
+HasRuntimeDeleted returns a boolean if a field has been set.
+
+### GetRuntimeVersion
+
+`func (o *Session) GetRuntimeVersion() int64`
+
+GetRuntimeVersion returns the RuntimeVersion field if non-nil, zero value otherwise.
+
+### GetRuntimeVersionOk
+
+`func (o *Session) GetRuntimeVersionOk() (*int64, bool)`
+
+GetRuntimeVersionOk returns a tuple with the RuntimeVersion field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetRuntimeVersion
+
+`func (o *Session) SetRuntimeVersion(v int64)`
+
+SetRuntimeVersion sets RuntimeVersion field to given value.
+
+### HasRuntimeVersion
+
+`func (o *Session) HasRuntimeVersion() bool`
+
+HasRuntimeVersion returns a boolean if a field has been set.
 
 ### GetName
 

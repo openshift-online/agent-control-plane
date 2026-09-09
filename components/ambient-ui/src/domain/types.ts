@@ -35,7 +35,17 @@ export type DomainCondition = {
   lastTransitionTime: string | null
 }
 
+export type DomainRuntime = {
+  backend: string
+  status: string | null
+  error: string | null
+  gatewayId: string | null
+  sandboxName?: string | null
+  workspace?: string | null
+}
+
 export type DomainSession = {
+  runtime?: DomainRuntime | null
   id: string
   name: string
   phase: SessionPhase
@@ -66,6 +76,7 @@ export type DomainSession = {
 }
 
 export type DomainProject = {
+  runtime?: DomainRuntime | null
   id: string
   name: string
   description: string | null

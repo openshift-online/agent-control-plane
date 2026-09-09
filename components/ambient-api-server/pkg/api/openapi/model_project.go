@@ -23,15 +23,27 @@ var _ MappedNullable = &Project{}
 
 // Project struct for Project
 type Project struct {
-	Id          *string    `json:"id,omitempty"`
-	Kind        *string    `json:"kind,omitempty"`
-	Href        *string    `json:"href,omitempty"`
-	CreatedAt   *time.Time `json:"created_at,omitempty"`
-	UpdatedAt   *time.Time `json:"updated_at,omitempty"`
-	Name        string     `json:"name"`
-	Description *string    `json:"description,omitempty"`
-	Labels      *string    `json:"labels,omitempty"`
-	Annotations *string    `json:"annotations,omitempty"`
+	Id                       *string    `json:"id,omitempty"`
+	Kind                     *string    `json:"kind,omitempty"`
+	Href                     *string    `json:"href,omitempty"`
+	CreatedAt                *time.Time `json:"created_at,omitempty"`
+	UpdatedAt                *time.Time `json:"updated_at,omitempty"`
+	RuntimeBackend           *string    `json:"runtime_backend,omitempty"`
+	GatewayId                *string    `json:"gateway_id,omitempty"`
+	GatewayInstanceId        *string    `json:"gateway_instance_id,omitempty"`
+	GatewayEndpoint          *string    `json:"gateway_endpoint,omitempty"`
+	GatewayStatus            *string    `json:"gateway_status,omitempty"`
+	GatewayError             *string    `json:"gateway_error,omitempty"`
+	GatewayCredentialId      *string    `json:"gateway_credential_id,omitempty"`
+	GatewayAccountId         *string    `json:"gateway_account_id,omitempty"`
+	GatewayAccountExpiresAt  *string    `json:"gateway_account_expires_at,omitempty"`
+	GatewayExternalReference *string    `json:"gateway_external_reference,omitempty"`
+	RuntimeDeleted           *bool      `json:"runtime_deleted,omitempty"`
+	RuntimeVersion           *int64     `json:"runtime_version,omitempty"`
+	Name                     string     `json:"name"`
+	Description              *string    `json:"description,omitempty"`
+	Labels                   *string    `json:"labels,omitempty"`
+	Annotations              *string    `json:"annotations,omitempty"`
 	// Workspace-level context injected into every agent start in this project
 	Prompt *string `json:"prompt,omitempty"`
 	Status *string `json:"status,omitempty"`
@@ -215,6 +227,390 @@ func (o *Project) HasUpdatedAt() bool {
 // SetUpdatedAt gets a reference to the given time.Time and assigns it to the UpdatedAt field.
 func (o *Project) SetUpdatedAt(v time.Time) {
 	o.UpdatedAt = &v
+}
+
+// GetRuntimeBackend returns the RuntimeBackend field value if set, zero value otherwise.
+func (o *Project) GetRuntimeBackend() string {
+	if o == nil || IsNil(o.RuntimeBackend) {
+		var ret string
+		return ret
+	}
+	return *o.RuntimeBackend
+}
+
+// GetRuntimeBackendOk returns a tuple with the RuntimeBackend field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Project) GetRuntimeBackendOk() (*string, bool) {
+	if o == nil || IsNil(o.RuntimeBackend) {
+		return nil, false
+	}
+	return o.RuntimeBackend, true
+}
+
+// HasRuntimeBackend returns a boolean if a field has been set.
+func (o *Project) HasRuntimeBackend() bool {
+	if o != nil && !IsNil(o.RuntimeBackend) {
+		return true
+	}
+
+	return false
+}
+
+// SetRuntimeBackend gets a reference to the given string and assigns it to the RuntimeBackend field.
+func (o *Project) SetRuntimeBackend(v string) {
+	o.RuntimeBackend = &v
+}
+
+// GetGatewayId returns the GatewayId field value if set, zero value otherwise.
+func (o *Project) GetGatewayId() string {
+	if o == nil || IsNil(o.GatewayId) {
+		var ret string
+		return ret
+	}
+	return *o.GatewayId
+}
+
+// GetGatewayIdOk returns a tuple with the GatewayId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Project) GetGatewayIdOk() (*string, bool) {
+	if o == nil || IsNil(o.GatewayId) {
+		return nil, false
+	}
+	return o.GatewayId, true
+}
+
+// HasGatewayId returns a boolean if a field has been set.
+func (o *Project) HasGatewayId() bool {
+	if o != nil && !IsNil(o.GatewayId) {
+		return true
+	}
+
+	return false
+}
+
+// SetGatewayId gets a reference to the given string and assigns it to the GatewayId field.
+func (o *Project) SetGatewayId(v string) {
+	o.GatewayId = &v
+}
+
+// GetGatewayInstanceId returns the GatewayInstanceId field value if set, zero value otherwise.
+func (o *Project) GetGatewayInstanceId() string {
+	if o == nil || IsNil(o.GatewayInstanceId) {
+		var ret string
+		return ret
+	}
+	return *o.GatewayInstanceId
+}
+
+// GetGatewayInstanceIdOk returns a tuple with the GatewayInstanceId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Project) GetGatewayInstanceIdOk() (*string, bool) {
+	if o == nil || IsNil(o.GatewayInstanceId) {
+		return nil, false
+	}
+	return o.GatewayInstanceId, true
+}
+
+// HasGatewayInstanceId returns a boolean if a field has been set.
+func (o *Project) HasGatewayInstanceId() bool {
+	if o != nil && !IsNil(o.GatewayInstanceId) {
+		return true
+	}
+
+	return false
+}
+
+// SetGatewayInstanceId gets a reference to the given string and assigns it to the GatewayInstanceId field.
+func (o *Project) SetGatewayInstanceId(v string) {
+	o.GatewayInstanceId = &v
+}
+
+// GetGatewayEndpoint returns the GatewayEndpoint field value if set, zero value otherwise.
+func (o *Project) GetGatewayEndpoint() string {
+	if o == nil || IsNil(o.GatewayEndpoint) {
+		var ret string
+		return ret
+	}
+	return *o.GatewayEndpoint
+}
+
+// GetGatewayEndpointOk returns a tuple with the GatewayEndpoint field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Project) GetGatewayEndpointOk() (*string, bool) {
+	if o == nil || IsNil(o.GatewayEndpoint) {
+		return nil, false
+	}
+	return o.GatewayEndpoint, true
+}
+
+// HasGatewayEndpoint returns a boolean if a field has been set.
+func (o *Project) HasGatewayEndpoint() bool {
+	if o != nil && !IsNil(o.GatewayEndpoint) {
+		return true
+	}
+
+	return false
+}
+
+// SetGatewayEndpoint gets a reference to the given string and assigns it to the GatewayEndpoint field.
+func (o *Project) SetGatewayEndpoint(v string) {
+	o.GatewayEndpoint = &v
+}
+
+// GetGatewayStatus returns the GatewayStatus field value if set, zero value otherwise.
+func (o *Project) GetGatewayStatus() string {
+	if o == nil || IsNil(o.GatewayStatus) {
+		var ret string
+		return ret
+	}
+	return *o.GatewayStatus
+}
+
+// GetGatewayStatusOk returns a tuple with the GatewayStatus field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Project) GetGatewayStatusOk() (*string, bool) {
+	if o == nil || IsNil(o.GatewayStatus) {
+		return nil, false
+	}
+	return o.GatewayStatus, true
+}
+
+// HasGatewayStatus returns a boolean if a field has been set.
+func (o *Project) HasGatewayStatus() bool {
+	if o != nil && !IsNil(o.GatewayStatus) {
+		return true
+	}
+
+	return false
+}
+
+// SetGatewayStatus gets a reference to the given string and assigns it to the GatewayStatus field.
+func (o *Project) SetGatewayStatus(v string) {
+	o.GatewayStatus = &v
+}
+
+// GetGatewayError returns the GatewayError field value if set, zero value otherwise.
+func (o *Project) GetGatewayError() string {
+	if o == nil || IsNil(o.GatewayError) {
+		var ret string
+		return ret
+	}
+	return *o.GatewayError
+}
+
+// GetGatewayErrorOk returns a tuple with the GatewayError field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Project) GetGatewayErrorOk() (*string, bool) {
+	if o == nil || IsNil(o.GatewayError) {
+		return nil, false
+	}
+	return o.GatewayError, true
+}
+
+// HasGatewayError returns a boolean if a field has been set.
+func (o *Project) HasGatewayError() bool {
+	if o != nil && !IsNil(o.GatewayError) {
+		return true
+	}
+
+	return false
+}
+
+// SetGatewayError gets a reference to the given string and assigns it to the GatewayError field.
+func (o *Project) SetGatewayError(v string) {
+	o.GatewayError = &v
+}
+
+// GetGatewayCredentialId returns the GatewayCredentialId field value if set, zero value otherwise.
+func (o *Project) GetGatewayCredentialId() string {
+	if o == nil || IsNil(o.GatewayCredentialId) {
+		var ret string
+		return ret
+	}
+	return *o.GatewayCredentialId
+}
+
+// GetGatewayCredentialIdOk returns a tuple with the GatewayCredentialId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Project) GetGatewayCredentialIdOk() (*string, bool) {
+	if o == nil || IsNil(o.GatewayCredentialId) {
+		return nil, false
+	}
+	return o.GatewayCredentialId, true
+}
+
+// HasGatewayCredentialId returns a boolean if a field has been set.
+func (o *Project) HasGatewayCredentialId() bool {
+	if o != nil && !IsNil(o.GatewayCredentialId) {
+		return true
+	}
+
+	return false
+}
+
+// SetGatewayCredentialId gets a reference to the given string and assigns it to the GatewayCredentialId field.
+func (o *Project) SetGatewayCredentialId(v string) {
+	o.GatewayCredentialId = &v
+}
+
+// GetGatewayAccountId returns the GatewayAccountId field value if set, zero value otherwise.
+func (o *Project) GetGatewayAccountId() string {
+	if o == nil || IsNil(o.GatewayAccountId) {
+		var ret string
+		return ret
+	}
+	return *o.GatewayAccountId
+}
+
+// GetGatewayAccountIdOk returns a tuple with the GatewayAccountId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Project) GetGatewayAccountIdOk() (*string, bool) {
+	if o == nil || IsNil(o.GatewayAccountId) {
+		return nil, false
+	}
+	return o.GatewayAccountId, true
+}
+
+// HasGatewayAccountId returns a boolean if a field has been set.
+func (o *Project) HasGatewayAccountId() bool {
+	if o != nil && !IsNil(o.GatewayAccountId) {
+		return true
+	}
+
+	return false
+}
+
+// SetGatewayAccountId gets a reference to the given string and assigns it to the GatewayAccountId field.
+func (o *Project) SetGatewayAccountId(v string) {
+	o.GatewayAccountId = &v
+}
+
+// GetGatewayAccountExpiresAt returns the GatewayAccountExpiresAt field value if set, zero value otherwise.
+func (o *Project) GetGatewayAccountExpiresAt() string {
+	if o == nil || IsNil(o.GatewayAccountExpiresAt) {
+		var ret string
+		return ret
+	}
+	return *o.GatewayAccountExpiresAt
+}
+
+// GetGatewayAccountExpiresAtOk returns a tuple with the GatewayAccountExpiresAt field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Project) GetGatewayAccountExpiresAtOk() (*string, bool) {
+	if o == nil || IsNil(o.GatewayAccountExpiresAt) {
+		return nil, false
+	}
+	return o.GatewayAccountExpiresAt, true
+}
+
+// HasGatewayAccountExpiresAt returns a boolean if a field has been set.
+func (o *Project) HasGatewayAccountExpiresAt() bool {
+	if o != nil && !IsNil(o.GatewayAccountExpiresAt) {
+		return true
+	}
+
+	return false
+}
+
+// SetGatewayAccountExpiresAt gets a reference to the given string and assigns it to the GatewayAccountExpiresAt field.
+func (o *Project) SetGatewayAccountExpiresAt(v string) {
+	o.GatewayAccountExpiresAt = &v
+}
+
+// GetGatewayExternalReference returns the GatewayExternalReference field value if set, zero value otherwise.
+func (o *Project) GetGatewayExternalReference() string {
+	if o == nil || IsNil(o.GatewayExternalReference) {
+		var ret string
+		return ret
+	}
+	return *o.GatewayExternalReference
+}
+
+// GetGatewayExternalReferenceOk returns a tuple with the GatewayExternalReference field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Project) GetGatewayExternalReferenceOk() (*string, bool) {
+	if o == nil || IsNil(o.GatewayExternalReference) {
+		return nil, false
+	}
+	return o.GatewayExternalReference, true
+}
+
+// HasGatewayExternalReference returns a boolean if a field has been set.
+func (o *Project) HasGatewayExternalReference() bool {
+	if o != nil && !IsNil(o.GatewayExternalReference) {
+		return true
+	}
+
+	return false
+}
+
+// SetGatewayExternalReference gets a reference to the given string and assigns it to the GatewayExternalReference field.
+func (o *Project) SetGatewayExternalReference(v string) {
+	o.GatewayExternalReference = &v
+}
+
+// GetRuntimeDeleted returns the RuntimeDeleted field value if set, zero value otherwise.
+func (o *Project) GetRuntimeDeleted() bool {
+	if o == nil || IsNil(o.RuntimeDeleted) {
+		var ret bool
+		return ret
+	}
+	return *o.RuntimeDeleted
+}
+
+// GetRuntimeDeletedOk returns a tuple with the RuntimeDeleted field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Project) GetRuntimeDeletedOk() (*bool, bool) {
+	if o == nil || IsNil(o.RuntimeDeleted) {
+		return nil, false
+	}
+	return o.RuntimeDeleted, true
+}
+
+// HasRuntimeDeleted returns a boolean if a field has been set.
+func (o *Project) HasRuntimeDeleted() bool {
+	if o != nil && !IsNil(o.RuntimeDeleted) {
+		return true
+	}
+
+	return false
+}
+
+// SetRuntimeDeleted gets a reference to the given bool and assigns it to the RuntimeDeleted field.
+func (o *Project) SetRuntimeDeleted(v bool) {
+	o.RuntimeDeleted = &v
+}
+
+// GetRuntimeVersion returns the RuntimeVersion field value if set, zero value otherwise.
+func (o *Project) GetRuntimeVersion() int64 {
+	if o == nil || IsNil(o.RuntimeVersion) {
+		var ret int64
+		return ret
+	}
+	return *o.RuntimeVersion
+}
+
+// GetRuntimeVersionOk returns a tuple with the RuntimeVersion field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Project) GetRuntimeVersionOk() (*int64, bool) {
+	if o == nil || IsNil(o.RuntimeVersion) {
+		return nil, false
+	}
+	return o.RuntimeVersion, true
+}
+
+// HasRuntimeVersion returns a boolean if a field has been set.
+func (o *Project) HasRuntimeVersion() bool {
+	if o != nil && !IsNil(o.RuntimeVersion) {
+		return true
+	}
+
+	return false
+}
+
+// SetRuntimeVersion gets a reference to the given int64 and assigns it to the RuntimeVersion field.
+func (o *Project) SetRuntimeVersion(v int64) {
+	o.RuntimeVersion = &v
 }
 
 // GetName returns the Name field value
@@ -425,6 +821,42 @@ func (o Project) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.UpdatedAt) {
 		toSerialize["updated_at"] = o.UpdatedAt
+	}
+	if !IsNil(o.RuntimeBackend) {
+		toSerialize["runtime_backend"] = o.RuntimeBackend
+	}
+	if !IsNil(o.GatewayId) {
+		toSerialize["gateway_id"] = o.GatewayId
+	}
+	if !IsNil(o.GatewayInstanceId) {
+		toSerialize["gateway_instance_id"] = o.GatewayInstanceId
+	}
+	if !IsNil(o.GatewayEndpoint) {
+		toSerialize["gateway_endpoint"] = o.GatewayEndpoint
+	}
+	if !IsNil(o.GatewayStatus) {
+		toSerialize["gateway_status"] = o.GatewayStatus
+	}
+	if !IsNil(o.GatewayError) {
+		toSerialize["gateway_error"] = o.GatewayError
+	}
+	if !IsNil(o.GatewayCredentialId) {
+		toSerialize["gateway_credential_id"] = o.GatewayCredentialId
+	}
+	if !IsNil(o.GatewayAccountId) {
+		toSerialize["gateway_account_id"] = o.GatewayAccountId
+	}
+	if !IsNil(o.GatewayAccountExpiresAt) {
+		toSerialize["gateway_account_expires_at"] = o.GatewayAccountExpiresAt
+	}
+	if !IsNil(o.GatewayExternalReference) {
+		toSerialize["gateway_external_reference"] = o.GatewayExternalReference
+	}
+	if !IsNil(o.RuntimeDeleted) {
+		toSerialize["runtime_deleted"] = o.RuntimeDeleted
+	}
+	if !IsNil(o.RuntimeVersion) {
+		toSerialize["runtime_version"] = o.RuntimeVersion
 	}
 	toSerialize["name"] = o.Name
 	if !IsNil(o.Description) {

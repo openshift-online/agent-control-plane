@@ -494,6 +494,18 @@ func protoSessionToSDK(s *pb.Session) types.Session {
 		return types.Session{}
 	}
 	session := types.Session{
+		GatewayID:                s.GetGatewayId(),
+		GatewayEndpoint:          s.GetGatewayEndpoint(),
+		GatewayCredentialID:      s.GetGatewayCredentialId(),
+		RuntimeBackend:           s.GetRuntimeBackend(),
+		RuntimeDeleted:           s.GetRuntimeDeleted(),
+		RuntimeVersion:           int(s.GetRuntimeVersion()),
+		GatewayWorkspace:         s.GetGatewayWorkspace(),
+		SandboxID:                s.GetSandboxId(),
+		SandboxName:              s.GetSandboxName(),
+		RunnerGeneration:         s.GetRunnerGeneration(),
+		RuntimeStatus:            s.GetRuntimeStatus(),
+		RuntimeError:             s.GetRuntimeError(),
 		Name:                     s.GetName(),
 		Prompt:                   s.GetPrompt(),
 		RepoURL:                  s.GetRepoUrl(),
@@ -551,11 +563,23 @@ func protoProjectToSDK(p *pb.Project) types.Project {
 		return types.Project{}
 	}
 	project := types.Project{
-		Name:        p.GetName(),
-		Description: p.GetDescription(),
-		Labels:      p.GetLabels(),
-		Annotations: p.GetAnnotations(),
-		Status:      p.GetStatus(),
+		GatewayID:                p.GetGatewayId(),
+		GatewayEndpoint:          p.GetGatewayEndpoint(),
+		GatewayCredentialID:      p.GetGatewayCredentialId(),
+		RuntimeBackend:           p.GetRuntimeBackend(),
+		RuntimeDeleted:           p.GetRuntimeDeleted(),
+		RuntimeVersion:           int(p.GetRuntimeVersion()),
+		GatewayInstanceID:        p.GetGatewayInstanceId(),
+		GatewayStatus:            p.GetGatewayStatus(),
+		GatewayError:             p.GetGatewayError(),
+		GatewayAccountID:         p.GetGatewayAccountId(),
+		GatewayAccountExpiresAt:  p.GetGatewayAccountExpiresAt(),
+		GatewayExternalReference: p.GetGatewayExternalReference(),
+		Name:                     p.GetName(),
+		Description:              p.GetDescription(),
+		Labels:                   p.GetLabels(),
+		Annotations:              p.GetAnnotations(),
+		Status:                   p.GetStatus(),
 	}
 	if m := p.GetMetadata(); m != nil {
 		project.ID = m.GetId()

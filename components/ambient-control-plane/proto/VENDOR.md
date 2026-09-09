@@ -40,3 +40,8 @@ cd components/ambient-control-plane/proto && buf generate
 ```
 
 Output lands in `internal/openshell/grpc/`.
+
+The `StopSandbox` and `StartSandbox` RPCs and request messages are added from
+`opendatahub-io/openshell` commit `681c9b2d8b9887f230cee4871bdbdbc9a362dfc8`.
+They preserve sandbox state across gateway-managed stop and start operations.
+All existing field numbers and RPC signatures remain unchanged.

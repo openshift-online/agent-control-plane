@@ -67,7 +67,7 @@ func TestShouldEvict(t *testing.T) {
 
 func TestGetOrCreateConn_CacheHit(t *testing.T) {
 	g := NewGatewayClient("gw", 8443, insecureResolver, "", zerolog.Nop())
-	t.Cleanup(func() { g.Close() })
+	t.Cleanup(func() { requireUploadNoError(t, g.Close()) })
 
 	ctx := context.Background()
 	conn1, err := g.getOrCreateConn(ctx, "ns-a")
@@ -105,7 +105,7 @@ func TestGetOrCreateConn_CredResolverError(t *testing.T) {
 
 func TestEvictConn(t *testing.T) {
 	g := NewGatewayClient("gw", 8443, insecureResolver, "", zerolog.Nop())
-	t.Cleanup(func() { g.Close() })
+	t.Cleanup(func() { requireUploadNoError(t, g.Close()) })
 
 	ctx := context.Background()
 	_, err := g.getOrCreateConn(ctx, "ns-a")
@@ -144,7 +144,7 @@ func TestGetOrCreateConn_ConcurrentSameNamespace(t *testing.T) {
 		mu.Unlock()
 		return insecure.NewCredentials(), nil
 	}, "", zerolog.Nop())
-	t.Cleanup(func() { g.Close() })
+	t.Cleanup(func() { requireUploadNoError(t, g.Close()) })
 
 	ctx := context.Background()
 	const goroutines = 20
@@ -176,6 +176,7 @@ func TestGetOrCreateConn_ConcurrentSameNamespace(t *testing.T) {
 	}
 }
 
+// Preserve the legacy 11-character suffix so existing sandboxes can be adopted.
 func TestSandboxName(t *testing.T) {
 	tests := []struct {
 		sessionID string
@@ -183,10 +184,10 @@ func TestSandboxName(t *testing.T) {
 	}{
 		{"abc123", "session-abc123"},
 		{"ABC-DEF", "session-abc-def"},
-		{"MiXeD-CaSe-123", "session-mixed-case-123"},
+		{"MiXeD-CaSe-123", "session-mixed-case-"},
 		{
 			"aaaaabbbbbcccccdddddeeeeefffffggggghhhhh-extra-chars-beyond-40",
-			"session-aaaaabbbbbcccccdddddeeeeefffffggggghhhhh",
+			"session-aaaaabbbbbc",
 		},
 		{"", "session-"},
 	}

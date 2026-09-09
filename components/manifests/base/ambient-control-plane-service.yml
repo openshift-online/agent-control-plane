@@ -30,6 +30,10 @@ spec:
           capabilities:
             drop: ["ALL"]
         env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         - name: AMBIENT_API_TOKEN
           valueFrom:
             secretKeyRef:
@@ -46,9 +50,9 @@ spec:
               name: ambient-api-server
               key: clientSecret
         - name: AMBIENT_API_SERVER_URL
-          value: "https://ambient-api-server.ambient-code.svc.cluster.local:8000"
+          value: "https://ambient-api-server.$(POD_NAMESPACE).svc:8000"
         - name: AMBIENT_GRPC_SERVER_ADDR
-          value: "ambient-api-server.ambient-code.svc.cluster.local:9000"
+          value: "ambient-api-server.$(POD_NAMESPACE).svc:9000"
         - name: AMBIENT_GRPC_USE_TLS
           value: "true"
         - name: MODE
@@ -91,13 +95,20 @@ spec:
               name: operator-config
               key: GOOGLE_APPLICATION_CREDENTIALS
               optional: true
+        - name: CP_TOKEN_TLS_CERT_FILE
+          value: /etc/cp-tls/tls.crt
+        - name: CP_TOKEN_TLS_KEY_FILE
+          value: /etc/cp-tls/tls.key
         - name: CP_TOKEN_URL
-          value: "http://ambient-control-plane.ambient-code.svc.cluster.local:8080/token"
+          value: "https://ambient-control-plane.$(POD_NAMESPACE).svc:8080/token"
         - name: CP_RUNTIME_NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
         volumeMounts:
+        - name: cp-tls
+          mountPath: /etc/cp-tls
+          readOnly: true
         - name: vertex-credentials
           mountPath: /app/vertex
           readOnly: true
@@ -109,6 +120,10 @@ spec:
             cpu: 200m
             memory: 256Mi
       volumes:
+      - name: cp-tls
+        secret:
+          secretName: ambient-control-plane-tls
+          optional: true
       - name: vertex-credentials
         secret:
           secretName: ambient-vertex

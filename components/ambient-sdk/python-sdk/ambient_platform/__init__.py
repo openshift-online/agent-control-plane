@@ -6,6 +6,8 @@
 """Ambient Platform SDK for Python."""
 
 from .client import AmbientClient
+from .runtime import RuntimeAPI
+from .runner_access import check_runner_access
 from ._base import APIError, ListOptions
 from .agent import Agent, AgentPatch
 from .application import Application, ApplicationPatch
@@ -28,6 +30,8 @@ __version__ = "1.0.0"
 
 __all__ = [
     "AmbientClient",
+    "RuntimeAPI",
+    "check_runner_access",
     "APIError",
     "ListOptions",
     "Agent",

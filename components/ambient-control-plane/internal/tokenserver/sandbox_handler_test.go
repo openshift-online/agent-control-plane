@@ -47,8 +47,9 @@ func (m *mockWatchStream) Recv() (*pb.SandboxStreamEvent, error) {
 
 func newTestSandboxHandler(gw SandboxGateway) *sandboxHandler {
 	return &sandboxHandler{
-		gateway: gw,
-		logger:  zerolog.Nop(),
+		gateway:   gw,
+		logger:    zerolog.Nop(),
+		authorize: func(ctx context.Context, bearer, sessionID, name string) (string, error) { return sessionID, nil },
 	}
 }
 
@@ -93,7 +94,7 @@ func TestHandleLogs_ResolvesNameToUUID(t *testing.T) {
 	}
 
 	h := newTestSandboxHandler(gw)
-	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/"+sandboxName+"/logs?namespace=tenant-a", nil))
+	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/"+sandboxName+"/logs?session_id=tenant-a", nil))
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
@@ -143,7 +144,7 @@ func TestHandleLogs_SSEFormat(t *testing.T) {
 	}
 
 	h := newTestSandboxHandler(gw)
-	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/session-test/logs?namespace=ns", nil))
+	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/session-test/logs?session_id=ns", nil))
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
@@ -201,7 +202,7 @@ func TestHandleLogs_GetSandboxNotFound(t *testing.T) {
 	}
 
 	h := newTestSandboxHandler(gw)
-	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/nonexistent/logs?namespace=ns", nil))
+	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/nonexistent/logs?session_id=ns", nil))
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
@@ -223,7 +224,7 @@ func TestHandleLogs_GetSandboxError(t *testing.T) {
 	}
 
 	h := newTestSandboxHandler(gw)
-	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/session-x/logs?namespace=ns", nil))
+	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/session-x/logs?session_id=ns", nil))
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
@@ -233,7 +234,7 @@ func TestHandleLogs_GetSandboxError(t *testing.T) {
 	}
 }
 
-func TestHandleLogs_MissingNamespace(t *testing.T) {
+func TestHandleLogs_MissingSessionID(t *testing.T) {
 	h := newTestSandboxHandler(&mockSandboxGateway{})
 	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/session-x/logs", nil))
 	rr := httptest.NewRecorder()
@@ -247,7 +248,7 @@ func TestHandleLogs_MissingNamespace(t *testing.T) {
 
 func TestHandleLogs_MethodNotAllowed(t *testing.T) {
 	h := newTestSandboxHandler(&mockSandboxGateway{})
-	req := httptest.NewRequest(http.MethodPost, "/sandbox/session-x/logs?namespace=ns", nil)
+	req := httptest.NewRequest(http.MethodPost, "/sandbox/session-x/logs?session_id=ns", nil)
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
@@ -265,7 +266,7 @@ func TestHandlePolicy_Success(t *testing.T) {
 	}
 
 	h := newTestSandboxHandler(gw)
-	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/session-pol/policy?namespace=ns", nil))
+	req := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/session-pol/policy?session_id=ns", nil))
 	rr := httptest.NewRecorder()
 
 	h.handlePolicy(rr, req)
@@ -299,7 +300,7 @@ func TestSandboxPolicy_RejectsUnauthenticated(t *testing.T) {
 	}
 
 	h := newTestSandboxHandler(gw)
-	req := httptest.NewRequest(http.MethodGet, "/sandbox/session-x/policy?namespace=ns", nil)
+	req := httptest.NewRequest(http.MethodGet, "/sandbox/session-x/policy?session_id=ns", nil)
 	rr := httptest.NewRecorder()
 
 	h.handlePolicy(rr, req)
@@ -318,7 +319,7 @@ func TestSandboxLogs_RejectsUnauthenticated(t *testing.T) {
 	}
 
 	h := newTestSandboxHandler(gw)
-	req := httptest.NewRequest(http.MethodGet, "/sandbox/session-x/logs?namespace=ns", nil)
+	req := httptest.NewRequest(http.MethodGet, "/sandbox/session-x/logs?session_id=ns", nil)
 	rr := httptest.NewRecorder()
 
 	h.handleLogs(rr, req)
@@ -348,5 +349,82 @@ func TestParseSandboxPath(t *testing.T) {
 		if !tc.wantEmpty && name != tc.wantName {
 			t.Errorf("parseSandboxPath(%q, %q) = %q, want %q", tc.path, tc.suffix, name, tc.wantName)
 		}
+	}
+}
+
+func TestSandboxAuthorizationCannotSelectAnotherGateway(t *testing.T) {
+	called := false
+	h := newTestSandboxHandler(&mockSandboxGateway{getSandboxFn: func(ctx context.Context, target, name string) (*pb.SandboxResponse, error) {
+		called = true
+		if target != "authorized-gateway" || name != "sandbox-a" {
+			t.Fatal("untrusted target used")
+		}
+		return makeSandboxResponse("id-a", name), nil
+	}})
+	h.authorize = func(ctx context.Context, bearer, sessionID, name string) (string, error) {
+		if bearer != "test-sandbox-token" || sessionID != "session-a" || name != "sandbox-a" {
+			return "", fmt.Errorf("scope mismatch")
+		}
+		return "authorized-gateway", nil
+	}
+	good := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/sandbox-a/policy?session_id=session-a&namespace=other-gateway", nil))
+	out := httptest.NewRecorder()
+	h.handlePolicy(out, good)
+	if out.Code != http.StatusOK || !called {
+		t.Fatalf("authorized request failed: %d", out.Code)
+	}
+	called = false
+	bad := withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/sandbox-b/policy?session_id=session-a", nil))
+	out = httptest.NewRecorder()
+	h.handlePolicy(out, bad)
+	if out.Code != http.StatusForbidden || called {
+		t.Fatal("cross-sandbox request reached gateway")
+	}
+	h.authorize = nil
+	out = httptest.NewRecorder()
+	h.handlePolicy(out, good)
+	if out.Code != http.StatusUnauthorized {
+		t.Fatal("missing authorizer accepted")
+	}
+}
+
+type currentPolicyGateway struct {
+	*mockSandboxGateway
+	policy *pb.GetSandboxPolicyStatusResponse
+	err    error
+}
+
+func (g *currentPolicyGateway) GetSandboxPolicyStatus(context.Context, string, string) (*pb.GetSandboxPolicyStatusResponse, error) {
+	return g.policy, g.err
+}
+
+func TestPolicyEndpointUsesCurrentAuthoredRevision(t *testing.T) {
+	gw := &currentPolicyGateway{mockSandboxGateway: &mockSandboxGateway{getSandboxFn: func(context.Context, string, string) (*pb.SandboxResponse, error) {
+		return makeSandboxResponse("sandbox-id", "sandbox-a"), nil
+	}}, policy: &pb.GetSandboxPolicyStatusResponse{Revision: &pb.SandboxPolicyRevision{Version: 9, PolicyHash: "current-hash", Policy: &sbv1.SandboxPolicy{Version: 1, NetworkPolicies: map[string]*sbv1.NetworkPolicyRule{"current": {Name: "current-rule"}}}}, ActiveVersion: 8}}
+	h := newTestSandboxHandler(gw)
+	w := httptest.NewRecorder()
+	h.handlePolicy(w, withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/sandbox-a/policy?session_id=session-a", nil)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d", w.Code)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result["config_revision"] != "9" || result["hash"] != "current-hash" || result["active_version"] != float64(8) || !strings.Contains(w.Body.String(), "current-rule") {
+		t.Fatalf("stale policy response: %s", w.Body.String())
+	}
+}
+
+func TestPolicyEndpointDoesNotHideCurrentPolicyFailure(t *testing.T) {
+	gw := &currentPolicyGateway{mockSandboxGateway: &mockSandboxGateway{getSandboxFn: func(context.Context, string, string) (*pb.SandboxResponse, error) {
+		return makeSandboxResponse("sandbox-id", "sandbox-a"), nil
+	}}, err: fmt.Errorf("private upstream failure")}
+	h := newTestSandboxHandler(gw)
+	w := httptest.NewRecorder()
+	h.handlePolicy(w, withTestAuth(httptest.NewRequest(http.MethodGet, "/sandbox/sandbox-a/policy?session_id=session-a", nil)))
+	if w.Code != http.StatusBadGateway || strings.Contains(w.Body.String(), "private") {
+		t.Fatalf("response=%d %s", w.Code, w.Body.String())
 	}
 }

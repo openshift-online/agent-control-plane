@@ -11,6 +11,6 @@ spec:
             - name: AMBIENT_ENV
               value: production
             - name: BACKEND_URL
-              value: "http://ambient-api-server.ambient-code.svc:8000"
+              value: "https://ambient-api-server.ambient-code.svc:8000"
             - name: CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT
               value: "true"

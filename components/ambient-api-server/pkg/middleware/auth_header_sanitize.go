@@ -9,7 +9,9 @@ import (
 )
 
 func init() {
-	pkgserver.RegisterPreAuthMiddleware(sanitizeAuthHeaders)
+	pkgserver.RegisterPreAuthMiddleware(func(next http.Handler) http.Handler {
+		return RejectRunnerHTTP(sanitizeAuthHeaders(next))
+	})
 }
 
 func sanitizeAuthHeaders(next http.Handler) http.Handler {

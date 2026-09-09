@@ -20,6 +20,7 @@ type SandboxLogsState = {
   isReconnecting: boolean
   error: string | null
   clear: () => void
+  retry: () => void
 }
 
 const SSE_EVENT_TYPES = ['log', 'platform_event', 'warning', 'status'] as const
@@ -45,6 +46,7 @@ export function useSandboxLogs(
   port?: SandboxObservabilityPort,
 ): SandboxLogsState {
   const adapter = port ?? getDefaultPort()
+  const [retryKey, setRetryKey] = useState(0)
   const [entries, setEntries] = useState<SandboxLogEntry[]>([])
   const [isConnected, setIsConnected] = useState(false)
   const [isReconnecting, setIsReconnecting] = useState(false)
@@ -57,26 +59,37 @@ export function useSandboxLogs(
     setEntries([])
   }, [])
 
+  const retry = useCallback(() => {
+    reconnectCountRef.current = 0
+    setError(null)
+    setRetryKey(key => key + 1)
+  }, [])
+
   useEffect(() => {
     if (!enabled || !sessionId) return
+    let active = true
+    reconnectCountRef.current = 0
 
     function connect() {
+      if (!active) return
       const url = adapter.getLogsUrl(sessionId)
       const es = new EventSource(url)
       eventSourceRef.current = es
 
       es.onopen = () => {
+        if (!active) return
         setIsConnected(true)
         setIsReconnecting(false)
         setError(null)
-        reconnectCountRef.current = 0
       }
 
       const handleEvent = (event: MessageEvent) => {
+        if (!active) return
         try {
           const raw = JSON.parse(event.data) as Record<string, unknown>
           const entry = parseSandboxLogEntry(raw)
           if (!entry) return
+          reconnectCountRef.current = 0
           setEntries(prev => {
             const next = [...prev, entry]
             return next.length > MAX_LOG_ENTRIES ? next.slice(-MAX_LOG_ENTRIES) : next
@@ -92,6 +105,8 @@ export function useSandboxLogs(
       }
 
       es.onerror = () => {
+        if (!active || es.onerror === null) return
+        es.onerror = null
         es.close()
         setIsConnected(false)
 
@@ -99,6 +114,9 @@ export function useSandboxLogs(
           reconnectCountRef.current++
           setIsReconnecting(true)
           reconnectTimeoutRef.current = setTimeout(connect, 3000)
+        } else {
+          setIsReconnecting(false)
+          setError('Sandbox logs could not connect after five retries.')
         }
       }
     }
@@ -106,6 +124,7 @@ export function useSandboxLogs(
     connect()
 
     return () => {
+      active = false
       if (eventSourceRef.current) {
         eventSourceRef.current.close()
         eventSourceRef.current = null
@@ -116,8 +135,9 @@ export function useSandboxLogs(
       }
       setIsConnected(false)
       setIsReconnecting(false)
+      setError(null)
     }
-  }, [sessionId, enabled, adapter])
+  }, [sessionId, enabled, adapter, retryKey])
 
-  return { entries, isConnected, isReconnecting, error, clear }
+  return { entries, isConnected, isReconnecting, error, clear, retry }
 }

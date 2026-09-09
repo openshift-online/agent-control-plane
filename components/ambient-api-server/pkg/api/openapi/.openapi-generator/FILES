@@ -24,12 +24,6 @@ docs/CredentialPatchRequest.md
 docs/CredentialTokenResponse.md
 docs/DefaultAPI.md
 docs/Error.md
-docs/Gateway.md
-docs/GatewayDatabase.md
-docs/GatewayList.md
-docs/GatewayOidc.md
-docs/GatewayPatchRequest.md
-docs/GatewayRoute.md
 docs/GpuRequirements.md
 docs/InboxMessage.md
 docs/InboxMessageList.md
@@ -45,6 +39,7 @@ docs/ProjectHome.md
 docs/ProjectHomeAgent.md
 docs/ProjectList.md
 docs/ProjectPatchRequest.md
+docs/ProjectRuntimePatch.md
 docs/ProjectSettings.md
 docs/ProjectSettingsList.md
 docs/ProjectSettingsPatchRequest.md
@@ -69,6 +64,7 @@ docs/SessionList.md
 docs/SessionMessage.md
 docs/SessionMessagePushRequest.md
 docs/SessionPatchRequest.md
+docs/SessionRuntimePatch.md
 docs/SessionStatusPatchRequest.md
 docs/StartRequest.md
 docs/StartResponse.md
@@ -95,12 +91,6 @@ model_credential_list.go
 model_credential_patch_request.go
 model_credential_token_response.go
 model_error.go
-model_gateway.go
-model_gateway_database.go
-model_gateway_list.go
-model_gateway_oidc.go
-model_gateway_patch_request.go
-model_gateway_route.go
 model_gpu_requirements.go
 model_inbox_message.go
 model_inbox_message_list.go
@@ -116,6 +106,7 @@ model_project_home.go
 model_project_home_agent.go
 model_project_list.go
 model_project_patch_request.go
+model_project_runtime_patch.go
 model_project_settings.go
 model_project_settings_list.go
 model_project_settings_patch_request.go
@@ -140,6 +131,7 @@ model_session_list.go
 model_session_message.go
 model_session_message_push_request.go
 model_session_patch_request.go
+model_session_runtime_patch.go
 model_session_status_patch_request.go
 model_start_request.go
 model_start_response.go

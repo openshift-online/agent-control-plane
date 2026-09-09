@@ -11,6 +11,18 @@ func sessionToProto(s *Session) *pb.Session {
 	}
 
 	proto := &pb.Session{
+		GatewayId:           s.GatewayId,
+		GatewayWorkspace:    s.GatewayWorkspace,
+		SandboxId:           s.SandboxId,
+		SandboxName:         s.SandboxName,
+		RuntimeBackend:      s.RuntimeBackend,
+		RunnerGeneration:    s.RunnerGeneration,
+		GatewayEndpoint:     s.GatewayEndpoint,
+		GatewayCredentialId: s.GatewayCredentialId,
+		RuntimeStatus:       s.RuntimeStatus,
+		RuntimeError:        s.RuntimeError,
+		RuntimeDeleted:      s.DeletedAt.Valid,
+		RuntimeVersion:      s.RuntimeVersion,
 		Metadata: &pb.ObjectReference{
 			Id:        s.ID,
 			CreatedAt: timestamppb.New(s.CreatedAt),

@@ -25,11 +25,12 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any, Optional
 
 import grpc
-
 from ag_ui.core import BaseEvent
 
-from .operational_events import OperationalEventWriter
 from ambient_runner.middleware.event_compressor import EventCompressor
+from ambient_runner.platform.message_cursor import MessageCursor, MessageCursorError
+
+from .operational_events import OperationalEventWriter
 
 if TYPE_CHECKING:
     from ambient_runner._grpc_client import AmbientGRPCClient
@@ -102,6 +103,7 @@ class GRPCSessionListener:
         self._grpc_client: Optional["AmbientGRPCClient"] = None
         self.ready = asyncio.Event()
         self._task: Optional[asyncio.Task] = None
+        self._message_cursor = MessageCursor.from_env(session_id)
 
     def start(self) -> None:
         from ambient_runner._grpc_client import AmbientGRPCClient
@@ -190,7 +192,9 @@ class GRPCSessionListener:
         is_resume = os.getenv("IS_RESUME", "").strip().lower() == "true"
         resume_after_seq: int | None = None
         resume_cutoff: float | None = None
-        if is_resume:
+        if self._message_cursor is not None:
+            resume_after_seq = self._message_cursor.last_seq
+        elif is_resume:
             raw_seq = os.getenv("RESUME_AFTER_SEQ", "").strip()
             if raw_seq.isdigit():
                 resume_after_seq = int(raw_seq)
@@ -265,6 +269,11 @@ class GRPCSessionListener:
                             )
                             continue
 
+                    if self._message_cursor is not None:
+                        # Acceptance is durable before bridge.run can produce side effects.
+                        if not self._message_cursor.accept(msg.seq):
+                            continue
+
                     logger.info(
                         "[GRPC LISTENER] User message seq=%d — triggering run: session=%s",
                         msg.seq,
@@ -276,6 +285,12 @@ class GRPCSessionListener:
                 stop_event.set()
                 executor.shutdown(wait=False)
                 logger.info("[GRPC LISTENER] Cancelled: session=%s", self._session_id)
+                raise
+            except MessageCursorError:
+                stop_event.set()
+                executor.shutdown(wait=False)
+                if self._grpc_client is not None:
+                    self._grpc_client.close()
                 raise
             except Exception as exc:
                 stop_event.set()

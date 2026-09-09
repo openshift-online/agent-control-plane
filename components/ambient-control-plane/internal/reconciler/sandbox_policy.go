@@ -55,6 +55,15 @@ func parsePolicySpec(spec string) (*sandboxpb.SandboxPolicy, error) {
 const acpInternalPolicyKey = "_acp_internal"
 const mlflowPolicyKey = "_mlflow_rh"
 
+func acpCallbackBinaries() []*sandboxpb.NetworkBinary {
+	return []*sandboxpb.NetworkBinary{
+		{Path: "/sandbox/.venv/bin/python"},
+		{Path: "/sandbox/.venv/bin/python3"},
+		{Path: "/sandbox/.venv/bin/uvicorn"},
+		{Path: "/sandbox/.uv/python/cpython-*/bin/python*"},
+	}
+}
+
 func acpInternalRule(namespace string) *sandboxpb.NetworkPolicyRule {
 	return &sandboxpb.NetworkPolicyRule{
 		Name: "acp-internal",
@@ -66,12 +75,7 @@ func acpInternalRule(namespace string) *sandboxpb.NetworkPolicyRule {
 			{Host: "ambient-api-server." + namespace + ".svc", Port: 9000},
 			{Host: "ambient-api-server." + namespace + ".svc.cluster.local", Port: 9000},
 		},
-		Binaries: []*sandboxpb.NetworkBinary{
-			{Path: "/sandbox/.venv/bin/python"},
-			{Path: "/sandbox/.venv/bin/python3"},
-			{Path: "/sandbox/.venv/bin/uvicorn"},
-			{Path: "/sandbox/.uv/python/cpython-*/bin/python*"},
-		},
+		Binaries: acpCallbackBinaries(),
 	}
 }
 

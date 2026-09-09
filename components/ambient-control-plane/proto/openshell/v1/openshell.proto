@@ -53,6 +53,9 @@ service OpenShell {
 
   // Delete a sandbox by name.
   rpc DeleteSandbox(DeleteSandboxRequest) returns (DeleteSandboxResponse);
+  // Lifecycle RPCs from opendatahub-io/openshell at 681c9b2d8b9887f230cee4871bdbdbc9a362dfc8.
+  rpc StopSandbox(StopSandboxRequest) returns (SandboxResponse);
+  rpc StartSandbox(StartSandboxRequest) returns (SandboxResponse);
 
   // Create a short-lived SSH session for a sandbox.
   rpc CreateSshSession(CreateSshSessionRequest) returns (CreateSshSessionResponse);
@@ -490,6 +493,10 @@ enum SandboxPhase {
   SANDBOX_PHASE_ERROR = 3;
   SANDBOX_PHASE_DELETING = 4;
   SANDBOX_PHASE_UNKNOWN = 5;
+  // Additional lifecycle phases from the pinned OpenDataHub gateway image.
+  SANDBOX_PHASE_STOPPING = 6;
+  SANDBOX_PHASE_STOPPED = 7;
+  SANDBOX_PHASE_STARTING = 8;
 }
 
 // Public platform event exposed on the sandbox watch stream.
@@ -2208,4 +2215,14 @@ message ListWorkspaceMembersRequest {
 // List workspace members response.
 message ListWorkspaceMembersResponse {
   repeated WorkspaceMember members = 1;
+}
+
+// Lifecycle messages from opendatahub-io/openshell at 681c9b2d8b9887f230cee4871bdbdbc9a362dfc8.
+message StopSandboxRequest {
+  string name = 1;
+  string workspace = 2;
+}
+message StartSandboxRequest {
+  string name = 1;
+  string workspace = 2;
 }

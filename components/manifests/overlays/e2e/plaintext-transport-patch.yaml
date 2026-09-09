@@ -1,0 +1,93 @@
+# This Kind-based test stack has no OpenShift serving certificate controller.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-api-server
+spec:
+  template:
+    spec:
+      containers:
+      - name: api-server
+        command:
+        - /usr/local/bin/ambient-api-server
+        - serve
+        - --db-host-file=/secrets/db/db.host
+        - --db-port-file=/secrets/db/db.port
+        - --db-user-file=/secrets/db/db.user
+        - --db-password-file=/secrets/db/db.password
+        - --db-name-file=/secrets/db/db.name
+        - --enable-jwt=true
+        - --enable-authz=true
+        - --jwk-cert-file=/configs/authentication/jwks.json
+        - --enable-https=false
+        - --enable-tls=false
+        - --enable-health-check-https=false
+        - --api-server-bindaddress=:8000
+        - --metrics-server-bindaddress=:4433
+        - --health-check-server-bindaddress=:4434
+        - --db-sslmode=disable
+        - --db-max-open-connections=50
+        - --enable-db-debug=false
+        - --enable-metrics-https=false
+        - --http-read-timeout=5s
+        - --http-write-timeout=30s
+        - --cors-allowed-origins=*
+        - --cors-allowed-headers=X-Ambient-Project
+        - --enable-grpc=true
+        - --grpc-server-bindaddress=:9000
+        - --grpc-enable-tls=false
+        - --alsologtostderr
+        - -v=4
+        env:
+        - name: CONTROL_PLANE_URL
+          value: http://ambient-control-plane:8080
+        livenessProbe:
+          httpGet:
+            scheme: HTTP
+        readinessProbe:
+          httpGet:
+            scheme: HTTP
+      volumes:
+      - name: tls-certs
+        secret: null
+        emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-control-plane
+spec:
+  template:
+    spec:
+      containers:
+      - name: ambient-control-plane
+        env:
+        - name: AMBIENT_API_SERVER_URL
+          value: http://ambient-api-server:8000
+        - name: AMBIENT_GRPC_USE_TLS
+          value: 'false'
+        - name: AMBIENT_ALLOW_INSECURE_RUNNER_TRANSPORT
+          value: 'true'
+        - name: CP_TOKEN_TLS_CERT_FILE
+          value: ''
+        - name: CP_TOKEN_TLS_KEY_FILE
+          value: ''
+        - name: CP_TOKEN_URL
+          value: http://ambient-control-plane:8080/token
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-ui
+spec:
+  template:
+    spec:
+      containers:
+      - name: ambient-ui
+        env:
+        - name: API_SERVER_URL
+          value: http://ambient-api-server:8000
+        - name: CONTROL_PLANE_URL
+          value: http://ambient-control-plane:8080
+        - name: NODE_EXTRA_CA_CERTS
+          value: ''

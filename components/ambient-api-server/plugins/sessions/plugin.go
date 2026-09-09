@@ -1,6 +1,11 @@
 package sessions
 
 import (
+	"context"
+	"fmt"
+	"github.com/golang/glog"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/middleware"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/runnerauth"
 	"net/http"
 	"sync"
 
@@ -22,9 +27,12 @@ import (
 
 const EventSource = "Sessions"
 
+var registeredSessionFactory *db.SessionFactory
+
 type ServiceLocator func() SessionService
 
 func NewServiceLocator(env *environments.Env) ServiceLocator {
+	registeredSessionFactory = &env.Database.SessionFactory
 	return func() SessionService {
 		return NewSessionService(
 			db.NewAdvisoryLockFactory(env.Database.SessionFactory),
@@ -125,6 +133,8 @@ func init() {
 		sessionsRouter.HandleFunc("", sessionHandler.List).Methods(http.MethodGet)
 		sessionsRouter.HandleFunc("/phase_counts", sessionHandler.PhaseCounts).Methods(http.MethodGet)
 		sessionsRouter.HandleFunc("/{id}", sessionHandler.Get).Methods(http.MethodGet)
+		sessionsRouter.HandleFunc("/{id}/runner/access", sessionHandler.RunnerAccess).Methods(http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete)
+		sessionsRouter.HandleFunc("/{id}/runner/access/stop", sessionHandler.RunnerAccess).Methods(http.MethodPost)
 		sessionsRouter.HandleFunc("", sessionHandler.Create).Methods(http.MethodPost)
 		sessionsRouter.HandleFunc("/{id}", sessionHandler.Patch).Methods(http.MethodPatch)
 		sessionsRouter.HandleFunc("/{id}/status", sessionHandler.PatchStatus).Methods(http.MethodPatch)
@@ -205,7 +215,17 @@ func init() {
 			}
 			return nil
 		}
-		pb.RegisterSessionServiceServer(grpcServer, NewSessionGRPCHandler(sessionService, genericService, brokerFunc, msgService, evtService))
+		handler := NewSessionGRPCHandler(sessionService, genericService, brokerFunc, msgService, evtService)
+		if err := middleware.ConfigureRunnerDispatch(handler, func(ctx context.Context, claims runnerauth.Claims) error {
+			session, err := sessionService.Get(ctx, claims.SessionID)
+			if err != nil {
+				return fmt.Errorf("session unavailable")
+			}
+			return validateRunnerSession(session, claims)
+		}); err != nil {
+			glog.Errorf("Runner authentication disabled: %v", err)
+		}
+		pb.RegisterSessionServiceServer(grpcServer, handler)
 	})
 
 	db.RegisterMigration(migration())

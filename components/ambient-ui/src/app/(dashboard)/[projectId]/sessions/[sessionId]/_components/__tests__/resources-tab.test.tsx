@@ -55,7 +55,7 @@ const RECONCILED: DomainReconciledRepo = {
 describe('ResourcesTab', () => {
   it('shows empty state when no repos', () => {
     render(<ResourcesTab session={makeSession()} />)
-    expect(screen.getByText('No resources attached')).toBeTruthy()
+    expect(screen.getByText('No repositories attached')).toBeTruthy()
     expect(screen.getByText('This session has no repositories configured.')).toBeTruthy()
   })
 
@@ -131,4 +131,15 @@ describe('ResourcesTab', () => {
     render(<ResourcesTab session={makeSession({ repos: [unnamedRepo] })} />)
     expect(screen.getByText('myrepo')).toBeTruthy()
   })
+})
+
+
+it('keeps sandbox resources visible when no repositories are attached', () => {
+  render(<ResourcesTab session={makeSession({ runtime: {
+    backend: 'hypershell', status: 'Ready', error: null,
+    gatewayId: 'gateway-a', sandboxName: 'sandbox-a', workspace: 'session-a',
+  } })} />)
+  expect(screen.getByText('No repositories attached')).toBeInTheDocument()
+  expect(screen.getByText('gateway-a')).toBeInTheDocument()
+  expect(screen.getByText('Hypershell')).toBeInTheDocument()
 })

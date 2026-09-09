@@ -2,7 +2,8 @@ package sessions
 
 import (
 	"context"
-	stderrors "errors"
+	stdErrors "errors"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/runtimeapi"
 
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
@@ -79,6 +80,18 @@ func (s *sqlSessionService) Get(ctx context.Context, id string) (*Session, *erro
 }
 
 func (s *sqlSessionService) Create(ctx context.Context, session *Session) (*Session, *errors.ServiceError) {
+	if (session.LlmModel == nil || *session.LlmModel == "") && session.AgentId != nil && *session.AgentId != "" {
+		if session.ProjectId == nil || *session.ProjectId == "" {
+			return nil, errors.Validation("project_id is required for an agent session")
+		}
+		model, err := s.sessionDao.AgentModel(ctx, *session.ProjectId, *session.AgentId)
+		if err != nil {
+			return nil, services.HandleGetError("Agent", "id", *session.AgentId, err)
+		}
+		if model != "" {
+			session.LlmModel = &model
+		}
+	}
 	session, err := s.sessionDao.Create(ctx, session)
 	if err != nil {
 		return nil, services.HandleCreateError("Session", err)
@@ -106,7 +119,7 @@ func (s *sqlSessionService) Replace(ctx context.Context, session *Session) (*Ses
 	var replaceErr error
 	session, replaceErr = s.sessionDao.Replace(ctx, session)
 	if replaceErr != nil {
-		return nil, services.HandleUpdateError("Session", replaceErr)
+		return nil, handleRuntimeUpdateError("Session", replaceErr)
 	}
 
 	_, evErr := s.events.Create(ctx, &api.Event{
@@ -115,7 +128,7 @@ func (s *sqlSessionService) Replace(ctx context.Context, session *Session) (*Ses
 		EventType: api.UpdateEventType,
 	})
 	if evErr != nil {
-		return nil, services.HandleUpdateError("Session", evErr)
+		return nil, handleRuntimeUpdateError("Session", evErr)
 	}
 
 	return session, nil
@@ -228,7 +241,7 @@ func (s *sqlSessionService) UpdateStatus(ctx context.Context, id string, patch *
 
 	session, err = s.sessionDao.Replace(ctx, session)
 	if err != nil {
-		return nil, services.HandleUpdateError("Session", err)
+		return nil, handleRuntimeUpdateError("Session", err)
 	}
 
 	_, evErr := s.events.Create(ctx, &api.Event{
@@ -237,7 +250,7 @@ func (s *sqlSessionService) UpdateStatus(ctx context.Context, id string, patch *
 		EventType: api.UpdateEventType,
 	})
 	if evErr != nil {
-		return nil, services.HandleUpdateError("Session", evErr)
+		return nil, handleRuntimeUpdateError("Session", evErr)
 	}
 
 	return session, nil
@@ -263,7 +276,7 @@ func (s *sqlSessionService) Start(ctx context.Context, id string) (*Session, *er
 
 	session, err = s.sessionDao.Replace(ctx, session)
 	if err != nil {
-		return nil, services.HandleUpdateError("Session", err)
+		return nil, handleRuntimeUpdateError("Session", err)
 	}
 
 	_, evErr := s.events.Create(ctx, &api.Event{
@@ -272,7 +285,7 @@ func (s *sqlSessionService) Start(ctx context.Context, id string) (*Session, *er
 		EventType: api.UpdateEventType,
 	})
 	if evErr != nil {
-		return nil, services.HandleUpdateError("Session", evErr)
+		return nil, handleRuntimeUpdateError("Session", evErr)
 	}
 
 	return session, nil
@@ -281,7 +294,7 @@ func (s *sqlSessionService) Start(ctx context.Context, id string) (*Session, *er
 func (s *sqlSessionService) ActiveByAgentID(ctx context.Context, agentID string) (*Session, *errors.ServiceError) {
 	session, err := s.sessionDao.ActiveByAgentID(ctx, agentID)
 	if err != nil {
-		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+		if stdErrors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, errors.GeneralError("unable to look up active session for agent %s: %s", agentID, err)
@@ -300,7 +313,7 @@ func (s *sqlSessionService) ByScheduledSessionID(ctx context.Context, scheduledS
 func (s *sqlSessionService) ActiveByScheduledSessionID(ctx context.Context, scheduledSessionID string) (*Session, *errors.ServiceError) {
 	session, err := s.sessionDao.ActiveByScheduledSessionID(ctx, scheduledSessionID)
 	if err != nil {
-		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+		if stdErrors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, errors.GeneralError("unable to look up active session for schedule %s: %s", scheduledSessionID, err)
@@ -336,7 +349,7 @@ func (s *sqlSessionService) Stop(ctx context.Context, id string) (*Session, *err
 
 	session, err = s.sessionDao.Replace(ctx, session)
 	if err != nil {
-		return nil, services.HandleUpdateError("Session", err)
+		return nil, handleRuntimeUpdateError("Session", err)
 	}
 
 	_, evErr := s.events.Create(ctx, &api.Event{
@@ -345,8 +358,15 @@ func (s *sqlSessionService) Stop(ctx context.Context, id string) (*Session, *err
 		EventType: api.UpdateEventType,
 	})
 	if evErr != nil {
-		return nil, services.HandleUpdateError("Session", evErr)
+		return nil, handleRuntimeUpdateError("Session", evErr)
 	}
 
 	return session, nil
+}
+
+func handleRuntimeUpdateError(resource string, err error) *errors.ServiceError {
+	if stdErrors.Is(err, runtimeapi.ErrConflict) {
+		return errors.Conflict("Resource runtime state changed; read it again")
+	}
+	return services.HandleUpdateError(resource, err)
 }

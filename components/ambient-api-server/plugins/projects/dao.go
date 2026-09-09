@@ -2,6 +2,7 @@ package projects
 
 import (
 	"context"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/runtimeapi"
 
 	"gorm.io/gorm/clause"
 
@@ -48,9 +49,22 @@ func (d *sqlProjectDao) Create(ctx context.Context, project *Project) (*Project,
 
 func (d *sqlProjectDao) Replace(ctx context.Context, project *Project) (*Project, error) {
 	g2 := (*d.sessionFactory).New(ctx)
-	if err := g2.Omit(clause.Associations).Save(project).Error; err != nil {
-		db.MarkForRollback(ctx, err)
-		return nil, err
+	// User writes cannot replace runtime bindings or recreate a deleted row.
+	omit := []string{clause.Associations, "id", "created_at", "deleted_at", "runtime_version"}
+	for field := range runtimeFields {
+		omit = append(omit, field)
+	}
+	result := g2.Model(project).Where("runtime_version = ?", project.RuntimeVersion).Where("(COALESCE(runtime_backend, '') = '' OR COALESCE(gateway_id, '') = '' OR name = ?)", project.Name).Select("*").Omit(omit...).Updates(project)
+	if result.Error != nil {
+		db.MarkForRollback(ctx, result.Error)
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		var current Project
+		if err := g2.Take(&current, "id = ?", project.ID).Error; err != nil {
+			return nil, err
+		}
+		return nil, runtimeapi.ErrConflict
 	}
 	return project, nil
 }
