@@ -71,3 +71,34 @@ describe('sandbox log retries', () => {
     expect(result.current.isReconnecting).toBe(false)
   })
 })
+
+it('stops a stream that opens and immediately fails after five retries', () => {
+  const { result } = renderHook(() => useSandboxLogs('session-a', true, port))
+  for (let attempt = 0; attempt < 6; attempt++) {
+    act(() => FakeEventSource.instances[attempt].onopen?.())
+    act(() => FakeEventSource.instances[attempt].onmessage?.(new MessageEvent('message', {data: '{"not":"a log"}'})))
+    act(() => FakeEventSource.instances[attempt].onerror?.())
+    act(() => vi.advanceTimersByTime(3000))
+  }
+  expect(result.current.error).toMatch('five retries')
+  expect(result.current.isReconnecting).toBe(false)
+  expect(FakeEventSource.instances).toHaveLength(6)
+})
+
+it('resets the retry limit after a valid log entry', () => {
+  const { result } = renderHook(() => useSandboxLogs('session-a', true, port))
+  for (let attempt = 0; attempt < 5; attempt++) {
+    act(() => FakeEventSource.instances[attempt].onerror?.())
+    act(() => vi.advanceTimersByTime(3000))
+  }
+  act(() => FakeEventSource.instances[5].onopen?.())
+  act(() => FakeEventSource.instances[5].onmessage?.(new MessageEvent('message', {
+    data: JSON.stringify({timestamp: 1, message: 'Sandbox ready', source: 'sandbox'}),
+  })))
+  expect(result.current.entries).toHaveLength(1)
+  act(() => FakeEventSource.instances[5].onerror?.())
+  expect(result.current.error).toBeNull()
+  expect(result.current.isReconnecting).toBe(true)
+  act(() => vi.advanceTimersByTime(3000))
+  expect(FakeEventSource.instances).toHaveLength(7)
+})

@@ -39,3 +39,10 @@ describe('RuntimeStatus', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })
+
+it('shows a supported degraded state and recovery action for an unhealthy gateway', () => {
+  render(<RuntimeStatus runtime={{...runtime, status: 'Degraded'}} label="Workspace sandbox service" resource="workspace" />)
+  expect(screen.getByRole('status')).toHaveTextContent('Service needs attention')
+  expect(screen.getByRole('alert')).toHaveTextContent('Contact your workspace administrator for help.')
+  expect(screen.queryByText('Status unavailable')).not.toBeInTheDocument()
+})

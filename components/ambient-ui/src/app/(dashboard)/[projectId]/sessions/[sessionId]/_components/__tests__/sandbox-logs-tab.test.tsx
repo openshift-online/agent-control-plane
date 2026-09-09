@@ -1,13 +1,23 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
-import type { DomainSession } from '@/domain/types'
+import type { DomainSession, SandboxLogEntry } from '@/domain/types'
 import { SandboxLogsTab } from '../sandbox-logs-tab'
 
-const { retry } = vi.hoisted(() => ({ retry: vi.fn() }))
-vi.mock('@/queries/use-sandbox-logs', () => ({
-  useSandboxLogs: () => ({ entries: [], isConnected: false, isReconnecting: false,
-    error: 'Sandbox logs could not connect after five retries.', retry, clear: vi.fn() }),
+const { retry, streamState } = vi.hoisted(() => ({
+  retry: vi.fn(),
+  streamState: { entries: [] as SandboxLogEntry[], isConnected: false, isReconnecting: false,
+    error: 'Sandbox logs could not connect after five retries.' as string | null },
 }))
+vi.mock('@/queries/use-sandbox-logs', () => ({
+  useSandboxLogs: () => ({ ...streamState, retry, clear: vi.fn() }),
+}))
+beforeEach(() => {
+  retry.mockClear()
+  streamState.entries = []
+  streamState.isConnected = false
+  streamState.isReconnecting = false
+  streamState.error = 'Sandbox logs could not connect after five retries.'
+})
 
 function makeSession(overrides: Partial<DomainSession> = {}): DomainSession {
   return {
@@ -61,4 +71,20 @@ it('removes Retry and shows the stopped explanation after a failed stream stops'
   expect(screen.queryByRole('button', {name: 'Retry'})).not.toBeInTheDocument()
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   expect(screen.getByText('Session is not running. Logs stream while the sandbox is active.')).toBeInTheDocument()
+})
+
+
+it('announces connection state in a persistent status region without entry counts', () => {
+  streamState.error = null
+  streamState.isReconnecting = true
+  const { rerender } = render(<SandboxLogsTab session={makeSession()} />)
+  const status = screen.getByRole('status')
+  expect(status).toHaveTextContent('Reconnecting...')
+  streamState.isReconnecting = false
+  streamState.isConnected = true
+  rerender(<SandboxLogsTab session={makeSession()} />)
+  expect(screen.getByRole('status')).toBe(status)
+  expect(status).toHaveTextContent('Live')
+  expect(status).not.toHaveTextContent('entries')
+  expect(screen.getByText('0 entries')).toBeInTheDocument()
 })

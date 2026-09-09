@@ -14,6 +14,7 @@ const STATUS_LABELS: Record<string, string> = {
   DeletionRequested: 'Removing sandbox service',
   Deleted: 'Removed',
   Failed: 'Action needed',
+  Degraded: 'Service needs attention',
 }
 
 export function RuntimeStatus({ runtime, label, resource = 'session' }: {
@@ -26,7 +27,7 @@ export function RuntimeStatus({ runtime, label, resource = 'session' }: {
   const status = resource === 'workspace' && runtime.status === 'Running'
     ? 'Preparing sandbox service'
     : STATUS_LABELS[runtime.status ?? ''] ?? 'Status unavailable'
-  const error = runtime.error || (runtime.status === 'Failed'
+  const error = runtime.error || ((runtime.status === 'Failed' || runtime.status === 'Degraded')
     ? 'Contact your workspace administrator for help.'
     : null)
 

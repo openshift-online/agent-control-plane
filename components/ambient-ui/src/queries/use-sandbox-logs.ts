@@ -81,7 +81,6 @@ export function useSandboxLogs(
         setIsConnected(true)
         setIsReconnecting(false)
         setError(null)
-        reconnectCountRef.current = 0
       }
 
       const handleEvent = (event: MessageEvent) => {
@@ -90,6 +89,7 @@ export function useSandboxLogs(
           const raw = JSON.parse(event.data) as Record<string, unknown>
           const entry = parseSandboxLogEntry(raw)
           if (!entry) return
+          reconnectCountRef.current = 0
           setEntries(prev => {
             const next = [...prev, entry]
             return next.length > MAX_LOG_ENTRIES ? next.slice(-MAX_LOG_ENTRIES) : next

@@ -103,30 +103,22 @@ export function SandboxLogsTab({ session }: { session: DomainSession }) {
   const { scrollRef, sentinelRef, isAtBottom, newEventCount, scrollToBottom } =
     useLiveTail(displayEntries.length)
 
+  const connectionStatus = isSandboxPending
+    ? 'Sandbox is not yet running. Logs will stream once the sandbox starts.'
+    : !isActive
+      ? isHistorical ? 'Saved sandbox logs.' : 'Session is not running. Logs stream while the sandbox is active.'
+      : error ? 'Log connection unavailable.'
+        : isReconnecting ? 'Reconnecting...'
+          : isConnected ? 'Live' : 'Connecting to sandbox logs...'
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        {isSandboxPending && (
-          <span>Sandbox is not yet running. Logs will stream once the sandbox starts.</span>
-        )}
-        {isHistorical && (
-          <span className="flex items-center gap-1.5">
-            <Badge variant="secondary" className="text-[10px]">Historical</Badge>
-            <span>{displayEntries.length} entries</span>
-          </span>
-        )}
-        {isConnected && !isHistorical && (
-          <span className="flex items-center gap-1.5">
-            <LiveIndicator />
-            <span>{displayEntries.length} entries</span>
-          </span>
-        )}
-        {isReconnecting && (
-          <span className="text-amber-600">Reconnecting...</span>
-        )}
-        {!isActive && !isSandboxPending && !isConnected && !isHistorical && entries.length === 0 && (
-          <span>Session is not running. Logs stream while the sandbox is active.</span>
-        )}
+      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+        <span role="status" aria-live="polite" aria-atomic="true">
+          {isActive && isConnected && !error ? <LiveIndicator /> : connectionStatus}
+        </span>
+        {isHistorical && <Badge variant="secondary" className="text-[10px]">Historical</Badge>}
+        {(isConnected || isHistorical) && <span>{displayEntries.length} entries</span>}
       </div>
 
       {isActive && error && (
@@ -138,7 +130,7 @@ export function SandboxLogsTab({ session }: { session: DomainSession }) {
 
       <Card className="relative">
         {isAtBottom && displayEntries.length > 0 && isConnected && !isHistorical && (
-          <div className="absolute top-2 right-3 z-10">
+          <div className="absolute top-2 right-3 z-10" aria-hidden="true">
             <LiveIndicator />
           </div>
         )}

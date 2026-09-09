@@ -31,7 +31,11 @@ export function getSessionPollingInterval(session: PollingSession | undefined): 
     session.runtime?.backend === 'hypershell' &&
     TRANSITIONING_RUNTIME_STATES.has(session.runtime.status ?? '')
   )) return 1000
-  if (TERMINAL_PHASES.has(session.phase)) return false
+  if (TERMINAL_PHASES.has(session.phase)) {
+    if (session.runtime?.backend === 'hypershell' &&
+      session.runtime.status !== 'Stopped' && session.runtime.status !== 'Deleted') return 1000
+    return false
+  }
   return 3000
 }
 

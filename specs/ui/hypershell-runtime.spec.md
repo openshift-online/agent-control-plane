@@ -13,7 +13,9 @@ the runtime backend is Hypershell. It SHALL show a reported error as text.
 A workspace gateway in `Running` state SHALL show that the service is still being
 prepared until its status is `Ready`. Session `Running` status SHALL retain its
 current meaning. An unknown status SHALL show "Status unavailable". A `Failed`
-state without error details SHALL direct the user to their workspace administrator.
+or `Degraded` state without error details SHALL direct the user to their workspace
+administrator.
+`Degraded` SHALL show "Service needs attention".
 The status row SHALL omit the backend brand. The Resources tab SHALL identify
 the backend.
 
@@ -33,6 +35,9 @@ NOT be displayed. Assigned sandbox resources SHALL remain visible when the sessi
 has no repositories. The repository empty state SHALL say "No repositories attached".
 The session list and detail view SHALL continue to poll while runtime cleanup is
 pending, including sessions whose phase is `Completed`, `Failed`, or `Stopped`.
+For a terminal managed session, polling SHALL stop only after runtime status is
+`Stopped` or `Deleted`. `Running`, missing, and unknown runtime status SHALL NOT
+stop cleanup polling.
 
 #### Scenario: Managed sandbox without a local namespace
 
@@ -46,13 +51,18 @@ pending, including sessions whose phase is `Completed`, `Failed`, or `Stopped`.
 State changes SHALL use text and an accessible status region. Errors SHALL use
 an alert region with the danger text and background contrast tokens. Long resource
 identifiers and error text SHALL wrap on small screens. The session tab list SHALL
-scroll horizontally at a viewport width of 320 pixels. All tabs SHALL remain
-available by keyboard.
+scroll horizontally at a viewport width of 320 pixels. This rule SHALL also apply
+to the nested OpenShell tab list. All tabs SHALL remain available by keyboard.
 
 ### Requirement: Log connection recovery
 
 Sandbox logs SHALL stop automatic reconnect attempts after five failed retries.
-They SHALL clear the reconnecting state and show an error with a Retry button,
+Opening a connection without valid log activity SHALL NOT reset the retry limit.
+Receipt of a valid log entry MAY reset that limit. The log view SHALL maintain a
+persistent status region for connection state, including Live and Reconnecting.
+Entry counts SHALL remain outside that region to prevent repeated announcements.
+After the retry limit, the view SHALL clear the reconnecting state and show an
+error with a Retry button,
 including when no log entries were received. Retry SHALL start a new connection
 attempt. Stopping the session SHALL cancel pending reconnect timers, clear a
 connection error, and hide Retry. A stopped session without saved logs SHALL show

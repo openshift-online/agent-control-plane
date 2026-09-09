@@ -20,3 +20,12 @@ describe('session runtime polling', () => {
     expect(getPollingInterval([])).toBe(15000)
   })
 })
+
+it.each(['Running', 'Ready', 'unknown', null])('keeps terminal managed sessions polling with runtime status %s', status => {
+  for (const phase of ['Completed', 'Failed', 'Stopped'] as const) {
+    const session = { phase, runtime: { ...stopping, status } }
+    expect(getSessionPollingInterval(session)).toBe(1000)
+    expect(getPollingInterval([session])).toBe(1000)
+    expect(getSessionPollingInterval({ ...session, runtime: { ...stopping, status: 'Deleted' } })).toBe(false)
+  }
+})
