@@ -2,6 +2,8 @@ package openshell
 
 import (
 	"context"
+	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -28,6 +30,7 @@ type GatewayClient struct {
 	conns           map[string]*grpc.ClientConn
 	targetResolver  TargetResolver
 	targetRevisions map[string]string
+	targetRootCAs   map[string]*x509.CertPool
 	oidcNamespaces  sync.Map // namespace → bool (true = OIDC enabled)
 	serviceName     string
 	grpcPort        int
@@ -49,6 +52,7 @@ func NewGatewayClient(serviceName string, grpcPort int, resolveCred CredentialRe
 	g := &GatewayClient{
 		conns:           make(map[string]*grpc.ClientConn),
 		targetRevisions: make(map[string]string),
+		targetRootCAs:   make(map[string]*x509.CertPool),
 		serviceName:     serviceName,
 		grpcPort:        grpcPort,
 		resolveCred:     resolveCred,
@@ -169,6 +173,7 @@ func (g *GatewayClient) evictConn(namespace string) {
 	}
 	delete(g.conns, namespace)
 	delete(g.targetRevisions, namespace)
+	delete(g.targetRootCAs, namespace)
 	if err := conn.Close(); err != nil {
 		g.logger.Warn().Err(err).Str("namespace", namespace).Msg("closing evicted gateway connection")
 	}
@@ -517,16 +522,17 @@ func (g *GatewayClient) Close() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	var firstErr error
+	var closeErr error
 	for ns, conn := range g.conns {
-		if err := conn.Close(); err != nil && firstErr == nil {
-			firstErr = err
+		if err := conn.Close(); err != nil {
+			closeErr = errors.Join(closeErr, fmt.Errorf("close gateway connection %s: %w", ns, err))
 		}
 		g.logger.Debug().Str("namespace", ns).Msg("gateway connection closed")
 	}
 	g.conns = make(map[string]*grpc.ClientConn)
 	g.targetRevisions = make(map[string]string)
-	return firstErr
+	g.targetRootCAs = make(map[string]*x509.CertPool)
+	return closeErr
 }
 
 func (g *GatewayClient) gatewayEndpoint(namespace string) string {

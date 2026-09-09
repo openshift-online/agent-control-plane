@@ -67,7 +67,7 @@ func TestShouldEvict(t *testing.T) {
 
 func TestGetOrCreateConn_CacheHit(t *testing.T) {
 	g := NewGatewayClient("gw", 8443, insecureResolver, "", zerolog.Nop())
-	t.Cleanup(func() { g.Close() })
+	t.Cleanup(func() { requireUploadNoError(t, g.Close()) })
 
 	ctx := context.Background()
 	conn1, err := g.getOrCreateConn(ctx, "ns-a")
@@ -105,7 +105,7 @@ func TestGetOrCreateConn_CredResolverError(t *testing.T) {
 
 func TestEvictConn(t *testing.T) {
 	g := NewGatewayClient("gw", 8443, insecureResolver, "", zerolog.Nop())
-	t.Cleanup(func() { g.Close() })
+	t.Cleanup(func() { requireUploadNoError(t, g.Close()) })
 
 	ctx := context.Background()
 	_, err := g.getOrCreateConn(ctx, "ns-a")
@@ -144,7 +144,7 @@ func TestGetOrCreateConn_ConcurrentSameNamespace(t *testing.T) {
 		mu.Unlock()
 		return insecure.NewCredentials(), nil
 	}, "", zerolog.Nop())
-	t.Cleanup(func() { g.Close() })
+	t.Cleanup(func() { requireUploadNoError(t, g.Close()) })
 
 	ctx := context.Background()
 	const goroutines = 20

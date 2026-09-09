@@ -3,6 +3,7 @@ package openshell
 import (
 	"archive/tar"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -34,7 +35,7 @@ type Payload struct {
 	Ref     string
 }
 
-func (g *GatewayClient) UploadPayloads(ctx context.Context, namespace string, sandboxID string, payloads []Payload) error {
+func (g *GatewayClient) UploadPayloads(ctx context.Context, namespace string, sandboxID string, payloads []Payload) (resultErr error) {
 	ctx = g.authContext(ctx, namespace)
 	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
@@ -72,7 +73,7 @@ func (g *GatewayClient) UploadPayloads(ctx context.Context, namespace string, sa
 	}
 
 	conn := newGrpcConn(stream)
-	defer conn.Close()
+	defer closeSSHTransport(conn, &resultErr)
 
 	sshConn, chans, reqs, err := ssh.NewClientConn(conn, "sandbox", &ssh.ClientConfig{
 		User: "sandbox",
@@ -94,7 +95,7 @@ func (g *GatewayClient) UploadPayloads(ctx context.Context, namespace string, sa
 		return fmt.Errorf("SSH handshake: %w", err)
 	}
 	sshClient := ssh.NewClient(sshConn, chans, reqs)
-	defer sshClient.Close()
+	defer closeSSHTransport(sshClient, &resultErr)
 
 	for _, p := range payloads {
 		if p.RepoURL != "" {
@@ -110,6 +111,14 @@ func (g *GatewayClient) UploadPayloads(ctx context.Context, namespace string, sa
 	return nil
 }
 
+// SSH channels can already be closed after Wait receives the remote exit.
+// Retain all other close errors, including any earlier write or command error.
+func closeSSHTransport(closer io.Closer, resultErr *error) {
+	if err := closer.Close(); err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
+		*resultErr = errors.Join(*resultErr, fmt.Errorf("close SSH transport: %w", err))
+	}
+}
+
 func validatePayloadPath(path string) error {
 	if path == "" {
 		return fmt.Errorf("empty path")
@@ -123,7 +132,7 @@ func validatePayloadPath(path string) error {
 	return nil
 }
 
-func writePayloadViaSSH(client *ssh.Client, p Payload) error {
+func writePayloadViaSSH(client *ssh.Client, p Payload) (resultErr error) {
 	if err := validatePayloadPath(p.Path); err != nil {
 		return fmt.Errorf("invalid payload path: %w", err)
 	}
@@ -132,7 +141,7 @@ func writePayloadViaSSH(client *ssh.Client, p Payload) error {
 	if err != nil {
 		return fmt.Errorf("open SSH session: %w", err)
 	}
-	defer session.Close()
+	defer closeSSHTransport(session, &resultErr)
 
 	dir := filepath.Dir(p.Path)
 	cmd := fmt.Sprintf("mkdir -p '%s' && cat > '%s'", dir, p.Path)
@@ -152,7 +161,9 @@ func writePayloadViaSSH(client *ssh.Client, p Payload) error {
 	if _, err := io.WriteString(stdin, p.Content); err != nil {
 		return fmt.Errorf("write content: %w", err)
 	}
-	stdin.Close()
+	if err := stdin.Close(); err != nil {
+		return fmt.Errorf("close SSH stdin: %w", err)
+	}
 
 	if err := session.Wait(); err != nil {
 		stderr := strings.TrimSpace(stderrBuf.String())
@@ -297,7 +308,7 @@ func cloneRepoFS(ctx context.Context, repoURL, ref string) (billy.Filesystem, er
 		// Branch ref failed — retry as tag
 		wt = newLimitedFS(memfs.New(), maxCloneBytes)
 		cloneOpts.ReferenceName = plumbing.NewTagReferenceName(ref)
-		repo, tagErr := git.CloneContext(ctx, memory.NewStorage(), wt, cloneOpts)
+		_, tagErr := git.CloneContext(ctx, memory.NewStorage(), wt, cloneOpts)
 
 		if tagErr != nil && isHexSHA(ref) {
 			// Tag ref also failed and ref looks like a SHA — full clone + checkout
@@ -305,6 +316,7 @@ func cloneRepoFS(ctx context.Context, repoURL, ref string) (billy.Filesystem, er
 			cloneOpts.ReferenceName = ""
 			cloneOpts.SingleBranch = false
 			cloneOpts.Depth = 0
+			var repo *git.Repository
 			repo, tagErr = git.CloneContext(ctx, memory.NewStorage(), wt, cloneOpts)
 			if tagErr == nil {
 				w, wtErr := repo.Worktree()
@@ -333,7 +345,7 @@ func isHexSHA(s string) bool {
 		return false
 	}
 	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 			return false
 		}
 	}
@@ -385,20 +397,21 @@ func tarFilesystem(ctx context.Context, bfs billy.Filesystem) io.ReadCloser {
 					return err
 				}
 				_, err = io.Copy(tw, f)
-				f.Close()
+				err = errors.Join(err, f.Close())
 				if err != nil {
 					return err
 				}
 			}
 			return nil
 		})
-		tw.Close()
-		pw.CloseWithError(err)
+		err = errors.Join(err, tw.Close())
+		// PipeWriter.CloseWithError always returns nil. It forwards err to the reader.
+		_ = pw.CloseWithError(err)
 	}()
 	return pr
 }
 
-func writeRepoPayloadViaSSH(client *ssh.Client, targetPath string, tarReader io.Reader) error {
+func writeRepoPayloadViaSSH(client *ssh.Client, targetPath string, tarReader io.Reader) (resultErr error) {
 	if err := validatePayloadPath(targetPath); err != nil {
 		return fmt.Errorf("invalid payload path: %w", err)
 	}
@@ -407,7 +420,7 @@ func writeRepoPayloadViaSSH(client *ssh.Client, targetPath string, tarReader io.
 	if err != nil {
 		return fmt.Errorf("open SSH session: %w", err)
 	}
-	defer session.Close()
+	defer closeSSHTransport(session, &resultErr)
 
 	cmd := fmt.Sprintf("mkdir -p '%s' && tar xf - -C '%s'", targetPath, targetPath)
 
@@ -426,7 +439,9 @@ func writeRepoPayloadViaSSH(client *ssh.Client, targetPath string, tarReader io.
 	if _, err := io.Copy(stdin, tarReader); err != nil {
 		return fmt.Errorf("stream tar content: %w", err)
 	}
-	stdin.Close()
+	if err := stdin.Close(); err != nil {
+		return fmt.Errorf("close SSH stdin: %w", err)
+	}
 
 	if err := session.Wait(); err != nil {
 		stderr := strings.TrimSpace(stderrBuf.String())
@@ -438,13 +453,13 @@ func writeRepoPayloadViaSSH(client *ssh.Client, targetPath string, tarReader io.
 	return nil
 }
 
-func uploadRepoPayload(ctx context.Context, client *ssh.Client, p Payload) error {
+func uploadRepoPayload(ctx context.Context, client *ssh.Client, p Payload) (resultErr error) {
 	repoFS, err := cloneRepoFS(ctx, p.RepoURL, p.Ref)
 	if err != nil {
 		return err
 	}
 	tarReader := tarFilesystem(ctx, repoFS)
-	defer tarReader.Close()
+	defer func() { resultErr = errors.Join(resultErr, tarReader.Close()) }()
 	return writeRepoPayloadViaSSH(client, p.Path, tarReader)
 }
 

@@ -2,9 +2,13 @@ package openshell
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"errors"
+	"math/big"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -130,7 +134,7 @@ func managedTestClient(t *testing.T) (*GatewayClient, *managedTestServer, map[st
 		}
 		return target, nil
 	}), WithTokenProvider(&managedTestTokens{token: "must-not-use-global-token"}))
-	t.Cleanup(func() { _ = client.Close() })
+	t.Cleanup(func() { requireUploadNoError(t, client.Close()) })
 	return client, server, targets, mu
 }
 
@@ -365,5 +369,46 @@ func TestManagedEndpointAndTargetKey(t *testing.T) {
 	}
 	if TargetKey("a:b", "c") == TargetKey("a", "b:c") {
 		t.Fatal("target keys collide")
+	}
+}
+
+func TestManagedTargetRotatesCAWithSameSubject(t *testing.T) {
+	client, _, targets, mu := managedTestClient(t)
+	key := TargetKey("gateway-a", "session-a")
+	newPool := func() *x509.CertPool {
+		public, private, err := ed25519.GenerateKey(rand.Reader)
+		requireUploadNoError(t, err)
+		template := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "same-ca-subject"}, IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour)}
+		der, err := x509.CreateCertificate(rand.Reader, template, template, public, private)
+		requireUploadNoError(t, err)
+		cert, err := x509.ParseCertificate(der)
+		requireUploadNoError(t, err)
+		pool := x509.NewCertPool()
+		pool.AddCert(cert)
+		return pool
+	}
+	setPool := func(pool *x509.CertPool) {
+		mu.Lock()
+		defer mu.Unlock()
+		target := targets[key]
+		target.TLSConfig = target.TLSConfig.Clone()
+		target.TLSConfig.RootCAs = pool
+		targets[key] = target
+	}
+	pool := newPool()
+	setPool(pool)
+	first, err := client.managedConn(context.Background(), key)
+	requireUploadNoError(t, err)
+	setPool(pool.Clone())
+	same, err := client.managedConn(context.Background(), key)
+	requireUploadNoError(t, err)
+	if same != first {
+		t.Fatal("equivalent CA pools should reuse the connection")
+	}
+	setPool(newPool())
+	rotated, err := client.managedConn(context.Background(), key)
+	requireUploadNoError(t, err)
+	if rotated == first {
+		t.Fatal("a new CA key with the same subject must invalidate the connection")
 	}
 }

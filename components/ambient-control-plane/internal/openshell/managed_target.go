@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -109,6 +111,9 @@ func (g *GatewayClient) managedConn(ctx context.Context, key string) (*grpc.Clie
 		return nil, fmt.Errorf("managed gateway requires verified TLS")
 	}
 	tlsConfig := target.TLSConfig.Clone()
+	if tlsConfig.RootCAs != nil {
+		tlsConfig.RootCAs = tlsConfig.RootCAs.Clone()
+	}
 	if tlsConfig.MinVersion < tls.VersionTLS12 {
 		tlsConfig.MinVersion = tls.VersionTLS12
 	}
@@ -130,7 +135,7 @@ func (g *GatewayClient) managedConn(ctx context.Context, key string) (*grpc.Clie
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if conn, found := g.conns[key]; found && g.targetRevisions[key] == fingerprint {
+	if conn, found := g.conns[key]; found && g.targetRevisions[key] == fingerprint && equalRootCAs(g.targetRootCAs[key], tlsConfig.RootCAs) {
 		return conn, nil
 	}
 	conn, err := grpc.NewClient(endpoint,
@@ -144,25 +149,30 @@ func (g *GatewayClient) managedConn(ctx context.Context, key string) (*grpc.Clie
 	}
 	if old := g.conns[key]; old != nil {
 		if err := old.Close(); err != nil {
-			_ = conn.Close()
-			return nil, fmt.Errorf("close previous managed gateway connection: %w", err)
+			return nil, fmt.Errorf("close previous managed gateway connection: %w", errors.Join(err, conn.Close()))
 		}
 	}
 	g.conns[key] = conn
 	g.targetRevisions[key] = fingerprint
+	g.targetRootCAs[key] = tlsConfig.RootCAs
 	return conn, nil
+}
+
+// Compare complete pools: two CA certificates can have the same subject but
+// different keys. A nil pool uses system roots and is distinct from an empty pool.
+func equalRootCAs(a, b *x509.CertPool) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Equal(b)
 }
 
 func targetFingerprint(endpoint string, target GatewayTarget, config *tls.Config) (string, error) {
 	material := struct {
 		Endpoint, Workspace, Revision, ServerName string
 		MinVersion, MaxVersion                    uint16
-		RootSubjects                              [][]byte
 		Certificates                              [][][]byte
 	}{Endpoint: endpoint, Workspace: target.Workspace, Revision: target.Revision, ServerName: config.ServerName, MinVersion: config.MinVersion, MaxVersion: config.MaxVersion}
-	if config.RootCAs != nil {
-		material.RootSubjects = config.RootCAs.Subjects()
-	}
 	for _, certificate := range config.Certificates {
 		material.Certificates = append(material.Certificates, certificate.Certificate)
 	}
