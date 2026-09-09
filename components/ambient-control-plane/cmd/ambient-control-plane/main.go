@@ -52,6 +52,16 @@ func main() {
 	}
 	zerolog.SetGlobalLevel(level)
 
+	if backend := os.Getenv("ACP_RUNTIME_BACKEND"); backend != "" && backend != "kubernetes" {
+		if backend != "hypershell" {
+			log.Fatal().Str("backend", backend).Msg("unknown resource backend")
+		}
+		if err := runHypershellMode(ctx, cfg); err != nil {
+			log.Fatal().Err(err).Msg("Hypershell runtime failed")
+		}
+		return
+	}
+
 	log.Info().
 		Str("version", version).
 		Str("build_time", buildTime).
