@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import yaml
 from render import postgres_identity
+from image_pull import image_pull_access
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('source', type=Path)
@@ -12,6 +13,7 @@ parser.add_argument('config', type=Path)
 args = parser.parse_args()
 config = json.loads(args.config.read_text())
 namespace = config['namespace']
+image_pull_roles, image_pull_resources = image_pull_access(config, namespace)
 issuer = config['oidc_issuer'].rstrip('/')
 source_files = ['api-server.yaml', 'controller.yaml', 'controller-rbac.yaml', 'postgres.yaml',
                 'certificates/ca-chain.yaml', 'networkpolicies.yaml']
@@ -84,11 +86,13 @@ for filename in source_files:
                         patch[name] = config[key]
                 if config.get('server_tls_cluster_issuer'):
                     patch['GATEWAY_SERVER_TLS_CLUSTER_ISSUER'] = config['server_tls_cluster_issuer']
+                patch['GATEWAY_SANDBOX_IMAGE_PULL_ROLES'] = json.dumps(image_pull_roles)
                 container['env'] = [entry for entry in container['env'] if entry['name'] not in patch]
                 container['env'] += [{'name': key, 'value': value} for key, value in patch.items()]
                 container['env'].append({'name': 'OIDC_CLIENT_SECRET', 'valueFrom': {
                     'secretKeyRef': {'name': 'hypershell-api-config', 'key': 'api-service.clientSecret'}}})
         items.append(obj)
+items.extend(image_pull_resources)
 items += [
     {'apiVersion': 'v1', 'kind': 'PersistentVolumeClaim',
      'metadata': {'name': 'hypershell-postgres', 'namespace': namespace},

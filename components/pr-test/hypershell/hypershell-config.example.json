@@ -10,5 +10,11 @@
   "workspace_default_storage_size": "2Gi",
   "server_tls_cluster_issuer": "acp-hypershell-test-ca",
   "database_memory_request": "128Mi",
-  "gateway_memory_request": "128Mi"
+  "gateway_memory_request": "128Mi",
+  "sandbox_image_pull_roles": [
+    {"namespace": "acp-hypershell", "role": "acp-runner-image-pull"}
+  ],
+  "image_pull_role_definitions": [
+    {"namespace": "acp-hypershell", "role": "acp-runner-image-pull", "image_streams": ["acp-claude-runner"]}
+  ]
 }

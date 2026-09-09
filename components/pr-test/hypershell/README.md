@@ -134,9 +134,24 @@ jshell test uses `acp-hypershell-gp3` and `2Gi`. If omitted, OpenShell selects t
 cluster default storage class and its default size. Do not put these keys in
 `HYPERSHELL_SANDBOX_DRIVER_CONFIG`: the pinned request schema rejects them.
 
-When runner images use the private OpenShift registry, run
-`grant-runner-pull.py <gateway-namespace>` after each workspace gateway namespace
-exists. This grants only its sandbox service account access to the runner image.
+For private OpenShift runner images, configure `sandbox_image_pull_roles` in the
+Hypershell JSON configuration as an array of `namespace` and `role` objects.
+The renderer passes this array through `GATEWAY_SANDBOX_IMAGE_PULL_ROLES` and
+grants the Hypershell controller `bind` permission on only those named Roles.
+An optional `image_pull_role_definitions` array creates the approved Roles at
+installation time. Each definition has `namespace`, `role`, and `image_streams`;
+the generated Role grants only `get` on those named image streams' layers. See
+the Hypershell example configuration. Apply the full rendered resources so the
+image Roles and bind permissions exist before gateway provisioning.
+
+Hypershell then creates, repairs, and deletes a RoleBinding for each gateway's
+configured sandbox service account. This supports the pinned gateway's shared
+workspace mode; other modes are rejected. New ACP workspaces need no manual
+grant. Grant failures keep the gateway from becoming Healthy. ACP receives no
+Kubernetes access, and registry tokens are not copied to gateway namespaces.
+
+`grant-runner-pull.py <gateway-namespace>` remains a manual fallback for an older
+Hypershell deployment. It grants only the sandbox account access to the runner image.
 The script reads the account name from the live gateway driver configuration
 and requires Python 3.11 or later. The jshell account is
 `openshell-gateway-sandbox`. An explicit `--sandbox-service-account` can override
