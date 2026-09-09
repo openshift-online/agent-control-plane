@@ -84,35 +84,18 @@ async def setup_sdk_authentication(context: RunnerContext) -> tuple[str, bool, s
     DEFAULT_VERTEX_MODEL = "claude-sonnet-4-6@default"
 
     if inference_routing:
-        # OpenShell inference routing: the supervisor runs an HTTP CONNECT
-        # proxy at 10.200.0.1:3128 inside the sandbox network namespace.
-        # "inference.local" is a virtual hostname the proxy intercepts and
-        # routes to the upstream inference provider (Vertex, Anthropic, etc).
-        # The proxy terminates TLS using a self-signed CA whose cert lives at
-        # /etc/openshell-tls/openshell-ca.pem.
+        # The supervisor supplies the proxy address for its network topology
+        # and a CA bundle that includes system roots. Keep those values.
         os.environ["ANTHROPIC_API_KEY"] = "inference-routing"
         os.environ.setdefault("ANTHROPIC_BASE_URL", "https://inference.local")
-
-        # HTTPS_PROXY: directs all HTTPS traffic through the supervisor's
-        # CONNECT proxy. Required so inference.local resolves — there's no
-        # DNS entry for it; the proxy intercepts the CONNECT request by
-        # hostname. Also needed when the runner process lands outside the
-        # sandbox network namespace (setns can silently fail in rootless
-        # container runtimes without CAP_SYS_ADMIN).
-        os.environ["HTTPS_PROXY"] = "http://10.200.0.1:3128"
-
-        # SSL_CERT_FILE: tells Python's ssl module (used by urllib3/requests)
-        # to trust the OpenShell self-signed CA for inference.local TLS.
-        os.environ["SSL_CERT_FILE"] = "/etc/openshell-tls/openshell-ca.pem"
-
-        # REQUESTS_CA_BUNDLE: same CA, but for the requests library which
-        # checks this var independently of SSL_CERT_FILE.
-        os.environ["REQUESTS_CA_BUNDLE"] = "/etc/openshell-tls/openshell-ca.pem"
-
-        # NODE_EXTRA_CA_CERTS: Claude Code CLI is a Node.js process; Node
-        # ignores SSL_CERT_FILE and uses this var to append extra CAs to
-        # the built-in trust store.
-        os.environ["NODE_EXTRA_CA_CERTS"] = "/etc/openshell-tls/openshell-ca.pem"
+        os.environ.setdefault("HTTPS_PROXY", "http://10.200.0.1:3128")
+        os.environ.setdefault("SSL_CERT_FILE", "/etc/openshell-tls/openshell-ca.pem")
+        os.environ.setdefault(
+            "REQUESTS_CA_BUNDLE", "/etc/openshell-tls/openshell-ca.pem"
+        )
+        os.environ.setdefault(
+            "NODE_EXTRA_CA_CERTS", "/etc/openshell-tls/openshell-ca.pem"
+        )
 
         # Vertex flags must be cleared — inference routing replaces direct
         # Vertex API access with the proxy-mediated path.

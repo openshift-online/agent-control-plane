@@ -2,10 +2,12 @@ package reconciler
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
 
+	datapb "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/datamodel/v1"
 	pb "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -162,5 +164,48 @@ func TestManagedApprovedTrustBundle(t *testing.T) {
 	}
 	if containsApprovedCAs(data, []byte("invalid")) {
 		t.Fatal("invalid CA accepted")
+	}
+}
+
+func TestManagedKubeconfigChangeRequiresRestartBeforeProfileUpdate(t *testing.T) {
+	t.Setenv("HYPERSHELL_KUBERNETES_ALLOWED_CIDRS", "10.0.0.0/8")
+	session := managedTestSession()
+	session.GatewayWorkspace = "session-workspace"
+	source := managedTestKubeconfig()
+	credential := managedTestCredential("kubeconfig")
+	writeCredential := func() {
+		raw, err := clientcmd.Write(*source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		credential.Token = string(raw)
+	}
+	writeCredential()
+	gateway := &managedFakeGateway{providers: map[string]*datapb.Provider{}, sandbox: &pb.Sandbox{Metadata: &datapb.ObjectMeta{Name: session.SandboxName, ResourceVersion: 1}, Spec: &pb.SandboxSpec{}}}
+	if _, err := reconcileManagedProviders(context.Background(), gateway, "gateway-a/session-a", session, nil, []managedCredential{credential}); err != nil {
+		t.Fatal(err)
+	}
+	session.Phase = PhaseRunning
+	source.AuthInfos["user"].Token = "rotated-token"
+	writeCredential()
+	if _, err := reconcileManagedProviders(context.Background(), gateway, gateway.target, session, nil, []managedCredential{credential}); err != nil {
+		t.Fatalf("kubeconfig token rotation must not require a restart: %v", err)
+	}
+	source.Clusters["cluster"].Server = "https://new-kube.example:6443"
+	writeCredential()
+	gateway.operations = nil
+	if _, err := reconcileManagedProviders(context.Background(), gateway, gateway.target, session, nil, []managedCredential{credential}); !errors.Is(err, ErrBindingsChanged) {
+		t.Fatalf("changed kubeconfig payload must require a restart: %v", err)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("profile changed before the runner stopped: %v", gateway.operations)
+	}
+	session.Phase = PhaseCreating
+	plan, err := reconcileManagedProviders(context.Background(), gateway, gateway.target, session, nil, []managedCredential{credential})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Payloads) != 1 || !strings.Contains(plan.Payloads[0].Content, "new-kube.example") {
+		t.Fatal("restart did not receive the updated kubeconfig")
 	}
 }

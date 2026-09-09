@@ -25,6 +25,7 @@ const managedProviderLabel = "ambient-code.io/managed-provider"
 const managedCredentialAnnotation = "ambient-code.io/credential-id"
 const managedSessionAnnotation = "ambient-code.io/session-id"
 const managedSourceVersionAnnotation = "ambient-code.io/source-version"
+const managedRuntimeInputsAnnotation = "ambient-code.io/runtime-inputs-sha256"
 
 // ErrBindingsChanged requires the caller to stop runtime access if a provider
 // cannot be removed. A failed authorization lookup must also stop active access.
@@ -301,9 +302,6 @@ func reconcileManagedProviders(ctx context.Context, gateway managedProviderGatew
 		}
 	}
 	for _, provider := range providers {
-		if err := reconcileManagedProfile(ctx, gateway, target, provider.profile); err != nil {
-			return nil, err
-		}
 		name := provider.data.Metadata.Name
 		existing, err := gateway.GetProvider(ctx, target, name)
 		needsUpdate := true
@@ -318,7 +316,14 @@ func reconcileManagedProviders(ctx context.Context, gateway managedProviderGatew
 			provider.data.Metadata.Id = current.GetMetadata().GetId()
 			provider.data.Metadata.ResourceVersion = current.GetMetadata().GetResourceVersion()
 			sourceVersion := provider.data.Metadata.Annotations[managedSourceVersionAnnotation]
-			needsUpdate = sourceVersion == "" || current.GetMetadata().GetAnnotations()[managedSourceVersionAnnotation] != sourceVersion || !maps.Equal(current.GetConfig(), provider.data.Config) || current.GetType() != provider.data.Type
+			runtimeInputsChanged := current.GetMetadata().GetAnnotations()[managedRuntimeInputsAnnotation] != provider.data.Metadata.Annotations[managedRuntimeInputsAnnotation] || current.GetType() != provider.data.Type
+			if session.Phase == PhaseRunning && runtimeInputsChanged {
+				return nil, fmt.Errorf("%w: restart the session to load changed credential settings", ErrBindingsChanged)
+			}
+			needsUpdate = sourceVersion == "" || current.GetMetadata().GetAnnotations()[managedSourceVersionAnnotation] != sourceVersion || !maps.Equal(current.GetConfig(), provider.data.Config) || runtimeInputsChanged
+		}
+		if err := reconcileManagedProfile(ctx, gateway, target, provider.profile); err != nil {
+			return nil, err
 		}
 		exists := err == nil
 		if provider.githubApp != nil {
@@ -451,6 +456,19 @@ func buildManagedProvider(session types.Session, agent *types.Agent, credential 
 			result.env[key] = "openshell:resolve:env:" + key
 		}
 	}
+	// Track the values that a runner loads at startup. Credential values and
+	// refresh material are excluded so token rotation does not stop a session.
+	runtimeInputs, err := json.Marshal(struct {
+		Environment map[string]string   `json:"environment"`
+		Payloads    []openshell.Payload `json:"payloads"`
+		Config      map[string]string   `json:"config"`
+		Profile     *pb.ProviderProfile `json:"profile"`
+	}{result.env, result.payloads, result.data.Config, result.profile})
+	if err != nil {
+		return result, fmt.Errorf("encode managed credential settings: %w", err)
+	}
+	digest := sha256.Sum256(runtimeInputs)
+	result.data.Metadata.Annotations[managedRuntimeInputsAnnotation] = hex.EncodeToString(digest[:])
 	return result, nil
 }
 
@@ -470,6 +488,13 @@ func configureManagedVertex(provider *managedProvider, agent *types.Agent, crede
 		project = source.ProjectID
 	}
 	if agent != nil {
+		if p := agent.Environment["ANTHROPIC_VERTEX_PROJECT_ID"]; p != "" {
+			project = p
+		}
+		if r := agent.Environment["CLOUD_ML_REGION"]; r != "" {
+			region = r
+		}
+		// Keep the existing explicit gateway aliases as the final overrides.
 		if p := agent.Environment["VERTEX_PROJECT_ID"]; p != "" {
 			project = p
 		}

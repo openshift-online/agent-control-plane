@@ -70,25 +70,33 @@ func TestManagedCredentialResolutionRetainsSelectedID(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/roles"):
-			json.NewEncoder(w).Encode(map[string]interface{}{"items": []map[string]string{{"id": "viewer-role", "name": "credential:viewer"}}, "total": 1})
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{"items": []map[string]string{{"id": "viewer-role", "name": "credential:viewer"}}, "total": 1}); err != nil {
+				t.Errorf("write API test response: %v", err)
+			}
 		case strings.HasSuffix(r.URL.Path, "/role_bindings"):
 			items := bindings
 			if r.URL.Query().Get("page") != "1" {
 				items = nil
 			}
-			json.NewEncoder(w).Encode(map[string]interface{}{"items": items, "total": len(bindings), "page": 1, "size": 100})
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{"items": items, "total": len(bindings), "page": 1, "size": 100}); err != nil {
+				t.Errorf("write API test response: %v", err)
+			}
 		case strings.HasSuffix(r.URL.Path, "/token"):
 			parts := strings.Split(r.URL.Path, "/")
 			id := parts[len(parts)-2]
 			fetched = append(fetched, id)
-			json.NewEncoder(w).Encode(types.CredentialTokenResponse{CredentialID: id, Provider: "github", Token: "test-credential-value"})
+			if err := json.NewEncoder(w).Encode(types.CredentialTokenResponse{CredentialID: id, Provider: "github", Token: "test-credential-value"}); err != nil {
+				t.Errorf("write API test response: %v", err)
+			}
 		default:
 			parts := strings.Split(r.URL.Path, "/")
 			id := parts[len(parts)-1]
 			if id == "owner-only" {
 				t.Error("ownership credential read")
 			}
-			json.NewEncoder(w).Encode(map[string]string{"id": id, "name": id, "provider": "github"})
+			if err := json.NewEncoder(w).Encode(map[string]string{"id": id, "name": id, "provider": "github"}); err != nil {
+				t.Errorf("write API test response: %v", err)
+			}
 		}
 	}))
 	defer server.Close()
@@ -322,5 +330,72 @@ func TestManagedFailedRefreshIsRetried(t *testing.T) {
 	}
 	if len(gateway.operations) != 2 || !strings.HasPrefix(gateway.operations[0], "refresh:") || !strings.HasPrefix(gateway.operations[1], "rotate:") {
 		t.Fatalf("refresh not retried: %v", gateway.operations)
+	}
+}
+
+func TestManagedVertexEnvironmentAliases(t *testing.T) {
+	credential := managedTestCredential("vertex")
+	credential.Token = `{"type":"authorized_user","client_id":"client","client_secret":"secret","refresh_token":"refresh","account":"user@example.com"}`
+	credential.Credential.Annotations = `{"vertex_project_id":"annotation-project","vertex_region":"us-east5"}`
+	for _, tc := range []struct {
+		name        string
+		environment map[string]string
+		project     string
+		region      string
+	}{
+		{name: "standard runner names", environment: map[string]string{"ANTHROPIC_VERTEX_PROJECT_ID": "runner-project", "CLOUD_ML_REGION": "global"}, project: "runner-project", region: "global"},
+		{name: "gateway aliases retain precedence", environment: map[string]string{"ANTHROPIC_VERTEX_PROJECT_ID": "runner-project", "CLOUD_ML_REGION": "global", "VERTEX_PROJECT_ID": "gateway-project", "VERTEX_REGION": "us-central1"}, project: "gateway-project", region: "us-central1"},
+		{name: "annotations remain fallback", environment: map[string]string{"ANTHROPIC_VERTEX_PROJECT_ID": "", "CLOUD_ML_REGION": ""}, project: "annotation-project", region: "us-east5"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			built, err := buildManagedProvider(managedTestSession(), &types.Agent{Environment: tc.environment}, credential)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if built.data.Config["VERTEX_AI_PROJECT_ID"] != tc.project || built.data.Config["VERTEX_AI_REGION"] != tc.region {
+				t.Fatalf("unexpected Vertex route configuration: %v", built.data.Config)
+			}
+			if built.refresh == nil || built.refresh.Strategy != pb.ProviderCredentialRefreshStrategy_PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_REFRESH_TOKEN {
+				t.Fatal("ADC refresh must remain configured")
+			}
+		})
+	}
+}
+
+func TestManagedProviderSettingsRequireRestart(t *testing.T) {
+	session := managedTestSession()
+	credential := managedTestCredential("jira")
+	credential.Credential.URL = "https://jira.example"
+	credential.Credential.Email = "old@example.com"
+	gateway := &managedFakeGateway{providers: map[string]*datapb.Provider{}, sandbox: &pb.Sandbox{Metadata: &datapb.ObjectMeta{Name: session.SandboxName, ResourceVersion: 1}, Spec: &pb.SandboxSpec{}}}
+	plan, err := reconcileManagedProviders(context.Background(), gateway, "gateway-a/session-a", session, nil, []managedCredential{credential})
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := plan.Names[0]
+	session.Phase = PhaseRunning
+	credential.Token = "rotated-token"
+	if _, err := reconcileManagedProviders(context.Background(), gateway, gateway.target, session, nil, []managedCredential{credential}); err != nil {
+		t.Fatalf("secret-only rotation must not stop the runner: %v", err)
+	}
+	if gateway.providers[name].Credentials["JIRA_API_TOKEN"] != credential.Token {
+		t.Fatal("token rotation was not applied")
+	}
+	before := proto.Clone(gateway.providers[name])
+	gateway.operations = nil
+	credential.Credential.Email = "new@example.com"
+	if _, err := reconcileManagedProviders(context.Background(), gateway, gateway.target, session, nil, []managedCredential{credential}); !errors.Is(err, ErrBindingsChanged) {
+		t.Fatalf("changed runner environment must require a restart: %v", err)
+	}
+	if len(gateway.operations) != 0 || !proto.Equal(before, gateway.providers[name]) {
+		t.Fatal("gateway settings changed before runtime access stopped")
+	}
+	session.Phase = PhaseCreating
+	plan, err = reconcileManagedProviders(context.Background(), gateway, gateway.target, session, nil, []managedCredential{credential})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Environment["JIRA_EMAIL"] != "new@example.com" {
+		t.Fatal("restart did not load changed settings")
 	}
 }
