@@ -26,7 +26,7 @@ def token_cache():
 
 def response(token=None):
     if token is None:
-        token = ".".join(["acp-runner-v1", "access", "signature"])
+        token = ".".join(["acp-runner-v1", "access", "signature"])  # noqa: FLY002
     result = MagicMock()
     result.read.return_value = json.dumps({"token": token}).encode()
     result.__enter__.return_value = result
@@ -152,3 +152,18 @@ def test_failed_refresh_has_no_cached_token_fallback():
         pytest.raises(RuntimeError, match="BOOTSTRAP_TOKEN is required"),
     ):
         refresh_bot_token()
+
+
+def test_explicit_missing_ca_fails_closed(tmp_path):
+    from ambient_runner._grpc_client import _load_ca_cert
+
+    with pytest.raises(RuntimeError, match="CA file cannot be read"):
+        _load_ca_cert(str(tmp_path / "missing.pem"))
+
+
+def test_token_url_error_does_not_echo_credentials():
+    from ambient_runner._grpc_client import _validate_cp_token_url
+
+    with pytest.raises(RuntimeError) as error:
+        _validate_cp_token_url("https://name:private-value@example.com/token")
+    assert "private-value" not in str(error.value)

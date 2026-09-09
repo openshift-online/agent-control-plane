@@ -47,3 +47,27 @@ redirects. Missing identity configuration SHALL deny access.
 - WHEN the session receives a new run generation
 - THEN token refresh and subsequent writes SHALL fail
 - AND the old message stream SHALL close
+
+
+### Requirement: Backend compatibility
+
+The Kubernetes gateway backend SHALL persist the sandbox name and a new run
+generation before launch or resume. It SHALL use the same scoped token exchange
+as the Hypershell backend. Bootstrap lifetime SHALL also be bounded by a positive
+session timeout. Runner environment overrides SHALL NOT replace authentication
+settings or inject a control-plane service token.
+
+The API server SHALL mount only `public.pem` from the signing Secret. The control
+plane MAY serve callback TLS directly with `CP_TOKEN_TLS_CERT_FILE` and
+`CP_TOKEN_TLS_KEY_FILE`. A partial or invalid TLS configuration SHALL prevent
+startup. OpenShift deployments SHALL use serving certificates for runner gRPC
+and callback HTTPS. Kind and local test overlays MAY explicitly set
+`AMBIENT_ALLOW_INSECURE_RUNNER_TRANSPORT=true`. Managed deployments SHALL NOT use
+this override. TLS trust payloads SHALL contain only public CA certificates.
+
+#### Scenario: Legacy backend resume
+
+- GIVEN a stopped session uses the Kubernetes gateway backend
+- WHEN the user resumes it
+- THEN ACP SHALL persist a new generation and supply a new bootstrap capability
+- AND the prior generation SHALL remain invalid

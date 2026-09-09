@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ambient-ui
+spec:
+  template:
+    spec:
+      containers:
+        - name: ambient-ui
+          env:
+            - name: CONTROL_PLANE_URL
+              value: http://ambient-control-plane:8080
+            - name: NODE_EXTRA_CA_CERTS
+              value: ""

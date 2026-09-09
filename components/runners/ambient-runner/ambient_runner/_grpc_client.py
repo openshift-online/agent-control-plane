@@ -43,7 +43,7 @@ def _validate_cp_token_url(url: str) -> None:
         or parsed.password is not None
     ):
         raise RuntimeError(
-            f"invalid CP token URL (must be http/https with no credentials): {url!r}"
+            "invalid CP token URL (must be http/https with no credentials)"
         )
 
 
@@ -93,15 +93,22 @@ def _fetch_token_from_cp(cp_token_url: str, bootstrap_token: str) -> str:
 
 
 def _load_ca_cert(ca_cert_file: str | None) -> bytes | None:
-    """Load CA cert from explicit path, then service-ca fallback, then None."""
-    candidates = [ca_cert_file, _SERVICE_CA_PATH]
-    for path in candidates:
-        if path and os.path.exists(path):
-            try:
-                with open(path, "rb") as f:
-                    return f.read()
-            except OSError:
-                pass
+    """Load an explicit CA file, or use service and system trust defaults."""
+    if ca_cert_file:
+        try:
+            with open(ca_cert_file, "rb") as source:
+                data = source.read()
+        except OSError as exc:
+            raise RuntimeError("configured gRPC CA file cannot be read") from exc
+        if not data:
+            raise RuntimeError("configured gRPC CA file is empty")
+        return data
+    if os.path.exists(_SERVICE_CA_PATH):
+        try:
+            with open(_SERVICE_CA_PATH, "rb") as source:
+                return source.read()
+        except OSError as exc:
+            raise RuntimeError("service CA file cannot be read") from exc
     return None
 
 

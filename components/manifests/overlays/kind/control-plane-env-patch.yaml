@@ -8,6 +8,14 @@ spec:
       containers:
         - name: ambient-control-plane
           env:
+            - name: AMBIENT_ALLOW_INSECURE_RUNNER_TRANSPORT
+              value: "true"
+            - name: CP_TOKEN_TLS_CERT_FILE
+              value: ""
+            - name: CP_TOKEN_TLS_KEY_FILE
+              value: ""
+            - name: CP_TOKEN_URL
+              value: "http://ambient-control-plane.ambient-code.svc.cluster.local:8080/token"
             - name: OIDC_CLIENT_ID
               valueFrom:
                 secretKeyRef:

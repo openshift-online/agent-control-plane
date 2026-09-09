@@ -8,6 +8,8 @@ spec:
       containers:
         - name: ambient-control-plane
           env:
+            - name: AMBIENT_ALLOW_INSECURE_RUNNER_TRANSPORT
+              value: "true"
             - name: OIDC_CLIENT_ID
               valueFrom:
                 secretKeyRef:

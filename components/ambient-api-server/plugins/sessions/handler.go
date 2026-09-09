@@ -60,6 +60,7 @@ var EventsHTTPClient = &http.Client{
 	Transport: &http.Transport{
 		DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
 		ResponseHeaderTimeout: 5 * time.Second,
+		TLSClientConfig:       controlPlaneTLSConfig(),
 	},
 }
 

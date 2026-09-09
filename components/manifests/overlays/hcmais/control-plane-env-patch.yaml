@@ -13,9 +13,9 @@ spec:
             - name: AMBIENT_GRPC_SERVER_ADDR
               value: "ambient-api-server.ambient-api.svc:9000"
             - name: AMBIENT_GRPC_USE_TLS
-              value: "false"
+              value: "true"
             - name: CP_TOKEN_URL
-              value: "http://ambient-control-plane.ambient-api.svc:8080/token"
+              value: "https://ambient-control-plane.ambient-api.svc:8080/token"
             - name: OIDC_TOKEN_URL
               value: "https://keycloak-ambient-keycloak.apps.rosa.hcmais01ue1.s9m2.p3.openshiftapps.com/realms/ambient-code/protocol/openid-connect/token"
             - name: OIDC_CLIENT_ID

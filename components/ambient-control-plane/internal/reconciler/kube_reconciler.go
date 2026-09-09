@@ -101,6 +101,8 @@ type KubeReconcilerConfig struct {
 	CPRuntimeNamespace              string
 	CPTokenURL                      string
 	CPTokenPublicKey                string
+	RunnerIdentity                  *LegacyRunnerIdentity
+	AllowInsecureRunnerTransport    bool
 	HTTPProxy                       string
 	HTTPSProxy                      string
 	NoProxy                         string
@@ -425,6 +427,10 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 
 	namespace := r.provisioner.NamespaceName(project.Name)
 	sbxName := openshell.SandboxName(session.ID)
+	session, bootstrap, err := r.cfg.RunnerIdentity.Prepare(ctx, sdk, session, sbxName, namespace)
+	if err != nil {
+		return err
+	}
 
 	r.logger.Info().
 		Str("session_id", session.ID).
@@ -470,11 +476,16 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 			r.logger.Warn().Err(err).Str("sandbox", sbxName).Msg("failed to patch sandbox dnsConfig; DNS resolution for external FQDNs may fail")
 		}
 		execEnv := r.inferenceExecEnv(agent)
+		r.applyLegacyRunnerEnvironment(execEnv, session, bootstrap)
 		var payloads []types.Payload
 		if agent != nil {
 			payloads = agent.Payloads
 		}
 		payloads = r.appendInitialPromptPayload(ctx, session, sdk, payloads)
+		payloads, err = r.legacyRunnerPayloads(payloads)
+		if err != nil {
+			return err
+		}
 		if !r.tryClaimExec(session.ID) {
 			r.logger.Info().Str("session_id", session.ID).Str("sandbox", sbxName).Msg("execAfterReady already running for session; skipping duplicate")
 			return nil
@@ -486,6 +497,7 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 
 	env := r.buildSandboxEnv(ctx, session, project.Name, sdk, providerNames, hasMLflowProvider)
 	r.mergeAgentEnvironment(env, agent)
+	r.applyLegacyRunnerEnvironment(env, session, bootstrap)
 
 	if stopOnRunFinished {
 		env["STOP_ON_RUN_FINISHED"] = "true"
@@ -550,11 +562,16 @@ func (r *SimpleKubeReconciler) provisionSessionSandbox(ctx context.Context, sess
 		Msg("sandbox created via gateway")
 
 	execEnv := r.inferenceExecEnv(agent)
+	r.applyLegacyRunnerEnvironment(execEnv, session, bootstrap)
 	var payloads []types.Payload
 	if agent != nil {
 		payloads = agent.Payloads
 	}
 	payloads = r.appendInitialPromptPayload(ctx, session, sdk, payloads)
+	payloads, err = r.legacyRunnerPayloads(payloads)
+	if err != nil {
+		return err
+	}
 	if !r.tryClaimExec(session.ID) {
 		r.logger.Info().Str("session_id", session.ID).Str("sandbox", sbxName).Msg("execAfterReady already running for session; skipping duplicate")
 		return nil

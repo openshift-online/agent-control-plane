@@ -50,6 +50,8 @@ spec:
         - name: api-server
           imagePullPolicy: IfNotPresent
           env:
+            - name: CONTROL_PLANE_URL
+              value: http://ambient-control-plane:8080
             - name: AMBIENT_ENV
               value: development
             - name: AMBIENT_API_TOKEN
@@ -119,6 +121,7 @@ spec:
             periodSeconds: 10
       volumes:
         - name: tls-certs
+          $patch: replace
           emptyDir: {}
         - name: tmp
           emptyDir: {}
