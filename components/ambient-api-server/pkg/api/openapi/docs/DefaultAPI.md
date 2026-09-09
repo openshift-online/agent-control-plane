@@ -96,6 +96,10 @@ Method | HTTP request | Description
 [**GetClusterStatus**](DefaultAPI.md#GetClusterStatus) | **Get** /api/ambient/v1/clusters/{cluster_id}/status | Get cluster health status
 [**HeartbeatCluster**](DefaultAPI.md#HeartbeatCluster) | **Post** /api/ambient/v1/clusters/{cluster_id}/heartbeat | Trigger manual health check
 [**ListClusters**](DefaultAPI.md#ListClusters) | **Get** /api/ambient/v1/clusters | List clusters
+[**ListRuntimeProjects**](DefaultAPI.md#ListRuntimeProjects) | **Get** /api/ambient/v1/runtime/projects | List runtime records, including deleted records
+[**ListRuntimeSessions**](DefaultAPI.md#ListRuntimeSessions) | **Get** /api/ambient/v1/runtime/sessions | List runtime records, including deleted records
+[**PatchRuntimeProject**](DefaultAPI.md#PatchRuntimeProject) | **Patch** /api/ambient/v1/runtime/projects/{id} | Update runtime fields with a version check
+[**PatchRuntimeSession**](DefaultAPI.md#PatchRuntimeSession) | **Patch** /api/ambient/v1/runtime/sessions/{id} | Update runtime fields with a version check
 [**RegisterCluster**](DefaultAPI.md#RegisterCluster) | **Post** /api/ambient/v1/clusters | Register a new cluster
 [**UpdateCluster**](DefaultAPI.md#UpdateCluster) | **Patch** /api/ambient/v1/clusters/{cluster_id} | Update a cluster
 
@@ -2785,7 +2789,6 @@ Name | Type | Description  | Notes
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
 [[Back to Model list]](../README.md#documentation-for-models)
 [[Back to README]](../README.md)
-
 
 
 ## ApiAmbientV1ProjectsIdGet
@@ -6565,6 +6568,286 @@ Name | Type | Description  | Notes
 ### HTTP request headers
 
 - **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ListRuntimeProjects
+
+> ProjectList ListRuntimeProjects(ctx).Page(page).Size(size).Execute()
+
+List runtime records, including deleted records
+
+
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
+	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ListRuntimeProjects(context.Background()).Page(page).Size(size).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ListRuntimeProjects``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ListRuntimeProjects`: ProjectList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ListRuntimeProjects`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiListRuntimeProjectsRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
+ **size** | **int32** | Maximum number of records to return | [default to 100]
+
+### Return type
+
+[**ProjectList**](ProjectList.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ListRuntimeSessions
+
+> SessionList ListRuntimeSessions(ctx).Page(page).Size(size).Execute()
+
+List runtime records, including deleted records
+
+
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	page := int32(56) // int32 | Page number of record list when record list exceeds specified page size (optional) (default to 1)
+	size := int32(56) // int32 | Maximum number of records to return (optional) (default to 100)
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.ListRuntimeSessions(context.Background()).Page(page).Size(size).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.ListRuntimeSessions``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ListRuntimeSessions`: SessionList
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.ListRuntimeSessions`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiListRuntimeSessionsRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **page** | **int32** | Page number of record list when record list exceeds specified page size | [default to 1]
+ **size** | **int32** | Maximum number of records to return | [default to 100]
+
+### Return type
+
+[**SessionList**](SessionList.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## PatchRuntimeProject
+
+> Project PatchRuntimeProject(ctx, id).ProjectRuntimePatch(projectRuntimePatch).Execute()
+
+Update runtime fields with a version check
+
+
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	projectRuntimePatch := *openapiclient.NewProjectRuntimePatch(int64(123)) // ProjectRuntimePatch | 
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.PatchRuntimeProject(context.Background(), id).ProjectRuntimePatch(projectRuntimePatch).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.PatchRuntimeProject``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `PatchRuntimeProject`: Project
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.PatchRuntimeProject`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiPatchRuntimeProjectRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **projectRuntimePatch** | [**ProjectRuntimePatch**](ProjectRuntimePatch.md) |  | 
+
+### Return type
+
+[**Project**](Project.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## PatchRuntimeSession
+
+> Session PatchRuntimeSession(ctx, id).SessionRuntimePatch(sessionRuntimePatch).Execute()
+
+Update runtime fields with a version check
+
+
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/GIT_USER_ID/GIT_REPO_ID"
+)
+
+func main() {
+	id := "id_example" // string | The id of record
+	sessionRuntimePatch := *openapiclient.NewSessionRuntimePatch(int64(123)) // SessionRuntimePatch | 
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.DefaultAPI.PatchRuntimeSession(context.Background(), id).SessionRuntimePatch(sessionRuntimePatch).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `DefaultAPI.PatchRuntimeSession``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `PatchRuntimeSession`: Session
+	fmt.Fprintf(os.Stdout, "Response from `DefaultAPI.PatchRuntimeSession`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | The id of record | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiPatchRuntimeSessionRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **sessionRuntimePatch** | [**SessionRuntimePatch**](SessionRuntimePatch.md) |  | 
+
+### Return type
+
+[**Session**](Session.md)
+
+### Authorization
+
+[Bearer](../README.md#Bearer)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
 - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)

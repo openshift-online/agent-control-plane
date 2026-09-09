@@ -170,6 +170,10 @@ Class | Method | HTTP request | Description
 *DefaultAPI* | [**GetClusterStatus**](docs/DefaultAPI.md#getclusterstatus) | **Get** /api/ambient/v1/clusters/{cluster_id}/status | Get cluster health status
 *DefaultAPI* | [**HeartbeatCluster**](docs/DefaultAPI.md#heartbeatcluster) | **Post** /api/ambient/v1/clusters/{cluster_id}/heartbeat | Trigger manual health check
 *DefaultAPI* | [**ListClusters**](docs/DefaultAPI.md#listclusters) | **Get** /api/ambient/v1/clusters | List clusters
+*DefaultAPI* | [**ListRuntimeProjects**](docs/DefaultAPI.md#listruntimeprojects) | **Get** /api/ambient/v1/runtime/projects | List runtime records, including deleted records
+*DefaultAPI* | [**ListRuntimeSessions**](docs/DefaultAPI.md#listruntimesessions) | **Get** /api/ambient/v1/runtime/sessions | List runtime records, including deleted records
+*DefaultAPI* | [**PatchRuntimeProject**](docs/DefaultAPI.md#patchruntimeproject) | **Patch** /api/ambient/v1/runtime/projects/{id} | Update runtime fields with a version check
+*DefaultAPI* | [**PatchRuntimeSession**](docs/DefaultAPI.md#patchruntimesession) | **Patch** /api/ambient/v1/runtime/sessions/{id} | Update runtime fields with a version check
 *DefaultAPI* | [**RegisterCluster**](docs/DefaultAPI.md#registercluster) | **Post** /api/ambient/v1/clusters | Register a new cluster
 *DefaultAPI* | [**UpdateCluster**](docs/DefaultAPI.md#updatecluster) | **Patch** /api/ambient/v1/clusters/{cluster_id} | Update a cluster
 
@@ -208,6 +212,7 @@ Class | Method | HTTP request | Description
  - [ProjectHomeAgent](docs/ProjectHomeAgent.md)
  - [ProjectList](docs/ProjectList.md)
  - [ProjectPatchRequest](docs/ProjectPatchRequest.md)
+ - [ProjectRuntimePatch](docs/ProjectRuntimePatch.md)
  - [ProjectSettings](docs/ProjectSettings.md)
  - [ProjectSettingsList](docs/ProjectSettingsList.md)
  - [ProjectSettingsPatchRequest](docs/ProjectSettingsPatchRequest.md)
@@ -232,6 +237,7 @@ Class | Method | HTTP request | Description
  - [SessionMessage](docs/SessionMessage.md)
  - [SessionMessagePushRequest](docs/SessionMessagePushRequest.md)
  - [SessionPatchRequest](docs/SessionPatchRequest.md)
+ - [SessionRuntimePatch](docs/SessionRuntimePatch.md)
  - [SessionStatusPatchRequest](docs/SessionStatusPatchRequest.md)
  - [StartRequest](docs/StartRequest.md)
  - [StartResponse](docs/StartResponse.md)
