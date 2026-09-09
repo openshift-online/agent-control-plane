@@ -129,7 +129,7 @@ export function SandboxLogsTab({ session }: { session: DomainSession }) {
         )}
       </div>
 
-      {error && (
+      {isActive && error && (
         <div className="flex flex-wrap items-center gap-3 rounded-md border border-status-error-border bg-status-error p-3 text-sm text-status-error-foreground">
           <p role="alert" className="min-w-0 break-words">{error}</p>
           <Button variant="outline" size="sm" onClick={retry}>Retry</Button>

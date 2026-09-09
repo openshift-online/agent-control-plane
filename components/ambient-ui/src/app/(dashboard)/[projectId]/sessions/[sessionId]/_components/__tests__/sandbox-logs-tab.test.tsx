@@ -52,3 +52,13 @@ describe('SandboxLogsTab connection failure', () => {
     expect(retry).toHaveBeenCalledOnce()
   })
 })
+
+
+it('removes Retry and shows the stopped explanation after a failed stream stops', () => {
+  const { rerender } = render(<SandboxLogsTab session={makeSession()} />)
+  expect(screen.getByRole('button', {name: 'Retry'})).toBeInTheDocument()
+  rerender(<SandboxLogsTab session={makeSession({phase: 'Stopped'})} />)
+  expect(screen.queryByRole('button', {name: 'Retry'})).not.toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByText('Session is not running. Logs stream while the sandbox is active.')).toBeInTheDocument()
+})

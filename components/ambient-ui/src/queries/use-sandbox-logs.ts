@@ -135,6 +135,7 @@ export function useSandboxLogs(
       }
       setIsConnected(false)
       setIsReconnecting(false)
+      setError(null)
     }
   }, [sessionId, enabled, adapter, retryKey])
 

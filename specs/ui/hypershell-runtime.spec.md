@@ -54,7 +54,9 @@ available by keyboard.
 Sandbox logs SHALL stop automatic reconnect attempts after five failed retries.
 They SHALL clear the reconnecting state and show an error with a Retry button,
 including when no log entries were received. Retry SHALL start a new connection
-attempt. Stopping the session SHALL cancel pending reconnect timers.
+attempt. Stopping the session SHALL cancel pending reconnect timers, clear a
+connection error, and hide Retry. A stopped session without saved logs SHALL show
+that logs stream only while the sandbox is active.
 
 #### Scenario: Log endpoint is unavailable
 

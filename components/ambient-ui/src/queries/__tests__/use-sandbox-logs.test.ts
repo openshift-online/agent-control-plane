@@ -46,6 +46,22 @@ describe('sandbox log retries', () => {
     expect(result.current.isConnected).toBe(true)
   })
 
+  it('clears an exhausted connection error when streaming stops', () => {
+    const { result, rerender } = renderHook(({enabled}) => useSandboxLogs('session-a', enabled, port), {initialProps: {enabled: true}})
+    for (let attempt = 0; attempt < 5; attempt++) {
+      act(() => FakeEventSource.instances[attempt].onerror?.())
+      act(() => vi.advanceTimersByTime(3000))
+    }
+    act(() => FakeEventSource.instances[5].onerror?.())
+    expect(result.current.error).toMatch('five retries')
+    rerender({enabled: false})
+    expect(result.current.error).toBeNull()
+    expect(result.current.isReconnecting).toBe(false)
+    act(() => result.current.retry())
+    act(() => vi.advanceTimersByTime(30000))
+    expect(FakeEventSource.instances).toHaveLength(6)
+  })
+
   it('cancels pending retry when the session stops', () => {
     const { result, rerender } = renderHook(({enabled}) => useSandboxLogs('session-a', enabled, port), {initialProps: {enabled: true}})
     act(() => FakeEventSource.instances[0].onerror?.())
