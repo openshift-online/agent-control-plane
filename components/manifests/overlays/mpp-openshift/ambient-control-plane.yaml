@@ -37,7 +37,7 @@ spec:
                   name: ambient-control-plane-token
                   key: token
             - name: AMBIENT_API_SERVER_URL
-              value: "http://ambient-api-server.ambient-code--runtime-int.svc:8000"
+              value: "https://ambient-api-server.ambient-code--runtime-int.svc:8000"
             - name: AMBIENT_GRPC_SERVER_ADDR
               value: "ambient-api-server.ambient-code--runtime-int.svc:9000"
             - name: AMBIENT_GRPC_USE_TLS

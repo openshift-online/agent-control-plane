@@ -26,6 +26,7 @@ spec:
             - --https-cert-file=/etc/tls/tls.crt
             - --https-key-file=/etc/tls/tls.key
             - --enable-tls=true
+            - --tls-min-version=1.2
             - --tls-cert-file=/etc/tls/tls.crt
             - --tls-key-file=/etc/tls/tls.key
             - --tls-auto-detect-kubernetes=false

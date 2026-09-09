@@ -17,6 +17,7 @@ resources:
 
 # Patches for e2e environment
 patches:
+- path: plaintext-transport-patch.yaml
 - path: namespace-patch.yaml
   target:
     kind: Namespace

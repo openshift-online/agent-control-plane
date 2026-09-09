@@ -15,6 +15,7 @@ resources:
 
 # Patches for local dev environment
 patches:
+- path: service-urls-patch.yaml
 # Ambient API Server: enable end-to-end TLS (OpenShift service-ca provides certs)
 - path: ambient-api-server-tls-patch.yaml
   target:

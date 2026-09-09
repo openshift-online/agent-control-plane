@@ -89,7 +89,7 @@ spec:
             - name: AMBIENT_RUNNER_PUBLIC_KEY_FILE
               value: /configs/runner/public.pem
             - name: CONTROL_PLANE_URL
-              value: https://ambient-control-plane:8080
+              value: https://ambient-control-plane.ambient-code--runtime-int.svc:8080
             - name: AMBIENT_ENV
               value: production
             - name: GRPC_SERVICE_ACCOUNT
@@ -130,14 +130,14 @@ spec:
             httpGet:
               path: /api/ambient
               port: 8000
-              scheme: HTTP
+              scheme: HTTPS
             initialDelaySeconds: 15
             periodSeconds: 5
           readinessProbe:
             httpGet:
               path: /healthcheck
               port: 4434
-              scheme: HTTP
+              scheme: HTTPS
               httpHeaders:
                 - name: User-Agent
                   value: Probe

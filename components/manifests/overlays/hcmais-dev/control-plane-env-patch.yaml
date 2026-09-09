@@ -9,7 +9,7 @@ spec:
         - name: ambient-control-plane
           env:
             - name: AMBIENT_API_SERVER_URL
-              value: "http://ambient-api-server.ambient-dev.svc:8000"
+              value: "https://ambient-api-server.ambient-dev.svc:8000"
             - name: AMBIENT_GRPC_SERVER_ADDR
               value: "ambient-api-server.ambient-dev.svc:9000"
             - name: AMBIENT_GRPC_USE_TLS
@@ -31,7 +31,7 @@ spec:
             - name: PLATFORM_MODE
               value: "standard"
             - name: MCP_API_SERVER_URL
-              value: "http://ambient-api-server.ambient-dev.svc:8000"
+              value: "https://ambient-api-server.ambient-dev.svc:8000"
             - name: USE_VERTEX
               value: "1"
               valueFrom: null

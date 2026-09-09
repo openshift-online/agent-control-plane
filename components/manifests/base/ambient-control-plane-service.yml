@@ -30,6 +30,10 @@ spec:
           capabilities:
             drop: ["ALL"]
         env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         - name: AMBIENT_API_TOKEN
           valueFrom:
             secretKeyRef:
@@ -46,9 +50,9 @@ spec:
               name: ambient-api-server
               key: clientSecret
         - name: AMBIENT_API_SERVER_URL
-          value: "https://ambient-api-server.ambient-code.svc.cluster.local:8000"
+          value: "https://ambient-api-server.$(POD_NAMESPACE).svc:8000"
         - name: AMBIENT_GRPC_SERVER_ADDR
-          value: "ambient-api-server.ambient-code.svc.cluster.local:9000"
+          value: "ambient-api-server.$(POD_NAMESPACE).svc:9000"
         - name: AMBIENT_GRPC_USE_TLS
           value: "true"
         - name: MODE
@@ -96,7 +100,7 @@ spec:
         - name: CP_TOKEN_TLS_KEY_FILE
           value: /etc/cp-tls/tls.key
         - name: CP_TOKEN_URL
-          value: "https://ambient-control-plane.ambient-code.svc.cluster.local:8080/token"
+          value: "https://ambient-control-plane.$(POD_NAMESPACE).svc:8080/token"
         - name: CP_RUNTIME_NAMESPACE
           valueFrom:
             fieldRef:

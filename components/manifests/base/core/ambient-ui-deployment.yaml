@@ -22,14 +22,18 @@ spec:
         - containerPort: 3000
           name: http
         env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         - name: API_SERVER_URL
-          value: "http://ambient-api-server:8000"
+          value: "https://ambient-api-server.$(POD_NAMESPACE).svc:8000"
         - name: NODE_ENV
           value: "production"
         - name: NODE_EXTRA_CA_CERTS
           value: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
         - name: CONTROL_PLANE_URL
-          value: "https://ambient-control-plane:8080"
+          value: "https://ambient-control-plane.$(POD_NAMESPACE).svc:8080"
         - name: SSO_ISSUER_URL
           valueFrom:
             secretKeyRef:

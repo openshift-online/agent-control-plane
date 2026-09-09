@@ -37,7 +37,9 @@ spec:
               name: http
           env:
             - name: API_SERVER_URL
-              value: "http://ambient-api-server.ambient-code--runtime-int.svc:8000"
+              value: "https://ambient-api-server.ambient-code--runtime-int.svc:8000"
+            - name: CONTROL_PLANE_URL
+              value: "https://ambient-control-plane.ambient-code--runtime-int.svc:8080"
             - name: NODE_ENV
               value: "production"
             - name: SSO_ISSUER_URL
@@ -61,15 +63,12 @@ spec:
                   name: sso-credentials
                   key: SESSION_SECRET
             - name: NODE_EXTRA_CA_CERTS
-              value: "/etc/ssl/service-ca/service-ca.crt"
+              value: "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
           volumeMounts:
             - name: next-cache
               mountPath: /app/.next/cache
             - name: tmp
               mountPath: /tmp
-            - name: service-ca
-              mountPath: /etc/ssl/service-ca
-              readOnly: true
           resources:
             requests:
               cpu: 100m
@@ -100,10 +99,6 @@ spec:
           emptyDir: {}
         - name: tmp
           emptyDir: {}
-        - name: service-ca
-          configMap:
-            name: openshift-service-ca.crt
-            optional: true
 ---
 apiVersion: v1
 kind: Service

@@ -56,6 +56,24 @@ The base manifests assume full TLS and JWT authentication. Overlays strip these 
 | `kind-local` | disabled | disabled | disabled |
 | `e2e` | disabled | disabled | disabled |
 
+OpenShift API servers require `--enable-tls=true`, the `--tls-cert-file` and
+`--tls-key-file` paths, and `--tls-auto-detect-kubernetes=false`. The pinned
+server framework does not enable gRPC TLS with `--grpc-enable-tls=true` alone.
+The manifests set TLS 1.2 as the minimum version. REST and health probes use
+HTTPS. API Routes use `reencrypt` termination.
+
+Internal clients use `service.namespace.svc` names to match OpenShift serving
+certificates. The API server and control plane load the Service CA for outbound
+requests. The UI uses `NODE_EXTRA_CA_CERTS` with the Service CA file. Kind and E2E
+explicitly disable server TLS and use HTTP. Both keep the runner public key mount.
+
+To check the rendered transport settings without a cluster, install PyYAML and
+run this command from the repository root with `kubectl` or `oc` on `PATH`:
+
+```bash
+python3 -m unittest discover -s scripts/tests -p test_manifest_tls.py
+```
+
 ## Overlays
 
 ### `production/` — OpenShift (ROSA / on-prem)
