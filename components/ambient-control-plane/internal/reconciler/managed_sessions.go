@@ -400,7 +400,15 @@ func (r *ManagedReconciler) reconcileManagedProcess(ctx context.Context, sdk, pr
 
 func (r *ManagedReconciler) stopManagedSession(ctx context.Context, sdk *sdkclient.Client, s types.Session, target string) error {
 	if s.RuntimeStatus == "Stopped" {
+		if s.Phase == PhaseStopping {
+			_, err := r.patchSession(ctx, sdk, s, map[string]interface{}{"phase": PhaseStopped, "expected_phase": s.Phase, "runner_generation": ""})
+			return err
+		}
 		return nil
+	}
+	if s.RuntimeStatus != "Stopping" {
+		_, err := r.patchSession(ctx, sdk, s, map[string]interface{}{"runtime_status": "Stopping", "runner_generation": ""})
+		return err
 	}
 	response, err := r.gateway.GetSandbox(ctx, target, s.SandboxName)
 	if err != nil && status.Code(err) != codes.NotFound {

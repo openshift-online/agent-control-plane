@@ -208,3 +208,28 @@ func TestManagedSandboxOwnershipRequiresLabelsAndStoredIdentity(t *testing.T) {
 		t.Fatal("accepted missing sandbox")
 	}
 }
+
+func TestManagedStopRecordsCleanupBeforeGatewayCall(t *testing.T) {
+	for _, phase := range []string{PhaseCompleted, PhaseFailed, PhaseStopping} {
+		t.Run(phase, func(t *testing.T) {
+			var patch map[string]interface{}
+			api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if err := json.NewDecoder(req.Body).Decode(&patch); err != nil {
+					t.Error(err)
+				}
+				fmt.Fprint(w, `{"id":"session","runtime_status":"Stopping","runtime_version":1}`)
+			}))
+			defer api.Close()
+			sdk, _ := sdkclient.NewServiceClient(api.URL, "test-service-identity-value")
+			r := &ManagedReconciler{sessions: map[string]types.Session{}}
+			s := types.Session{ObjectReference: types.ObjectReference{ID: "session"}, Phase: phase, RuntimeStatus: "Running", RunnerGeneration: "old"}
+			// A nil gateway proves cleanup state is saved before external operations.
+			if err := r.stopManagedSession(context.Background(), sdk, s, "target"); err != nil {
+				t.Fatal(err)
+			}
+			if patch["runtime_status"] != "Stopping" || patch["runner_generation"] != "" {
+				t.Fatal("cleanup state was not persisted")
+			}
+		})
+	}
+}
