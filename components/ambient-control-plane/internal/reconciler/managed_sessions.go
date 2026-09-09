@@ -151,9 +151,9 @@ func (r *ManagedReconciler) reconcileManagedSession(ctx context.Context, sdk *sd
 			return fmt.Errorf("running sandbox is missing; explicit session restart is required")
 		}
 		helper := &SimpleKubeReconciler{factory: r.factory, cfg: r.runnerCfg, logger: r.logger}
-		policy, err := helper.resolveAgentSandboxPolicy(ctx, projectSDK, s.ProjectID, agent)
-		if err != nil {
-			return err
+		policy, policyErr := helper.resolveAgentSandboxPolicy(ctx, projectSDK, s.ProjectID, agent)
+		if policyErr != nil {
+			return policyErr
 		}
 		if policy != nil {
 			if policy.NetworkPolicies == nil {
@@ -165,9 +165,9 @@ func (r *ManagedReconciler) reconcileManagedSession(ctx context.Context, sdk *sd
 			}
 			policy.NetworkPolicies[acpInternalPolicyKey] = rule
 		}
-		driver, err := structpb.NewStruct(r.cfg.SandboxDriverConfig)
-		if err != nil {
-			return fmt.Errorf("sandbox driver configuration: %w", err)
+		driver, driverErr := structpb.NewStruct(r.cfg.SandboxDriverConfig)
+		if driverErr != nil {
+			return fmt.Errorf("sandbox driver configuration: %w", driverErr)
 		}
 		image := helper.resolveSandboxImage(agent)
 		if image == "" {
@@ -229,9 +229,10 @@ func (r *ManagedReconciler) managedEnvironment(s types.Session, agent *types.Age
 	for k, v := range plan.Environment {
 		env[k] = v
 	}
-	for k, v := range map[string]string{"SESSION_ID": s.ID, "AMBIENT_PROJECT_ID": s.ProjectID, "AGENTIC_SESSION_NAME": s.Name, "AGENTIC_SESSION_NAMESPACE": s.ProjectID, "PROJECT_NAME": s.ProjectID, "AGENT_ID": s.AgentID, "WORKSPACE_PATH": "/sandbox/workspace", "ARTIFACTS_DIR": "artifacts", "AMBIENT_CP_TOKEN_URL": r.cfg.RunnerTokenURL, "AMBIENT_GRPC_URL": r.cfg.RunnerGRPCAddress, "AMBIENT_GRPC_ENABLED": "true", "AMBIENT_GRPC_USE_TLS": "true", "HOME": "/sandbox", "LOG_LEVEL": r.runnerCfg.RunnerLogLevel, "STOP_ON_RUN_FINISHED": strconv.FormatBool(s.StopOnRunFinished), "LLM_MODEL": s.LlmModel} {
+	for k, v := range map[string]string{"SESSION_ID": s.ID, "AMBIENT_PROJECT_ID": s.ProjectID, "AGENTIC_SESSION_NAME": s.Name, "AGENTIC_SESSION_NAMESPACE": s.ProjectID, "PROJECT_NAME": s.ProjectID, "AGENT_ID": s.AgentID, "WORKSPACE_PATH": "/sandbox/workspace", "ACP_MESSAGE_CURSOR_FILE": "/sandbox/workspace/.acp-runtime/message-cursor.json", "ARTIFACTS_DIR": "artifacts", "AMBIENT_CP_TOKEN_URL": r.cfg.RunnerTokenURL, "AMBIENT_GRPC_URL": r.cfg.RunnerGRPCAddress, "AMBIENT_GRPC_ENABLED": "true", "AMBIENT_GRPC_USE_TLS": "true", "HOME": "/sandbox", "LOG_LEVEL": r.runnerCfg.RunnerLogLevel, "STOP_ON_RUN_FINISHED": strconv.FormatBool(s.StopOnRunFinished), "LLM_MODEL": s.LlmModel} {
 		env[k] = v
 	}
+	delete(env, "RESUME_AFTER_SEQ")
 	delete(env, "AMBIENT_CP_TOKEN_PUBLIC_KEY")
 	delete(env, "AMBIENT_TOKEN")
 	delete(env, "AMBIENT_API_TOKEN")
@@ -360,7 +361,6 @@ func (r *ManagedReconciler) reconcileManagedProcess(ctx context.Context, sdk, pr
 		if agent != nil {
 			extra = agent.Payloads
 		}
-		extra = helper.appendInitialPromptPayload(ctx, s, projectSDK, extra)
 		converted, _ := convertPayloads(extra, r.logger, s.SandboxName)
 		if err := r.gateway.UploadPayloads(ctx, target, s.SandboxID, converted); err != nil {
 			return err
@@ -375,6 +375,9 @@ func (r *ManagedReconciler) reconcileManagedProcess(ctx context.Context, sdk, pr
 		}
 		env, err := r.managedEnvironment(s, agent, plan)
 		if err != nil {
+			return err
+		}
+		if err := r.applyManagedContext(ctx, projectSDK, s, agent, env); err != nil {
 			return err
 		}
 		env["AMBIENT_RUNNER_BOOTSTRAP_TOKEN"] = bootstrap
