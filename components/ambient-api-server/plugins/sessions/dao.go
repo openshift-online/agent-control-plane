@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"context"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/runtimeapi"
 
 	"gorm.io/gorm/clause"
 
@@ -53,9 +54,26 @@ func (d *sqlSessionDao) Create(ctx context.Context, session *Session) (*Session,
 
 func (d *sqlSessionDao) Replace(ctx context.Context, session *Session) (*Session, error) {
 	g2 := (*d.sessionFactory).New(ctx)
-	if err := g2.Omit(clause.Associations).Save(session).Error; err != nil {
-		db.MarkForRollback(ctx, err)
-		return nil, err
+	// User writes cannot replace runtime bindings or recreate a deleted row.
+	omit := []string{clause.Associations, "id", "created_at", "deleted_at", "runtime_version"}
+	for field := range runtimeFields {
+		switch field {
+		case "phase", "start_time", "completion_time", "kube_cr_name", "kube_cr_uid", "kube_namespace", "sandbox_logs_snapshot", "sandbox_policy_snapshot", "sdk_session_id", "reconciled_repos", "reconciled_workflow":
+			continue
+		}
+		omit = append(omit, field)
+	}
+	result := g2.Model(session).Where("runtime_version = ?", session.RuntimeVersion).Select("*").Omit(omit...).Updates(session)
+	if result.Error != nil {
+		db.MarkForRollback(ctx, result.Error)
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		var current Session
+		if err := g2.Take(&current, "id = ?", session.ID).Error; err != nil {
+			return nil, err
+		}
+		return nil, runtimeapi.ErrConflict
 	}
 	return session, nil
 }

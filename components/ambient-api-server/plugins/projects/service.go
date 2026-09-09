@@ -2,7 +2,9 @@ package projects
 
 import (
 	"context"
+	stdErrors "errors"
 	"fmt"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/runtimeapi"
 	"regexp"
 	"time"
 
@@ -190,7 +192,7 @@ func (s *sqlProjectService) Replace(ctx context.Context, project *Project) (*Pro
 
 	project, err := s.projectDao.Replace(ctx, project)
 	if err != nil {
-		return nil, services.HandleUpdateError("Project", err)
+		return nil, handleRuntimeUpdateError("Project", err)
 	}
 
 	_, evErr := s.events.Create(ctx, &api.Event{
@@ -199,7 +201,7 @@ func (s *sqlProjectService) Replace(ctx context.Context, project *Project) (*Pro
 		EventType: api.UpdateEventType,
 	})
 	if evErr != nil {
-		return nil, services.HandleUpdateError("Project", evErr)
+		return nil, handleRuntimeUpdateError("Project", evErr)
 	}
 
 	return project, nil
@@ -341,4 +343,11 @@ func (s *sqlProjectService) All(ctx context.Context) (ProjectList, *errors.Servi
 		return nil, errors.GeneralError("Unable to get all projects: %s", err)
 	}
 	return projects, nil
+}
+
+func handleRuntimeUpdateError(resource string, err error) *errors.ServiceError {
+	if stdErrors.Is(err, runtimeapi.ErrConflict) {
+		return errors.Conflict("Resource runtime state changed; read it again")
+	}
+	return services.HandleUpdateError(resource, err)
 }

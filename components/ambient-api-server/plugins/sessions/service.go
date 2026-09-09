@@ -2,7 +2,9 @@ package sessions
 
 import (
 	"context"
+	stdErrors "errors"
 	stderrors "errors"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/runtimeapi"
 
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
@@ -106,7 +108,7 @@ func (s *sqlSessionService) Replace(ctx context.Context, session *Session) (*Ses
 	var replaceErr error
 	session, replaceErr = s.sessionDao.Replace(ctx, session)
 	if replaceErr != nil {
-		return nil, services.HandleUpdateError("Session", replaceErr)
+		return nil, handleRuntimeUpdateError("Session", replaceErr)
 	}
 
 	_, evErr := s.events.Create(ctx, &api.Event{
@@ -115,7 +117,7 @@ func (s *sqlSessionService) Replace(ctx context.Context, session *Session) (*Ses
 		EventType: api.UpdateEventType,
 	})
 	if evErr != nil {
-		return nil, services.HandleUpdateError("Session", evErr)
+		return nil, handleRuntimeUpdateError("Session", evErr)
 	}
 
 	return session, nil
@@ -228,7 +230,7 @@ func (s *sqlSessionService) UpdateStatus(ctx context.Context, id string, patch *
 
 	session, err = s.sessionDao.Replace(ctx, session)
 	if err != nil {
-		return nil, services.HandleUpdateError("Session", err)
+		return nil, handleRuntimeUpdateError("Session", err)
 	}
 
 	_, evErr := s.events.Create(ctx, &api.Event{
@@ -237,7 +239,7 @@ func (s *sqlSessionService) UpdateStatus(ctx context.Context, id string, patch *
 		EventType: api.UpdateEventType,
 	})
 	if evErr != nil {
-		return nil, services.HandleUpdateError("Session", evErr)
+		return nil, handleRuntimeUpdateError("Session", evErr)
 	}
 
 	return session, nil
@@ -263,7 +265,7 @@ func (s *sqlSessionService) Start(ctx context.Context, id string) (*Session, *er
 
 	session, err = s.sessionDao.Replace(ctx, session)
 	if err != nil {
-		return nil, services.HandleUpdateError("Session", err)
+		return nil, handleRuntimeUpdateError("Session", err)
 	}
 
 	_, evErr := s.events.Create(ctx, &api.Event{
@@ -272,7 +274,7 @@ func (s *sqlSessionService) Start(ctx context.Context, id string) (*Session, *er
 		EventType: api.UpdateEventType,
 	})
 	if evErr != nil {
-		return nil, services.HandleUpdateError("Session", evErr)
+		return nil, handleRuntimeUpdateError("Session", evErr)
 	}
 
 	return session, nil
@@ -336,7 +338,7 @@ func (s *sqlSessionService) Stop(ctx context.Context, id string) (*Session, *err
 
 	session, err = s.sessionDao.Replace(ctx, session)
 	if err != nil {
-		return nil, services.HandleUpdateError("Session", err)
+		return nil, handleRuntimeUpdateError("Session", err)
 	}
 
 	_, evErr := s.events.Create(ctx, &api.Event{
@@ -345,8 +347,15 @@ func (s *sqlSessionService) Stop(ctx context.Context, id string) (*Session, *err
 		EventType: api.UpdateEventType,
 	})
 	if evErr != nil {
-		return nil, services.HandleUpdateError("Session", evErr)
+		return nil, handleRuntimeUpdateError("Session", evErr)
 	}
 
 	return session, nil
+}
+
+func handleRuntimeUpdateError(resource string, err error) *errors.ServiceError {
+	if stdErrors.Is(err, runtimeapi.ErrConflict) {
+		return errors.Conflict("Resource runtime state changed; read it again")
+	}
+	return services.HandleUpdateError(resource, err)
 }

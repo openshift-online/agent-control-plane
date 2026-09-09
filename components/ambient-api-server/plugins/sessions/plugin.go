@@ -27,9 +27,12 @@ import (
 
 const EventSource = "Sessions"
 
+var registeredSessionFactory *db.SessionFactory
+
 type ServiceLocator func() SessionService
 
 func NewServiceLocator(env *environments.Env) ServiceLocator {
+	registeredSessionFactory = &env.Database.SessionFactory
 	return func() SessionService {
 		return NewSessionService(
 			db.NewAdvisoryLockFactory(env.Database.SessionFactory),
