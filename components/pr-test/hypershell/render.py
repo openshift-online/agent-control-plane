@@ -2,6 +2,7 @@
 """Render ACP resources for an existing Hypershell service and OIDC realm."""
 import argparse
 import json
+import re
 from pathlib import Path
 
 
@@ -19,6 +20,9 @@ def postgres_identity(pod, image):
 
 
 def render(config):
+    api_memory_request = config.get('api_memory_request', '64Mi')
+    if not isinstance(api_memory_request, str) or not re.fullmatch(r'[1-9][0-9]*Mi', api_memory_request) or int(api_memory_request[:-2]) > 1024:
+        raise ValueError('api_memory_request must use integer Mi units from 1Mi to 1024Mi')
     namespace = config['namespace']
     domain = config['apps_domain']
     issuer = config['oidc_issuer'].rstrip('/')
@@ -59,7 +63,7 @@ def render(config):
             'securityContext': {'runAsNonRoot': True, 'allowPrivilegeEscalation': False,
                 'readOnlyRootFilesystem': True, 'capabilities': {'drop': ['ALL']}},
             'env': environment, 'ports': [{'containerPort': p} for p in ports],
-            'resources': {'requests': {'cpu': '50m', 'memory': '64Mi' if name in ('ambient-api-server-db', 'ambient-api-server', 'ambient-control-plane') else '128Mi'},
+            'resources': {'requests': {'cpu': '50m', 'memory': api_memory_request if name == 'ambient-api-server' else ('64Mi' if name in ('ambient-api-server-db', 'ambient-control-plane') else '128Mi')},
                 'limits': {'cpu': '2', 'memory': '1Gi'}},
             'volumeMounts': [mount('tmp', '/tmp')] + (mounts or [])}
         if command:

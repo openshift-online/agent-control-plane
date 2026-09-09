@@ -51,6 +51,10 @@ Kubernetes `secretKeyRef` records. Set these connection variables:
 - `HYPERSHELL_SANDBOX_DRIVER_CONFIG`: optional driver settings, including
   `workspace_storage_class` when a specific storage class is required.
 
+`api_memory_request` sets the API pod memory request. It defaults to `64Mi` and
+accepts integer Mi units from `1Mi` to `1024Mi`. Its limit stays `1Gi`. The jshell
+test uses `48Mi` after observing `21Mi` of API memory use.
+
 ```bash
 python3 components/pr-test/hypershell/setup-secrets.py /private/path/config.json \
   --cp-client-secret-file /private/path/cp-secret \

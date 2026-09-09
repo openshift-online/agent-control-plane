@@ -5,6 +5,7 @@
   "cp_client_id": "acp-hypershell-cp",
   "ui_client_id": "acp-hypershell-ui",
   "storage_class": "gp3-csi",
+  "api_memory_request": "64Mi",
   "images": {
     "api_server": "image-registry.openshift-image-registry.svc:5000/acp-hypershell/acp-api-server:REPLACE",
     "control_plane": "image-registry.openshift-image-registry.svc:5000/acp-hypershell/acp-control-plane:REPLACE",

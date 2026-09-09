@@ -14,6 +14,7 @@ class RenderTests(unittest.TestCase):
         config = json.loads(Path(__file__).with_name('config.example.json').read_text())
         config.update(api_tls=True, api_tls_ca='public-ca', grpc_tls_secret='grpc-cert',
                       grpc_route_termination='passthrough', runtime_ca_configmap='runtime-ca')
+        self.config = config
         self.items = {(item['kind'], item['metadata']['name']): item for item in render(config)['items']}
 
     def test_both_api_protocols_use_verified_tls(self):
@@ -50,6 +51,20 @@ class RenderTests(unittest.TestCase):
         volumes = {v['name']: v for v in pod['volumes']}
         self.assertIn('emptyDir', volumes[server_tmp])
         self.assertIn('emptyDir', volumes[migration_tmp])
+
+    def test_api_request_override_keeps_limit_and_other_requests(self):
+        self.config['api_memory_request'] = '48Mi'
+        items = {(item['kind'], item['metadata']['name']): item for item in render(self.config)['items']}
+        api = items['Deployment', 'ambient-api-server']['spec']['template']['spec']['containers'][0]
+        self.assertEqual(api['resources']['requests']['memory'], '48Mi')
+        self.assertEqual(api['resources']['limits']['memory'], '1Gi')
+        cp = items['Deployment', 'ambient-control-plane']['spec']['template']['spec']['containers'][0]
+        self.assertEqual(cp['resources']['requests']['memory'], '64Mi')
+        for value in ['0Mi', '-1Mi', '1025Mi', '48', 48, None]:
+            with self.subTest(value=value):
+                self.config['api_memory_request'] = value
+                with self.assertRaises(ValueError):
+                    render(self.config)
 
     def test_hypershell_migration_and_server_have_separate_log_directories(self):
         with tempfile.TemporaryDirectory() as directory:
