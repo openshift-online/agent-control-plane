@@ -164,6 +164,17 @@ func TestManagedEnvironmentProtectsIdentityAndUsesExternalEndpoints(t *testing.T
 	if len(rule.Endpoints) != 2 || rule.Endpoints[0].Host != "cp.example" || rule.Endpoints[1].Host != "runner.example" {
 		t.Fatal("policy did not use external callback hosts")
 	}
+	// The image policy already declares uvicorn. Native policy merges require
+	// its explicit declaration when the callback authorization changes.
+	paths := map[string]bool{}
+	for _, binary := range rule.Binaries {
+		paths[binary.Path] = true
+	}
+	for _, path := range []string{managedPython, "/sandbox/.venv/bin/python3", "/sandbox/.venv/bin/uvicorn", "/sandbox/.uv/python/cpython-*/bin/python*"} {
+		if !paths[path] {
+			t.Errorf("callback policy omits runner binary %s", path)
+		}
+	}
 }
 
 func TestManagedSessionEnvironmentValidatesInputAndKeepsLimits(t *testing.T) {

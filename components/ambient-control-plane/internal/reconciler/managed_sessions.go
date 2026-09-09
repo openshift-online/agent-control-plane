@@ -298,7 +298,7 @@ func (r *ManagedReconciler) managedNetworkRule() (*sandboxpb.NetworkPolicyRule, 
 	if err != nil {
 		return nil, err
 	}
-	return &sandboxpb.NetworkPolicyRule{Name: "acp-session-callbacks", Endpoints: []*sandboxpb.NetworkEndpoint{{Host: u.Hostname(), Port: port}, {Host: host, Port: uint32(n)}}, Binaries: []*sandboxpb.NetworkBinary{{Path: managedPython}, {Path: "/sandbox/.venv/bin/python3"}, {Path: "/sandbox/.uv/python/cpython-*/bin/python*"}}}, nil
+	return &sandboxpb.NetworkPolicyRule{Name: "acp-session-callbacks", Endpoints: []*sandboxpb.NetworkEndpoint{{Host: u.Hostname(), Port: port}, {Host: host, Port: uint32(n)}}, Binaries: acpCallbackBinaries()}, nil
 }
 
 func (r *ManagedReconciler) applyManagedNetworkPolicy(ctx context.Context, target, name string) error {
