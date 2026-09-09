@@ -281,6 +281,7 @@ func printSessionTable(printer *output.Printer, sessions []sdktypes.Session) err
 		{Name: "PROJECT", Width: 20},
 		{Name: "PHASE", Width: 12},
 		{Name: "MODEL", Width: 16},
+		{Name: "RUNTIME", Width: 20},
 		{Name: "AGE", Width: 10},
 	}
 
@@ -292,7 +293,7 @@ func printSessionTable(printer *output.Printer, sessions []sdktypes.Session) err
 		if s.CreatedAt != nil {
 			age = output.FormatAge(time.Since(*s.CreatedAt))
 		}
-		table.WriteRow(s.ID, s.Name, s.ProjectID, s.Phase, s.LlmModel, age)
+		table.WriteRow(s.ID, s.Name, s.ProjectID, s.Phase, s.LlmModel, s.RuntimeStatus, age)
 	}
 	return nil
 }
@@ -327,13 +328,14 @@ func printProjectTable(printer *output.Printer, projects []sdktypes.Project) err
 		{Name: "ID", Width: 27},
 		{Name: "NAME", Width: 30},
 		{Name: "STATUS", Width: 10},
+		{Name: "GATEWAY", Width: 20},
 	}
 
 	table := output.NewTable(printer.Writer(), columns)
 	table.WriteHeaders()
 
 	for _, p := range projects {
-		table.WriteRow(p.ID, p.Name, p.Status)
+		table.WriteRow(p.ID, p.Name, p.Status, p.GatewayStatus)
 	}
 	return nil
 }
