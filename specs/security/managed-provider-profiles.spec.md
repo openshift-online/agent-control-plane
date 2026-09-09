@@ -50,3 +50,40 @@ NOT retain access until session termination after a binding is removed.
 - THEN ACP SHALL detach and delete its provider
 - OR it SHALL stop the sandbox if removal cannot complete
 - AND unrelated sessions SHALL retain their providers
+
+### Requirement: Google SDK access
+
+Bound Google service-account and ADC credentials SHALL use the `google-cloud`
+profile. The gateway SHALL refresh access tokens. The sandbox SHALL use the
+OpenShell metadata emulator. ACP SHALL NOT copy private keys or refresh tokens
+into sandbox files or environment variables.
+
+#### Scenario: ADC refresh
+
+- GIVEN a bound Google credential contains ADC refresh data
+- WHEN ACP prepares a session
+- THEN the gateway SHALL receive the refresh material
+- AND the sandbox SHALL use metadata access without an ADC secret file
+
+### Requirement: Kubernetes bearer profile
+
+ACP SHALL accept kubeconfig credentials with an embedded bearer token and a
+verified HTTPS API origin. It SHALL create a profile in the session workspace
+with that origin and operator-approved private network ranges. Profile updates
+SHALL use the current resource version and verify session ownership. The sandbox
+kubeconfig SHALL contain a placeholder token. It SHALL NOT contain the source
+bearer token or disable certificate checks.
+
+ACP SHALL reject exec authentication, client certificates, external file
+references, impersonation, basic authentication, proxy URLs, and TLS name
+overrides. Embedded CA certificates SHALL match the public certificates in
+`HYPERSHELL_KUBERNETES_TRUST_BUNDLE`. Operators SHALL install the same certificates
+in the supervisor system trust store. Private API address ranges SHALL come from
+`HYPERSHELL_KUBERNETES_ALLOWED_CIDRS`, a comma-separated list of IPs or CIDRs.
+
+#### Scenario: Unsupported kubeconfig helper
+
+- GIVEN a bound kubeconfig uses an exec authentication helper
+- WHEN ACP prepares the profile
+- THEN ACP SHALL reject the format before it starts the session
+- AND ACP SHALL NOT run the helper

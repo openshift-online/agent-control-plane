@@ -34,9 +34,13 @@ type ManagedProviderPlan struct {
 	Names             []string
 	Environment       map[string]string
 	InferenceProvider string
+	Payloads          []openshell.Payload
 }
 
 type managedProviderGateway interface {
+	GetProviderProfile(context.Context, string, *pb.GetProviderProfileRequest) (*pb.ProviderProfileResponse, error)
+	ImportProviderProfiles(context.Context, string, *pb.ImportProviderProfilesRequest) (*pb.ImportProviderProfilesResponse, error)
+	UpdateProviderProfiles(context.Context, string, *pb.UpdateProviderProfilesRequest) (*pb.UpdateProviderProfilesResponse, error)
 	GetProvider(context.Context, string, string) (*pb.ProviderResponse, error)
 	CreateProvider(context.Context, string, *pb.CreateProviderRequest) (*pb.ProviderResponse, error)
 	UpdateProvider(context.Context, string, *pb.UpdateProviderRequest) (*pb.ProviderResponse, error)
@@ -60,6 +64,8 @@ type managedProvider struct {
 	env       map[string]string
 	inference bool
 	githubApp *managedGitHubApp
+	profile   *pb.ProviderProfile
+	payloads  []openshell.Payload
 }
 
 // ReconcileManagedProviders resolves injection grants and maintains providers in
@@ -233,6 +239,7 @@ func reconcileManagedProviders(ctx context.Context, gateway managedProviderGatew
 		desired[name] = true
 		providers = append(providers, provider)
 		plan.Names = append(plan.Names, name)
+		plan.Payloads = append(plan.Payloads, provider.payloads...)
 		for key, value := range provider.env {
 			plan.Environment[key] = value
 		}
@@ -294,6 +301,9 @@ func reconcileManagedProviders(ctx context.Context, gateway managedProviderGatew
 		}
 	}
 	for _, provider := range providers {
+		if err := reconcileManagedProfile(ctx, gateway, target, provider.profile); err != nil {
+			return nil, err
+		}
 		name := provider.data.Metadata.Name
 		existing, err := gateway.GetProvider(ctx, target, name)
 		needsUpdate := true
@@ -355,6 +365,9 @@ func reconcileManagedProviders(ctx context.Context, gateway managedProviderGatew
 				}
 			}
 			if !attached {
+				if session.Phase == PhaseRunning && (provider.data.Type == "google-cloud" || len(provider.env) > 0 || len(provider.payloads) > 0) {
+					return nil, fmt.Errorf("%w: restart the session to load the new credential environment", ErrBindingsChanged)
+				}
 				response, err := gateway.AttachSandboxProvider(ctx, target, &pb.AttachSandboxProviderRequest{SandboxName: session.SandboxName, ProviderName: name, ExpectedResourceVersion: sandbox.GetMetadata().GetResourceVersion()})
 				if err != nil {
 					return nil, fmt.Errorf("attach managed provider: %s", status.Code(err))
@@ -420,8 +433,14 @@ func buildManagedProvider(session types.Session, agent *types.Agent, credential 
 		if err := configureManagedVertex(&result, agent, credential); err != nil {
 			return result, err
 		}
-	case "google", "kubeconfig":
-		return result, fmt.Errorf("credential %s uses %s file delivery; configure a supported gateway provider before starting the session", credential.Credential.ID, kind)
+	case "google":
+		if err := configureManagedGoogleCloud(&result, credential); err != nil {
+			return result, err
+		}
+	case "kubeconfig":
+		if err := configureManagedKubeconfig(&result, session, credential); err != nil {
+			return result, err
+		}
 	default:
 		return result, fmt.Errorf("credential provider %s has no managed gateway profile", kind)
 	}

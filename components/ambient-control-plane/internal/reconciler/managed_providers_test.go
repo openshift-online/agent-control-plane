@@ -106,6 +106,7 @@ func TestManagedCredentialResolutionRetainsSelectedID(t *testing.T) {
 }
 
 type managedFakeGateway struct {
+	profiles     map[string]*pb.ProviderProfile
 	providers    map[string]*datapb.Provider
 	sandbox      *pb.Sandbox
 	detachError  error
