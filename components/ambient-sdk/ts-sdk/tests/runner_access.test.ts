@@ -4,7 +4,8 @@ describe('runner access', () => {
   afterEach(() => jest.restoreAllMocks());
   it('preserves the method, identity and encoded session', async () => {
     const request = jest.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
-    await checkRunnerAccess({ baseUrl: 'https://api.test', token: 'user-identity' }, 'session/id', 'PUT');
+    const identityFixture = 'user-identity';
+    await checkRunnerAccess({ baseUrl: 'https://api.test', token: identityFixture }, 'session/id', 'PUT');
     expect(request).toHaveBeenCalledWith('https://api.test/api/ambient/v1/sessions/session%2Fid/runner/access', expect.objectContaining({
       method: 'PUT', headers: expect.objectContaining({ Authorization: 'Bearer user-identity' }),
     }));

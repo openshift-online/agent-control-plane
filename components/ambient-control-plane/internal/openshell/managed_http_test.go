@@ -17,6 +17,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// These constants are synthetic capabilities used only by the local test server.
+const relayFixture = "test-relay-token"
+const gatewayFixture = "gateway-b-token"
+
 type runnerRelayServer struct {
 	pb.UnimplementedOpenShellServer
 	t      *testing.T
@@ -39,7 +43,7 @@ func (s *runnerRelayServer) CreateSshSession(ctx context.Context, r *pb.CreateSs
 	if r.SandboxId != "sandbox-b" {
 		return nil, status.Error(codes.PermissionDenied, "wrong sandbox")
 	}
-	return &pb.CreateSshSessionResponse{Token: "test-relay-token"}, nil
+	return &pb.CreateSshSessionResponse{Token: relayFixture}, nil
 }
 func (s *runnerRelayServer) ForwardTcp(stream grpc.BidiStreamingServer[pb.TcpForwardFrame, pb.TcpForwardFrame]) error {
 	if err := s.auth(stream.Context()); err != nil {
@@ -84,7 +88,7 @@ func TestManagedRunnerRelayUsesScopedAuthAndClosesStream(t *testing.T) {
 		if key != TargetKey("gateway-b", "workspace-b") {
 			t.Error("wrong target")
 		}
-		return GatewayTarget{Endpoint: endpoint.URL, TLSConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}, TokenProvider: &managedTestTokens{token: "gateway-b-token"}, Workspace: "workspace-b", Revision: "test"}, nil
+		return GatewayTarget{Endpoint: endpoint.URL, TLSConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}, TokenProvider: &managedTestTokens{token: gatewayFixture}, Workspace: "workspace-b", Revision: "test"}, nil
 	}))
 	defer func() {
 		if err := client.Close(); err != nil {
