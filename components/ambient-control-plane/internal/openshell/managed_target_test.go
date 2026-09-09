@@ -24,6 +24,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// Fixed values used only by these tests.
+const (
+	testSSHIdentity         = "temporary-ssh-token"
+	testGatewayPrefix       = "gateway-"
+	testGlobalIdentity      = "must-not-use-global-token"
+	testReplacementIdentity = "new-token"
+)
+
 type managedTestTokens struct {
 	mu    sync.Mutex
 	token string
@@ -76,7 +84,7 @@ func (s *managedTestServer) CreateSshSession(ctx context.Context, _ *pb.CreateSs
 	if err := s.record(ctx, "ssh", ""); err != nil {
 		return nil, err
 	}
-	return &pb.CreateSshSessionResponse{Token: "temporary-ssh-token"}, nil
+	return &pb.CreateSshSessionResponse{Token: testSSHIdentity}, nil
 }
 func (s *managedTestServer) ForwardTcp(stream grpc.BidiStreamingServer[pb.TcpForwardFrame, pb.TcpForwardFrame]) error {
 	if err := s.record(stream.Context(), "forward", ""); err != nil {
@@ -122,7 +130,7 @@ func managedTestClient(t *testing.T) (*GatewayClient, *managedTestServer, map[st
 	pool.AddCert(httpServer.Certificate())
 	targets := map[string]GatewayTarget{}
 	for _, name := range []string{"a", "b"} {
-		targets[TargetKey("gateway-"+name, "session-"+name)] = GatewayTarget{Endpoint: httpServer.URL, TLSConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}, TokenProvider: &managedTestTokens{token: "gateway-" + name + "-token"}, Workspace: "session-" + name, Revision: "identity-" + name}
+		targets[TargetKey(testGatewayPrefix+name, "session-"+name)] = GatewayTarget{Endpoint: httpServer.URL, TLSConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}, TokenProvider: &managedTestTokens{token: testGatewayPrefix + name + "-token"}, Workspace: "session-" + name, Revision: "identity-" + name}
 	}
 	mu := &sync.Mutex{}
 	client := NewGatewayClient("unused", 0, nil, "", zerolog.Nop(), WithTargetResolver(func(_ context.Context, key string) (GatewayTarget, error) {
@@ -133,7 +141,7 @@ func managedTestClient(t *testing.T) (*GatewayClient, *managedTestServer, map[st
 			return GatewayTarget{}, errors.New("binding is missing")
 		}
 		return target, nil
-	}), WithTokenProvider(&managedTestTokens{token: "must-not-use-global-token"}))
+	}), WithTokenProvider(&managedTestTokens{token: testGlobalIdentity}))
 	t.Cleanup(func() { requireUploadNoError(t, client.Close()) })
 	return client, server, targets, mu
 }
@@ -144,7 +152,7 @@ func TestManagedTargetsUseDistinctCredentialsAndWorkspaces(t *testing.T) {
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer inherited-control-plane-token"))
 	for _, name := range []string{"a", "b"} {
-		if _, err := client.GetSandbox(ctx, TargetKey("gateway-"+name, "session-"+name), "same-name"); err != nil {
+		if _, err := client.GetSandbox(ctx, TargetKey(testGatewayPrefix+name, "session-"+name), "same-name"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -210,7 +218,7 @@ func TestManagedTargetRotationReplacesConnection(t *testing.T) {
 	mu.Lock()
 	target := targets[key]
 	target.Revision = "rotated-identity"
-	target.TokenProvider = &managedTestTokens{token: "new-token"}
+	target.TokenProvider = &managedTestTokens{token: testReplacementIdentity}
 	targets[key] = target
 	mu.Unlock()
 	next, err := client.getOrCreateConn(context.Background(), key)

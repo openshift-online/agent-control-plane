@@ -49,7 +49,7 @@ func parseManagedGitHubApp(value string) (*managedGitHubApp, error) {
 	return &app, nil
 }
 
-func (a *managedGitHubApp) installationToken(ctx context.Context, client *http.Client) (token string, expiry time.Time, resultErr error) {
+func (a *managedGitHubApp) installationToken(ctx context.Context, client *http.Client) (value string, expiry time.Time, resultErr error) {
 	block, _ := pem.Decode([]byte(a.PrivateKey))
 	if block == nil {
 		return "", time.Time{}, fmt.Errorf("invalid GitHub App private key")
@@ -94,7 +94,7 @@ func (a *managedGitHubApp) installationToken(ctx context.Context, client *http.C
 	}
 	defer func() {
 		if err := response.Body.Close(); err != nil {
-			token = ""
+			value = ""
 			expiry = time.Time{}
 			resultErr = errors.Join(resultErr, fmt.Errorf("close GitHub App response: %w", err))
 		}

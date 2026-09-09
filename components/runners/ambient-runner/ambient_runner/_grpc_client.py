@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 _ENV_GRPC_URL = "AMBIENT_GRPC_URL"
 _ENV_TOKEN = "BOT_TOKEN"
 _ENV_CP_TOKEN_URL = "AMBIENT_CP_TOKEN_URL"
-_ENV_BOOTSTRAP_TOKEN = "AMBIENT_RUNNER_BOOTSTRAP_TOKEN"
+_ENV_BOOTSTRAP_TOKEN_NAME = "AMBIENT_RUNNER_BOOTSTRAP_TOKEN"
 _ENV_SESSION_ID = "SESSION_ID"
 _ENV_USE_TLS = "AMBIENT_GRPC_USE_TLS"
 _ENV_CA_CERT = "AMBIENT_GRPC_CA_CERT_FILE"
@@ -176,7 +176,7 @@ class AmbientGRPCClient:
             ):
                 raise RuntimeError("runner gRPC connection requires TLS")
             token = _fetch_token_from_cp(
-                cp_token_url, os.environ.get(_ENV_BOOTSTRAP_TOKEN, "")
+                cp_token_url, os.environ.get(_ENV_BOOTSTRAP_TOKEN_NAME, "")
             )
         else:
             token = os.environ.get(_ENV_TOKEN, "")
@@ -199,7 +199,7 @@ class AmbientGRPCClient:
         """Close the existing channel and rebuild with a fresh token from the CP endpoint."""
         if self._cp_token_url:
             fresh_token = _fetch_token_from_cp(
-                self._cp_token_url, os.environ.get(_ENV_BOOTSTRAP_TOKEN, "")
+                self._cp_token_url, os.environ.get(_ENV_BOOTSTRAP_TOKEN_NAME, "")
             )
         else:
             fresh_token = os.environ.get(_ENV_TOKEN, "")

@@ -10,6 +10,11 @@ import (
 	"testing"
 )
 
+// Fixed values used only by these tests.
+const (
+	testManagementIdentity = "test-management-identity"
+)
+
 type testToken struct {
 	token string
 	err   error
@@ -42,7 +47,7 @@ func TestReferenceCreateAndRecovery(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	client, err := NewClient(server.URL, testToken{token: "test-management-identity"}, server.Client())
+	client, err := NewClient(server.URL, testToken{token: testManagementIdentity}, server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,12 +82,12 @@ func TestManagementTrustAndErrors(t *testing.T) {
 	if _, err := client.GetGateway(context.Background(), "one"); err == nil || requests != 0 {
 		t.Fatal("token failure did not fail closed")
 	}
-	client, _ = NewClient(server.URL, testToken{token: "test-management-identity"}, server.Client())
+	client, _ = NewClient(server.URL, testToken{token: testManagementIdentity}, server.Client())
 	_, err := client.GetGateway(context.Background(), "one")
 	if err == nil || strings.Contains(err.Error(), "private-response-value") {
 		t.Fatal("upstream secret response was exposed")
 	}
-	client, _ = NewClient(server.URL, testToken{token: "test-management-identity"}, nil)
+	client, _ = NewClient(server.URL, testToken{token: testManagementIdentity}, nil)
 	if _, err := client.GetGateway(context.Background(), "one"); err == nil {
 		t.Fatal("untrusted TLS certificate accepted")
 	}
@@ -96,7 +101,7 @@ func TestManagementRedirectDoesNotForwardIdentity(t *testing.T) {
 		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
 	}))
 	defer source.Close()
-	client, _ := NewClient(source.URL, testToken{token: "test-management-identity"}, source.Client())
+	client, _ := NewClient(source.URL, testToken{token: testManagementIdentity}, source.Client())
 	if _, err := client.GetGateway(context.Background(), "one"); err == nil || targetCalls != 0 {
 		t.Fatal("management redirect followed")
 	}

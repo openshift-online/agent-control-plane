@@ -15,18 +15,22 @@ from ambient_runner._grpc_client import (
 )
 
 
+EMPTY_CACHE_VALUE = ""
+TEST_RUNNER_IDENTITY = "acp-runner-v1.access.signature"
+
+
 @pytest.fixture(autouse=True)
 def token_cache():
     from ambient_runner.platform import utils
 
-    utils._cp_fetched_token = ""
+    utils._cp_fetched_token = EMPTY_CACHE_VALUE
     yield
-    utils._cp_fetched_token = ""
+    utils._cp_fetched_token = EMPTY_CACHE_VALUE
 
 
 def response(token=None):
     if token is None:
-        token = ".".join(["acp-runner-v1", "access", "signature"])  # noqa: FLY002
+        token = TEST_RUNNER_IDENTITY
     result = MagicMock()
     result.read.return_value = json.dumps({"token": token}).encode()
     result.__enter__.return_value = result

@@ -21,6 +21,13 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Fixed values used only by these tests.
+const (
+	testProviderValue            = "test-credential-value"
+	testReplacementProviderValue = "replacement-test-value"
+	testRotatedProviderValue     = "rotated-token"
+)
+
 func managedString(s string) *string { return &s }
 
 func TestManagedBindingRequiresInjectionIntent(t *testing.T) {
@@ -85,7 +92,7 @@ func TestManagedCredentialResolutionRetainsSelectedID(t *testing.T) {
 			parts := strings.Split(r.URL.Path, "/")
 			id := parts[len(parts)-2]
 			fetched = append(fetched, id)
-			if err := json.NewEncoder(w).Encode(types.CredentialTokenResponse{CredentialID: id, Provider: "github", Token: "test-credential-value"}); err != nil {
+			if err := json.NewEncoder(w).Encode(types.CredentialTokenResponse{CredentialID: id, Provider: "github", Token: testProviderValue}); err != nil {
 				t.Errorf("write API test response: %v", err)
 			}
 		default:
@@ -222,7 +229,7 @@ func managedTestSession() types.Session {
 	return types.Session{ObjectReference: types.ObjectReference{ID: "session-a"}, ProjectID: "project-a", SandboxName: "sandbox-a"}
 }
 func managedTestCredential(provider string) managedCredential {
-	return managedCredential{Credential: types.Credential{ObjectReference: types.ObjectReference{ID: "credential-a"}, Provider: provider}, Token: "test-credential-value"}
+	return managedCredential{Credential: types.Credential{ObjectReference: types.ObjectReference{ID: "credential-a"}, Provider: provider}, Token: testProviderValue}
 }
 
 func TestManagedProviderRotationAndRevocation(t *testing.T) {
@@ -242,7 +249,7 @@ func TestManagedProviderRotationAndRevocation(t *testing.T) {
 			t.Fatal("secret leaked into sandbox environment")
 		}
 	}
-	credential.Token = "replacement-test-value"
+	credential.Token = testReplacementProviderValue
 	if _, err := reconcileManagedProviders(context.Background(), gateway, gateway.target, session, nil, []managedCredential{credential}); err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +381,7 @@ func TestManagedProviderSettingsRequireRestart(t *testing.T) {
 	}
 	name := plan.Names[0]
 	session.Phase = PhaseRunning
-	credential.Token = "rotated-token"
+	credential.Token = testRotatedProviderValue
 	if _, err := reconcileManagedProviders(context.Background(), gateway, gateway.target, session, nil, []managedCredential{credential}); err != nil {
 		t.Fatalf("secret-only rotation must not stop the runner: %v", err)
 	}

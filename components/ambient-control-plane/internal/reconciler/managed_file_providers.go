@@ -24,6 +24,9 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
+// OpenShell resolves this marker inside the sandbox. It is not a credential.
+const managedKubeTokenPlaceholder = "openshell:resolve:env:KUBERNETES_TOKEN"
+
 const managedKubeconfigPath = "/sandbox/.config/acp/kubeconfig"
 
 func configureManagedGoogleCloud(provider *managedProvider, credential managedCredential) error {
@@ -134,7 +137,7 @@ func configureManagedKubeconfig(provider *managedProvider, session types.Session
 	provider.data.Type = profileID
 	provider.data.ProfileWorkspace = session.GatewayWorkspace
 	provider.data.Credentials = map[string]string{"KUBERNETES_TOKEN": identity.Token}
-	clean := clientcmdapi.Config{Kind: "Config", APIVersion: "v1", CurrentContext: "ambient", Clusters: map[string]*clientcmdapi.Cluster{"ambient": {Server: cluster.Server}}, AuthInfos: map[string]*clientcmdapi.AuthInfo{"ambient": {Token: "openshell:resolve:env:KUBERNETES_TOKEN"}}, Contexts: map[string]*clientcmdapi.Context{"ambient": {Cluster: "ambient", AuthInfo: "ambient", Namespace: current.Namespace}}}
+	clean := clientcmdapi.Config{Kind: "Config", APIVersion: "v1", CurrentContext: "ambient", Clusters: map[string]*clientcmdapi.Cluster{"ambient": {Server: cluster.Server}}, AuthInfos: map[string]*clientcmdapi.AuthInfo{"ambient": {Token: managedKubeTokenPlaceholder}}, Contexts: map[string]*clientcmdapi.Context{"ambient": {Cluster: "ambient", AuthInfo: "ambient", Namespace: current.Namespace}}}
 	content, err := clientcmd.Write(clean)
 	if err != nil {
 		return fmt.Errorf("write sandbox kubeconfig")

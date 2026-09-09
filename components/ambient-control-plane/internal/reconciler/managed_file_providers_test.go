@@ -16,6 +16,12 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
+// Fixed values used only by these tests.
+const (
+	testKubeBearer        = "private-test-bearer"
+	testRotatedKubeBearer = "rotated-token"
+)
+
 func (g *managedFakeGateway) GetProviderProfile(ctx context.Context, target string, r *pb.GetProviderProfileRequest) (*pb.ProviderProfileResponse, error) {
 	g.scope(target)
 	p := g.profiles[r.Id]
@@ -49,7 +55,7 @@ func (g *managedFakeGateway) UpdateProviderProfiles(ctx context.Context, target 
 	return &pb.UpdateProviderProfilesResponse{Updated: true, Profile: p}, nil
 }
 func managedTestKubeconfig() *clientcmdapi.Config {
-	return &clientcmdapi.Config{CurrentContext: "selected", Clusters: map[string]*clientcmdapi.Cluster{"cluster": {Server: "https://kube.example:6443"}}, AuthInfos: map[string]*clientcmdapi.AuthInfo{"user": {Token: "private-test-bearer"}}, Contexts: map[string]*clientcmdapi.Context{"selected": {Cluster: "cluster", AuthInfo: "user", Namespace: "ns"}}}
+	return &clientcmdapi.Config{CurrentContext: "selected", Clusters: map[string]*clientcmdapi.Cluster{"cluster": {Server: "https://kube.example:6443"}}, AuthInfos: map[string]*clientcmdapi.AuthInfo{"user": {Token: testKubeBearer}}, Contexts: map[string]*clientcmdapi.Context{"selected": {Cluster: "cluster", AuthInfo: "user", Namespace: "ns"}}}
 }
 func TestManagedKubeconfigPayloadAndProfile(t *testing.T) {
 	t.Setenv("HYPERSHELL_KUBERNETES_ALLOWED_CIDRS", "10.0.0.0/8")
@@ -69,7 +75,7 @@ func TestManagedKubeconfigPayloadAndProfile(t *testing.T) {
 	if p.data.Credentials["KUBERNETES_TOKEN"] != source.AuthInfos["user"].Token || p.data.ProfileWorkspace != s.GatewayWorkspace {
 		t.Fatal("credential or workspace mapping lost")
 	}
-	if len(p.payloads) != 1 || strings.Contains(p.payloads[0].Content, "private-test-bearer") {
+	if len(p.payloads) != 1 || strings.Contains(p.payloads[0].Content, testKubeBearer) {
 		t.Fatal("secret leaked into payload")
 	}
 	clean, err := clientcmd.Load([]byte(p.payloads[0].Content))
@@ -186,7 +192,7 @@ func TestManagedKubeconfigChangeRequiresRestartBeforeProfileUpdate(t *testing.T)
 		t.Fatal(err)
 	}
 	session.Phase = PhaseRunning
-	source.AuthInfos["user"].Token = "rotated-token"
+	source.AuthInfos["user"].Token = testRotatedKubeBearer
 	writeCredential()
 	if _, err := reconcileManagedProviders(context.Background(), gateway, gateway.target, session, nil, []managedCredential{credential}); err != nil {
 		t.Fatalf("kubeconfig token rotation must not require a restart: %v", err)
