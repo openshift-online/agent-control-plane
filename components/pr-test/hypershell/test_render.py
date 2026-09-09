@@ -37,6 +37,17 @@ class RenderTests(unittest.TestCase):
         key = next(v for v in api['volumes'] if v['name'] == 'runner-key')
         self.assertEqual(key['secret']['items'], [{'key': 'public.pem', 'path': 'public.pem'}])
 
+    def test_migration_and_server_have_separate_log_directories(self):
+        pod = self.items['Deployment', 'ambient-api-server']['spec']['template']['spec']
+        server = pod['containers'][0]
+        migration = next(c for c in pod['initContainers'] if c['name'] == 'migrate')
+        server_tmp = next(v['name'] for v in server['volumeMounts'] if v['mountPath'] == '/tmp')
+        migration_tmp = next(v['name'] for v in migration['volumeMounts'] if v['mountPath'] == '/tmp')
+        self.assertNotEqual(server_tmp, migration_tmp)
+        volumes = {v['name']: v for v in pod['volumes']}
+        self.assertIn('emptyDir', volumes[server_tmp])
+        self.assertIn('emptyDir', volumes[migration_tmp])
+
 
 if __name__ == '__main__':
     unittest.main()

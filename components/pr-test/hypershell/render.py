@@ -125,12 +125,13 @@ def render(config):
             '--enable-tls=true', '--tls-cert-file=/secrets/grpc-tls/tls.crt',
             '--tls-key-file=/secrets/grpc-tls/tls.key', '--tls-min-version=1.2',
             '--tls-auto-detect-kubernetes=false']
+    api['spec']['template']['spec']['volumes'].append({'name': 'migration-tmp', 'emptyDir': {}})
     api['spec']['template']['spec']['initContainers'] = [{
         'name': 'migrate', 'image': images['api_server'],
         'command': ['/usr/local/bin/ambient-api-server', 'migrate'] + db_args,
         'securityContext': {'runAsNonRoot': True, 'readOnlyRootFilesystem': True,
             'allowPrivilegeEscalation': False, 'capabilities': {'drop': ['ALL']}},
-        'volumeMounts': [mount('db', '/secrets/db', True), mount('tmp', '/tmp')]}]
+        'volumeMounts': [mount('db', '/secrets/db', True), mount('migration-tmp', '/tmp')]}]
     api_service = service('ambient-api-server', [('api', 8000), ('grpc', 9000)])
     api_service['metadata']['annotations'] = {'service.beta.openshift.io/serving-cert-secret-name': 'ambient-api-server-tls'}
 
