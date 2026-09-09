@@ -35,7 +35,7 @@ for filename in source_files:
             pod['securityContext'] = {'runAsNonRoot': True, 'seccompProfile': {'type': 'RuntimeDefault'}}
             pod.setdefault('volumes', []).append({'name': 'tmp', 'emptyDir': {}})
             for container in pod.get('containers', []) + pod.get('initContainers', []):
-                container.setdefault('resources', {})['requests'] = {'cpu': '50m', 'memory': '128Mi' if name == 'hypershell-api-server' else '64Mi'}
+                container.setdefault('resources', {})['requests'] = {'cpu': '50m', 'memory': '64Mi'}
                 container['securityContext'] = {'runAsNonRoot': True, 'readOnlyRootFilesystem': True,
                     'allowPrivilegeEscalation': False, 'capabilities': {'drop': ['ALL']}}
                 container.setdefault('volumeMounts', []).append({'name': 'tmp', 'mountPath': '/tmp'})

@@ -164,3 +164,14 @@ account and the `acp-claude-runner` image stream. An authorization check returne
 `yes`. The gateway database pod requests 256Mi and remains Pending because all
 three workers have insufficient memory. Its PVC waits for a schedulable
 consumer. A fourth worker is still needed before sandbox tests can proceed.
+
+
+Observed API memory use was about 20Mi per process. The test API requests are
+64Mi each. This allowed the UI image from ACP commit `86d13cf5` to start while
+capacity expansion remained pending. The UI address is:
+
+`https://ambient-ui-acp-hypershell.apps.rosa.jshell.8u58.p3.openshiftapps.com`
+
+Hypershell commit `cbc5442` adds validated memory request settings and the
+shared server certificate issuer. Its API and controller images are being
+rebuilt before the next gateway check.
