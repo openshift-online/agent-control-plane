@@ -4,7 +4,8 @@ These files prepare an isolated ACP test namespace. They use an existing
 Hypershell service and OIDC realm. They do not change the current `oc` context.
 The code that connects ACP to Hypershell supplies `control_plane_env` in the
 configuration file. The example has no connection variables and is not a
-complete deployment configuration.
+complete deployment configuration. See `jshell-evidence.md` for the current
+cluster state and completed checks.
 
 ## Cluster inspection: 2026-09-09
 
@@ -73,8 +74,9 @@ components/pr-test/hypershell/build.sh ui
 components/pr-test/hypershell/build.sh runner
 ```
 
-Builds use the internal image registry. They do not require a registry password
-on the workstation. The build scripts print the resulting image reference. Use
+Builds run in local Podman and push to the internal image registry. The OpenShift
+token is passed through standard input. Temporary registry credentials are
+removed when the script exits. The build scripts print the resulting image reference. Use
 those references, with digests, in a copy of `config.example.json`. Build from a
 committed source tree so the recorded revision identifies the source.
 
@@ -99,13 +101,13 @@ environment variables can use Kubernetes `secretKeyRef` records.
 
 ```bash
 python3 components/pr-test/hypershell/render.py /private/path/config.json > /tmp/acp-resources.json
-python3 components/pr-test/hypershell/secrets.py /private/path/config.json \
+python3 components/pr-test/hypershell/setup-secrets.py /private/path/config.json \
   --cp-client-secret-file /private/path/cp-secret \
   --ui-client-secret-file /private/path/ui-secret
 components/pr-test/hypershell/apply.sh /private/path/config.json
 ```
 
-Rendering does not contact the cluster. `secrets.py` preserves the database
+Rendering does not contact the cluster. `setup-secrets.py` preserves the database
 password, encryption key, and session key on repeat runs. It applies secret
 values through standard input and does not print them. `apply.sh` requires all
 secrets before it applies the workloads. PostgreSQL uses a PVC. All containers
@@ -131,4 +133,29 @@ IDs, session and sandbox IDs, and HTTPS routes. Verify these operations:
 8. Leave a ready workspace for user approval.
 
 A successful rollout is a prerequisite for these tests. It is not the test
-result. These assets had no deployment applied during preparation.
+result. See `jshell-evidence.md` for the resources applied during preparation.
+
+## Isolated Hypershell setup
+
+`render-hypershell.py` reads the selected Hypershell checkout's base manifests.
+It creates a separate database, API, controller, CA issuer, and Route. It does
+not deploy another Keycloak service or change the shared Hypershell service.
+It requires PyYAML. Supply a JSON configuration with `namespace`, `oidc_issuer`,
+`apps_domain`, `cp_client_id`, `storage_class`, `api_image`, and `controller_image`.
+
+`bootstrap-oidc.py` can create the test clients through the existing Keycloak
+Admin API. It reads the test deployment's bootstrap admin settings through the
+selected cluster context. Client secrets are written to a private output
+directory. It does not print secret values.
+
+`seed-hypershell.py` creates or checks the dedicated managed cluster and gateway
+image release. It writes the gateway template to a private local file. Configure
+`HYPERSHELL_GATEWAY_TEMPLATE` with that JSON. Configure
+`HYPERSHELL_SANDBOX_DRIVER_CONFIG` with `workspace_storage_class` when a specific
+class is required. Hypershell uses `DATABASE_STORAGE_CLASS` for new gateway
+database PVCs. Existing PVCs keep their storage class.
+
+Before applying ACP, include the namespace's `openshift-service-ca.crt`
+ConfigMap value as `service_ca` in its JSON configuration. The renderer sets the
+public gRPC Route's destination CA from this value. `setup-secrets.py` creates
+the runner keypair before the API mounts its public key.

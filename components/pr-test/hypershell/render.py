@@ -5,6 +5,19 @@ import json
 from pathlib import Path
 
 
+def postgres_identity(pod, image):
+    """Give the assigned OpenShift UID a passwd entry with a read-only root."""
+    pod['volumes'].append({'name': 'postgres-identity', 'emptyDir': {}})
+    pod['containers'][0]['volumeMounts'].append({'name': 'postgres-identity',
+        'mountPath': '/etc/passwd', 'subPath': 'passwd', 'readOnly': True})
+    pod.setdefault('initContainers', []).append({'name': 'postgres-identity', 'image': image,
+        'command': ['sh', '-c', 'cp /etc/passwd /identity/passwd; printf "runtime:x:%s:%s:Runtime user:/tmp:/sbin/nologin\\n" "$(id -u)" "$(id -g)" >> /identity/passwd'],
+        'securityContext': {'runAsNonRoot': True, 'readOnlyRootFilesystem': True,
+            'allowPrivilegeEscalation': False, 'capabilities': {'drop': ['ALL']}},
+        'resources': {'requests': {'cpu': '10m', 'memory': '32Mi'}, 'limits': {'cpu': '100m', 'memory': '64Mi'}},
+        'volumeMounts': [{'name': 'postgres-identity', 'mountPath': '/identity'}]})
+
+
 def render(config):
     namespace = config['namespace']
     domain = config['apps_domain']
@@ -15,6 +28,7 @@ def render(config):
     ui_host = f'ambient-ui-{namespace}.{domain}'
     api_host = f'ambient-api-server-{namespace}.{domain}'
     cp_host = f'ambient-control-plane-{namespace}.{domain}'
+    grpc_host = f'ambient-api-grpc-{namespace}.{domain}'
     items = []
 
     def add(kind, name, spec=None, api='v1', **fields):
@@ -36,7 +50,7 @@ def render(config):
         return {'name': name, 'mountPath': path, 'readOnly': readonly}
 
     def service(name, ports):
-        add('Service', name, {'selector': {'app': name}, 'ports': [
+        return add('Service', name, {'selector': {'app': name}, 'ports': [
             {'name': label, 'port': port, 'targetPort': port} for label, port in ports]})
 
     def deployment(name, image, environment, ports, mounts=None, volumes=None, command=None, probe=None):
@@ -44,7 +58,7 @@ def render(config):
             'securityContext': {'runAsNonRoot': True, 'allowPrivilegeEscalation': False,
                 'readOnlyRootFilesystem': True, 'capabilities': {'drop': ['ALL']}},
             'env': environment, 'ports': [{'containerPort': p} for p in ports],
-            'resources': {'requests': {'cpu': '100m', 'memory': '256Mi'},
+            'resources': {'requests': {'cpu': '50m', 'memory': '128Mi'},
                 'limits': {'cpu': '2', 'memory': '1Gi'}},
             'volumeMounts': [mount('tmp', '/tmp')] + (mounts or [])}
         if command:
@@ -75,6 +89,7 @@ def render(config):
         [{'name': 'data', 'persistentVolumeClaim': {'claimName': 'ambient-api-server-db'}},
          {'name': 'socket', 'emptyDir': {}}], probe={'tcpSocket': {'port': 5432}})
     db['spec']['strategy'] = {'type': 'Recreate'}
+    postgres_identity(db['spec']['template']['spec'], images['postgres'])
     service('ambient-api-server-db', [('postgres', 5432)])
 
     add('ConfigMap', 'ambient-api-server-auth', data={'jwks.json': '{"keys":[]}'})
@@ -84,12 +99,16 @@ def render(config):
         env('AMBIENT_ENV', 'production'), env('GRPC_SERVICE_ACCOUNT', cp_client),
         secret_env('CREDENTIAL_ENCRYPTION_KEYRING', 'credential-encryption-key', 'keyring'),
         secret_env('CREDENTIAL_ENCRYPTION_KEY_VERSION', 'credential-encryption-key', 'version'),
-        env('CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT', 'false')], [8000, 9000, 4434],
+        env('CREDENTIAL_ENCRYPTION_ALLOW_PLAINTEXT', 'false'),
+        env('AMBIENT_RUNNER_PUBLIC_KEY_FILE', '/secrets/runner-key/public.pem')], [8000, 9000, 4434],
         [mount('db', '/secrets/db', True), mount('service', '/secrets/service', True),
-         mount('auth', '/configs/authentication', True)],
+         mount('auth', '/configs/authentication', True), mount('grpc-tls', '/secrets/grpc-tls', True),
+         mount('runner-key', '/secrets/runner-key', True)],
         [{'name': 'db', 'secret': {'secretName': 'ambient-api-server-db'}},
          {'name': 'service', 'secret': {'secretName': 'ambient-api-server'}},
-         {'name': 'auth', 'configMap': {'name': 'ambient-api-server-auth'}}],
+         {'name': 'auth', 'configMap': {'name': 'ambient-api-server-auth'}},
+         {'name': 'grpc-tls', 'secret': {'secretName': 'ambient-api-server-tls'}},
+         {'name': 'runner-key', 'secret': {'secretName': 'ambient-cp-token-keypair', 'items': [{'key': 'public.pem', 'path': 'public.pem'}]}}],
         ['/usr/local/bin/ambient-api-server', 'serve'] + db_args + [
             '--enable-jwt=true', '--enable-authz=true',
             f'--jwk-cert-url={issuer}/protocol/openid-connect/certs',
@@ -97,7 +116,8 @@ def render(config):
             '--enable-grpc=true', '--api-server-bindaddress=:8000',
             '--metrics-server-bindaddress=:4433', '--health-check-server-bindaddress=:4434',
             '--enable-metrics-https=false', '--grpc-server-bindaddress=:9000',
-            '--grpc-enable-tls=false', '--enable-db-debug=false', '--alsologtostderr'],
+            '--grpc-enable-tls=true', '--grpc-tls-cert-file=/secrets/grpc-tls/tls.crt',
+            '--grpc-tls-key-file=/secrets/grpc-tls/tls.key', '--enable-db-debug=false', '--alsologtostderr'],
         {'httpGet': {'path': '/healthcheck', 'port': 4434}})
     api['spec']['template']['spec']['initContainers'] = [{
         'name': 'migrate', 'image': images['api_server'],
@@ -105,16 +125,20 @@ def render(config):
         'securityContext': {'runAsNonRoot': True, 'readOnlyRootFilesystem': True,
             'allowPrivilegeEscalation': False, 'capabilities': {'drop': ['ALL']}},
         'volumeMounts': [mount('db', '/secrets/db', True), mount('tmp', '/tmp')]}]
-    service('ambient-api-server', [('api', 8000), ('grpc', 9000)])
+    api_service = service('ambient-api-server', [('api', 8000), ('grpc', 9000)])
+    api_service['metadata']['annotations'] = {'service.beta.openshift.io/serving-cert-secret-name': 'ambient-api-server-tls'}
 
     cp_env = [env('MODE', 'kube'), env('PLATFORM_MODE', 'standard'),
         env('NAMESPACE', namespace), env('CP_RUNTIME_NAMESPACE', namespace),
         env('AMBIENT_API_SERVER_URL', f'http://ambient-api-server.{namespace}.svc:8000'),
         env('AMBIENT_GRPC_SERVER_ADDR', f'ambient-api-server.{namespace}.svc:9000'),
-        env('AMBIENT_GRPC_USE_TLS', 'false'), env('OIDC_TOKEN_URL', f'{issuer}/protocol/openid-connect/token'),
+        env('AMBIENT_GRPC_USE_TLS', 'true'), env('OIDC_TOKEN_URL', f'{issuer}/protocol/openid-connect/token'),
         env('OIDC_CLIENT_ID', cp_client),
         secret_env('OIDC_CLIENT_SECRET', 'ambient-control-plane-oidc', 'client-secret'),
         env('RUNNER_IMAGE', images['runner']), env('OPENSHELL_ENABLED', 'true'),
+        env('ACP_RUNTIME_BACKEND', 'hypershell'),
+        env('AMBIENT_RUNNER_GRPC_ADDR', f'{grpc_host}:443'),
+        env('AMBIENT_RUNNER_TOKEN_URL', f'https://{cp_host}/token'),
         env('CP_TOKEN_URL', f'https://{cp_host}/token')]
     # The integration owns its connection variable names. Accept Kubernetes EnvVar
     # records to support Secret references without writing credentials to config.
@@ -147,6 +171,11 @@ def render(config):
         add('Route', name, {'host': host, 'to': {'kind': 'Service', 'name': name},
             'port': {'targetPort': port}, 'tls': {'termination': 'edge',
             'insecureEdgeTerminationPolicy': 'Redirect'}}, api='route.openshift.io/v1')
+    add('Route', 'ambient-api-grpc', {'host': grpc_host,
+        'to': {'kind': 'Service', 'name': 'ambient-api-server'}, 'port': {'targetPort': 'grpc'},
+        'tls': {'termination': 'reencrypt', 'insecureEdgeTerminationPolicy': 'Redirect',
+                **({'destinationCACertificate': config['service_ca']} if config.get('service_ca') else {})}},
+        api='route.openshift.io/v1')
     return {'apiVersion': 'v1', 'kind': 'List', 'items': items}
 
 

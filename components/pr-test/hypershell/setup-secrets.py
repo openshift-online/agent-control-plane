@@ -41,6 +41,14 @@ def main():
             raise RuntimeError(f'Cannot apply Secret {name}; inspect cluster permissions and field ownership')
         print(f'Secret {name} is ready')
 
+    pair = get('ambient-cp-token-keypair')
+    if pair and (not pair.get('private.pem') or not pair.get('public.pem')):
+        raise RuntimeError('Runner keypair Secret is incomplete; repair it before deployment')
+    if not pair:
+        private_key = subprocess.check_output(['openssl', 'genrsa', '-traditional', '4096'], stderr=subprocess.DEVNULL)
+        public_key = subprocess.check_output(['openssl', 'rsa', '-pubout'], input=private_key, stderr=subprocess.DEVNULL)
+        apply('ambient-cp-token-keypair', {'private.pem': private_key.decode(), 'public.pem': public_key.decode()})
+
     cp_secret = args.cp_client_secret_file.read_text().strip()
     ui_secret = args.ui_client_secret_file.read_text().strip()
     if not cp_secret or not ui_secret:
