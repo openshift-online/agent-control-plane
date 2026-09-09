@@ -415,9 +415,11 @@ func (r *ManagedReconciler) stopManagedSession(ctx context.Context, sdk *sdkclie
 		return err
 	}
 	if err == nil {
-		if err := validateManagedSandbox(s, response); err != nil {
-			return err
+		updated, snapshotErr := r.saveManagedSnapshot(ctx, sdk, s, target, response)
+		if snapshotErr != nil {
+			return snapshotErr
 		}
+		s = *updated
 	}
 	if err == nil && response.Sandbox.GetStatus().GetPhase() != openshellpb.SandboxPhase_SANDBOX_PHASE_STOPPED {
 		_, err = r.gateway.StopSandbox(ctx, target, s.SandboxName)
@@ -439,9 +441,11 @@ func (r *ManagedReconciler) deleteManagedSession(ctx context.Context, sdk *sdkcl
 	target := openshell.TargetKey(s.GatewayID, s.GatewayWorkspace)
 	response, err := r.gateway.GetSandbox(ctx, target, s.SandboxName)
 	if err == nil {
-		if err := validateManagedSandbox(s, response); err != nil {
-			return err
+		updated, snapshotErr := r.saveManagedSnapshot(ctx, sdk, s, target, response)
+		if snapshotErr != nil {
+			return snapshotErr
 		}
+		s = *updated
 		if err := r.gateway.DeleteSandbox(ctx, target, s.SandboxName); err != nil {
 			return err
 		}

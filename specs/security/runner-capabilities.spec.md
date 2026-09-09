@@ -71,3 +71,36 @@ this override. TLS trust payloads SHALL contain only public CA certificates.
 - WHEN the user resumes it
 - THEN ACP SHALL persist a new generation and supply a new bootstrap capability
 - AND the prior generation SHALL remain invalid
+
+### Requirement: Durable message acceptance
+
+Managed runners SHALL store an execution cursor in the retained session workspace
+when `ACP_MESSAGE_CURSOR_FILE` is configured. The control plane SHALL reserve
+this path against agent environment overrides. The cursor SHALL contain a format
+version, the exact session ID, and the last accepted user-message sequence. The
+API database SHALL remain the message history.
+
+The runner SHALL save acceptance before dispatch. Writes SHALL use an atomic
+file replacement, file and directory synchronization, and a lock that prevents
+concurrent instances from accepting the same sequence. A resumed runner SHALL
+read its stored sequence instead of using a timestamp cutoff or the current
+maximum database sequence. User messages above the cursor SHALL remain eligible
+regardless of their age. Accepted requests SHALL NOT run again automatically;
+acceptance does not prove that a turn completed. A user can submit a new request
+to repeat or continue work after an interrupted turn.
+
+A missing cursor on resume, invalid content, another session ID, or a path outside
+the session workspace SHALL prevent startup with a recovery instruction. Failure
+to save acceptance SHALL stop dispatch. An initial API user message SHALL use the
+same acceptance path. Managed startup SHALL NOT insert a second copy of that
+initial user request. Project and agent instructions SHALL be supplied separately
+from the user request.
+
+#### Scenario: Message queued during a long stop
+
+- GIVEN a stopped session has accepted user-message sequence 4
+- AND sequence 5 was queued while the runner was stopped
+- WHEN its retained workspace resumes
+- THEN the runner SHALL start its watch after sequence 4
+- AND it SHALL accept sequence 5 regardless of its timestamp
+- AND it SHALL NOT run sequence 4 again
