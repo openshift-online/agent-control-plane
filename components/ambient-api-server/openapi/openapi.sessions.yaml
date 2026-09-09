@@ -391,6 +391,53 @@ paths:
                 $ref: 'openapi.yaml#/components/schemas/Error'
     parameters:
       - $ref: '#/components/parameters/id'
+  /api/ambient/v1/runtime/sessions:
+    get:
+      operationId: listRuntimeSessions
+      summary: List runtime records, including deleted records
+      description: Requires the configured control plane service identity.
+      security:
+        - Bearer: []
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/size'
+      responses:
+        '200':
+          description: Runtime inventory
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionList'
+        '403':
+          description: Requires the control plane service identity
+  /api/ambient/v1/runtime/sessions/{id}:
+    patch:
+      operationId: patchRuntimeSession
+      summary: Update runtime fields with a version check
+      description: Requires the configured control plane service identity. Deleted records remain deleted. Omitted fields stay unchanged.
+      security:
+        - Bearer: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionRuntimePatch'
+      responses:
+        '200':
+          description: Updated runtime record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '403':
+          description: Requires the control plane service identity
+        '404':
+          description: Record does not exist
+        '409':
+          description: Version or expected phase changed
 components:
   schemas:
     # NEW SCHEMA START
@@ -402,6 +449,43 @@ components:
           required:
             - name
           properties:
+            gateway_id:
+              type: string
+              readOnly: true
+            gateway_workspace:
+              type: string
+              readOnly: true
+            sandbox_id:
+              type: string
+              readOnly: true
+            sandbox_name:
+              type: string
+              readOnly: true
+            runtime_backend:
+              type: string
+              readOnly: true
+            runner_generation:
+              type: string
+              readOnly: true
+            gateway_endpoint:
+              type: string
+              readOnly: true
+            gateway_credential_id:
+              type: string
+              readOnly: true
+            runtime_status:
+              type: string
+              readOnly: true
+            runtime_error:
+              type: string
+              readOnly: true
+            runtime_deleted:
+              type: boolean
+              readOnly: true
+            runtime_version:
+              type: integer
+              format: int64
+              readOnly: true
             name:
               type: string
             repo_url:
@@ -585,6 +669,59 @@ components:
           type: string
         sandbox_policy_snapshot:
           type: string
+    SessionRuntimePatch:
+      type: object
+      additionalProperties: false
+      required: [runtime_version]
+      properties:
+        runtime_version:
+          type: integer
+          format: int64
+          minimum: 0
+        gateway_id:
+          type: string
+        gateway_workspace:
+          type: string
+        sandbox_id:
+          type: string
+        sandbox_name:
+          type: string
+        runtime_backend:
+          type: string
+        runner_generation:
+          type: string
+        gateway_endpoint:
+          type: string
+        gateway_credential_id:
+          type: string
+        runtime_status:
+          type: string
+        runtime_error:
+          type: string
+        expected_phase:
+          type: string
+        phase:
+          type: string
+        kube_cr_name:
+          type: string
+        kube_cr_uid:
+          type: string
+        kube_namespace:
+          type: string
+        snapshots:
+          type: string
+        sdk_session_id:
+          type: string
+        reconciled_repos:
+          type: string
+        reconciled_workflow:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        completion_time:
+          type: string
+          format: date-time
   parameters:
       id:
         name: id

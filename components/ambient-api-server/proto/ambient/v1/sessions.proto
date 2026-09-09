@@ -8,6 +8,18 @@ import "ambient/v1/common.proto";
 import "google/protobuf/timestamp.proto";
 
 message Session {
+  optional string gateway_id = 35;
+  optional string gateway_workspace = 36;
+  optional string sandbox_id = 37;
+  optional string sandbox_name = 38;
+  optional string runtime_backend = 39;
+  optional string runner_generation = 40;
+  optional string gateway_endpoint = 41;
+  optional string gateway_credential_id = 42;
+  optional string runtime_status = 43;
+  optional string runtime_error = 44;
+  bool runtime_deleted = 45;
+  int64 runtime_version = 46;
   ObjectReference metadata = 1;
   string name = 2;
   optional string repo_url = 3;

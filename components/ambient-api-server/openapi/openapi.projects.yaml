@@ -206,6 +206,53 @@ paths:
                 $ref: 'openapi.yaml#/components/schemas/Error'
     parameters:
       - $ref: '#/components/parameters/id'
+  /api/ambient/v1/runtime/projects:
+    get:
+      operationId: listRuntimeProjects
+      summary: List runtime records, including deleted records
+      description: Requires the configured control plane service identity.
+      security:
+        - Bearer: []
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/size'
+      responses:
+        '200':
+          description: Runtime inventory
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectList'
+        '403':
+          description: Requires the control plane service identity
+  /api/ambient/v1/runtime/projects/{id}:
+    patch:
+      operationId: patchRuntimeProject
+      summary: Update runtime fields with a version check
+      description: Requires the configured control plane service identity. Deleted records remain deleted. Omitted fields stay unchanged.
+      security:
+        - Bearer: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectRuntimePatch'
+      responses:
+        '200':
+          description: Updated runtime record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '403':
+          description: Requires the control plane service identity
+        '404':
+          description: Record does not exist
+        '409':
+          description: Version or expected phase changed
 components:
   schemas:
     Project:
@@ -215,6 +262,43 @@ components:
           required:
             - name
           properties:
+            runtime_backend:
+              type: string
+              readOnly: true
+            gateway_id:
+              type: string
+              readOnly: true
+            gateway_instance_id:
+              type: string
+              readOnly: true
+            gateway_endpoint:
+              type: string
+              readOnly: true
+            gateway_status:
+              type: string
+              readOnly: true
+            gateway_error:
+              type: string
+              readOnly: true
+            gateway_credential_id:
+              type: string
+              readOnly: true
+            gateway_account_id:
+              type: string
+              readOnly: true
+            gateway_account_expires_at:
+              type: string
+              readOnly: true
+            gateway_external_reference:
+              type: string
+              readOnly: true
+            runtime_deleted:
+              type: boolean
+              readOnly: true
+            runtime_version:
+              type: integer
+              format: int64
+              readOnly: true
             name:
               type: string
             description:
@@ -257,6 +341,35 @@ components:
         prompt:
           type: string
         status:
+          type: string
+    ProjectRuntimePatch:
+      type: object
+      additionalProperties: false
+      required: [runtime_version]
+      properties:
+        runtime_version:
+          type: integer
+          format: int64
+          minimum: 0
+        runtime_backend:
+          type: string
+        gateway_id:
+          type: string
+        gateway_instance_id:
+          type: string
+        gateway_endpoint:
+          type: string
+        gateway_status:
+          type: string
+        gateway_error:
+          type: string
+        gateway_credential_id:
+          type: string
+        gateway_account_id:
+          type: string
+        gateway_account_expires_at:
+          type: string
+        gateway_external_reference:
           type: string
   parameters:
       id:

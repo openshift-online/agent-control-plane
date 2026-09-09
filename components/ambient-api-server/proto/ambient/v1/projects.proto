@@ -7,6 +7,18 @@ option go_package = "github.com/openshift-online/agent-control-plane/components/
 import "ambient/v1/common.proto";
 
 message Project {
+  optional string runtime_backend = 8;
+  optional string gateway_id = 9;
+  optional string gateway_instance_id = 10;
+  optional string gateway_endpoint = 11;
+  optional string gateway_status = 12;
+  optional string gateway_error = 13;
+  optional string gateway_credential_id = 14;
+  optional string gateway_account_id = 15;
+  optional string gateway_account_expires_at = 16;
+  optional string gateway_external_reference = 17;
+  bool runtime_deleted = 18;
+  int64 runtime_version = 19;
   ObjectReference metadata = 1;
   string name = 2;
   // TODO(proto-cleanup): display_name was removed from model.go (migration 202505090001).
