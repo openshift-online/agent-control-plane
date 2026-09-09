@@ -63,7 +63,7 @@ def _fetch_token_from_cp(cp_token_url: str, bootstrap_token: str) -> str:
     ):
         raise RuntimeError("runner token exchange requires HTTPS")
     ca_file = os.getenv("AMBIENT_CP_CA_CERT_FILE") or None
-    context = ssl.create_default_context(cafile=ca_file)
+    context = _tls_context(ca_file, "configured CP")
     opener = urllib.request.build_opener(
         _NoRedirect(), urllib.request.HTTPSHandler(context=context)
     )
@@ -92,24 +92,30 @@ def _fetch_token_from_cp(cp_token_url: str, bootstrap_token: str) -> str:
     raise RuntimeError("CP token endpoint unavailable")
 
 
-def _load_ca_cert(ca_cert_file: str | None) -> bytes | None:
-    """Load an explicit CA file, or use service and system trust defaults."""
+def _tls_context(ca_cert_file: str | None, source: str) -> ssl.SSLContext:
+    """Add the ACP CA to default trust, including the sandbox proxy CA."""
+    context = ssl.create_default_context()
     if ca_cert_file:
         try:
-            with open(ca_cert_file, "rb") as source:
-                data = source.read()
+            context.load_verify_locations(cafile=ca_cert_file)
         except OSError as exc:
-            raise RuntimeError("configured gRPC CA file cannot be read") from exc
-        if not data:
-            raise RuntimeError("configured gRPC CA file is empty")
-        return data
-    if os.path.exists(_SERVICE_CA_PATH):
-        try:
-            with open(_SERVICE_CA_PATH, "rb") as source:
-                return source.read()
-        except OSError as exc:
-            raise RuntimeError("service CA file cannot be read") from exc
-    return None
+            raise RuntimeError(
+                f"{source} CA file cannot be read or is invalid"
+            ) from exc
+    return context
+
+
+def _load_ca_cert(ca_cert_file: str | None) -> bytes:
+    """Export native, system, and ACP trust for gRPC's separate TLS library."""
+    source = "configured gRPC"
+    if not ca_cert_file and os.path.exists(_SERVICE_CA_PATH):
+        ca_cert_file = _SERVICE_CA_PATH
+        source = "service"
+    context = _tls_context(ca_cert_file, source)
+    certificates = context.get_ca_certs(binary_form=True)
+    if not certificates:
+        raise RuntimeError("gRPC CA trust store is empty")
+    return "".join(ssl.DER_cert_to_PEM_cert(cert) for cert in certificates).encode()
 
 
 def _build_channel(
