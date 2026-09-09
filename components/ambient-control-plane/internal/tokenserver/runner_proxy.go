@@ -34,20 +34,7 @@ func runnerProxyPath(raw string) (name, sessionID, runnerPath string, ok bool) {
 			return "", "", "", false
 		}
 	}
-	// These are the existing ACP runner HTTP surfaces. No arbitrary loopback
-	// destination or unrelated runner administration path is accepted.
-	root := strings.SplitN(parts[3], "/", 2)[0]
-	switch root {
-	case "", "interrupt", "feedback", "capabilities":
-		if runnerPath != "/"+root {
-			return "", "", "", false
-		}
-		return parts[0], parts[2], runnerPath, true
-	case "tasks", "events", "agui", "workspace", "files", "content", "git", "repos", "mcp", "oauth":
-		return parts[0], parts[2], runnerPath, true
-	default:
-		return "", "", "", false
-	}
+	return parts[0], parts[2], runnerPath, true
 }
 
 func (h *sandboxHandler) handleRunnerProxy(w http.ResponseWriter, r *http.Request) {
@@ -56,12 +43,16 @@ func (h *sandboxHandler) handleRunnerProxy(w http.ResponseWriter, r *http.Reques
 		http.NotFound(w, r)
 		return
 	}
+	accessMethod, accessAction, allowed := runnerAccessOperation(r.Method, runnerPath)
+	if !allowed {
+		http.NotFound(w, r)
+		return
+	}
 	bearer, err := extractBearerToken(r)
 	if err != nil || h.authorizeRunner == nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	accessMethod, accessAction := runnerAccessOperation(r.Method, runnerPath)
 	target, err := h.authorizeRunner(r.Context(), bearer, sessionID, name, accessMethod, accessAction)
 	if err != nil || target == "" {
 		http.Error(w, "forbidden", http.StatusForbidden)
@@ -114,17 +105,40 @@ func (h *sandboxHandler) handleRunnerProxy(w http.ResponseWriter, r *http.Reques
 // RunnerAuthorizer checks the API role binding before runner transport access.
 type RunnerAuthorizer func(ctx context.Context, bearer, sessionID, sandboxName, method, action string) (string, error)
 
-func runnerAccessOperation(method, runnerPath string) (string, string) {
-	if method == http.MethodOptions {
-		return http.MethodGet, ""
+// runnerAccessOperation accepts only the native routes used by ACP's public
+// API adapter. A new runner endpoint does not automatically become accessible.
+func runnerAccessOperation(method, runnerPath string) (string, string, bool) {
+	switch method {
+	case http.MethodGet:
+		switch runnerPath {
+		case "/capabilities", "/tasks", "/mcp/status", "/repos/status",
+			"/content/list", "/content/file", "/content/git-status", "/content/git-list-branches":
+			return method, "", true
+		}
+	case http.MethodPost:
+		switch runnerPath {
+		case "/", "/interrupt", "/feedback", "/content/git-configure-remote":
+			return method, "", true
+		case "/content/write":
+			// Public file PUT maps to the native writer's POST.
+			return http.MethodPut, "", true
+		}
+	case http.MethodDelete:
+		if runnerPath == "/content/delete" {
+			return method, "", true
+		}
 	}
-	// The public file PUT endpoint maps to the native content writer's POST.
-	if method == http.MethodPost && runnerPath == "/content/write" {
-		return http.MethodPut, ""
+	parts := strings.Split(strings.TrimPrefix(runnerPath, "/"), "/")
+	if method == http.MethodGet && len(parts) == 2 && parts[0] == "events" && runnerProxySegment.MatchString(parts[1]) {
+		return method, "", true
 	}
-	parts := strings.Split(strings.Trim(runnerPath, "/"), "/")
-	if method == http.MethodPost && len(parts) == 3 && parts[0] == "tasks" && parts[2] == "stop" {
-		return method, "stop"
+	if len(parts) == 3 && parts[0] == "tasks" && runnerProxySegment.MatchString(parts[1]) {
+		if method == http.MethodGet && parts[2] == "output" {
+			return method, "", true
+		}
+		if method == http.MethodPost && parts[2] == "stop" {
+			return method, "stop", true
+		}
 	}
-	return method, ""
+	return "", "", false
 }
