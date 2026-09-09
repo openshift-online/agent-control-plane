@@ -1,65 +1,12 @@
 # ACP with a Hypershell service
 
-These files prepare an isolated ACP test namespace. They use an existing
-Hypershell service and OIDC realm. They do not change the current `oc` context.
-The code that connects ACP to Hypershell supplies `control_plane_env` in the
-configuration file. The example has no connection variables and is not a
-complete deployment configuration. See `jshell-evidence.md` for the current
-cluster state and completed checks.
+These files deploy ACP to an isolated OpenShift test namespace. Hypershell owns
+each workspace gateway and its database. OpenShell owns each session sandbox.
+All cluster commands require an explicit `ACP_OC_CONTEXT`; no script changes
+the current context. See [jshell-evidence.md](jshell-evidence.md) for deployed
+revisions, resource IDs, completed checks, and remaining work.
 
-## Cluster inspection: 2026-09-09
-
-The `jshell` cluster has these services:
-
-| Resource | State |
-| --- | --- |
-| Hypershell API, controller, web console, PostgreSQL | Each deployment has one ready pod |
-| Keycloak | One ready pod; HTTPS OIDC discovery succeeds |
-| Agent Sandbox controller | One ready pod |
-| cert-manager | Controller, webhook, and CA injector are ready |
-| Storage | `gp3-csi` is the default; new volume creation fails |
-| Internal image registry | The `default-route` is available |
-| `acp-hypershell` namespace | Not present during inspection |
-
-Hypershell API rejects an unauthenticated gateway list request with HTTP 401.
-The existing `openshell-934c33c811ba0575` namespace has no gateway workloads.
-Read-only database inspection found no active fleets, gateway releases, or
-managed clusters. The only active managed database is failed. Its PVC cannot
-provision a volume: AWS STS rejects `AssumeRoleWithWebIdentity` with HTTP 403.
-Repair the CSI role trust or supply working storage before deployment. One
-node also reports insufficient memory for the pending database pod.
-
-There is no cluster issuer. Inspect each gateway's namespaced issuer when it
-is created. A ready controller alone does not prove gateway provisioning.
-
-The existing Hypershell images come from different source revisions:
-
-| Component | Source tag | Running image digest |
-| --- | --- | --- |
-| API | `pr210-236bd3d` | `sha256:5188552c32eaaeb0dcd9478c381b513e48f875552ee787c5c31b2d7b2e650576` |
-| Controller | `935baba-hypershell-system` | `sha256:d07e4b2e9911d032f531900c54c11c8b299a17307645a247a0812fcc03b56d45` |
-| Web console | `pr210-236bd3d` | `sha256:4ff195b56e307837475475fb7cecf77fa120a47fb10cee7885ee7bf2910fa5a5` |
-
-The API source at `236bd3d` has gateway service-account APIs. The controller
-has no `GATEWAY_IMAGE` environment variable. Read the selected gateway release
-from Hypershell before creating a gateway. Do not assume that the live service
-uses the image in the current source manifest.
-
-Service URLs:
-
-- Hypershell API: `https://hypershell-api-hypershell-system.apps.rosa.jshell.8u58.p3.openshiftapps.com`
-- Hypershell UI: `https://hypershell.apps.rosa.jshell.8u58.p3.openshiftapps.com`
-- OIDC realm: `https://keycloak.apps.rosa.jshell.8u58.p3.openshiftapps.com/realms/hypershell`
-- Image registry: `default-route-openshift-image-registry.apps.rosa.jshell.8u58.p3.openshiftapps.com`
-
-Reuse Hypershell for the first gateway test. Create a dedicated ACP OIDC client
-and separate gateway resources. If the existing API cannot meet the required
-contract, deploy a separate Hypershell API, database, and controller. Do not
-upgrade the shared service as a side effect of ACP installation.
-
-## Prepare and build
-
-Set the context on every command through the supplied wrapper:
+## Build the ACP images
 
 ```bash
 export ACP_OC_CONTEXT=default/api-jshell-8u58-p3-openshiftapps-com:443/johnsell
@@ -74,121 +21,121 @@ components/pr-test/hypershell/build.sh ui
 components/pr-test/hypershell/build.sh runner
 ```
 
-Builds run in local Podman and push to the internal image registry. The OpenShift
-token is passed through standard input. Temporary registry credentials are
-removed when the script exits. The build scripts print the resulting image reference. Use
-those references, with digests, in a copy of `config.example.json`. Build from a
-committed source tree so the recorded revision identifies the source.
+Builds use local Podman and an archive of the committed Git revision. Commit
+source changes before running the build script. This keeps the source and image
+revision label in agreement during concurrent worktree edits. The runner build
+uses `Dockerfile.openshell`.
 
-Gateway sandbox service accounts need pull access to the runner image. Give
-`system:image-puller` in the ACP image namespace to each specific gateway
-service account. Do not grant pull access to all service accounts in the cluster.
-Alternatively, publish the runner image to a registry that those gateways can
-already read.
+The build script passes the OpenShift token to the registry through standard
+input and removes its temporary registry credentials on exit. It prints an
+image reference with a digest. Put each reference in a private copy of
+`config.example.json`.
 
-## Configure authentication and apply
+## Configure authentication and TLS
 
-Create confidential OIDC clients named by `cp_client_id` and `ui_client_id`.
-Enable the client credentials grant for the control plane. Configure the UI
-client with the exact HTTPS callback URL shown by `render.py`. Give the control
-plane the ACP service identity claims. Configure user roles for ACP access.
-Use a separate authorized Hypershell client for gateway management. Gateway
-service-account credentials are separate from both ACP client credentials.
+`bootstrap-oidc.py` creates dedicated clients in the existing test Keycloak
+realm. It reads the test Keycloak deployment's bootstrap admin settings through
+the explicit cluster context. It writes client secrets to a private directory.
+The UI client has an exact HTTPS callback URL. ACP and Hypershell management
+use separate confidential clients. The manager receives `gateway:creator`.
 
-Store the two ACP client secrets in local files with mode `0600`. Do not put
-secret values in `config.json`, shell arguments, or source control. Connection
-environment variables can use Kubernetes `secretKeyRef` records.
+Store local secret files with mode `0600`. Do not put their values in source
+control, shell arguments, or `config.json`. The `control_plane_env` list accepts
+Kubernetes `secretKeyRef` records. Set these connection variables:
+
+- `HYPERSHELL_API_URL`: the authenticated Hypershell API base URL.
+- `HYPERSHELL_OIDC_TOKEN_URL`, `HYPERSHELL_OIDC_CLIENT_ID`, and
+  `HYPERSHELL_OIDC_CLIENT_SECRET`: the gateway management identity.
+- `HYPERSHELL_INSTANCE_ID`: a stable UUID for this ACP installation.
+- `HYPERSHELL_GATEWAY_TEMPLATE`: the JSON produced by `seed-hypershell.py`.
+- `HYPERSHELL_SANDBOX_DRIVER_CONFIG`: optional driver settings, including
+  `workspace_storage_class` when a specific storage class is required.
 
 ```bash
-python3 components/pr-test/hypershell/render.py /private/path/config.json > /tmp/acp-resources.json
 python3 components/pr-test/hypershell/setup-secrets.py /private/path/config.json \
   --cp-client-secret-file /private/path/cp-secret \
   --ui-client-secret-file /private/path/ui-secret
+python3 components/pr-test/hypershell/setup-tls.py /private/path/config.json
 components/pr-test/hypershell/apply.sh /private/path/config.json
 ```
 
-Rendering does not contact the cluster. `setup-secrets.py` preserves the database
-password, encryption key, and session key on repeat runs. It applies secret
-values through standard input and does not print them. `apply.sh` requires all
-secrets before it applies the workloads. PostgreSQL uses a PVC. All containers
-use a read-only root filesystem and restricted security settings.
+`setup-secrets.py` preserves the database password, credential encryption key,
+runner signing key, and UI session key on repeat runs. The API receives only
+the runner public key. Plaintext credential storage is disabled. Secret values
+pass to `oc` through standard input and are not printed.
 
-The control plane has a namespace Role for Secrets and ConfigMaps. If the
-integration requires more permissions, add the specific resources after review.
-It has no authority to create gateway workloads or namespaces in this manifest.
-Hypershell must own those resources.
+`setup-tls.py` creates a dedicated test ClusterIssuer and an ACP certificate
+with public gRPC and internal service DNS names. The CA private key stays in
+the cert-manager namespace. A ConfigMap contains its public CA and system
+roots. The public gRPC Route uses passthrough TLS; the REST Route uses
+reencrypt TLS. OpenShift's default ingress certificate does not permit HTTP/2
+on a reencrypt Route. See the [Red Hat ingress documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/networking_operators/configuring-ingress).
 
-## Required deployment proof
+The deployment enables enhanced TLS for REST and gRPC and disables Kubernetes
+TLS auto-detection. The control plane uses HTTPS for the internal API. It
+receives the public trust bundle through `SSL_CERT_FILE`, `CA_CERT_FILE`, and
+`HYPERSHELL_CA_CERT_FILE`. The last variable also supplies gateway trust and the
+runner CA payload. The UI receives the bundle through `NODE_EXTRA_CA_CERTS`.
+Browser UI and token Routes use the cluster's publicly trusted certificate.
 
-Record the source revision, all running image digests, test workspace and gateway
-IDs, session and sandbox IDs, and HTTPS routes. Verify these operations:
+After CA rotation, run TLS setup again to refresh the public trust ConfigMap
+and restart its consumers. A production installation needs an automatic trust
+and certificate rotation process.
 
-1. Sign in through the ACP UI. Reject requests without valid authentication.
-2. Create an ACP workspace and observe a ready Hypershell gateway.
-3. Create two sessions with separate sandboxes and inference settings.
-4. Select an ACP credential and confirm that its exact provider record is used.
-5. Rotate and revoke that credential. Confirm that the changes reach OpenShell.
-6. Replace a control-plane pod and confirm recovery without duplicate gateways.
-7. Stop and delete sessions. Delete the test workspace and confirm cleanup.
-8. Leave a ready workspace for user approval.
+`apply.sh` requires configured TLS, built images, and all Secrets. It waits for
+OpenShift service account image pull Secrets before creating pods. Deployments
+use Recreate. PostgreSQL uses a PVC. Containers use restricted security settings
+and read-only root filesystems. The ACP control plane has namespace access to
+its signing Secret and ConfigMaps; it cannot create gateway namespaces or
+workloads.
 
-A successful rollout is a prerequisite for these tests. It is not the test
-result. See `jshell-evidence.md` for the resources applied during preparation.
+## Deploy isolated Hypershell
 
-## Isolated Hypershell setup
+`render-hypershell.py` reads a compatible Hypershell checkout's base manifests.
+It renders a separate database, API, controller, CA issuer, and Route. It does
+not deploy Keycloak or upgrade shared Hypershell services. It requires PyYAML.
+Supply `namespace`, `oidc_issuer`, `apps_domain`, `cp_client_id`, `storage_class`,
+`api_image`, and `controller_image` in a private JSON configuration. Supply the
+Hypershell database, API client, and Keycloak provisioner Secrets before apply.
+The source base manifests define their required keys.
 
-`render-hypershell.py` reads the selected Hypershell checkout's base manifests.
-It creates a separate database, API, controller, CA issuer, and Route. It does
-not deploy another Keycloak service or change the shared Hypershell service.
-It requires PyYAML. Supply a JSON configuration with `namespace`, `oidc_issuer`,
-`apps_domain`, `cp_client_id`, `storage_class`, `api_image`, and `controller_image`.
+The Hypershell source must support caller-scoped `external_reference`, verified
+gateway deletion completion, configurable database storage, and
+`GATEWAY_SERVER_TLS_CLUSTER_ISSUER`. Set `server_tls_cluster_issuer` to
+`<ACP namespace>-test-ca`. Each gateway server then uses the same issuer trusted
+by ACP. Client credentials remain separate from the shared server CA.
 
-`bootstrap-oidc.py` can create the test clients through the existing Keycloak
-Admin API. It reads the test deployment's bootstrap admin settings through the
-selected cluster context. Client secrets are written to a private output
-directory. It does not print secret values.
+The configuration can set `database_memory_request` and
+`gateway_memory_request`. Both use `128Mi` in this test deployment. Hypershell
+validates these quantities and retains its 512Mi container limits. Without
+these settings, its memory requests stay unchanged.
 
 `seed-hypershell.py` creates or checks the dedicated managed cluster and gateway
-image release. It writes the gateway template to a private local file. Configure
-`HYPERSHELL_GATEWAY_TEMPLATE` with that JSON. Configure
-`HYPERSHELL_SANDBOX_DRIVER_CONFIG` with `workspace_storage_class` when a specific
-class is required. Hypershell uses `DATABASE_STORAGE_CLASS` for new gateway
-database PVCs. Existing PVCs keep their storage class.
-
-Before applying ACP, include the namespace's `openshift-service-ca.crt`
-ConfigMap value as `service_ca` in its JSON configuration. The renderer sets the
-public gRPC Route's destination CA from this value. `setup-secrets.py` creates
-the runner keypair before the API mounts its public key.
-
-
-For public gRPC on an OpenShift default ingress certificate, use a dedicated
-certificate and passthrough Route. The default ingress certificate does not
-permit HTTP/2 on a reencrypt Route. Run `setup-tls.py config.json` with
-`ACP_OC_CONTEXT` set. This creates a dedicated test ClusterIssuer and an ACP
-server certificate. It puts the public CA and system roots in a ConfigMap.
-The CA private key stays in the cert-manager namespace. Set Hypershell
-`GATEWAY_SERVER_TLS_CLUSTER_ISSUER` to `<ACP namespace>-test-ca` so each gateway
-server uses the same trusted issuer. The control plane supplies this trust
-bundle to runner startup. Browser UI and token Routes keep public certificates.
-
-The operator must renew the trust ConfigMap after CA rotation. This script is
-for the review deployment; a production installation needs a managed trust
-bundle and certificate rotation process.
-
+image release. It writes the gateway template to a private file. The current
+create schema requires an empty `database_id` placeholder; Hypershell assigns
+the database. `DATABASE_STORAGE_CLASS` selects the class for new gateway
+database PVCs. Existing PVCs keep their class.
 
 When runner images use the private OpenShift registry, run
 `grant-runner-pull.py <gateway-namespace>` after each workspace gateway namespace
-exists. This permits only its sandbox service account to pull the runner image.
-The RoleBinding has a Namespace owner reference, so namespace deletion also
-removes that binding. The script rejects namespaces from other Hypershell
-instances. No registry token is copied to a gateway namespace.
+exists. This grants only its sandbox service account access to the runner image.
+The RoleBinding has a Namespace owner reference. Namespace deletion therefore
+removes the binding. The script rejects namespaces from other Hypershell
+instances. It does not copy registry tokens to gateway namespaces.
 
+## Required deployment proof
 
-Image builds use an archive of the committed Git revision. Commit source changes
-before running `build.sh`. This keeps the image source and its revision label
-in agreement when another task edits the shared worktree.
+Record source revisions, image digests, workspace and gateway IDs, session and
+sandbox IDs, and HTTPS routes. Verify these operations:
 
-The isolated Hypershell configuration can set `database_memory_request` and
-`gateway_memory_request`. Both use `128Mi` in this test deployment. Hypershell
-validates these quantities and retains its existing 512Mi limits. Without these
-settings, its current memory requests stay unchanged.
+1. Sign in through the ACP UI and reject requests without authentication.
+2. Create a workspace and observe a ready Hypershell gateway.
+3. Create two sessions with separate sandboxes and inference settings.
+4. Confirm that a selected credential maps to its exact provider record.
+5. Rotate and revoke the credential and verify OpenShell convergence.
+6. Replace a control-plane pod and verify recovery without duplicate gateways.
+7. Stop and delete sessions, then verify workspace cleanup.
+8. Leave a ready workspace for user approval.
+
+A successful rollout is a prerequisite for these tests. It does not prove
+session execution.

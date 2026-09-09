@@ -47,7 +47,7 @@ Namespace: `acp-hypershell-system`.
 API: `https://hypershell-api-acp-hypershell-system.apps.rosa.jshell.8u58.p3.openshiftapps.com`
 
 The API and controller now run digest-pinned images from Hypershell commit
-`d8ec5c2`. This includes persistent storage configuration, the OpenShift database
+`cbc5442`. This includes persistent storage configuration, the OpenShift database
 UID fix, caller-scoped gateway references, and verified deletion completion.
 The existing shared Hypershell deployments were not upgraded.
 
@@ -81,8 +81,8 @@ values. The API has plaintext credential storage disabled.
 Operator configuration and client secret files are in the local directory
 `/home/jsell/.cache/acp-hypershell-jshell`. The directory has mode `0700` and
 secret files have mode `0600`. These files are not in source control. The ACP
-configuration file is `config.json`. API and runner images currently come from
-ACP commit `e8fd4b35`; the control plane image comes from `49d41e39`. Final ACP
+configuration file is `config.json`. API, control plane, and runner images now come from
+ACP commit `c64d811c`. Final ACP
 source changes require another image build before approval tests.
 
 The jshell and Keycloak HTTPS certificates pass system trust verification.
@@ -161,7 +161,8 @@ resolved the first HTTP 400 response without creating a duplicate gateway.
 
 The runner image pull grant is limited to the gateway's default service
 account and the `acp-claude-runner` image stream. An authorization check returned
-`yes`. The gateway database pod requests 256Mi and remains Pending because all
+`yes`. The gateway database pod initially requested 256Mi. After the memory request
+configuration was deployed, it requests 128Mi and remains Pending because all
 three workers have insufficient memory. Its PVC waits for a schedulable
 consumer. A fourth worker is still needed before sandbox tests can proceed.
 
@@ -173,5 +174,23 @@ capacity expansion remained pending. The UI address is:
 `https://ambient-ui-acp-hypershell.apps.rosa.jshell.8u58.p3.openshiftapps.com`
 
 Hypershell commit `cbc5442` adds validated memory request settings and the
-shared server certificate issuer. Its API and controller images are being
-rebuilt before the next gateway check.
+shared server certificate issuer. Its API and controller images are deployed and Ready.
+
+
+The browser login passed after the dedicated user profile was set from local
+Git configuration. The user sees `jshell-hypershell-test` with the Owner role.
+Authenticated public gRPC reflection also passed and listed eight services.
+The fourth worker remains the blocker for gateway database scheduling.
+
+
+The gateway database later took a free scheduling slot during the ACP control
+plane update. Its 1Gi PVC became Bound, and PostgreSQL completed startup. The
+new ACP control plane then established both project and session gRPC watch
+streams over verified TLS. The test UI was temporarily scaled to zero to free
+capacity. It must be restored before user approval.
+
+Hypershell created the gateway server and console pods. Both remain Pending
+for memory. The server certificate uses `acp-hypershell-test-ca` and includes
+the public gateway hostname. The separate sandbox TLS Secret has a public
+server CA and an owner reference to the gateway client Secret. The certificate
+generation Job completed.
