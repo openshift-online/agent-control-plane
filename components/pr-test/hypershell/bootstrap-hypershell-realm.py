@@ -25,9 +25,9 @@ def main():
     if not context:
         parser.error('Set ACP_OC_CONTEXT')
     config = json.loads(args.config.read_text())
-    server, old_realm = config['oidc_issuer'].rstrip('/').rsplit('/realms/', 1)
-    if args.realm == old_realm or args.realm == 'master' or not args.realm.replace('-', '').isalnum():
-        parser.error('Use a new realm name with letters, digits, or hyphens')
+    server, _ = config['oidc_issuer'].rstrip('/').rsplit('/realms/', 1)
+    if args.realm == 'master' or not args.realm.replace('-', '').isalnum():
+        parser.error('Use a realm name with letters, digits, or hyphens, other than master')
     spec = spec_from_file_location('bootstrap_oidc', Path(__file__).with_name('bootstrap-oidc.py'))
     helper = module_from_spec(spec)
     spec.loader.exec_module(helper)
