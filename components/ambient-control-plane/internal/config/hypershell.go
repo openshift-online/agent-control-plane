@@ -54,8 +54,16 @@ func LoadHypershell() (*HypershellConfig, error) {
 		}
 	}
 	if raw := os.Getenv("HYPERSHELL_SANDBOX_DRIVER_CONFIG"); raw != "" {
-		if err := json.Unmarshal([]byte(raw), &c.SandboxDriverConfig); err != nil {
+		if err := json.Unmarshal([]byte(raw), &c.SandboxDriverConfig); err != nil || c.SandboxDriverConfig == nil {
 			return nil, fmt.Errorf("HYPERSHELL_SANDBOX_DRIVER_CONFIG must be a JSON object")
+		}
+	}
+	for field, setting := range map[string]string{
+		"workspace_storage_class":        "GATEWAY_WORKSPACE_STORAGE_CLASS",
+		"workspace_default_storage_size": "GATEWAY_WORKSPACE_DEFAULT_STORAGE_SIZE",
+	} {
+		if _, present := c.SandboxDriverConfig[field]; present {
+			return nil, fmt.Errorf("HYPERSHELL_SANDBOX_DRIVER_CONFIG cannot set %s; configure %s on the Hypershell controller", field, setting)
 		}
 	}
 	return c, nil
