@@ -298,7 +298,9 @@ func (r *ManagedReconciler) managedNetworkRule() (*sandboxpb.NetworkPolicyRule, 
 	if err != nil {
 		return nil, err
 	}
-	return &sandboxpb.NetworkPolicyRule{Name: "acp-session-callbacks", Endpoints: []*sandboxpb.NetworkEndpoint{{Host: u.Hostname(), Port: port}, {Host: host, Port: uint32(n)}}, Binaries: acpCallbackBinaries()}, nil
+	// Keep callback TLS end to end. Native TLS interception does not support
+	// gRPC HTTP/2; the runner still verifies the server certificate and CA.
+	return &sandboxpb.NetworkPolicyRule{Name: "acp-session-callbacks", Endpoints: []*sandboxpb.NetworkEndpoint{{Host: u.Hostname(), Port: port, Tls: "skip"}, {Host: host, Port: uint32(n), Tls: "skip"}}, Binaries: acpCallbackBinaries()}, nil
 }
 
 func (r *ManagedReconciler) applyManagedNetworkPolicy(ctx context.Context, target, name string) error {

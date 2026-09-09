@@ -177,6 +177,51 @@ func TestManagedEnvironmentProtectsIdentityAndUsesExternalEndpoints(t *testing.T
 	}
 }
 
+func TestManagedCallbacksPassTLSOnlyToConfiguredEndpoints(t *testing.T) {
+	for _, tc := range []struct {
+		name, tokenURL, grpcAddress, tokenHost, grpcHost string
+		tokenPort, grpcPort                              uint32
+	}{
+		{"default HTTPS port", "https://cp.example/token", "runner.example:443", "cp.example", "runner.example", 443, 443},
+		{"custom ports", "https://cp.example:8443/token", "runner.example:9443", "cp.example", "runner.example", 8443, 9443},
+		{"IPv6", "https://[2001:db8::1]:8443/token", "[2001:db8::2]:9443", "2001:db8::1", "2001:db8::2", 8443, 9443},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &ManagedReconciler{cfg: &config.HypershellConfig{RunnerTokenURL: tc.tokenURL, RunnerGRPCAddress: tc.grpcAddress}}
+			rule, err := r.managedNetworkRule()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rule.Name != "acp-session-callbacks" || len(rule.Endpoints) != 2 {
+				t.Fatal("callback rule must contain only its two configured endpoints")
+			}
+			if rule.Endpoints[0].Host != tc.tokenHost || rule.Endpoints[0].Port != tc.tokenPort || rule.Endpoints[1].Host != tc.grpcHost || rule.Endpoints[1].Port != tc.grpcPort {
+				t.Fatal("callback destination changed")
+			}
+			for _, endpoint := range rule.Endpoints {
+				if endpoint.Tls != "skip" || endpoint.Protocol != "" {
+					t.Fatal("callback TLS must pass through a layer-4 endpoint")
+				}
+			}
+			paths := map[string]bool{
+				"/sandbox/.venv/bin/python":                 true,
+				"/sandbox/.venv/bin/python3":                true,
+				"/sandbox/.venv/bin/uvicorn":                true,
+				"/sandbox/.uv/python/cpython-*/bin/python*": true,
+			}
+			if len(rule.Binaries) != len(paths) {
+				t.Fatal("callback binary scope changed")
+			}
+			for _, binary := range rule.Binaries {
+				if !paths[binary.Path] {
+					t.Fatalf("unexpected or duplicate callback binary %s", binary.Path)
+				}
+				delete(paths, binary.Path)
+			}
+		})
+	}
+}
+
 func TestManagedSessionEnvironmentValidatesInputAndKeepsLimits(t *testing.T) {
 	r := &ManagedReconciler{cfg: &config.HypershellConfig{}}
 	s := types.Session{ObjectReference: types.ObjectReference{ID: "session"}, ProjectID: "project", EnvironmentVariables: `{"AMBIENT_PROJECT_ID":"other","USER_OPTION":"set"}`, Timeout: 90, LlmMaxTokens: 400, LlmTemperature: 0.2}
