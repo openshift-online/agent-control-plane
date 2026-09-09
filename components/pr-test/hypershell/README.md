@@ -5,6 +5,8 @@ each workspace gateway and its database. OpenShell owns each session sandbox.
 All cluster commands require an explicit `ACP_OC_CONTEXT`; no script changes
 the current context. See [jshell-evidence.md](jshell-evidence.md) for deployed
 revisions, resource IDs, completed checks, and remaining work.
+See [approval-verification.md](approval-verification.md) for the checks required
+before user approval and the limits of the current deployment evidence.
 
 ## Build the ACP images
 
@@ -48,8 +50,10 @@ Kubernetes `secretKeyRef` records. Set these connection variables:
   `HYPERSHELL_OIDC_CLIENT_SECRET`: the gateway management identity.
 - `HYPERSHELL_INSTANCE_ID`: a stable UUID for this ACP installation.
 - `HYPERSHELL_GATEWAY_TEMPLATE`: the JSON produced by `seed-hypershell.py`.
-- `HYPERSHELL_SANDBOX_DRIVER_CONFIG`: optional driver settings, including
-  `workspace_storage_class` when a specific storage class is required.
+- `HYPERSHELL_SANDBOX_DRIVER_CONFIG`: optional per-sandbox driver settings.
+  The pinned Kubernetes driver accepts `pod`, `containers`, and `volumes`.
+  For example, `containers.agent.resources.requests` sets resource requests.
+  Workspace storage settings belong to the Hypershell controller configuration.
 
 `api_memory_request` sets the API pod memory request. It defaults to `64Mi` and
 accepts integer Mi units from `1Mi` to `1024Mi`. Its limit stays `1Gi`. The jshell
@@ -102,6 +106,8 @@ Supply `namespace`, `oidc_issuer`, `apps_domain`, `cp_client_id`, `storage_class
 `api_image`, and `controller_image` in a private JSON configuration. Supply the
 Hypershell database, API client, and Keycloak provisioner Secrets before apply.
 The source base manifests define their required keys.
+Use [hypershell-config.example.json](hypershell-config.example.json) as a starting
+point and replace the image references with built digests.
 
 The Hypershell source must support caller-scoped `external_reference`, verified
 gateway deletion completion, configurable database storage, and
@@ -119,6 +125,14 @@ image release. It writes the gateway template to a private file. The current
 create schema requires an empty `database_id` placeholder; Hypershell assigns
 the database. `DATABASE_STORAGE_CLASS` selects the class for new gateway
 database PVCs. Existing PVCs keep their class.
+
+In the Hypershell configuration, `workspace_storage_class` and
+`workspace_default_storage_size` set `GATEWAY_WORKSPACE_STORAGE_CLASS` and
+`GATEWAY_WORKSPACE_DEFAULT_STORAGE_SIZE` on the controller. Hypershell writes
+them under `[openshell.drivers.kubernetes]` for sandbox workspace PVCs. The
+jshell test uses `acp-hypershell-gp3` and `2Gi`. If omitted, OpenShell selects the
+cluster default storage class and its default size. Do not put these keys in
+`HYPERSHELL_SANDBOX_DRIVER_CONFIG`: the pinned request schema rejects them.
 
 When runner images use the private OpenShift registry, run
 `grant-runner-pull.py <gateway-namespace>` after each workspace gateway namespace

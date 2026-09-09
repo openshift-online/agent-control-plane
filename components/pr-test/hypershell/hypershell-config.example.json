@@ -1,0 +1,14 @@
+{
+  "namespace": "acp-hypershell-system",
+  "apps_domain": "apps.rosa.jshell.8u58.p3.openshiftapps.com",
+  "oidc_issuer": "https://keycloak.apps.rosa.jshell.8u58.p3.openshiftapps.com/realms/hypershell",
+  "cp_client_id": "acp-hypershell-controller",
+  "api_image": "image-registry.openshift-image-registry.svc:5000/acp-hypershell-system/hypershell-api:REPLACE",
+  "controller_image": "image-registry.openshift-image-registry.svc:5000/acp-hypershell-system/hypershell-controller:REPLACE",
+  "storage_class": "acp-hypershell-gp3",
+  "workspace_storage_class": "acp-hypershell-gp3",
+  "workspace_default_storage_size": "2Gi",
+  "server_tls_cluster_issuer": "acp-hypershell-test-ca",
+  "database_memory_request": "128Mi",
+  "gateway_memory_request": "128Mi"
+}

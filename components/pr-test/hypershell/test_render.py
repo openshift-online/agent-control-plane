@@ -95,6 +95,40 @@ class RenderTests(unittest.TestCase):
         for name in mounts:
             self.assertIn('emptyDir', volumes[name])
 
+    def test_workspace_storage_is_controller_config_and_separate_from_database(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            base = source / 'deploy/base'
+            (base / 'certificates').mkdir(parents=True)
+            for name in ('api-server.yaml', 'controller-rbac.yaml', 'postgres.yaml',
+                         'certificates/ca-chain.yaml', 'networkpolicies.yaml'):
+                (base / name).write_text('')
+            deployment = {'apiVersion': 'apps/v1', 'kind': 'Deployment',
+                'metadata': {'name': 'hypershell-controller', 'namespace': 'original'},
+                'spec': {'template': {'spec': {'containers': [{'name': 'controller', 'env': []}]}}}}
+            (base / 'controller.yaml').write_text(json.dumps(deployment))
+            config = source / 'config.json'
+            values = {'namespace': 'isolated', 'oidc_issuer': 'https://issuer.example',
+                'controller_image': 'example/controller:test', 'cp_client_id': 'controller',
+                'storage_class': 'database-storage', 'apps_domain': 'apps.example',
+                'workspace_storage_class': 'sandbox-storage', 'workspace_default_storage_size': '3Gi'}
+            for configured in [True, False]:
+                if not configured:
+                    values.pop('workspace_storage_class')
+                    values.pop('workspace_default_storage_size')
+                config.write_text(json.dumps(values))
+                result = subprocess.run([sys.executable, str(Path(__file__).with_name('render-hypershell.py')),
+                    str(source), str(config)], check=True, capture_output=True, text=True)
+                controller = next(item for item in json.loads(result.stdout)['items'] if item['kind'] == 'Deployment')
+                env = {entry['name']: entry.get('value') for entry in controller['spec']['template']['spec']['containers'][0]['env']}
+                self.assertEqual(env['DATABASE_STORAGE_CLASS'], 'database-storage')
+                if configured:
+                    self.assertEqual(env['GATEWAY_WORKSPACE_STORAGE_CLASS'], 'sandbox-storage')
+                    self.assertEqual(env['GATEWAY_WORKSPACE_DEFAULT_STORAGE_SIZE'], '3Gi')
+                else:
+                    self.assertNotIn('GATEWAY_WORKSPACE_STORAGE_CLASS', env)
+                    self.assertNotIn('GATEWAY_WORKSPACE_DEFAULT_STORAGE_SIZE', env)
+
 
 if __name__ == '__main__':
     unittest.main()

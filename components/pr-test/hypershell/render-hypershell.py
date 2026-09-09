@@ -78,6 +78,10 @@ for filename in source_files:
                 for key in ('database_memory_request', 'gateway_memory_request'):
                     if config.get(key):
                         patch[key.upper()] = config[key]
+                for key, name in [('workspace_storage_class', 'GATEWAY_WORKSPACE_STORAGE_CLASS'),
+                                  ('workspace_default_storage_size', 'GATEWAY_WORKSPACE_DEFAULT_STORAGE_SIZE')]:
+                    if config.get(key):
+                        patch[name] = config[key]
                 if config.get('server_tls_cluster_issuer'):
                     patch['GATEWAY_SERVER_TLS_CLUSTER_ISSUER'] = config['server_tls_cluster_issuer']
                 container['env'] = [entry for entry in container['env'] if entry['name'] not in patch]
