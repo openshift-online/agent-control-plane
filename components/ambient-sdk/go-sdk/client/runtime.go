@@ -43,7 +43,7 @@ func (a *RuntimeAPI) PatchSession(ctx context.Context, id string, version int, f
 }
 
 func (a *RuntimeAPI) patch(ctx context.Context, resource, id string, version int, fields map[string]interface{}, result interface{}) error {
-	patch := make(map[string]interface{}, len(fields)+1)
+	patch := make(map[string]interface{})
 	for key, value := range fields {
 		patch[key] = value
 	}
