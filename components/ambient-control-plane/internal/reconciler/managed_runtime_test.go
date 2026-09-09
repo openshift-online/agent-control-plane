@@ -30,7 +30,9 @@ func TestManagedBindingIsPersistedBeforeGatewayRequest(t *testing.T) {
 		if err := json.NewDecoder(req.Body).Decode(&patch); err != nil {
 			t.Error(err)
 		}
-		fmt.Fprint(w, `{"id":"workspace","runtime_backend":"hypershell","runtime_version":1}`)
+		if _, err := fmt.Fprint(w, `{"id":"workspace","runtime_backend":"hypershell","runtime_version":1}`); err != nil {
+			t.Error(err)
+		}
 	}))
 	defer server.Close()
 	sdk, _ := sdkclient.NewServiceClient(server.URL, "test-service-identity-value")
@@ -56,7 +58,9 @@ func TestManagedRunnerAuthorizationChecksCurrentGenerationAndPhase(t *testing.T)
 		if req.Header.Get("Authorization") != "Bearer test-user-identity-value" && req.Header.Get("Authorization") != "Bearer test-service-identity-value" {
 			t.Error("unexpected identity")
 		}
-		json.NewEncoder(w).Encode(session)
+		if err := json.NewEncoder(w).Encode(session); err != nil {
+			t.Error(err)
+		}
 	}))
 	defer server.Close()
 	r := &ManagedReconciler{factory: NewSDKClientFactory(server.URL, auth.NewStaticTokenProvider("test-service-identity-value"), zerolog.Nop())}
@@ -138,7 +142,9 @@ func TestManagedDeletionRecoversGatewayAfterLostCreateResponse(t *testing.T) {
 						w.WriteHeader(http.StatusNotFound)
 						return
 					}
-					fmt.Fprint(w, `{"gateway_id":"gateway","external_reference":"instance/reference","state":"pending"}`)
+					if _, err := fmt.Fprint(w, `{"gateway_id":"gateway","external_reference":"instance/reference","state":"pending"}`); err != nil {
+						t.Error(err)
+					}
 					return
 				}
 				if req.Method != http.MethodPost || req.URL.Path != "/api/hypershell/v1/gateways" {
@@ -155,7 +161,9 @@ func TestManagedDeletionRecoversGatewayAfterLostCreateResponse(t *testing.T) {
 					t.Error("durable create key was not replayed")
 				}
 				w.WriteHeader(http.StatusCreated)
-				fmt.Fprint(w, `{"id":"gateway","external_reference":"instance/reference"}`)
+				if _, err := fmt.Fprint(w, `{"id":"gateway","external_reference":"instance/reference"}`); err != nil {
+					t.Error(err)
+				}
 			}))
 			defer hsServer.Close()
 			hs, err := hypershell.NewClient(hsServer.URL, auth.NewStaticTokenProvider("test-service-identity-value"), hsServer.Client())
@@ -167,7 +175,9 @@ func TestManagedDeletionRecoversGatewayAfterLostCreateResponse(t *testing.T) {
 				if err := json.NewDecoder(req.Body).Decode(&patch); err != nil {
 					t.Error(err)
 				}
-				fmt.Fprint(w, `{"id":"project","gateway_id":"gateway","runtime_version":1}`)
+				if _, err := fmt.Fprint(w, `{"id":"project","gateway_id":"gateway","runtime_version":1}`); err != nil {
+					t.Error(err)
+				}
 			}))
 			defer apiServer.Close()
 			sdk, _ := sdkclient.NewServiceClient(apiServer.URL, "test-service-identity-value")
@@ -217,7 +227,9 @@ func TestManagedStopRecordsCleanupBeforeGatewayCall(t *testing.T) {
 				if err := json.NewDecoder(req.Body).Decode(&patch); err != nil {
 					t.Error(err)
 				}
-				fmt.Fprint(w, `{"id":"session","runtime_status":"Stopping","runtime_version":1}`)
+				if _, err := fmt.Fprint(w, `{"id":"session","runtime_status":"Stopping","runtime_version":1}`); err != nil {
+					t.Error(err)
+				}
 			}))
 			defer api.Close()
 			sdk, _ := sdkclient.NewServiceClient(api.URL, "test-service-identity-value")

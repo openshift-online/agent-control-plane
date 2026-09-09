@@ -26,7 +26,7 @@ func runHypershellMode(ctx context.Context, cfg *config.ControlPlaneConfig) erro
 		return err
 	}
 	if cfg.OIDCClientID == "" || cfg.OIDCClientSecret == "" {
-		return fmt.Errorf("Hypershell runtime requires an authenticated ACP service identity")
+		return fmt.Errorf("hypershell runtime requires an authenticated ACP service identity")
 	}
 	// Kubernetes access is limited to the control plane's own signing key Secret.
 	kube, err := kubeclient.New(cfg.Kubeconfig, log.Logger)
@@ -61,7 +61,7 @@ func runHypershellMode(ctx context.Context, cfg *config.ControlPlaneConfig) erro
 	}()
 	runtime.SetGateway(gateway)
 	if !cfg.GRPCUseTLS {
-		return fmt.Errorf("Hypershell runtime requires TLS for the ACP watch connection")
+		return fmt.Errorf("hypershell runtime requires TLS for the ACP watch connection")
 	}
 	watchRoots := loadServiceCAPool()
 	if managedCfg.CACertFile != "" {

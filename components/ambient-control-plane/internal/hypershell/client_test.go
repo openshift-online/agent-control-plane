@@ -29,12 +29,16 @@ func TestReferenceCreateAndRecovery(t *testing.T) {
 				t.Error(err)
 			}
 			w.WriteHeader(http.StatusCreated)
-			fmt.Fprint(w, `{"id":"gateway-one","external_reference":"instance/workspace"}`)
+			if _, err := fmt.Fprint(w, `{"id":"gateway-one","external_reference":"instance/workspace"}`); err != nil {
+				t.Error(err)
+			}
 		case http.MethodGet:
 			if r.URL.Query().Get("external_reference") != "instance/workspace" {
 				t.Error("reference lookup was not exact")
 			}
-			fmt.Fprint(w, `{"items":[{"id":"gateway-one","external_reference":"instance/workspace"}]}`)
+			if _, err := fmt.Fprint(w, `{"items":[{"id":"gateway-one","external_reference":"instance/workspace"}]}`); err != nil {
+				t.Error(err)
+			}
 		}
 	}))
 	defer server.Close()
@@ -64,7 +68,9 @@ func TestManagementTrustAndErrors(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests++
 		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprint(w, "private-response-value")
+		if _, err := fmt.Fprint(w, "private-response-value"); err != nil {
+			t.Error(err)
+		}
 	}))
 	defer server.Close()
 	client, _ := NewClient(server.URL, testToken{err: fmt.Errorf("identity unavailable")}, server.Client())

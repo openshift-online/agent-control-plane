@@ -83,10 +83,10 @@ type Client struct {
 func NewClient(base string, token TokenProvider, httpClient *http.Client) (*Client, error) {
 	u, err := url.Parse(base)
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return nil, fmt.Errorf("Hypershell API URL must use HTTPS without credentials, query, or fragment")
+		return nil, fmt.Errorf("hypershell API URL must use HTTPS without credentials, query, or fragment")
 	}
 	if token == nil {
-		return nil, fmt.Errorf("Hypershell token provider is required")
+		return nil, fmt.Errorf("hypershell token provider is required")
 	}
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 45 * time.Second}
@@ -97,7 +97,7 @@ func NewClient(base string, token TokenProvider, httpClient *http.Client) (*Clie
 	return &Client{base: strings.TrimSuffix(strings.TrimRight(base, "/"), "/api/hypershell/v1") + "/api/hypershell/v1", token: token, http: &copyClient}, nil
 }
 
-func (c *Client) request(ctx context.Context, method, path string, body interface{}, out interface{}, accepted ...int) error {
+func (c *Client) request(ctx context.Context, method, path string, body interface{}, out interface{}, accepted ...int) (resultErr error) {
 	var encoded []byte
 	var err error
 	if body != nil {
@@ -111,7 +111,7 @@ func (c *Client) request(ctx context.Context, method, path string, body interfac
 		return fmt.Errorf("obtain Hypershell token: %w", err)
 	}
 	if token == "" {
-		return fmt.Errorf("Hypershell token is empty")
+		return fmt.Errorf("hypershell token is empty")
 	}
 	req, err := http.NewRequestWithContext(ctx, method, c.base+path, bytes.NewReader(encoded))
 	if err != nil {
@@ -123,7 +123,11 @@ func (c *Client) request(ctx context.Context, method, path string, body interfac
 	if err != nil {
 		return fmt.Errorf("send Hypershell request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("close Hypershell response: %w", err))
+		}
+	}()
 	valid := false
 	for _, code := range accepted {
 		if resp.StatusCode == code {
@@ -168,7 +172,7 @@ func (c *Client) FindGateway(ctx context.Context, reference string) (*Gateway, e
 		return nil, nil
 	}
 	if len(result.Items) != 1 {
-		return nil, fmt.Errorf("Hypershell reference is not unique")
+		return nil, fmt.Errorf("hypershell reference is not unique")
 	}
 	return &result.Items[0], nil
 }

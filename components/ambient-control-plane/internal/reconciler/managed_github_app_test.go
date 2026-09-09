@@ -32,7 +32,7 @@ func TestManagedGitHubAppExchangesKeyForExpiringToken(t *testing.T) {
 		parts := strings.Split(token, ".")
 		if len(parts) != 3 {
 			t.Error("missing App JWT")
-			http.Error(w, "bad", 401)
+			http.Error(w, "bad", http.StatusUnauthorized)
 			return
 		}
 		signature, err := base64.RawURLEncoding.DecodeString(parts[2])
@@ -52,7 +52,9 @@ func TestManagedGitHubAppExchangesKeyForExpiringToken(t *testing.T) {
 			t.Error("App ID missing")
 		}
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]interface{}{"token": "installation-test-value", "expires_at": expires})
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{"token": "installation-test-value", "expires_at": expires}); err != nil {
+			t.Error(err)
+		}
 	}))
 	defer server.Close()
 	app := &managedGitHubApp{AppID: "7", InstallationID: "42", PrivateKey: privatePEM, APIURL: server.URL}

@@ -37,7 +37,7 @@ func LoadHypershell() (*HypershellConfig, error) {
 		}
 	}
 	if c.ClientID == "" || c.ClientSecret == "" {
-		return nil, fmt.Errorf("Hypershell OIDC client credentials are required")
+		return nil, fmt.Errorf("hypershell OIDC client credentials are required")
 	}
 	if len(c.InstanceID) < 8 || len(c.InstanceID) > 100 || strings.ContainsAny(c.InstanceID, "/ \t\r\n") {
 		return nil, fmt.Errorf("HYPERSHELL_INSTANCE_ID must be a stable identifier of 8 to 100 characters")

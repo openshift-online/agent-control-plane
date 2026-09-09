@@ -33,7 +33,7 @@ func configureManagedGoogleCloud(provider *managedProvider, credential managedCr
 		QuotaProjectID string `json:"quota_project_id"`
 	}
 	if json.Unmarshal([]byte(credential.Token), &source) != nil {
-		return fmt.Errorf("Google credential must contain service-account or ADC JSON")
+		return fmt.Errorf("invalid configuration: Google credential must contain service-account or ADC JSON")
 	}
 	kind, err := openshell.DetectGoogleCredentialType(credential.Token)
 	if err != nil {
@@ -127,7 +127,7 @@ func configureManagedKubeconfig(provider *managedProvider, session types.Session
 		allowedIPs = append(allowedIPs, entry)
 	}
 	if session.GatewayWorkspace == "" {
-		return fmt.Errorf("Kubernetes provider requires a session gateway workspace")
+		return fmt.Errorf("invalid configuration: Kubernetes provider requires a session gateway workspace")
 	}
 	profileID := provider.data.Metadata.Name + "-kube"
 	provider.profile = &pb.ProviderProfile{Id: profileID, DisplayName: "ACP Kubernetes", Description: "Bound Kubernetes API bearer credential", Category: pb.ProviderProfileCategory_PROVIDER_PROFILE_CATEGORY_OTHER, Annotations: map[string]string{managedSessionAnnotation: session.ID}, Credentials: []*pb.ProviderProfileCredential{{Name: "api_token", EnvVars: []string{"KUBERNETES_TOKEN"}, Required: true, AuthStyle: "bearer", HeaderName: "authorization"}}, Endpoints: []*sandboxpb.NetworkEndpoint{{Host: endpoint.Hostname(), Port: uint32(port), Protocol: "rest", Tls: "terminate", Enforcement: "enforce", Access: "read-write", AllowedIps: allowedIPs}}, Binaries: []*sandboxpb.NetworkBinary{{Path: "/usr/bin/kubectl"}, {Path: "/usr/local/bin/kubectl"}, {Path: "/usr/bin/oc"}, {Path: "/usr/local/bin/oc"}, {Path: "/usr/bin/python3"}, {Path: "/usr/bin/python3.12"}, {Path: "/usr/local/bin/python3"}}, Discovery: &pb.ProviderProfileDiscovery{Credentials: []string{"api_token"}}}
@@ -206,7 +206,7 @@ func reconcileManagedProfile(ctx context.Context, gateway managedProviderGateway
 	}
 	current := response.GetProfile()
 	if current == nil || current.GetAnnotations()[managedSessionAnnotation] != desired.GetAnnotations()[managedSessionAnnotation] {
-		return fmt.Errorf("Kubernetes provider profile ownership does not match session")
+		return fmt.Errorf("invalid configuration: Kubernetes provider profile ownership does not match session")
 	}
 	normalized := proto.Clone(current).(*pb.ProviderProfile)
 	normalized.ResourceVersion = 0
@@ -216,7 +216,7 @@ func reconcileManagedProfile(ctx context.Context, gateway managedProviderGateway
 		return nil
 	}
 	if current.ResourceVersion == 0 {
-		return fmt.Errorf("Kubernetes provider profile has no resource version")
+		return fmt.Errorf("invalid configuration: Kubernetes provider profile has no resource version")
 	}
 	result, err := gateway.UpdateProviderProfiles(ctx, target, &pb.UpdateProviderProfilesRequest{Id: desired.Id, ExpectedResourceVersion: current.ResourceVersion, Profile: &pb.ProviderProfileImportItem{Profile: desired}})
 	if err != nil {

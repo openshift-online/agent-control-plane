@@ -343,7 +343,7 @@ func (r *ManagedReconciler) reconcileProject(ctx context.Context, sdk *sdkclient
 		return err
 	}
 	if gw.ID == "" || gw.ExternalReference != p.GatewayExternalReference {
-		return fmt.Errorf("Hypershell gateway does not match the workspace reference")
+		return fmt.Errorf("invalid configuration: Hypershell gateway does not match the workspace reference")
 	}
 	if p.GatewayID == "" {
 		_, err = r.patchProject(ctx, sdk, p, map[string]interface{}{"gateway_id": gw.ID, "gateway_status": "Provisioning"})

@@ -421,7 +421,7 @@ func buildManagedProvider(session types.Session, agent *types.Agent, credential 
 		result.data.Credentials = map[string]string{"MLFLOW_TRACKING_TOKEN": credential.Token}
 	case "jira":
 		if credential.Credential.URL == "" || credential.Credential.Email == "" {
-			return result, fmt.Errorf("Jira credential requires URL and email")
+			return result, fmt.Errorf("invalid configuration: Jira credential requires URL and email")
 		}
 		result.data.Credentials = map[string]string{"JIRA_API_TOKEN": credential.Token}
 		result.env["JIRA_URL"] = credential.Credential.URL
@@ -431,7 +431,7 @@ func buildManagedProvider(session types.Session, agent *types.Agent, credential 
 			Tokens map[string]string `json:"tokens"`
 		}
 		if json.Unmarshal([]byte(credential.Token), &token) != nil || token.Tokens["access_token"] == "" || token.Tokens["refresh_token"] == "" || token.Tokens["account_id"] == "" {
-			return result, fmt.Errorf("Codex credential requires auth JSON with access_token, refresh_token, and account_id")
+			return result, fmt.Errorf("invalid configuration: Codex credential requires auth JSON with access_token, refresh_token, and account_id")
 		}
 		result.data.Credentials = map[string]string{"CODEX_AUTH_ACCESS_TOKEN": token.Tokens["access_token"], "CODEX_AUTH_REFRESH_TOKEN": token.Tokens["refresh_token"], "CODEX_AUTH_ACCOUNT_ID": token.Tokens["account_id"], "CODEX_AUTH_ID_TOKEN": token.Tokens["id_token"]}
 	case "vertex":
@@ -477,11 +477,11 @@ func configureManagedVertex(provider *managedProvider, agent *types.Agent, crede
 		ProjectID string `json:"project_id"`
 	}
 	if json.Unmarshal([]byte(credential.Token), &source) != nil {
-		return fmt.Errorf("Vertex credential must contain Google credential JSON")
+		return fmt.Errorf("invalid configuration: Vertex credential must contain Google credential JSON")
 	}
 	annotations := map[string]string{}
 	if credential.Credential.Annotations != "" && json.Unmarshal([]byte(credential.Credential.Annotations), &annotations) != nil {
-		return fmt.Errorf("Vertex credential annotations must be a JSON string map")
+		return fmt.Errorf("invalid configuration: Vertex credential annotations must be a JSON string map")
 	}
 	project, region := annotations["vertex_project_id"], annotations["vertex_region"]
 	if project == "" {
@@ -503,7 +503,7 @@ func configureManagedVertex(provider *managedProvider, agent *types.Agent, crede
 		}
 	}
 	if project == "" || region == "" {
-		return fmt.Errorf("Vertex credential requires vertex_project_id and vertex_region annotations")
+		return fmt.Errorf("invalid configuration: Vertex credential requires vertex_project_id and vertex_region annotations")
 	}
 	provider.data.Config = openshell.ProviderConfig("vertex", project, region)
 	kind, err := openshell.DetectGoogleCredentialType(credential.Token)

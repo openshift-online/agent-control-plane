@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -48,7 +49,7 @@ func parseManagedGitHubApp(value string) (*managedGitHubApp, error) {
 	return &app, nil
 }
 
-func (a *managedGitHubApp) installationToken(ctx context.Context, client *http.Client) (string, time.Time, error) {
+func (a *managedGitHubApp) installationToken(ctx context.Context, client *http.Client) (token string, expiry time.Time, resultErr error) {
 	block, _ := pem.Decode([]byte(a.PrivateKey))
 	if block == nil {
 		return "", time.Time{}, fmt.Errorf("invalid GitHub App private key")
@@ -91,7 +92,13 @@ func (a *managedGitHubApp) installationToken(ctx context.Context, client *http.C
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("GitHub App token endpoint unavailable")
 	}
-	defer response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			token = ""
+			expiry = time.Time{}
+			resultErr = errors.Join(resultErr, fmt.Errorf("close GitHub App response: %w", err))
+		}
+	}()
 	if response.StatusCode != http.StatusCreated {
 		return "", time.Time{}, fmt.Errorf("GitHub App token endpoint returned HTTP %d", response.StatusCode)
 	}
