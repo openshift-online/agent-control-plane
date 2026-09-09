@@ -148,6 +148,14 @@ function positiveNumberOrNull(value: number | null | undefined): number | null {
 export function mapSdkSessionToDomain(sdk: Session): DomainSession {
   const annotations = parseAnnotations(sdk.annotations)
   return {
+    runtime: sdk.runtime_backend ? {
+      backend: sdk.runtime_backend,
+      status: emptyToNull(sdk.runtime_status),
+      error: emptyToNull(sdk.runtime_error),
+      gatewayId: emptyToNull(sdk.gateway_id),
+      sandboxName: emptyToNull(sdk.sandbox_name),
+      workspace: emptyToNull(sdk.gateway_workspace),
+    } : null,
     id: sdk.id,
     name: sdk.name,
     phase: parsePhase(sdk.phase),
@@ -180,6 +188,12 @@ export function mapSdkSessionToDomain(sdk: Session): DomainSession {
 
 export function mapSdkProjectToDomain(sdk: Project): DomainProject {
   return {
+    runtime: sdk.runtime_backend ? {
+      backend: sdk.runtime_backend,
+      status: emptyToNull(sdk.gateway_status),
+      error: emptyToNull(sdk.gateway_error),
+      gatewayId: emptyToNull(sdk.gateway_id),
+    } : null,
     id: sdk.id,
     name: sdk.name,
     description: emptyToNull(sdk.description),

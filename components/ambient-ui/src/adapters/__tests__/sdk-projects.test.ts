@@ -16,6 +16,18 @@ function makeSdkProject(overrides: Partial<Project> = {}): Project {
     name: 'test-project',
     prompt: '',
     status: 'active',
+    gateway_account_expires_at: '',
+    gateway_account_id: '',
+    gateway_credential_id: '',
+    gateway_endpoint: '',
+    gateway_error: '',
+    gateway_external_reference: '',
+    gateway_id: '',
+    gateway_instance_id: '',
+    gateway_status: '',
+    runtime_backend: '',
+    runtime_deleted: false,
+    runtime_version: 0,
     ...overrides,
   }
 }

@@ -1,5 +1,6 @@
 'use client'
 
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import type { DomainSession, SandboxLogEntry } from '@/domain/types'
@@ -91,7 +92,7 @@ function LogEntryRow({ entry }: LogEntryRowProps) {
 export function SandboxLogsTab({ session }: { session: DomainSession }) {
   const isActive = session.phase === 'Running'
   const isSandboxPending = session.phase === 'Pending' || session.phase === 'Creating'
-  const { entries, isConnected, isReconnecting } = useSandboxLogs(
+  const { entries, isConnected, isReconnecting, error, retry } = useSandboxLogs(
     session.id,
     isActive,
   )
@@ -120,13 +121,20 @@ export function SandboxLogsTab({ session }: { session: DomainSession }) {
             <span>{displayEntries.length} entries</span>
           </span>
         )}
-        {isReconnecting && entries.length > 0 && (
+        {isReconnecting && (
           <span className="text-amber-600">Reconnecting...</span>
         )}
         {!isActive && !isSandboxPending && !isConnected && !isHistorical && entries.length === 0 && (
           <span>Session is not running. Logs stream while the sandbox is active.</span>
         )}
       </div>
+
+      {error && (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-status-error-border bg-status-error p-3 text-sm text-status-error-foreground">
+          <p role="alert" className="min-w-0 break-words">{error}</p>
+          <Button variant="outline" size="sm" onClick={retry}>Retry</Button>
+        </div>
+      )}
 
       <Card className="relative">
         {isAtBottom && displayEntries.length > 0 && isConnected && !isHistorical && (
@@ -138,7 +146,7 @@ export function SandboxLogsTab({ session }: { session: DomainSession }) {
         <CardContent className="p-0">
           {displayEntries.length === 0 ? (
             <p className="p-6 text-center text-sm text-muted-foreground">
-              {isActive
+              {isActive && !error
                 ? 'Waiting for sandbox logs...'
                 : 'No sandbox logs available.'}
             </p>

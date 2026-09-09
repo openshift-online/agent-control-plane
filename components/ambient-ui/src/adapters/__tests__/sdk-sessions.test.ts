@@ -46,6 +46,18 @@ function makeSdkSession(overrides: Partial<Session> = {}): Session {
     sandbox_logs_snapshot: '',
     sandbox_policy_snapshot: '',
     stop_on_run_finished: true,
+    gateway_credential_id: '',
+    gateway_endpoint: '',
+    gateway_id: '',
+    gateway_workspace: '',
+    runner_generation: '',
+    runtime_backend: '',
+    runtime_deleted: false,
+    runtime_error: '',
+    runtime_status: '',
+    runtime_version: 0,
+    sandbox_id: '',
+    sandbox_name: '',
     ...overrides,
   }
 }

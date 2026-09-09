@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { SessionsPort, SessionPhaseCounts } from '@/ports/sessions'
+import type { SessionsPort } from '@/ports/sessions'
 import type { DomainSession, DomainSessionCreateRequest, ListParams, SessionPhase } from '@/domain/types'
 import { createSessionsAdapter } from '@/adapters/sdk-sessions'
 import { queryKeys } from './query-keys'
@@ -12,36 +12,34 @@ const TRANSITIONING_PHASES: ReadonlySet<SessionPhase> = new Set([
   'Stopping',
 ])
 
-const ACTIVE_PHASES: ReadonlySet<SessionPhase> = new Set([
-  'Running',
-])
-
 const TERMINAL_PHASES: ReadonlySet<SessionPhase> = new Set([
   'Completed',
   'Failed',
   'Stopped',
 ])
 
-function getPollingInterval(sessions: DomainSession[] | undefined): number | false {
-  if (!sessions || sessions.length === 0) {
-    return 15000
-  }
+type PollingSession = Pick<DomainSession, 'phase' | 'runtime'>
 
-  const hasTransitioning = sessions.some(s => TRANSITIONING_PHASES.has(s.phase))
-  if (hasTransitioning) {
-    return 1000
-  }
+const TRANSITIONING_RUNTIME_STATES = new Set([
+  'Provisioning', 'Pending', 'WaitingForGateway', 'Creating',
+  'Stopping', 'Deleting', 'DeletionRequested',
+])
 
-  const hasActive = sessions.some(s => ACTIVE_PHASES.has(s.phase))
-  if (hasActive) {
-    return 3000
-  }
+export function getSessionPollingInterval(session: PollingSession | undefined): number | false {
+  if (!session) return 3000
+  if (TRANSITIONING_PHASES.has(session.phase) || (
+    session.runtime?.backend === 'hypershell' &&
+    TRANSITIONING_RUNTIME_STATES.has(session.runtime.status ?? '')
+  )) return 1000
+  if (TERMINAL_PHASES.has(session.phase)) return false
+  return 3000
+}
 
-  const allTerminal = sessions.every(s => TERMINAL_PHASES.has(s.phase))
-  if (allTerminal) {
-    return false
-  }
-
+export function getPollingInterval(sessions: PollingSession[] | undefined): number | false {
+  if (!sessions || sessions.length === 0) return 15000
+  const intervals = sessions.map(getSessionPollingInterval)
+  if (intervals.includes(1000)) return 1000
+  if (intervals.every(interval => interval === false)) return false
   return 3000
 }
 
@@ -106,11 +104,7 @@ export function useSession(
     queryFn: () => adapter.get(sessionId),
     enabled: !!sessionId,
     refetchInterval: (query) => {
-      const session = query.state.data
-      if (!session) return 3000
-      if (TRANSITIONING_PHASES.has(session.phase)) return 1000
-      if (TERMINAL_PHASES.has(session.phase)) return false
-      return 3000
+      return getSessionPollingInterval(query.state.data)
     },
   })
 }

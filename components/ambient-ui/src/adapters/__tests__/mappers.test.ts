@@ -46,6 +46,18 @@ function makeSdkSession(overrides: Partial<Session> = {}): Session {
     sandbox_logs_snapshot: '',
     sandbox_policy_snapshot: '',
     stop_on_run_finished: true,
+    gateway_credential_id: '',
+    gateway_endpoint: '',
+    gateway_id: '',
+    gateway_workspace: '',
+    runner_generation: '',
+    runtime_backend: '',
+    runtime_deleted: false,
+    runtime_error: '',
+    runtime_status: '',
+    runtime_version: 0,
+    sandbox_id: '',
+    sandbox_name: '',
     ...overrides,
   }
 }
@@ -63,6 +75,18 @@ function makeSdkProject(overrides: Partial<Project> = {}): Project {
     name: 'test-project',
     prompt: '',
     status: 'active',
+    gateway_account_expires_at: '',
+    gateway_account_id: '',
+    gateway_credential_id: '',
+    gateway_endpoint: '',
+    gateway_error: '',
+    gateway_external_reference: '',
+    gateway_id: '',
+    gateway_instance_id: '',
+    gateway_status: '',
+    runtime_backend: '',
+    runtime_deleted: false,
+    runtime_version: 0,
     ...overrides,
   }
 }
@@ -578,5 +602,30 @@ describe('mapSdkAgentToDomain', () => {
     const sdk = makeSdkAgent({ current_session_id: 'sess-abc' })
     const domain = mapSdkAgentToDomain(sdk)
     expect(domain.currentSessionId).toBe('sess-abc')
+  })
+})
+
+
+describe('managed runtime mappings', () => {
+  it('maps session binding without exposing credential IDs or run capabilities', () => {
+    const session = mapSdkSessionToDomain(makeSdkSession({
+      runtime_backend: 'hypershell', runtime_status: 'Stopping', runtime_error: 'Cleanup pending',
+      gateway_id: 'gateway-a', gateway_workspace: 'workspace-a', sandbox_name: 'sandbox-a',
+      gateway_credential_id: 'credential-private', runner_generation: 'generation-private',
+      kube_namespace: '',
+    }))
+    expect(session.runtime).toEqual({ backend: 'hypershell', status: 'Stopping',
+      error: 'Cleanup pending', gatewayId: 'gateway-a', workspace: 'workspace-a', sandboxName: 'sandbox-a' })
+    expect(session.kubeNamespace).toBeNull()
+    expect(JSON.stringify(session)).not.toContain('credential-private')
+    expect(JSON.stringify(session)).not.toContain('generation-private')
+  })
+
+  it('maps workspace readiness and keeps legacy runtime absent', () => {
+    const project = mapSdkProjectToDomain(makeSdkProject({runtime_backend: 'hypershell',
+      gateway_status: 'Running', gateway_error: '', gateway_id: 'gateway-a'}))
+    expect(project.runtime).toEqual({backend: 'hypershell', status: 'Running', error: null, gatewayId: 'gateway-a'})
+    expect(mapSdkProjectToDomain(makeSdkProject()).runtime).toBeNull()
+    expect(mapSdkSessionToDomain(makeSdkSession()).runtime).toBeNull()
   })
 })

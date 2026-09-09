@@ -9,6 +9,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { EmptyState } from '@/components/empty-state'
+import { RuntimeResourceDetails } from '@/components/runtime-status'
 import type { DomainSession, DomainRepo, DomainReconciledRepo, ReconciledRepoStatus } from '@/domain/types'
 import { formatAbsoluteTime } from '@/lib/format-timestamp'
 import { cn } from '@/lib/utils'
@@ -83,10 +84,11 @@ export function ResourcesTab({ session }: { session: DomainSession }) {
 
   if (!hasRepos) {
     return (
-      <div className="pt-4">
+      <div className="space-y-6 pt-4">
+        <RuntimeResourceDetails runtime={session.runtime} />
         <EmptyState
           icon={FolderGit2}
-          title="No resources attached"
+          title="No repositories attached"
           description="This session has no repositories configured."
         />
       </div>
@@ -95,6 +97,7 @@ export function ResourcesTab({ session }: { session: DomainSession }) {
 
   return (
     <div className="space-y-6 pt-4">
+      <RuntimeResourceDetails runtime={session.runtime} />
       <Card>
         <CardHeader>
           <CardTitle className="text-base">

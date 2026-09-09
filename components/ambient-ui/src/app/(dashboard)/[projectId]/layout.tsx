@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation'
 import { FolderX } from 'lucide-react'
 import { useProject } from '@/queries/use-projects'
 import { Skeleton } from '@/components/ui/skeleton'
+import { RuntimeStatus } from '@/components/runtime-status'
 
 export default function ProjectLayout({
   children,
@@ -34,5 +35,10 @@ export default function ProjectLayout({
     )
   }
 
-  return <>{children}</>
+  return (
+    <div className="space-y-4">
+      <RuntimeStatus runtime={data.runtime} label="Workspace sandbox service" resource="workspace" />
+      {children}
+    </div>
+  )
 }
