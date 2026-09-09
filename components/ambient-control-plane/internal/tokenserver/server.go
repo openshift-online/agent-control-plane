@@ -29,7 +29,19 @@ type Server struct {
 type Option func(*serverConfig)
 
 type serverConfig struct {
-	gateway SandboxGateway
+	gateway   SandboxGateway
+	validate  SessionValidator
+	authorize SandboxAuthorizer
+}
+
+// WithSessionValidator enables scoped runner token exchange.
+func WithSessionValidator(validate SessionValidator) Option {
+	return func(c *serverConfig) { c.validate = validate }
+}
+
+// WithSandboxAuthorizer verifies a user token and returns its authorized gateway.
+func WithSandboxAuthorizer(authorize SandboxAuthorizer) Option {
+	return func(c *serverConfig) { c.authorize = authorize }
 }
 
 // WithGateway injects an OpenShell gateway client for sandbox observability endpoints.
@@ -52,9 +64,9 @@ func New(
 	componentLogger := logger.With().Str("component", "tokenserver").Logger()
 
 	h := &handler{
-		tokenProvider: tokenProvider,
-		privateKey:    privateKey,
-		logger:        componentLogger,
+		validate:   cfg.validate,
+		privateKey: privateKey,
+		logger:     componentLogger,
 	}
 
 	mux := http.NewServeMux()
@@ -63,9 +75,9 @@ func New(
 
 	if cfg.gateway != nil {
 		sbx := &sandboxHandler{
-			gateway:    cfg.gateway,
-			logger:     componentLogger,
-			privateKey: privateKey,
+			gateway:   cfg.gateway,
+			logger:    componentLogger,
+			authorize: cfg.authorize,
 		}
 		mux.HandleFunc("/sandbox/", func(w http.ResponseWriter, r *http.Request) {
 			switch {

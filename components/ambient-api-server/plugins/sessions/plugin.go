@@ -1,6 +1,11 @@
 package sessions
 
 import (
+	"context"
+	"fmt"
+	"github.com/golang/glog"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/middleware"
+	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/runnerauth"
 	"net/http"
 	"sync"
 
@@ -205,7 +210,17 @@ func init() {
 			}
 			return nil
 		}
-		pb.RegisterSessionServiceServer(grpcServer, NewSessionGRPCHandler(sessionService, genericService, brokerFunc, msgService, evtService))
+		handler := NewSessionGRPCHandler(sessionService, genericService, brokerFunc, msgService, evtService)
+		if err := middleware.ConfigureRunnerDispatch(handler, func(ctx context.Context, claims runnerauth.Claims) error {
+			session, err := sessionService.Get(ctx, claims.SessionID)
+			if err != nil {
+				return fmt.Errorf("session unavailable")
+			}
+			return validateRunnerSession(session, claims)
+		}); err != nil {
+			glog.Errorf("Runner authentication disabled: %v", err)
+		}
+		pb.RegisterSessionServiceServer(grpcServer, handler)
 	})
 
 	db.RegisterMigration(migration())

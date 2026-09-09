@@ -1,27 +1,40 @@
 package tokenserver
 
 import (
-	"crypto/rand"
+	"context"
 	"crypto/rsa"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
-	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/auth"
+	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/runnerauth"
 	"github.com/rs/zerolog"
 )
 
 type tokenResponse struct {
-	Token string `json:"token"`
+	Token     string `json:"token"`
+	ExpiresAt int64  `json:"expires_at"`
 }
 
+// SessionValidator must read current session state and reject deleted, stopped,
+// or replaced runs. It must compare all scope fields, not only the session ID.
+type SessionValidator func(context.Context, runnerauth.Claims) error
+
 type handler struct {
-	tokenProvider auth.TokenProvider
-	privateKey    *rsa.PrivateKey
-	logger        zerolog.Logger
+	privateKey *rsa.PrivateKey
+	validate   SessionValidator
+	logger     zerolog.Logger
+}
+
+// IssueBootstrap signs a capability for one run. Store it only in that sandbox.
+func IssueBootstrap(key *rsa.PrivateKey, sessionID, projectID, sandboxName, generation string, ttl time.Duration) (string, error) {
+	if ttl <= 0 || ttl > runnerauth.MaxBootstrapTTL {
+		return "", fmt.Errorf("invalid runner bootstrap lifetime")
+	}
+	now := time.Now()
+	return runnerauth.Sign(key, runnerauth.Claims{Purpose: "bootstrap", SessionID: sessionID, ProjectID: projectID, SandboxName: sandboxName, Generation: generation, IssuedAt: now.Unix(), ExpiresAt: now.Add(ttl).Unix()})
 }
 
 func (h *handler) handleToken(w http.ResponseWriter, r *http.Request) {
@@ -29,57 +42,34 @@ func (h *handler) handleToken(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	ciphertext, err := extractBearerToken(r)
-	if err != nil {
-		h.logger.Warn().Err(err).Msg("token request: missing or malformed Authorization header")
+	bearer, err := extractBearerToken(r)
+	if err != nil || h.privateKey == nil || h.validate == nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-
-	sessionID, err := h.decryptSessionID(ciphertext)
+	claims, err := runnerauth.Verify(&h.privateKey.PublicKey, bearer, "bootstrap", time.Now())
 	if err != nil {
-		h.logger.Warn().Err(err).Msg("token request: session ID decryption failed")
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-
-	if !isValidSessionID(sessionID) {
-		h.logger.Warn().Str("session_id", sessionID).Msg("token request: decrypted value does not match session ID pattern")
-		http.Error(w, "forbidden", http.StatusForbidden)
+	if err := h.validate(r.Context(), claims); err != nil {
+		http.Error(w, "runner access revoked", http.StatusForbidden)
 		return
 	}
-
-	apiToken, err := h.tokenProvider.Token(r.Context())
+	claims.Purpose = "access"
+	claims.IssuedAt = time.Now().Unix()
+	claims.ExpiresAt = min(claims.ExpiresAt, time.Now().Add(runnerauth.AccessTTL).Unix())
+	token, err := runnerauth.Sign(h.privateKey, claims)
 	if err != nil {
-		h.logger.Error().Err(err).Str("session_id", sessionID).Msg("token request: failed to mint API token")
+		h.logger.Error().Msg("failed to sign runner access token")
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-
-	h.logger.Info().Str("session_id", sessionID).Msg("token request: issued fresh API token")
-
-	resp := tokenResponse{Token: apiToken}
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		h.logger.Warn().Err(err).Msg("token request: failed to write response")
+	w.Header().Set("Cache-Control", "no-store")
+	if err := json.NewEncoder(w).Encode(tokenResponse{Token: token, ExpiresAt: claims.ExpiresAt}); err != nil {
+		h.logger.Warn().Msg("failed to write runner token response")
 	}
-}
-
-func (h *handler) decryptSessionID(ciphertext string) (string, error) {
-	ciphertextBytes, err := base64.StdEncoding.DecodeString(ciphertext)
-	if err != nil {
-		return "", fmt.Errorf("base64-decoding bearer token: %w", err)
-	}
-	plaintext, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, h.privateKey, ciphertextBytes, nil)
-	if err != nil {
-		return "", fmt.Errorf("RSA decryption failed: %w", err)
-	}
-	return string(plaintext), nil
-}
-
-func isValidSessionID(sessionID string) bool {
-	return len(sessionID) >= 8 && !strings.ContainsAny(sessionID, " \t\n\r")
 }
 
 func extractBearerToken(r *http.Request) (string, error) {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -1156,14 +1157,14 @@ func (h sessionHandler) SandboxLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if session.KubeNamespace == nil || *session.KubeNamespace == "" {
+	if session.SandboxName == nil || *session.SandboxName == "" {
 		http.Error(w, "session has no sandbox", http.StatusNotFound)
 		return
 	}
 
-	sbxName := sandboxName(session.ID)
-	cpURL := fmt.Sprintf("%s/sandbox/%s/logs?namespace=%s",
-		ControlPlaneURL, sbxName, *session.KubeNamespace)
+	sbxName := *session.SandboxName
+	cpURL := fmt.Sprintf("%s/sandbox/%s/logs?session_id=%s",
+		ControlPlaneURL, url.PathEscape(sbxName), url.QueryEscape(session.ID))
 
 	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, cpURL, nil)
 	if reqErr != nil {
@@ -1173,6 +1174,12 @@ func (h sessionHandler) SandboxLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Header.Set("Accept", "text/event-stream")
 
+	userToken, tokenErr := auth.TokenFromContext(ctx)
+	if tokenErr != nil || userToken == nil || userToken.Raw == "" {
+		http.Error(w, "authenticated user token required", http.StatusUnauthorized)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+userToken.Raw)
 	resp, doErr := EventsHTTPClient.Do(req)
 	if doErr != nil {
 		glog.Warningf("SandboxLogs: CP unreachable for session %s: %v", id, doErr)
@@ -1225,14 +1232,14 @@ func (h sessionHandler) SandboxPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if session.KubeNamespace == nil || *session.KubeNamespace == "" {
+	if session.SandboxName == nil || *session.SandboxName == "" {
 		http.Error(w, "session has no sandbox", http.StatusNotFound)
 		return
 	}
 
-	sbxName := sandboxName(session.ID)
-	cpURL := fmt.Sprintf("%s/sandbox/%s/policy?namespace=%s",
-		ControlPlaneURL, sbxName, *session.KubeNamespace)
+	sbxName := *session.SandboxName
+	cpURL := fmt.Sprintf("%s/sandbox/%s/policy?session_id=%s",
+		ControlPlaneURL, url.PathEscape(sbxName), url.QueryEscape(session.ID))
 
 	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, cpURL, nil)
 	if reqErr != nil {
@@ -1241,6 +1248,12 @@ func (h sessionHandler) SandboxPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userToken, tokenErr := auth.TokenFromContext(ctx)
+	if tokenErr != nil || userToken == nil || userToken.Raw == "" {
+		http.Error(w, "authenticated user token required", http.StatusUnauthorized)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+userToken.Raw)
 	resp, doErr := EventsHTTPClient.Do(req)
 	if doErr != nil {
 		glog.Warningf("SandboxPolicy: CP unreachable for session %s: %v", id, doErr)
