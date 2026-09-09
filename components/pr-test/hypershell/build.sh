@@ -20,9 +20,11 @@ REGISTRY="$("$OC" get route default-route -n openshift-image-registry -o jsonpat
 LOCAL_IMAGE="localhost/$IMAGE:$ACP_IMAGE_TAG"
 AUTH_DIR="$(mktemp -d)"
 trap 'rm -rf "$AUTH_DIR"' EXIT
+mkdir -p "$AUTH_DIR/source"
+git archive "$REVISION" "$CONTEXT" | tar -x -C "$AUTH_DIR/source"
 podman build --platform linux/amd64 --build-arg "GIT_COMMIT=$REVISION" \
   --build-arg "GIT_VERSION=$REVISION" --label "org.opencontainers.image.revision=$REVISION" \
-  -t "$LOCAL_IMAGE" -f "$REPO_ROOT/$CONTEXT/$DOCKERFILE" "$REPO_ROOT/$CONTEXT"
+  -t "$LOCAL_IMAGE" -f "$AUTH_DIR/source/$CONTEXT/$DOCKERFILE" "$AUTH_DIR/source/$CONTEXT"
 "$OC" create imagestream "$IMAGE" -n "$ACP_NAMESPACE" --dry-run=client -o yaml | "$OC" apply -f -
 "$OC" whoami -t | podman login --authfile "$AUTH_DIR/auth.json" --username "$("$OC" whoami)" \
   --password-stdin "$REGISTRY"

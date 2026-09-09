@@ -70,6 +70,11 @@ for filename in source_files:
                     'OIDC_CLIENT_ID': config['cp_client_id'], 'DATABASE_PROVIDER': 'deployment',
                     'DATABASE_STORAGE_CLASS': config['storage_class'],
                     'OPENSHELL_DATABASE_IMAGE': config.get('database_image', 'registry.access.redhat.com/hi/postgresql:18.4@sha256:9b1917bf15a3b3a6a99b94ab75db1bfde3f434990e881c69d527417d2c035a09')}
+                for key in ('database_memory_request', 'gateway_memory_request'):
+                    if config.get(key):
+                        patch[key.upper()] = config[key]
+                if config.get('server_tls_cluster_issuer'):
+                    patch['GATEWAY_SERVER_TLS_CLUSTER_ISSUER'] = config['server_tls_cluster_issuer']
                 container['env'] = [entry for entry in container['env'] if entry['name'] not in patch]
                 container['env'] += [{'name': key, 'value': value} for key, value in patch.items()]
                 container['env'].append({'name': 'OIDC_CLIENT_SECRET', 'valueFrom': {

@@ -182,3 +182,13 @@ exists. This permits only its sandbox service account to pull the runner image.
 The RoleBinding has a Namespace owner reference, so namespace deletion also
 removes that binding. The script rejects namespaces from other Hypershell
 instances. No registry token is copied to a gateway namespace.
+
+
+Image builds use an archive of the committed Git revision. Commit source changes
+before running `build.sh`. This keeps the image source and its revision label
+in agreement when another task edits the shared worktree.
+
+The isolated Hypershell configuration can set `database_memory_request` and
+`gateway_memory_request`. Both use `128Mi` in this test deployment. Hypershell
+validates these quantities and retains its existing 512Mi limits. Without these
+settings, its current memory requests stay unchanged.
