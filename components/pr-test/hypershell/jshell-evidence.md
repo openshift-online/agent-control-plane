@@ -236,11 +236,11 @@ Both PRs remain drafts until live session checks pass.
 | Image | Source commit | SHA-256 digest |
 | --- | --- | --- |
 | ACP API | `95264f99` | `feb8319e05e94e0fc7a83cac53fff9ad4d4b7cf89f1429a306dcb8d44e936305` |
-| ACP control plane | `c8ac1505` | `ecefdc3484119fc7010780c6f8248c4154b42de36ad5145ce00ddaa232508c4d` |
+| ACP control plane | `33b69273` | `f9038ab6b407a8a7857fb827aab193887c4c2be8e1b79606e4c1dbaca6879ea3` |
 | ACP UI | `95264f99` | `a3868c1dd976c1865b87d14f731c41217254e5fe51be114e785ccf372d9ca185` |
 | ACP runner | `95264f99` | `0d677d416128d4aa6bbed07d76c0c5f37f7e8b5e03d6ceb98106b6544762736d` |
 | Hypershell API | `e66e994` | `704126e10a001faa577af3003fc40dec6ba92e7f2b17b10934364c2842d79ab5` |
-| Hypershell control plane | `05abc20` | `2a53e48d38f2c853817fd5fbaf17ccf57ec315917b77b5e1f7daa47f0be7dd4b` |
+| Hypershell control plane | `1375696` | `7482d2e07028fe5c5c716876144373524efd01af9bfaee217e65738c8ca9a07a` |
 
 All image builds used a Git archive of the stated commit. The later control
 plane commits contain the SDK allocation fix and the gateway TOML fix. The
@@ -274,3 +274,27 @@ cannot change this cluster's worker pool. The user was asked to increase the
 pool from three to four workers or supply an OCM login with cluster access.
 Gateway authentication, sandbox execution, credential convergence, recovery,
 and cleanup remain unproven. The ACP UI must be restored after capacity is added.
+
+
+## Final configuration checks
+
+The actual sandbox service account is `openshell-gateway-sandbox`. The runner
+pull script now reads this name from the gateway configuration. Its narrow
+image pull permission passes; the old `default` account permission is removed.
+The dedicated account already has Hypershell's native sandbox SCC binding.
+The [approval verification](approval-verification.md) records the elevated
+sandbox context and the runtime security checks that remain required.
+
+Workspace storage settings are gateway-wide Kubernetes driver settings. They
+are not valid fields in a per-sandbox driver request. Hypershell now validates
+and renders `GATEWAY_WORKSPACE_STORAGE_CLASS` and
+`GATEWAY_WORKSPACE_DEFAULT_STORAGE_SIZE`. The live TOML contains
+`acp-hypershell-gp3` and `2Gi` in `[openshell.drivers.kubernetes]`.
+ACP rejects these misplaced request fields at startup with configuration
+guidance. The invalid live request override has been removed.
+
+ACP control plane `33b69273` is Ready with zero restarts. Its project and session
+watch streams connected at 17:13:51 UTC on 2026-09-09. Hypershell control plane
+`1375696` is Ready with zero restarts. API images are unchanged. The corrected
+gateway and console remain Pending for memory, and the ACP UI remains paused.
+No sandbox has executed. All live rows in the approval checklist remain open.

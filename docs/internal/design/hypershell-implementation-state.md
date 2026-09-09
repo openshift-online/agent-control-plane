@@ -87,10 +87,18 @@ It must be restored before the deployment is ready for user approval.
 ACP draft PR: https://github.com/openshift-online/agent-control-plane/pull/482.
 Hypershell draft PR: https://github.com/openshift-online/hypershell/pull/260.
 
-The deployed ACP control plane uses `c8ac1505`; its API, UI, and runner images
+The deployed ACP control plane uses `33b69273`; its API, UI, and runner images
 use `95264f99`. The deployed Hypershell API uses `e66e994`, and its control plane
-uses `05abc20`. See the deployment evidence for image digests. Both APIs and
+uses `1375696`. See the deployment evidence for image digests. Both APIs and
 control planes are ready. The UI remains paused. The corrected gateway remains
 Pending because another workload used the memory released by its failed
 replica. No live sandbox has run. A fourth worker is the remaining prerequisite
 for live verification; the current OCM login cannot change this worker pool.
+
+The final deployment corrects the sandbox service account image pull grant and
+moves workspace storage settings into the gateway's Kubernetes driver config.
+The full remaining scope and native sandbox security boundary are in
+[approval verification](../../../components/pr-test/hypershell/approval-verification.md).
+The native combined sandbox topology uses elevated permissions under an
+existing Hypershell SCC grant. It differs from the restricted ACP service pods;
+actual workload privilege drop and isolation remain unverified.
