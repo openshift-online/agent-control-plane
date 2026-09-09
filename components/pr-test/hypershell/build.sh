@@ -21,7 +21,7 @@ LOCAL_IMAGE="localhost/$IMAGE:$ACP_IMAGE_TAG"
 AUTH_DIR="$(mktemp -d)"
 trap 'rm -rf "$AUTH_DIR"' EXIT
 mkdir -p "$AUTH_DIR/source"
-git archive "$REVISION" "$CONTEXT" | tar -x -C "$AUTH_DIR/source"
+git -c tar.umask=0022 archive "$REVISION" "$CONTEXT" | tar -x --no-same-owner --same-permissions -C "$AUTH_DIR/source"
 podman build --platform linux/amd64 --build-arg "GIT_COMMIT=$REVISION" \
   --build-arg "GIT_VERSION=$REVISION" --label "org.opencontainers.image.revision=$REVISION" \
   -t "$LOCAL_IMAGE" -f "$AUTH_DIR/source/$CONTEXT/$DOCKERFILE" "$AUTH_DIR/source/$CONTEXT"

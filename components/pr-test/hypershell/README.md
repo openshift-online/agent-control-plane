@@ -26,7 +26,12 @@ components/pr-test/hypershell/build.sh runner
 Builds use local Podman and an archive of the committed Git revision. Commit
 source changes before running the build script. This keeps the source and image
 revision label in agreement during concurrent worktree edits. The runner build
-uses `Dockerfile.openshell`.
+uses `Dockerfile.openshell`. Archive permissions do not depend on the build
+process umask. Check the built runner with an arbitrary UID before deployment:
+
+```bash
+components/pr-test/hypershell/verify-runner-permissions.sh "localhost/acp-claude-runner:$ACP_IMAGE_TAG"
+```
 
 The build script passes the OpenShift token to the registry through standard
 input and removes its temporary registry credentials on exit. It prints an

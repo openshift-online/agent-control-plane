@@ -48,6 +48,8 @@ WORKDIR /app
 
 # Copy ambient-runner package
 COPY . /app/ambient-runner
+# Source must remain readable and traversable under an arbitrary runtime UID.
+RUN chmod -R a+rX /app/ambient-runner
 
 # OpenShell wrapper script (dispatches to supervisor or direct claude based on OPENSHELL_ENABLED)
 COPY standard-claude-wrapper.sh /app/standard-claude-wrapper.sh
