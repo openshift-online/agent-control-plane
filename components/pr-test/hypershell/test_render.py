@@ -1,6 +1,9 @@
 """Check the TLS and credential boundaries in the test deployment."""
 import json
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 
 from render import render
@@ -47,6 +50,35 @@ class RenderTests(unittest.TestCase):
         volumes = {v['name']: v for v in pod['volumes']}
         self.assertIn('emptyDir', volumes[server_tmp])
         self.assertIn('emptyDir', volumes[migration_tmp])
+
+    def test_hypershell_migration_and_server_have_separate_log_directories(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            base = source / 'deploy/base'
+            (base / 'certificates').mkdir(parents=True)
+            for name in ('controller.yaml', 'controller-rbac.yaml', 'postgres.yaml',
+                         'certificates/ca-chain.yaml', 'networkpolicies.yaml'):
+                (base / name).write_text('')
+            deployment = {'apiVersion': 'apps/v1', 'kind': 'Deployment',
+                'metadata': {'name': 'hypershell-api-server', 'namespace': 'original'},
+                'spec': {'template': {'spec': {
+                    'containers': [{'name': 'api', 'command': ['serve'], 'env': []}],
+                    'initContainers': [{'name': 'migrate', 'command': ['migrate'], 'env': []}]}}}}
+            (base / 'api-server.yaml').write_text(json.dumps(deployment))
+            config = source / 'config.json'
+            config.write_text(json.dumps({'namespace': 'isolated', 'oidc_issuer': 'https://issuer.example',
+                'api_image': 'example/api:test', 'cp_client_id': 'controller',
+                'storage_class': 'storage', 'apps_domain': 'apps.example'}))
+            result = subprocess.run([sys.executable, str(Path(__file__).with_name('render-hypershell.py')),
+                str(source), str(config)], check=True, capture_output=True, text=True)
+            api = next(item for item in json.loads(result.stdout)['items'] if item['kind'] == 'Deployment')
+        pod = api['spec']['template']['spec']
+        mounts = [next(m['name'] for m in container['volumeMounts'] if m['mountPath'] == '/tmp')
+                  for container in (pod['containers'][0], pod['initContainers'][0])]
+        self.assertNotEqual(*mounts)
+        volumes = {volume['name']: volume for volume in pod['volumes']}
+        for name in mounts:
+            self.assertIn('emptyDir', volumes[name])
 
 
 if __name__ == '__main__':

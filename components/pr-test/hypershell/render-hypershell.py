@@ -49,6 +49,11 @@ for filename in source_files:
                 pod['containers'][0]['volumeMounts'].append({'name': 'socket', 'mountPath': '/var/run/postgresql'})
                 postgres_identity(pod, pod['containers'][0]['image'])
             elif name == 'hypershell-api-server':
+                pod['volumes'].append({'name': 'migration-tmp', 'emptyDir': {}})
+                for migration in pod['initContainers']:
+                    for mount in migration['volumeMounts']:
+                        if mount['mountPath'] == '/tmp':
+                            mount['name'] = 'migration-tmp'
                 for container in pod['containers'] + pod['initContainers']:
                     container['image'] = config['api_image']
                 container = pod['containers'][0]
