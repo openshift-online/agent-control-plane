@@ -66,6 +66,12 @@ class RenderTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     render(self.config)
 
+    def test_managed_sandbox_uses_the_built_runner_image(self):
+        cp = self.items['Deployment', 'ambient-control-plane']['spec']['template']['spec']['containers'][0]
+        env = {entry['name']: entry.get('value') for entry in cp['env']}
+        self.assertEqual(env['OPENSHELL_RUNNER_IMAGE'], self.config['images']['runner'])
+        self.assertEqual(env['RUNNER_IMAGE'], env['OPENSHELL_RUNNER_IMAGE'])
+
     def test_hypershell_migration_and_server_have_separate_log_directories(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory)
