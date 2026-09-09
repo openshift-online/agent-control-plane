@@ -66,8 +66,8 @@ func normalizeGatewayEndpoint(endpoint string) (string, error) {
 	authority := endpoint
 	if strings.Contains(endpoint, "://") {
 		parsed, err := url.Parse(endpoint)
-		if err != nil || parsed.Scheme != "https" || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
-			return "", fmt.Errorf("managed gateway endpoint must be an HTTPS origin or host:port")
+		if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "grpcs") || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || strings.Contains(endpoint, "#") || parsed.Path != "" || parsed.RawPath != "" || strings.HasSuffix(parsed.Host, ":") {
+			return "", fmt.Errorf("managed gateway endpoint must use HTTPS, GRPCS, or host:port without a path, query, fragment, or credentials")
 		}
 		authority = parsed.Host
 		if parsed.Port() == "" {

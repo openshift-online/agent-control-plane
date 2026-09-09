@@ -359,16 +359,39 @@ func TestManagedUploadUsesTargetCredentialsForSSHAndForwarding(t *testing.T) {
 }
 
 func TestManagedEndpointAndTargetKey(t *testing.T) {
-	for input, expected := range map[string]string{"https://gateway.example": "dns:///gateway.example:443", "gateway.example:8443": "dns:///gateway.example:8443", "https://gateway.example:8443/": "dns:///gateway.example:8443", "[::1]:443": "dns:///[::1]:443"} {
-		got, err := normalizeGatewayEndpoint(input)
-		if err != nil || got != expected {
-			t.Errorf("endpoint %q = %q, %v", input, got, err)
-		}
+	for input, expected := range map[string]string{
+		"https://gateway.example":      "dns:///gateway.example:443",
+		"grpcs://gateway.example":      "dns:///gateway.example:443",
+		"gateway.example:8443":         "dns:///gateway.example:8443",
+		"https://gateway.example:8443": "dns:///gateway.example:8443",
+		"grpcs://gateway.example:443":  "dns:///gateway.example:443",
+		"grpcs://gateway.example:8443": "dns:///gateway.example:8443",
+		"[::1]:443":                    "dns:///[::1]:443",
+		"https://[::1]":                "dns:///[::1]:443",
+		"grpcs://[2001:db8::1]":        "dns:///[2001:db8::1]:443",
+		"grpcs://[2001:db8::1]:8443":   "dns:///[2001:db8::1]:8443",
+	} {
+		t.Run(input, func(t *testing.T) {
+			got, err := normalizeGatewayEndpoint(input)
+			if err != nil || got != expected {
+				t.Errorf("endpoint %q = %q, %v", input, got, err)
+			}
+		})
 	}
-	for _, invalid := range []string{"https://user:password@gateway.example", "https://gateway.example/path", "https://gateway.example?token=secret", "dns:///gateway.example", "gateway.example", "gateway.example:0"} {
-		if _, err := normalizeGatewayEndpoint(invalid); err == nil {
-			t.Errorf("accepted %q", invalid)
-		}
+	for _, invalid := range []string{
+		"https://user:password@gateway.example", "https://gateway.example/path", "https://gateway.example?token=secret",
+		"dns:///gateway.example", "gateway.example", "gateway.example:0", "http://gateway.example", "grpc://gateway.example:443",
+		"grpcs://user:password@gateway.example", "grpcs://user@gateway.example", "grpcs://gateway.example/path",
+		"grpcs://gateway.example/", "https://gateway.example/", "grpcs://gateway.example/%2f", "grpcs://gateway.example?token=secret",
+		"grpcs://gateway.example?", "grpcs://gateway.example#fragment", "grpcs://gateway.example#", "grpcs:///gateway.example",
+		"grpcs://gateway.example:", "grpcs://gateway.example:0", "grpcs://gateway.example:65536", "grpcs://gateway.example:abc",
+		"grpcs://[::1]:", "grpcs://::1", " grpcs://gateway.example", "grpcs://gateway.example\n", "grpcs://",
+	} {
+		t.Run("reject "+invalid, func(t *testing.T) {
+			if _, err := normalizeGatewayEndpoint(invalid); err == nil {
+				t.Errorf("accepted %q", invalid)
+			}
+		})
 	}
 	key := TargetKey("gateway:one", "workspace:two")
 	gateway, workspace, err := ParseTargetKey(key)
@@ -377,6 +400,48 @@ func TestManagedEndpointAndTargetKey(t *testing.T) {
 	}
 	if TargetKey("a:b", "c") == TargetKey("a", "b:c") {
 		t.Fatal("target keys collide")
+	}
+}
+
+func TestManagedGRPCSAliasUsesVerifiedTLSAndCanonicalCache(t *testing.T) {
+	client, server, targets, mu := managedTestClient(t)
+	key := TargetKey("gateway-a", "session-a")
+	mu.Lock()
+	target := targets[key]
+	httpsEndpoint := target.Endpoint
+	target.Endpoint = strings.Replace(httpsEndpoint, "https://", "grpcs://", 1)
+	targets[key] = target
+	mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := client.GetSandbox(ctx, key, "sandbox"); err != nil {
+		t.Fatalf("GRPCS request with verified server certificate failed: %v", err)
+	}
+	first, err := client.getOrCreateConn(ctx, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	target.Endpoint = httpsEndpoint
+	targets[key] = target
+	mu.Unlock()
+	second, err := client.getOrCreateConn(ctx, key)
+	if err != nil || first != second {
+		t.Fatalf("HTTPS and GRPCS did not share the canonical connection: %v", err)
+	}
+	mu.Lock()
+	target.Endpoint = strings.Replace(httpsEndpoint, "https://", "grpcs://", 1)
+	target.TLSConfig = target.TLSConfig.Clone()
+	target.TLSConfig.InsecureSkipVerify = true
+	targets[key] = target
+	mu.Unlock()
+	if _, err := client.getOrCreateConn(ctx, key); err == nil {
+		t.Fatal("GRPCS accepted disabled certificate verification")
+	}
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	if len(server.calls) != 1 || server.calls[0] != "get|session-a|Bearer gateway-a-token" {
+		t.Fatalf("unexpected gateway calls: %v", server.calls)
 	}
 }
 
