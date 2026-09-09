@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"net/url"
 	"strconv"
@@ -22,6 +23,7 @@ import (
 	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -308,8 +310,54 @@ func (r *ManagedReconciler) applyManagedNetworkPolicy(ctx context.Context, targe
 	if err != nil {
 		return err
 	}
-	_, err = r.gateway.UpdateConfig(ctx, target, &openshellpb.UpdateConfigRequest{Name: name, MergeOperations: []*openshellpb.PolicyMergeOperation{{Operation: &openshellpb.PolicyMergeOperation_AddRule{AddRule: &openshellpb.AddNetworkRule{RuleName: acpInternalPolicyKey, Rule: rule}}}}})
-	return err
+	return replaceManagedCallbackPolicy(ctx, r.gateway, target, name, rule)
+}
+
+type managedCallbackPolicyGateway interface {
+	GetSandbox(context.Context, string, string) (*openshellpb.SandboxResponse, error)
+	GetSandboxPolicyStatus(context.Context, string, string) (*openshellpb.GetSandboxPolicyStatusResponse, error)
+	UpdateConfig(context.Context, string, *openshellpb.UpdateConfigRequest) (*openshellpb.UpdateConfigResponse, error)
+}
+
+func replaceManagedCallbackPolicy(ctx context.Context, gateway managedCallbackPolicyGateway, target, name string, rule *sandboxpb.NetworkPolicyRule) error {
+	// Capture the object version before reading the authored policy. A policy
+	// change during either read then causes the native atomic update to abort.
+	sandbox, err := gateway.GetSandbox(ctx, target, name)
+	if err != nil {
+		return fmt.Errorf("read sandbox callback policy version: %w", err)
+	}
+	version := sandbox.GetSandbox().GetMetadata().GetResourceVersion()
+	if version == 0 {
+		return fmt.Errorf("sandbox callback policy requires a resource version")
+	}
+	status, err := gateway.GetSandboxPolicyStatus(ctx, target, name)
+	if err != nil {
+		return fmt.Errorf("read authored sandbox callback policy: %w", err)
+	}
+	revision := status.GetRevision()
+	authored := revision.GetPolicy()
+	if authored == nil {
+		return fmt.Errorf("sandbox has no authored policy revision")
+	}
+	if proto.Equal(authored.NetworkPolicies[acpInternalPolicyKey], rule) {
+		return nil
+	}
+	// AddRule retains old TLS fields and unions endpoint lists. Even a preceding
+	// RemoveRule can fold the replacement into another overlapping user rule.
+	// Replace only the reserved entry in the latest authored policy instead.
+	updated := proto.Clone(authored).(*sandboxpb.SandboxPolicy)
+	if updated.NetworkPolicies == nil {
+		updated.NetworkPolicies = make(map[string]*sandboxpb.NetworkPolicyRule)
+	}
+	updated.NetworkPolicies[acpInternalPolicyKey] = proto.Clone(rule).(*sandboxpb.NetworkPolicyRule)
+	_, err = gateway.UpdateConfig(ctx, target, &openshellpb.UpdateConfigRequest{
+		Name: name, Policy: updated, ExpectedResourceVersion: version,
+		Annotations: maps.Clone(revision.Provenance),
+	})
+	if err != nil {
+		return fmt.Errorf("replace sandbox callback policy: %w", err)
+	}
+	return nil
 }
 
 type managedProcessState struct {

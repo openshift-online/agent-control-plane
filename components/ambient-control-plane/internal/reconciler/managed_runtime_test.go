@@ -3,6 +3,7 @@ package reconciler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -16,11 +17,15 @@ import (
 	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/hypershell"
 	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell"
 	datapb "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/datamodel/v1"
+	sandboxpb "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/sandbox/v1"
 	pb "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/runnerauth"
 	sdkclient "github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/client"
 	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
 	"github.com/rs/zerolog"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestManagedSessionBindingUsesRoutableNamesBeforeGatewayRequest(t *testing.T) {
@@ -349,5 +354,95 @@ func TestManagedStopRecordsCleanupBeforeGatewayCall(t *testing.T) {
 				t.Fatal("cleanup state was not persisted")
 			}
 		})
+	}
+}
+
+// This fake models the native authored-policy endpoint and object-version CAS.
+// Its sandbox spec deliberately contains a provider-composed rule that must
+// never be copied into an authored update.
+type callbackPolicyGateway struct {
+	version  uint64
+	authored *sandboxpb.SandboxPolicy
+	writes   int
+	conflict bool
+	readErr  error
+}
+
+func (g *callbackPolicyGateway) GetSandbox(context.Context, string, string) (*pb.SandboxResponse, error) {
+	return &pb.SandboxResponse{Sandbox: &pb.Sandbox{Metadata: &datapb.ObjectMeta{ResourceVersion: g.version}, Spec: &pb.SandboxSpec{Policy: &sandboxpb.SandboxPolicy{NetworkPolicies: map[string]*sandboxpb.NetworkPolicyRule{"_provider_composed": {Name: "must-not-be-authored"}}}}}}, nil
+}
+func (g *callbackPolicyGateway) GetSandboxPolicyStatus(context.Context, string, string) (*pb.GetSandboxPolicyStatusResponse, error) {
+	if g.readErr != nil {
+		return nil, g.readErr
+	}
+	return &pb.GetSandboxPolicyStatusResponse{Revision: &pb.SandboxPolicyRevision{Policy: g.authored, Provenance: map[string]string{"owner": "test"}}}, nil
+}
+func (g *callbackPolicyGateway) UpdateConfig(_ context.Context, _ string, request *pb.UpdateConfigRequest) (*pb.UpdateConfigResponse, error) {
+	if request.Policy == nil || len(request.MergeOperations) != 0 || request.Name != "sandbox" || request.Annotations["owner"] != "test" {
+		return nil, errors.New("expected authored policy replacement with retained provenance")
+	}
+	if g.conflict {
+		g.conflict = false
+		g.version++
+		g.authored.NetworkPolicies["concurrent-user-rule"] = &sandboxpb.NetworkPolicyRule{Name: "concurrent-user-rule"}
+	}
+	if request.ExpectedResourceVersion != g.version {
+		return nil, status.Error(codes.Aborted, "object version changed")
+	}
+	g.authored = request.Policy
+	g.version++
+	g.writes++
+	return &pb.UpdateConfigResponse{}, nil
+}
+
+func TestManagedCallbackPolicyReplacesOnlyReservedAuthoredRule(t *testing.T) {
+	r := &ManagedReconciler{cfg: &config.HypershellConfig{RunnerTokenURL: "https://new-token.example/token", RunnerGRPCAddress: "new-grpc.example:443"}}
+	desired, err := r.managedNetworkRule()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// This overlapping user rule would receive an AddRule fallback after a
+	// RemoveRule operation. Exact replacement must leave it unchanged.
+	userRule := &sandboxpb.NetworkPolicyRule{Name: "user-rule", Endpoints: []*sandboxpb.NetworkEndpoint{{Host: "new-token.example", Port: 443, Tls: "terminate"}}, Binaries: []*sandboxpb.NetworkBinary{{Path: "/usr/bin/curl"}}}
+	oldRule := &sandboxpb.NetworkPolicyRule{Name: "old-callback", Endpoints: []*sandboxpb.NetworkEndpoint{{Host: "old-token.example", Port: 443, Tls: "terminate"}, {Host: "old-grpc.example", Port: 443, Tls: "auto"}}}
+	original := &sandboxpb.SandboxPolicy{NetworkPolicies: map[string]*sandboxpb.NetworkPolicyRule{acpInternalPolicyKey: oldRule, "user-rule": userRule}}
+	before := proto.Clone(original).(*sandboxpb.SandboxPolicy)
+	gateway := &callbackPolicyGateway{version: 7, authored: original}
+	if err := replaceManagedCallbackPolicy(context.Background(), gateway, "target", "sandbox", desired); err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(original, before) {
+		t.Fatal("authored response was mutated")
+	}
+	if len(gateway.authored.NetworkPolicies) != 2 || !proto.Equal(gateway.authored.NetworkPolicies["user-rule"], userRule) || !proto.Equal(gateway.authored.NetworkPolicies[acpInternalPolicyKey], desired) {
+		t.Fatal("replacement retained old callback destinations or changed other rules")
+	}
+	if err := replaceManagedCallbackPolicy(context.Background(), gateway, "target", "sandbox", desired); err != nil {
+		t.Fatal(err)
+	}
+	if gateway.writes != 1 {
+		t.Fatalf("unchanged policy caused %d writes", gateway.writes)
+	}
+}
+
+func TestManagedCallbackPolicyCASPreservesConcurrentChanges(t *testing.T) {
+	desired := &sandboxpb.NetworkPolicyRule{Name: "callbacks"}
+	gateway := &callbackPolicyGateway{version: 7, authored: &sandboxpb.SandboxPolicy{NetworkPolicies: map[string]*sandboxpb.NetworkPolicyRule{}}, conflict: true}
+	err := replaceManagedCallbackPolicy(context.Background(), gateway, "target", "sandbox", desired)
+	if status.Code(err) != codes.Aborted || gateway.writes != 0 {
+		t.Fatalf("stale update was not rejected: %v", err)
+	}
+	if err := replaceManagedCallbackPolicy(context.Background(), gateway, "target", "sandbox", desired); err != nil {
+		t.Fatal(err)
+	}
+	if gateway.authored.NetworkPolicies["concurrent-user-rule"] == nil || gateway.writes != 1 {
+		t.Fatal("retry lost a concurrent policy edit")
+	}
+	gateway.readErr = errors.New("policy unavailable")
+	if err := replaceManagedCallbackPolicy(context.Background(), gateway, "target", "sandbox", desired); !errors.Is(err, gateway.readErr) {
+		t.Fatalf("policy read error = %v", err)
+	}
+	if gateway.writes != 1 {
+		t.Fatal("policy read failure caused a write")
 	}
 }
