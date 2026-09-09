@@ -93,7 +93,10 @@ func TestManagedEnvironmentProtectsIdentityAndUsesExternalEndpoints(t *testing.T
 	r := &ManagedReconciler{cfg: &config.HypershellConfig{RunnerGRPCAddress: "runner.example:443", RunnerTokenURL: "https://cp.example/token"}}
 	s := types.Session{ObjectReference: types.ObjectReference{ID: "session"}, ProjectID: "workspace"}
 	agent := &types.Agent{Environment: map[string]string{"SESSION_ID": "other", "AMBIENT_GRPC_USE_TLS": "false", "AMBIENT_ALLOW_INSECURE_RUNNER_TRANSPORT": "true", "CLAUDE_CODE_USE_VERTEX": "1", "GOOGLE_APPLICATION_CREDENTIALS": "/private/key"}}
-	env := r.managedEnvironment(s, agent, &ManagedProviderPlan{Environment: map[string]string{}, InferenceProvider: "inference"})
+	env, err := r.managedEnvironment(s, agent, &ManagedProviderPlan{Environment: map[string]string{}, InferenceProvider: "inference"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if env["SESSION_ID"] != "session" || env["AMBIENT_GRPC_USE_TLS"] != "true" || env["AMBIENT_ALLOW_INSECURE_RUNNER_TRANSPORT"] != "" || env["GOOGLE_APPLICATION_CREDENTIALS"] != "" || env["CLAUDE_CODE_USE_VERTEX"] != "" {
 		t.Fatal("agent environment replaced platform identity or inference routing")
 	}
@@ -103,5 +106,21 @@ func TestManagedEnvironmentProtectsIdentityAndUsesExternalEndpoints(t *testing.T
 	}
 	if len(rule.Endpoints) != 2 || rule.Endpoints[0].Host != "cp.example" || rule.Endpoints[1].Host != "runner.example" {
 		t.Fatal("policy did not use external callback hosts")
+	}
+}
+
+func TestManagedSessionEnvironmentValidatesInputAndKeepsLimits(t *testing.T) {
+	r := &ManagedReconciler{cfg: &config.HypershellConfig{}}
+	s := types.Session{ObjectReference: types.ObjectReference{ID: "session"}, ProjectID: "project", EnvironmentVariables: `{"AMBIENT_PROJECT_ID":"other","USER_OPTION":"set"}`, Timeout: 90, LlmMaxTokens: 400, LlmTemperature: 0.2}
+	env, err := r.managedEnvironment(s, nil, &ManagedProviderPlan{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if env["AMBIENT_PROJECT_ID"] != "project" || env["USER_OPTION"] != "set" || env["TIMEOUT"] != "90" || env["LLM_MAX_TOKENS"] != "400" || env["LLM_TEMPERATURE"] != "0.2" {
+		t.Fatal("session settings or identity were lost")
+	}
+	s.EnvironmentVariables = `{"option":42}`
+	if _, err := r.managedEnvironment(s, nil, &ManagedProviderPlan{}); err == nil {
+		t.Fatal("invalid session environment accepted")
 	}
 }

@@ -133,3 +133,25 @@ func (g *GatewayClient) DetachSandboxProvider(ctx context.Context, key string, r
 	}
 	return client.DetachSandboxProvider(ctx, req)
 }
+
+func (g *GatewayClient) ListProviderProfiles(ctx context.Context, key string, req *pb.ListProviderProfilesRequest) (*pb.ListProviderProfilesResponse, error) {
+	ctx = g.authContext(ctx, key)
+	client, err := g.clientForNamespace(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	return client.ListProviderProfiles(ctx, req)
+}
+
+func (g *GatewayClient) DeleteProviderProfile(ctx context.Context, key, id string) error {
+	ctx = g.authContext(ctx, key)
+	client, err := g.clientForNamespace(ctx, key)
+	if err != nil {
+		return err
+	}
+	_, err = client.DeleteProviderProfile(ctx, &pb.DeleteProviderProfileRequest{Id: id})
+	if status.Code(err) == codes.NotFound {
+		return nil
+	}
+	return err
+}

@@ -16,6 +16,7 @@ import (
 	inferencepb "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/inference/v1"
 	sandboxpb "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/sandbox/v1"
 	openshellpb "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
+	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/runnerauth"
 	"github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/tokenserver"
 	sdkclient "github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/client"
 	"github.com/openshift-online/agent-control-plane/components/ambient-sdk/go-sdk/types"
@@ -160,7 +161,11 @@ func (r *ManagedReconciler) reconcileManagedSession(ctx context.Context, sdk *sd
 		if image == "" {
 			return fmt.Errorf("managed runner image is required")
 		}
-		sandbox, err = r.gateway.CreateSandbox(ctx, target, &openshellpb.CreateSandboxRequest{Name: s.SandboxName, Workspace: s.GatewayWorkspace, Labels: map[string]string{LabelManaged: "true", LabelManagedBy: "ambient-control-plane", LabelProjectID: s.ProjectID, "ambient-code.io/session-id": s.ID}, Spec: &openshellpb.SandboxSpec{Template: &openshellpb.SandboxTemplate{Image: image, DriverConfig: driver}, Environment: r.managedEnvironment(s, agent, plan), Providers: plan.Names, Policy: policy}})
+		environment, envErr := r.managedEnvironment(s, agent, plan)
+		if envErr != nil {
+			return envErr
+		}
+		sandbox, err = r.gateway.CreateSandbox(ctx, target, &openshellpb.CreateSandboxRequest{Name: s.SandboxName, Workspace: s.GatewayWorkspace, Labels: map[string]string{LabelManaged: "true", LabelManagedBy: "ambient-control-plane", LabelProjectID: s.ProjectID, "ambient-code.io/session-id": s.ID}, Spec: &openshellpb.SandboxSpec{Template: &openshellpb.SandboxTemplate{Image: image, DriverConfig: driver}, Environment: environment, Providers: plan.Names, Policy: policy}})
 	}
 	if err != nil {
 		return err
@@ -196,19 +201,29 @@ func (r *ManagedReconciler) reconcileManagedSession(ctx context.Context, sdk *sd
 	return r.reconcileManagedProcess(ctx, sdk, projectSDK, s, agent, plan, target)
 }
 
-func (r *ManagedReconciler) managedEnvironment(s types.Session, agent *types.Agent, plan *ManagedProviderPlan) map[string]string {
+func (r *ManagedReconciler) managedEnvironment(s types.Session, agent *types.Agent, plan *ManagedProviderPlan) (map[string]string, error) {
 	env := map[string]string{}
 	if agent != nil {
 		for k, v := range agent.Environment {
 			env[k] = v
 		}
 	}
+	if s.EnvironmentVariables != "" {
+		var sessionEnvironment map[string]string
+		if err := json.Unmarshal([]byte(s.EnvironmentVariables), &sessionEnvironment); err != nil {
+			return nil, fmt.Errorf("session environment must be a JSON object of strings")
+		}
+		for k, v := range sessionEnvironment {
+			env[k] = v
+		}
+	}
 	for k, v := range plan.Environment {
 		env[k] = v
 	}
-	for k, v := range map[string]string{"SESSION_ID": s.ID, "AGENTIC_SESSION_NAME": s.Name, "AGENTIC_SESSION_NAMESPACE": s.ProjectID, "PROJECT_NAME": s.ProjectID, "AGENT_ID": s.AgentID, "WORKSPACE_PATH": "/sandbox/workspace", "ARTIFACTS_DIR": "artifacts", "AMBIENT_CP_TOKEN_URL": r.cfg.RunnerTokenURL, "AMBIENT_GRPC_URL": r.cfg.RunnerGRPCAddress, "AMBIENT_GRPC_ENABLED": "true", "AMBIENT_GRPC_USE_TLS": "true", "HOME": "/sandbox", "LOG_LEVEL": r.runnerCfg.RunnerLogLevel, "STOP_ON_RUN_FINISHED": strconv.FormatBool(s.StopOnRunFinished), "LLM_MODEL": s.LlmModel} {
+	for k, v := range map[string]string{"SESSION_ID": s.ID, "AMBIENT_PROJECT_ID": s.ProjectID, "AGENTIC_SESSION_NAME": s.Name, "AGENTIC_SESSION_NAMESPACE": s.ProjectID, "PROJECT_NAME": s.ProjectID, "AGENT_ID": s.AgentID, "WORKSPACE_PATH": "/sandbox/workspace", "ARTIFACTS_DIR": "artifacts", "AMBIENT_CP_TOKEN_URL": r.cfg.RunnerTokenURL, "AMBIENT_GRPC_URL": r.cfg.RunnerGRPCAddress, "AMBIENT_GRPC_ENABLED": "true", "AMBIENT_GRPC_USE_TLS": "true", "HOME": "/sandbox", "LOG_LEVEL": r.runnerCfg.RunnerLogLevel, "STOP_ON_RUN_FINISHED": strconv.FormatBool(s.StopOnRunFinished), "LLM_MODEL": s.LlmModel} {
 		env[k] = v
 	}
+	delete(env, "AMBIENT_CP_TOKEN_PUBLIC_KEY")
 	delete(env, "AMBIENT_TOKEN")
 	delete(env, "AMBIENT_API_TOKEN")
 	delete(env, "AMBIENT_RUNNER_BOOTSTRAP_TOKEN")
@@ -229,6 +244,15 @@ func (r *ManagedReconciler) managedEnvironment(s types.Session, agent *types.Age
 		env["AMBIENT_GRPC_CA_CERT_FILE"] = managedCAPath
 		env["AMBIENT_CP_CA_CERT_FILE"] = managedCAPath
 	}
+	if s.Timeout > 0 {
+		env["TIMEOUT"] = strconv.Itoa(s.Timeout)
+	}
+	if s.LlmTemperature != 0 {
+		env["LLM_TEMPERATURE"] = strconv.FormatFloat(s.LlmTemperature, 'g', -1, 64)
+	}
+	if s.LlmMaxTokens > 0 {
+		env["LLM_MAX_TOKENS"] = strconv.Itoa(s.LlmMaxTokens)
+	}
 	if s.Repos != "" {
 		env["REPOS_JSON"] = s.Repos
 	} else if s.RepoURL != "" {
@@ -238,7 +262,7 @@ func (r *ManagedReconciler) managedEnvironment(s types.Session, agent *types.Age
 	if s.StartTime != nil {
 		env["IS_RESUME"] = "true"
 	}
-	return env
+	return env, nil
 }
 
 func (r *ManagedReconciler) managedNetworkRule() (*sandboxpb.NetworkPolicyRule, error) {
@@ -332,11 +356,18 @@ func (r *ManagedReconciler) reconcileManagedProcess(ctx context.Context, sdk, pr
 		if err := r.gateway.UploadPayloads(ctx, target, s.SandboxID, converted); err != nil {
 			return err
 		}
-		bootstrap, err := tokenserver.IssueBootstrap(r.privateKey, s.ID, s.ProjectID, s.SandboxName, s.RunnerGeneration, 7*24*time.Hour)
+		ttl := runnerauth.MaxBootstrapTTL
+		if s.Timeout > 0 && time.Duration(s.Timeout)*time.Second < ttl {
+			ttl = time.Duration(s.Timeout) * time.Second
+		}
+		bootstrap, err := tokenserver.IssueBootstrap(r.privateKey, s.ID, s.ProjectID, s.SandboxName, s.RunnerGeneration, ttl)
 		if err != nil {
 			return err
 		}
-		env := r.managedEnvironment(s, agent, plan)
+		env, err := r.managedEnvironment(s, agent, plan)
+		if err != nil {
+			return err
+		}
 		env["AMBIENT_RUNNER_BOOTSTRAP_TOKEN"] = bootstrap
 		command := append([]string{managedPython, managedRunnerPath, "start", s.RunnerGeneration}, helper.resolveEntrypoint(agent)...)
 		response, err = r.gateway.ExecSandbox(ctx, target, &openshellpb.ExecSandboxRequest{SandboxId: s.SandboxID, Command: command, Environment: env, TimeoutSeconds: 20})
@@ -374,7 +405,7 @@ func (r *ManagedReconciler) stopManagedSession(ctx context.Context, sdk *sdkclie
 	if phase == PhaseStopping {
 		phase = PhaseStopped
 	}
-	_, err = r.patchSession(ctx, sdk, s, map[string]interface{}{"phase": phase, "expected_phase": s.Phase, "runner_generation": "", "runtime_status": "Stopped", "runtime_error": ""})
+	_, err = r.patchSession(ctx, sdk, s, map[string]interface{}{"phase": phase, "expected_phase": s.Phase, "runner_generation": "", "runtime_status": "Stopped", "runtime_error": s.RuntimeError})
 	return err
 }
 
@@ -393,6 +424,9 @@ func (r *ManagedReconciler) deleteManagedSession(ctx context.Context, sdk *sdkcl
 		return err
 	}
 	if status.Code(err) != codes.NotFound {
+		return err
+	}
+	if err := cleanupManagedProviders(ctx, r.gateway, target, s.ID); err != nil {
 		return err
 	}
 	if err := r.gateway.DeleteWorkspace(ctx, target, s.GatewayWorkspace); err != nil && status.Code(err) != codes.NotFound {

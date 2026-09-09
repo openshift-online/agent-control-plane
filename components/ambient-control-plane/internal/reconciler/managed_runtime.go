@@ -232,7 +232,7 @@ func (r *ManagedReconciler) sweep(ctx context.Context) error {
 			current := r.projects[p.ID]
 			r.mu.RUnlock()
 			if current.GatewayError == "" {
-				_, patchErr := r.patchProject(ctx, sdk, current, map[string]interface{}{"gateway_error": "Gateway reconciliation failed. Check the control plane logs."})
+				_, patchErr := r.patchProject(ctx, sdk, current, map[string]interface{}{"gateway_error": "Gateway reconciliation failed. Contact your workspace administrator."})
 				if patchErr != nil {
 					failures = append(failures, patchErr)
 				}
@@ -254,7 +254,7 @@ func (r *ManagedReconciler) sweep(ctx context.Context) error {
 			current := r.sessions[s.ID]
 			r.mu.RUnlock()
 			if current.RuntimeError == "" {
-				_, patchErr := r.patchSession(ctx, sdk, current, map[string]interface{}{"runtime_error": "Sandbox reconciliation failed. Check the control plane logs."})
+				_, patchErr := r.patchSession(ctx, sdk, current, map[string]interface{}{"runtime_error": "Sandbox reconciliation failed. Contact your workspace administrator."})
 				if patchErr != nil {
 					failures = append(failures, patchErr)
 				}
