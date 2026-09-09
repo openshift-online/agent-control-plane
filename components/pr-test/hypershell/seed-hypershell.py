@@ -58,7 +58,8 @@ def ensure(resource, desired):
 cluster_id = ensure('managed_clusters', {'name': config['cluster_name'], 'provider': 'openshift',
     'region': config['region'], 'kubeconfig_secret': config['kubeconfig_secret']})
 release_id = ensure('gateway_releases', {'name': config['release_name'], 'image': config['gateway_image']})
-template = {'cluster_id': cluster_id, 'release_id': release_id, 'image': config['gateway_image'],
+# The current schema requires this key; the server assigns its final value.
+template = {'database_id': '', 'cluster_id': cluster_id, 'release_id': release_id, 'image': config['gateway_image'],
     'supervisor_image': config['supervisor_image'], 'route': json.dumps({'enabled': True}),
     'credential_driver': json.dumps({'type': 'kubernetes-secrets'})}
 args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -174,3 +174,11 @@ bundle to runner startup. Browser UI and token Routes keep public certificates.
 The operator must renew the trust ConfigMap after CA rotation. This script is
 for the review deployment; a production installation needs a managed trust
 bundle and certificate rotation process.
+
+
+When runner images use the private OpenShift registry, run
+`grant-runner-pull.py <gateway-namespace>` after each workspace gateway namespace
+exists. This permits only its sandbox service account to pull the runner image.
+The RoleBinding has a Namespace owner reference, so namespace deletion also
+removes that binding. The script rejects namespaces from other Hypershell
+instances. No registry token is copied to a gateway namespace.

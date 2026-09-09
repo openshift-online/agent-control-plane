@@ -145,3 +145,22 @@ ALPN `h2`. A `grpcurl` reflection request without a token returned
 `Unauthenticated`, which proves that the public TLS path reached the protected
 gRPC server. The control plane resumed successful runtime inventory requests
 over HTTPS.
+
+
+## First workspace
+
+Workspace `jshell-hypershell-test` was created through the authenticated ACP API.
+A normal API role binding gives `johnsell` the `project:owner` role. ACP created
+Hypershell gateway `3J6BJgdqGcVTB92p3JCnhkgfkEn`. Its namespace is
+`openshell-13839a239b6b75e9`; its database namespace is
+`openshell-db-f83c619409286167`.
+
+The current Hypershell create schema requires a `database_id` key, although the
+server assigns its value. The template therefore sends an empty value. This
+resolved the first HTTP 400 response without creating a duplicate gateway.
+
+The runner image pull grant is limited to the gateway's default service
+account and the `acp-claude-runner` image stream. An authorization check returned
+`yes`. The gateway database pod requests 256Mi and remains Pending because all
+three workers have insufficient memory. Its PVC waits for a schedulable
+consumer. A fourth worker is still needed before sandbox tests can proceed.
