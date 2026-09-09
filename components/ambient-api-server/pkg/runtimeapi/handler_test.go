@@ -2,6 +2,7 @@ package runtimeapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +17,61 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
+
+func TestRuntimeSnapshotSizeLimits(t *testing.T) {
+	fields := map[string]FieldKind{"sandbox_logs_snapshot": Snapshot, "sandbox_policy_snapshot": Snapshot, "gateway_id": String}
+	for _, tc := range []struct {
+		name, field string
+		size        int
+		valid       bool
+	}{
+		{"large logs", "sandbox_logs_snapshot", MaxSnapshotBytes, true},
+		{"large policy", "sandbox_policy_snapshot", MaxSnapshotBytes, true},
+		{"oversize logs", "sandbox_logs_snapshot", MaxSnapshotBytes + 1, false},
+		{"oversize policy", "sandbox_policy_snapshot", MaxSnapshotBytes + 1, false},
+		{"identity limit retained", "gateway_id", 16385, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			value := `"` + strings.Repeat("x", tc.size-2) + `"`
+			body, err := json.Marshal(map[string]interface{}{"runtime_version": 7, tc.field: value})
+			if err != nil {
+				t.Fatal(err)
+			}
+			patch, err := DecodePatch(strings.NewReader(string(body)), fields)
+			if (err == nil) != tc.valid {
+				t.Fatalf("valid=%t, error=%v", tc.valid, err)
+			}
+			if tc.valid && patch.Fields[tc.field] != value {
+				t.Fatal("snapshot content changed")
+			}
+		})
+	}
+}
+
+func TestRuntimePatchAcceptsEscapedSnapshotsInOneCASWrite(t *testing.T) {
+	store := &fakeStore{}
+	h := Handler[runtimeRow, *runtimeRow]{Store: store, Present: func(r *runtimeRow) *runtimeRow { return r }, Fields: map[string]FieldKind{"sandbox_logs_snapshot": Snapshot, "sandbox_policy_snapshot": Snapshot}}
+	// Escaping inside each JSON document adds another layer in the HTTP body.
+	document := `"` + strings.Repeat(`\"`, (MaxSnapshotBytes-2)/2) + `"`
+	if !json.Valid([]byte(document)) {
+		t.Fatal("test snapshot must be valid JSON")
+	}
+	body, err := json.Marshal(map[string]interface{}{"runtime_version": 7, "expected_phase": "Stopping", "sandbox_logs_snapshot": document, "sandbox_policy_snapshot": document})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPatch, "/runtime/sessions/session-a", strings.NewReader(string(body)))
+	req = mux.SetURLVars(req, map[string]string{"id": "session-a"})
+	req = req.WithContext(middleware.WithCallerType(req.Context(), middleware.CallerTypeService))
+	out := httptest.NewRecorder()
+	h.Patch(out, req)
+	if out.Code != http.StatusOK || store.calls != 1 || store.patch.Version != 7 {
+		t.Fatalf("snapshot status=%d, writes=%d", out.Code, store.calls)
+	}
+	if store.patch.Fields["sandbox_logs_snapshot"] != document || store.patch.Fields["sandbox_policy_snapshot"] != document || *store.patch.ExpectedPhase != "Stopping" {
+		t.Fatal("snapshot or phase guard changed")
+	}
+}
 
 type runtimeRow struct {
 	ID             string `gorm:"primaryKey"`

@@ -27,7 +27,13 @@ type FieldKind int
 const (
 	String FieldKind = iota
 	Timestamp
+	Snapshot
 )
+
+// Snapshots retain bounded policy and log documents. Other runtime fields keep
+// the small identity/status limit. The request limit also allows JSON escaping.
+const MaxSnapshotBytes = 2 * 1024 * 1024
+const maxRuntimePatchBytes = 10 * 1024 * 1024
 
 type Patch struct {
 	Version       int64
@@ -104,7 +110,7 @@ func (h Handler[T, R]) Patch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	patch, err := DecodePatch(http.MaxBytesReader(w, r.Body, 65536), h.Fields)
+	patch, err := DecodePatch(http.MaxBytesReader(w, r.Body, maxRuntimePatchBytes), h.Fields)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -162,7 +168,11 @@ func DecodePatch(reader io.Reader, allowed map[string]FieldKind) (Patch, error) 
 		if json.Unmarshal(value, &text) != nil {
 			return patch, fmt.Errorf("runtime fields must be strings or null")
 		}
-		if len(text) > 16384 {
+		limit := 16384
+		if kind == Snapshot {
+			limit = MaxSnapshotBytes
+		}
+		if len(text) > limit {
 			return patch, fmt.Errorf("runtime field is too long")
 		}
 		if kind == Timestamp {
