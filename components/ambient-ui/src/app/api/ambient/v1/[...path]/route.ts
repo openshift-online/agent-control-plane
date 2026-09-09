@@ -59,9 +59,9 @@ async function proxyRequest(
     headers["content-type"] = contentType
   }
 
-  let body: string | undefined
+  let body: ArrayBuffer | undefined
   if (METHODS_WITH_BODY.has(request.method)) {
-    body = await request.text()
+    body = await request.arrayBuffer()
   }
 
   let upstream: Response
@@ -121,8 +121,8 @@ async function proxyRequest(
     return new Response(null, { status: 204 })
   }
 
-  const text = await upstream.text()
-  return new Response(text, {
+  // Keep file bytes intact. Text decoding replaces invalid UTF-8 bytes.
+  return new Response(upstream.body, {
     status: upstream.status,
     headers: { "Content-Type": upstreamContentType || "application/json" },
   })
