@@ -143,7 +143,12 @@ func TestRuntimeSQLCASPreservesTombstones(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer sqlDB.Close()
+	defer func() {
+		mock.ExpectClose()
+		if err := sqlDB.Close(); err != nil {
+			t.Errorf("close mock database: %v", err)
+		}
+	}()
 	database, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{DisableAutomaticPing: true, SkipDefaultTransaction: true})
 	if err != nil {
 		t.Fatal(err)

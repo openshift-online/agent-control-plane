@@ -1130,23 +1130,6 @@ func controlPlaneURLFromEnv() string {
 	return "http://ambient-control-plane:8080"
 }
 
-// sandboxName mirrors the control plane's openshell.SandboxName() derivation.
-func sandboxName(sessionID string) string {
-	name := sessionID
-	if len(name) > 40 {
-		name = name[:40]
-	}
-	result := make([]byte, len(name))
-	for i := 0; i < len(name); i++ {
-		c := name[i]
-		if c >= 'A' && c <= 'Z' {
-			c += 'a' - 'A'
-		}
-		result[i] = c
-	}
-	return "session-" + string(result)
-}
-
 // SandboxLogs proxies sandbox log SSE from the control plane.
 func (h sessionHandler) SandboxLogs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

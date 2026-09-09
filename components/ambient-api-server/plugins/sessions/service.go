@@ -3,7 +3,6 @@ package sessions
 import (
 	"context"
 	stdErrors "errors"
-	stderrors "errors"
 	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/runtimeapi"
 
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
@@ -283,7 +282,7 @@ func (s *sqlSessionService) Start(ctx context.Context, id string) (*Session, *er
 func (s *sqlSessionService) ActiveByAgentID(ctx context.Context, agentID string) (*Session, *errors.ServiceError) {
 	session, err := s.sessionDao.ActiveByAgentID(ctx, agentID)
 	if err != nil {
-		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+		if stdErrors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, errors.GeneralError("unable to look up active session for agent %s: %s", agentID, err)
@@ -302,7 +301,7 @@ func (s *sqlSessionService) ByScheduledSessionID(ctx context.Context, scheduledS
 func (s *sqlSessionService) ActiveByScheduledSessionID(ctx context.Context, scheduledSessionID string) (*Session, *errors.ServiceError) {
 	session, err := s.sessionDao.ActiveByScheduledSessionID(ctx, scheduledSessionID)
 	if err != nil {
-		if stderrors.Is(err, gorm.ErrRecordNotFound) {
+		if stdErrors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, errors.GeneralError("unable to look up active session for schedule %s: %s", scheduledSessionID, err)
