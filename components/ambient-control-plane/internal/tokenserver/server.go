@@ -94,6 +94,8 @@ func New(
 		}
 		mux.HandleFunc("/sandbox/", func(w http.ResponseWriter, r *http.Request) {
 			switch {
+			case strings.Contains(r.URL.Path, "/runner/"):
+				sbx.handleRunnerProxy(w, r)
 			case strings.HasSuffix(r.URL.Path, "/policy"):
 				sbx.handlePolicy(w, r)
 			case strings.HasSuffix(r.URL.Path, "/logs"):

@@ -57,3 +57,21 @@ connection settings before these cleanup attempts.
 - WHEN ACP records the operation result
 - THEN cleanup SHALL remain pending
 - AND ACP SHALL NOT report successful runtime deletion
+
+### Requirement: Runner HTTP operations
+
+Existing session file and runner HTTP operations SHALL use the recorded gateway
+binding when the runtime is Hypershell. They SHALL NOT require a local runner
+Service. The control plane SHALL verify the user token against the session and
+sandbox before it opens a gateway connection. It SHALL forward only to the
+runner's fixed loopback HTTP port. It SHALL NOT forward the user token or browser
+cookies to the runner. Gateway and relay credentials SHALL remain in the control
+plane. A failed connection SHALL return an error, not an empty success response.
+The gateway stream SHALL close when the HTTP request ends.
+
+#### Scenario: File access across workspaces
+
+- GIVEN a user can access session A but cannot access session B
+- WHEN the user requests a file from session B through the runner proxy
+- THEN the request SHALL fail before a runner connection opens
+- AND the response SHALL NOT contain gateway or runner credentials
