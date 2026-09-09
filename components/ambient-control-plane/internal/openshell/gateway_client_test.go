@@ -176,6 +176,7 @@ func TestGetOrCreateConn_ConcurrentSameNamespace(t *testing.T) {
 	}
 }
 
+// Preserve the legacy 11-character suffix so existing sandboxes can be adopted.
 func TestSandboxName(t *testing.T) {
 	tests := []struct {
 		sessionID string
@@ -183,10 +184,10 @@ func TestSandboxName(t *testing.T) {
 	}{
 		{"abc123", "session-abc123"},
 		{"ABC-DEF", "session-abc-def"},
-		{"MiXeD-CaSe-123", "session-mixed-case-123"},
+		{"MiXeD-CaSe-123", "session-mixed-case-"},
 		{
 			"aaaaabbbbbcccccdddddeeeeefffffggggghhhhh-extra-chars-beyond-40",
-			"session-aaaaabbbbbcccccdddddeeeeefffffggggghhhhh",
+			"session-aaaaabbbbbc",
 		},
 		{"", "session-"},
 	}

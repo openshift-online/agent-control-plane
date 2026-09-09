@@ -24,15 +24,17 @@ type TokenProvider interface {
 }
 
 type GatewayClient struct {
-	mu             sync.RWMutex
-	conns          map[string]*grpc.ClientConn
-	oidcNamespaces sync.Map // namespace → bool (true = OIDC enabled)
-	serviceName    string
-	grpcPort       int
-	resolveCred    CredentialResolver
-	saTokenPath    string
-	tokenProvider  TokenProvider
-	logger         zerolog.Logger
+	mu              sync.RWMutex
+	conns           map[string]*grpc.ClientConn
+	targetResolver  TargetResolver
+	targetRevisions map[string]string
+	oidcNamespaces  sync.Map // namespace → bool (true = OIDC enabled)
+	serviceName     string
+	grpcPort        int
+	resolveCred     CredentialResolver
+	saTokenPath     string
+	tokenProvider   TokenProvider
+	logger          zerolog.Logger
 }
 
 type GatewayClientOption func(*GatewayClient)
@@ -45,12 +47,13 @@ func WithTokenProvider(tp TokenProvider) GatewayClientOption {
 
 func NewGatewayClient(serviceName string, grpcPort int, resolveCred CredentialResolver, saTokenPath string, logger zerolog.Logger, opts ...GatewayClientOption) *GatewayClient {
 	g := &GatewayClient{
-		conns:       make(map[string]*grpc.ClientConn),
-		serviceName: serviceName,
-		grpcPort:    grpcPort,
-		resolveCred: resolveCred,
-		saTokenPath: saTokenPath,
-		logger:      logger.With().Str("component", "openshell-gateway").Logger(),
+		conns:           make(map[string]*grpc.ClientConn),
+		targetRevisions: make(map[string]string),
+		serviceName:     serviceName,
+		grpcPort:        grpcPort,
+		resolveCred:     resolveCred,
+		saTokenPath:     saTokenPath,
+		logger:          logger.With().Str("component", "openshell-gateway").Logger(),
 	}
 	for _, opt := range opts {
 		opt(g)
@@ -66,6 +69,9 @@ func (g *GatewayClient) SetNamespaceAuthMode(namespace string, hasOIDC bool) {
 }
 
 func (g *GatewayClient) authContext(ctx context.Context, namespace string) context.Context {
+	if g.targetResolver != nil {
+		return managedAuthContext(ctx)
+	}
 	if mode, ok := g.oidcNamespaces.Load(namespace); ok {
 		if mode.(bool) {
 			return g.oidcAuthContext(ctx)
@@ -83,6 +89,9 @@ func (g *GatewayClient) stripAuthContext(ctx context.Context) context.Context {
 }
 
 func (g *GatewayClient) isUnauthSigningKeyErr(err error) bool {
+	if g.targetResolver != nil {
+		return false
+	}
 	if err == nil {
 		return false
 	}
@@ -117,6 +126,9 @@ func (g *GatewayClient) clientForNamespace(ctx context.Context, namespace string
 }
 
 func (g *GatewayClient) getOrCreateConn(ctx context.Context, namespace string) (*grpc.ClientConn, error) {
+	if g.targetResolver != nil {
+		return g.managedConn(ctx, namespace)
+	}
 	g.mu.RLock()
 	conn, ok := g.conns[namespace]
 	g.mu.RUnlock()
@@ -156,6 +168,7 @@ func (g *GatewayClient) evictConn(namespace string) {
 		return
 	}
 	delete(g.conns, namespace)
+	delete(g.targetRevisions, namespace)
 	if err := conn.Close(); err != nil {
 		g.logger.Warn().Err(err).Str("namespace", namespace).Msg("closing evicted gateway connection")
 	}
@@ -512,6 +525,7 @@ func (g *GatewayClient) Close() error {
 		g.logger.Debug().Str("namespace", ns).Msg("gateway connection closed")
 	}
 	g.conns = make(map[string]*grpc.ClientConn)
+	g.targetRevisions = make(map[string]string)
 	return firstErr
 }
 
