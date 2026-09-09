@@ -56,9 +56,6 @@ func (r *ManagedReconciler) reconcileManagedSession(ctx context.Context, sdk *sd
 	if s.GatewayID != p.GatewayID {
 		return fmt.Errorf("session gateway no longer matches its workspace")
 	}
-	if p.GatewayStatus != "Ready" {
-		return nil
-	}
 	if s.GatewayEndpoint != p.GatewayEndpoint || s.GatewayCredentialID != p.GatewayCredentialID {
 		_, err := r.patchSession(ctx, sdk, s, map[string]interface{}{"gateway_endpoint": p.GatewayEndpoint, "gateway_credential_id": p.GatewayCredentialID})
 		return err
@@ -68,6 +65,10 @@ func (r *ManagedReconciler) reconcileManagedSession(ctx context.Context, sdk *sd
 		return r.stopManagedSession(ctx, sdk, s, target)
 	}
 	if s.Phase == PhaseStopped {
+		return nil
+	}
+	// Readiness gates new work. A degraded gateway can still serve cleanup.
+	if p.GatewayStatus != "Ready" {
 		return nil
 	}
 	if s.Phase == PhasePending || s.Phase == "" {

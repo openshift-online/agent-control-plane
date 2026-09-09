@@ -41,6 +41,15 @@ upload, stop, resume, and deletion through gateway APIs. Failed remote operation
 SHALL remain pending or report a failure. ACP SHALL retry cleanup after outages.
 Stop and resume SHALL preserve the documented session files and message sequence.
 Completed session snapshots SHALL remain available after runtime deletion.
+Before stop or deletion, ACP SHALL use the finite `GetSandboxLogs` gateway RPC
+and persist the policy and up to 500 buffered log entries with a session version
+and phase check. An empty log buffer SHALL be a valid snapshot, including when
+the sandbox never became Ready. A failed RPC or database write SHALL keep cleanup
+pending. ACP SHALL preserve a saved snapshot when a stopped sandbox has no logs.
+An already deleted sandbox SHALL NOT require another snapshot.
+A Degraded gateway SHALL block new session work but SHALL NOT block attempts to
+stop terminal sessions. ACP SHALL validate the gateway binding and refresh its
+connection settings before these cleanup attempts.
 
 #### Scenario: Failed remote deletion
 

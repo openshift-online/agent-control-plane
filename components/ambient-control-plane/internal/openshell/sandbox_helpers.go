@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 
 	pb "github.com/openshift-online/agent-control-plane/components/ambient-control-plane/internal/openshell/grpc/openshell/v1"
 )
@@ -61,41 +60,31 @@ func BuildSnapshotPatch(sbx *pb.Sandbox) (map[string]interface{}, error) {
 	return patch, nil
 }
 
+// FetchSandboxLogs reads the gateway's finite log buffer. WatchSandbox is a
+// live stream even with all follow flags disabled, so it cannot capture a snapshot.
 func (g *GatewayClient) FetchSandboxLogs(ctx context.Context, namespace, sandboxID string, tailLines uint32) ([]map[string]interface{}, error) {
-	req := &pb.WatchSandboxRequest{
-		Id:           sandboxID,
-		FollowLogs:   false,
-		LogTailLines: tailLines,
-	}
-
-	stream, err := g.WatchSandbox(ctx, namespace, req)
+	ctx = g.authContext(ctx, namespace)
+	client, err := g.clientForNamespace(ctx, namespace)
 	if err != nil {
 		return nil, err
 	}
-
-	var entries []map[string]interface{}
-	for {
-		event, recvErr := stream.Recv()
-		if recvErr == io.EOF {
-			break
-		}
-		if recvErr != nil {
-			if len(entries) > 0 {
-				return entries, recvErr
-			}
-			return nil, recvErr
-		}
-
-		if p, ok := event.Payload.(*pb.SandboxStreamEvent_Log); ok {
-			entries = append(entries, map[string]interface{}{
-				"timestamp": p.Log.GetTimestampMs(),
-				"source":    p.Log.GetSource(),
-				"level":     p.Log.GetLevel(),
-				"module":    p.Log.GetTarget(),
-				"message":   p.Log.GetMessage(),
-				"fields":    p.Log.GetFields(),
-			})
-		}
+	response, err := client.GetSandboxLogs(ctx, &pb.GetSandboxLogsRequest{
+		SandboxId: sandboxID,
+		Lines:     tailLines,
+	})
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]map[string]interface{}, 0, len(response.GetLogs()))
+	for _, line := range response.GetLogs() {
+		entries = append(entries, map[string]interface{}{
+			"timestamp": line.GetTimestampMs(),
+			"source":    line.GetSource(),
+			"level":     line.GetLevel(),
+			"module":    line.GetTarget(),
+			"message":   line.GetMessage(),
+			"fields":    line.GetFields(),
+		})
 	}
 	return entries, nil
 }

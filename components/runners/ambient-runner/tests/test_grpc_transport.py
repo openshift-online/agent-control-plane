@@ -649,7 +649,7 @@ class TestSynthesizeRunError:
 async def test_durable_resume_processes_old_queued_messages_without_replaying(
     cursor_path, monkeypatch
 ):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from ambient_runner.platform.message_cursor import MessageCursor
 

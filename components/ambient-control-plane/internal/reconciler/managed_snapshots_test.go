@@ -30,6 +30,7 @@ type managedSnapshotServer struct {
 	mu                   sync.Mutex
 	sandbox              *pb.Sandbox
 	logError, patchError bool
+	emptyLogs            bool
 	calls                []string
 	session              types.Session
 }
@@ -37,22 +38,25 @@ type managedSnapshotServer struct {
 func (s *managedSnapshotServer) GetSandbox(context.Context, *pb.GetSandboxRequest) (*pb.SandboxResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sandbox == nil {
+		return nil, status.Error(codes.NotFound, "sandbox not found")
+	}
 	return &pb.SandboxResponse{Sandbox: s.sandbox}, nil
 }
-func (s *managedSnapshotServer) WatchSandbox(req *pb.WatchSandboxRequest, stream grpc.ServerStreamingServer[pb.SandboxStreamEvent]) error {
+func (s *managedSnapshotServer) GetSandboxLogs(_ context.Context, req *pb.GetSandboxLogsRequest) (*pb.GetSandboxLogsResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls = append(s.calls, "logs")
-	if req.Id != "sandbox-id" || req.FollowLogs || req.LogTailLines != openshell.LogTailLines {
-		return status.Error(codes.InvalidArgument, "incorrect snapshot request")
-	}
-	if err := stream.Send(&pb.SandboxStreamEvent{Payload: &pb.SandboxStreamEvent_Log{Log: &pb.SandboxLogLine{TimestampMs: 42, Source: "sandbox", Level: "INFO", Target: "network", Message: "provider request allowed", Fields: map[string]string{"provider": "session-provider", "action": "allow", "dst_host": "model.example"}}}}); err != nil {
-		return err
+	if req.SandboxId != "sandbox-id" || req.Lines != openshell.LogTailLines || req.Workspace != "workspace" {
+		return nil, status.Error(codes.InvalidArgument, "incorrect snapshot request")
 	}
 	if s.logError {
-		return status.Error(codes.Unavailable, "log collection failed after partial result")
+		return nil, status.Error(codes.Unavailable, "log collection failed")
 	}
-	return nil
+	if s.emptyLogs {
+		return &pb.GetSandboxLogsResponse{}, nil
+	}
+	return &pb.GetSandboxLogsResponse{Logs: []*pb.SandboxLogLine{{TimestampMs: 42, Source: "sandbox", Level: "INFO", Target: "network", Message: "provider request allowed", Fields: map[string]string{"provider": "session-provider", "action": "allow", "dst_host": "model.example"}}}}, nil
 }
 func (s *managedSnapshotServer) StopSandbox(context.Context, *pb.StopSandboxRequest) (*pb.SandboxResponse, error) {
 	s.mu.Lock()
@@ -239,5 +243,142 @@ func TestManagedSnapshotDeletePreservesStoppedCapture(t *testing.T) {
 	}
 	if server.session.SandboxLogsSnapshot != saved.SandboxLogsSnapshot || server.session.SandboxPolicySnapshot != saved.SandboxPolicySnapshot {
 		t.Fatal("stopped capture changed during deletion")
+	}
+}
+
+func TestManagedSnapshotEmptyLogsDoNotBlockCleanup(t *testing.T) {
+	for _, phase := range []pb.SandboxPhase{pb.SandboxPhase_SANDBOX_PHASE_PROVISIONING, pb.SandboxPhase_SANDBOX_PHASE_ERROR, pb.SandboxPhase_SANDBOX_PHASE_STOPPED} {
+		for _, action := range []string{"stop", "delete"} {
+			t.Run(phase.String()+"/"+action, func(t *testing.T) {
+				r, sdk, server, target := newManagedSnapshotTest(t)
+				server.sandbox.Status.Phase = phase
+				server.emptyLogs = true
+				var err error
+				if action == "stop" {
+					err = r.stopManagedSession(context.Background(), sdk, server.session, target)
+				} else {
+					err = r.deleteManagedSession(context.Background(), sdk, server.session)
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				server.mu.Lock()
+				defer server.mu.Unlock()
+				if server.session.SandboxLogsSnapshot != "[]" || server.session.SandboxPolicySnapshot == "" {
+					t.Fatal("empty log buffer did not produce a durable snapshot")
+				}
+				want := "logs,persist," + action
+				if action == "delete" {
+					want += ",persist"
+				}
+				if action == "stop" && phase == pb.SandboxPhase_SANDBOX_PHASE_STOPPED {
+					want = "logs,persist,persist"
+				}
+				if got := strings.Join(server.calls, ","); got != want {
+					t.Fatalf("operation order: %s, want %s", got, want)
+				}
+			})
+		}
+	}
+}
+
+func TestManagedSnapshotPhaseConflictPreventsRemoteMutation(t *testing.T) {
+	for _, action := range []string{"stop", "delete"} {
+		t.Run(action, func(t *testing.T) {
+			r, sdk, server, target := newManagedSnapshotTest(t)
+			stale := server.session
+			server.session.Phase = PhasePending
+			var err error
+			if action == "stop" {
+				err = r.stopManagedSession(context.Background(), sdk, stale, target)
+			} else {
+				err = r.deleteManagedSession(context.Background(), sdk, stale)
+			}
+			if err == nil {
+				t.Fatal("phase conflict was ignored")
+			}
+			server.mu.Lock()
+			defer server.mu.Unlock()
+			if got := strings.Join(server.calls, ","); got != "logs" {
+				t.Fatalf("mutation after phase conflict: %s", got)
+			}
+		})
+	}
+}
+
+func TestManagedSnapshotAbsentSandboxDoesNotBlockStop(t *testing.T) {
+	r, sdk, server, target := newManagedSnapshotTest(t)
+	server.sandbox = nil
+	if err := r.stopManagedSession(context.Background(), sdk, server.session, target); err != nil {
+		t.Fatal(err)
+	}
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	if server.session.RuntimeStatus != "Stopped" || strings.Join(server.calls, ",") != "persist" {
+		t.Fatalf("absent runtime cleanup blocked: %v", server.calls)
+	}
+}
+
+func TestManagedCleanupContinuesWithDegradedGateway(t *testing.T) {
+	for _, phase := range []string{PhaseStopping, PhaseCompleted, PhaseFailed} {
+		t.Run(phase, func(t *testing.T) {
+			r, sdk, server, _ := newManagedSnapshotTest(t)
+			server.session.Phase = phase
+			project := types.Project{GatewayID: server.session.GatewayID, GatewayStatus: "Degraded"}
+			if err := r.reconcileManagedSession(context.Background(), sdk, project, server.session); err != nil {
+				t.Fatal(err)
+			}
+			server.mu.Lock()
+			defer server.mu.Unlock()
+			if got := strings.Join(server.calls, ","); got != "logs,persist,stop" {
+				t.Fatalf("cleanup did not reach degraded gateway: %s", got)
+			}
+		})
+	}
+}
+
+func TestManagedActiveSessionWaitsForReadyGateway(t *testing.T) {
+	for _, phase := range []string{PhasePending, PhaseCreating, PhaseRunning} {
+		t.Run(phase, func(t *testing.T) {
+			r, sdk, server, _ := newManagedSnapshotTest(t)
+			server.session.Phase = phase
+			project := types.Project{GatewayID: server.session.GatewayID, GatewayStatus: "Degraded"}
+			if err := r.reconcileManagedSession(context.Background(), sdk, project, server.session); err != nil {
+				t.Fatal(err)
+			}
+			server.mu.Lock()
+			defer server.mu.Unlock()
+			if len(server.calls) != 0 {
+				t.Fatalf("active session used degraded gateway: %v", server.calls)
+			}
+		})
+	}
+}
+
+func TestManagedDegradedCleanupChecksBindingAndRefreshesConnection(t *testing.T) {
+	for _, mismatch := range []bool{true, false} {
+		t.Run(fmt.Sprintf("mismatched-gateway=%t", mismatch), func(t *testing.T) {
+			r, sdk, server, _ := newManagedSnapshotTest(t)
+			project := types.Project{GatewayID: server.session.GatewayID, GatewayStatus: "Degraded", GatewayEndpoint: "https://updated.example", GatewayCredentialID: "new-credential"}
+			if mismatch {
+				project.GatewayID = "other-gateway"
+			}
+			err := r.reconcileManagedSession(context.Background(), sdk, project, server.session)
+			if mismatch && err == nil {
+				t.Fatal("gateway mismatch accepted")
+			}
+			if !mismatch && err != nil {
+				t.Fatal(err)
+			}
+			server.mu.Lock()
+			defer server.mu.Unlock()
+			want := "persist"
+			if mismatch {
+				want = ""
+			}
+			if got := strings.Join(server.calls, ","); got != want {
+				t.Fatalf("remote cleanup before binding validation or connection refresh: %s", got)
+			}
+		})
 	}
 }
