@@ -116,7 +116,7 @@ worker is needed to test gateway and sandbox workloads without reducing
 unrelated workload requests.
 
 The Keycloak realm has no identity provider. Existing human usernames are
-`admin`, `developer`, and `platform-admin`. There is no `johnsell` realm user.
+`admin`, `developer`, and `platform-admin`. There was no `johnsell` realm user.
 A dedicated `johnsell` user was then created with the `hypershell-users` role.
 Its password is in the private local file `johnsell-password`.
 
@@ -180,7 +180,8 @@ shared server certificate issuer. Its API and controller images are deployed and
 The browser login passed after the dedicated user profile was set from local
 Git configuration. The user sees `jshell-hypershell-test` with the Owner role.
 Authenticated public gRPC reflection also passed and listed eight services.
-The fourth worker remains the blocker for gateway database scheduling.
+The gateway database was still pending at this point. Its later state is
+recorded below.
 
 
 The gateway database later took a free scheduling slot during the ACP control
@@ -194,3 +195,32 @@ for memory. The server certificate uses `acp-hypershell-test-ca` and includes
 the public gateway hostname. The separate sandbox TLS Secret has a public
 server CA and an owner reference to the gateway client Secret. The certificate
 generation Job completed.
+
+
+## Prepared session checks
+
+The normal ACP API has two sessions in `jshell-hypershell-test`. Each session
+has its own agent and credential record. Both credentials use the same existing
+user ADC identity; they are not separate cloud identities. The database stores
+both tokens in encrypted form.
+
+| Model | Session ID | Credential ID |
+| --- | --- | --- |
+| Claude Haiku 4.5 | `3J6CUL5MoYr2eykRRkgSktf4IYE` | `3J6CUHm6FYJWpJAXCdRgaXSUhSt` |
+| Claude Sonnet 4.5 | `3J6CUSoEhn9Zj2akpxAHEwkcWmk` | `3J6CULUofYmakWfvXiK3e7ej719` |
+
+The Vertex project and region came from the user's configured environment.
+Direct ADC refresh and model catalog requests succeeded. A direct Haiku request
+returned the expected test text. These requests did not run through OpenShell
+and do not prove sandbox inference or credential isolation.
+
+All 446 UI tests passed. API PostgreSQL integration tests passed for runtime
+updates, projects, sessions, credentials, and access control. API lint passed.
+Control-plane tests and vet passed; lint found no new issues against `origin/main`.
+OpenShell transport race tests passed. The final code also uses the finite
+`GetSandboxLogs` RPC for snapshots. The watch RPC does not terminate after its
+initial event and is not suitable for a cleanup snapshot.
+
+The gateway and console are still Pending for memory. Live session execution,
+credential rotation and revocation, recovery, and cleanup proof remain pending.
+The UI must be restored before this deployment is offered for user approval.
