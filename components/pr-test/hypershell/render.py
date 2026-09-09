@@ -58,7 +58,7 @@ def render(config):
             'securityContext': {'runAsNonRoot': True, 'allowPrivilegeEscalation': False,
                 'readOnlyRootFilesystem': True, 'capabilities': {'drop': ['ALL']}},
             'env': environment, 'ports': [{'containerPort': p} for p in ports],
-            'resources': {'requests': {'cpu': '50m', 'memory': '128Mi'},
+            'resources': {'requests': {'cpu': '50m', 'memory': '64Mi' if name in ('ambient-api-server-db', 'ambient-control-plane') else '128Mi'},
                 'limits': {'cpu': '2', 'memory': '1Gi'}},
             'volumeMounts': [mount('tmp', '/tmp')] + (mounts or [])}
         if command:
@@ -66,7 +66,7 @@ def render(config):
         if probe:
             container['readinessProbe'] = dict(probe, initialDelaySeconds=5, periodSeconds=5)
             container['livenessProbe'] = dict(probe, initialDelaySeconds=30, periodSeconds=10)
-        obj = add('Deployment', name, {'replicas': 1,
+        obj = add('Deployment', name, {'replicas': 1, 'strategy': {'type': 'Recreate'},
             'selector': {'matchLabels': {'app': name}}, 'template': {
                 'metadata': {'labels': {'app': name}}, 'spec': {
                     'serviceAccountName': name,

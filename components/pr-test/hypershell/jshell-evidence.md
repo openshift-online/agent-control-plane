@@ -46,10 +46,10 @@ Namespace: `acp-hypershell-system`.
 
 API: `https://hypershell-api-acp-hypershell-system.apps.rosa.jshell.8u58.p3.openshiftapps.com`
 
-The first API and controller images came from Hypershell commit
-`433388cee436699009ac652b5cc4c3bd0cfb8aeb`. Follow-up storage and deletion fixes
-require a final image rebuild before approval tests. The existing shared
-Hypershell deployments were not upgraded.
+The API and controller now run digest-pinned images from Hypershell commit
+`d8ec5c2`. This includes persistent storage configuration, the OpenShift database
+UID fix, caller-scoped gateway references, and verified deletion completion.
+The existing shared Hypershell deployments were not upgraded.
 
 PostgreSQL has a bound 5Gi PVC. A restricted init container supplies a passwd
 entry for the assigned OpenShift UID. PostgreSQL keeps a read-only root
@@ -81,8 +81,9 @@ values. The API has plaintext credential storage disabled.
 Operator configuration and client secret files are in the local directory
 `/home/jsell/.cache/acp-hypershell-jshell`. The directory has mode `0700` and
 secret files have mode `0600`. These files are not in source control. The ACP
-configuration file is `config.json`; its image references must be replaced with
-the final build digests.
+configuration file is `config.json`. API and runner images currently come from
+ACP commit `e8fd4b35`; the control plane image comes from `49d41e39`. Final ACP
+source changes require another image build before approval tests.
 
 The jshell and Keycloak HTTPS certificates pass system trust verification.
 The ACP manifest uses a reencrypt Route for public gRPC and a service-issued
@@ -91,3 +92,28 @@ certificate for the API gRPC listener. The token callback uses an HTTPS Route.
 The three worker nodes have limited memory request capacity. Only the new test
 workload requests were reduced. Two concurrent agent sessions can require more
 worker capacity; this must be checked during the session tests.
+
+
+## Service checks and capacity
+
+The ACP API and database reached Ready. An unauthenticated public sessions
+request returned HTTP 401. The ACP control plane acquired an OIDC client token
+and started the Hypershell backend. Its public API address is:
+
+`https://ambient-api-server-acp-hypershell.apps.rosa.jshell.8u58.p3.openshiftapps.com`
+
+OpenShift adds service account image pull Secrets asynchronously. The apply
+script now waits for these Secrets before it creates pods. Deployments use
+Recreate to avoid extra replicas in this test namespace. The ACP database used
+40Mi in the observed sample; its request is 64Mi.
+
+The cluster has three `m8i-flex.large` workers. Its OCM cluster ID is
+`2sf62fcjk3cr6ob60log2b05mtfb7im5`, and its worker pool is `workers`.
+The current OCM login cannot access this cluster. The OCM API returns Forbidden,
+and the ROSA CLI lists no clusters. No worker size change was made. One more
+worker is needed to test gateway and sandbox workloads without reducing
+unrelated workload requests.
+
+The Keycloak realm has no identity provider. Existing human usernames are
+`admin`, `developer`, and `platform-admin`. There is no `johnsell` realm user.
+A personal login still needs an identity broker or a dedicated realm user.
