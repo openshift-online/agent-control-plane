@@ -1,0 +1,16 @@
+{
+  "namespace": "acp-hypershell",
+  "apps_domain": "apps.rosa.jshell.8u58.p3.openshiftapps.com",
+  "oidc_issuer": "https://keycloak.apps.rosa.jshell.8u58.p3.openshiftapps.com/realms/hypershell",
+  "cp_client_id": "acp-hypershell-cp",
+  "ui_client_id": "acp-hypershell-ui",
+  "storage_class": "gp3-csi",
+  "images": {
+    "api_server": "image-registry.openshift-image-registry.svc:5000/acp-hypershell/acp-api-server:REPLACE",
+    "control_plane": "image-registry.openshift-image-registry.svc:5000/acp-hypershell/acp-control-plane:REPLACE",
+    "ui": "image-registry.openshift-image-registry.svc:5000/acp-hypershell/acp-ambient-ui:REPLACE",
+    "runner": "image-registry.openshift-image-registry.svc:5000/acp-hypershell/acp-claude-runner:REPLACE",
+    "postgres": "registry.access.redhat.com/hi/postgresql:18.4@sha256:9b1917bf15a3b3a6a99b94ab75db1bfde3f434990e881c69d527417d2c035a09"
+  },
+  "control_plane_env": []
+}
