@@ -2,6 +2,7 @@ package credentials
 
 import (
 	"context"
+	stdErrors "errors"
 	"fmt"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/openshift-online/rh-trex-ai/pkg/errors"
 	"github.com/openshift-online/rh-trex-ai/pkg/logger"
 	"github.com/openshift-online/rh-trex-ai/pkg/services"
+	"gorm.io/gorm"
 )
 
 // credRoleBindingRow is a local struct for creating role_bindings rows via
@@ -240,6 +242,9 @@ func (s *sqlCredentialService) Replace(ctx context.Context, credential *Credenti
 
 func (s *sqlCredentialService) Delete(ctx context.Context, id string) *errors.ServiceError {
 	if err := s.credentialDao.Delete(ctx, id); err != nil {
+		if stdErrors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.NotFound("Credential not found")
+		}
 		return services.HandleDeleteError("Credential", errors.GeneralError("Unable to delete credential: %s", err))
 	}
 
