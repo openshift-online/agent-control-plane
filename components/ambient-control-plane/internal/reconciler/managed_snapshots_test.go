@@ -31,6 +31,8 @@ type managedSnapshotServer struct {
 	sandbox              *pb.Sandbox
 	logError, patchError bool
 	emptyLogs            bool
+	logs                 []*pb.SandboxLogLine
+	patchAttempts        int
 	calls                []string
 	session              types.Session
 }
@@ -55,6 +57,9 @@ func (s *managedSnapshotServer) GetSandboxLogs(_ context.Context, req *pb.GetSan
 	}
 	if s.emptyLogs {
 		return &pb.GetSandboxLogsResponse{}, nil
+	}
+	if s.logs != nil {
+		return &pb.GetSandboxLogsResponse{Logs: s.logs}, nil
 	}
 	return &pb.GetSandboxLogsResponse{Logs: []*pb.SandboxLogLine{{TimestampMs: 42, Source: "sandbox", Level: "INFO", Target: "network", Message: "provider request allowed", Fields: map[string]string{"provider": "session-provider", "action": "allow", "dst_host": "model.example"}}}}, nil
 }
@@ -111,6 +116,7 @@ func newManagedSnapshotTest(t *testing.T) (*ManagedReconciler, *sdkclient.Client
 			w.WriteHeader(500)
 			return
 		}
+		server.patchAttempts++
 		version, ok := patch["runtime_version"].(float64)
 		if !ok || int(version) != server.session.RuntimeVersion || server.patchError {
 			w.WriteHeader(http.StatusConflict)
@@ -380,5 +386,122 @@ func TestManagedDegradedCleanupChecksBindingAndRefreshesConnection(t *testing.T)
 				t.Fatalf("remote cleanup before binding validation or connection refresh: %s", got)
 			}
 		})
+	}
+}
+
+func TestManagedLogSnapshotLimitPreservesNewestEscapedEntries(t *testing.T) {
+	// This text is below 2 MiB, but JSON escaping expands it beyond the limit.
+	text := strings.Repeat("<\"\n", 100000)
+	logs := []map[string]interface{}{
+		{"timestamp": 1, "message": text},
+		{"timestamp": 2, "message": text},
+		{"timestamp": 3, "message": text},
+	}
+	data, err := encodeManagedLogSnapshot(logs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) > 2*1024*1024 {
+		t.Fatalf("snapshot has %d encoded bytes", len(data))
+	}
+	var decoded []map[string]interface{}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded) != 3 || decoded[0]["level"] != "WARN" || decoded[1]["timestamp"] != float64(2) || decoded[2]["timestamp"] != float64(3) {
+		t.Fatal("snapshot did not keep the newest two complete entries and omission warning")
+	}
+	if decoded[1]["message"] != text || decoded[2]["message"] != text || decoded[0]["fields"].(map[string]interface{})["omitted_entries"] != "1" {
+		t.Fatal("retained entry text or omitted count changed")
+	}
+}
+
+func TestManagedLogSnapshotOmitsOversizedEntryAndKeepsOtherLogs(t *testing.T) {
+	logs := []map[string]interface{}{{"timestamp": 1, "message": "older small entry"}, {"timestamp": 2, "message": strings.Repeat("x", 2*1024*1024)}, {"timestamp": 3, "message": "newest entry"}}
+	data, err := encodeManagedLogSnapshot(logs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded []map[string]interface{}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(data) > 2*1024*1024 || len(decoded) != 3 || decoded[0]["level"] != "WARN" || decoded[1]["message"] != "older small entry" || decoded[2]["message"] != "newest entry" {
+		t.Fatal("one oversized entry prevented other log capture")
+	}
+}
+
+func TestManagedLogSnapshotNormalArrayUnchanged(t *testing.T) {
+	logs := []map[string]interface{}{{"message": "ordinary log", "timestamp": 42}}
+	want, err := json.Marshal(logs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := encodeManagedLogSnapshot(logs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(want) {
+		t.Fatal("small snapshot contract changed")
+	}
+	got, err = encodeManagedLogSnapshot(nil)
+	if err != nil || string(got) != "[]" {
+		t.Fatal("empty snapshot contract changed")
+	}
+}
+
+func TestManagedLargeSnapshotUsesOneCASBeforeStop(t *testing.T) {
+	for _, conflict := range []bool{false, true} {
+		t.Run(fmt.Sprintf("persist-conflict=%t", conflict), func(t *testing.T) {
+			r, sdk, server, target := newManagedSnapshotTest(t)
+			server.patchError = conflict
+			for i := 0; i < 3; i++ {
+				server.logs = append(server.logs, &pb.SandboxLogLine{TimestampMs: int64(i), Message: strings.Repeat("x", 800000)})
+			}
+			policy, err := openshell.BuildSnapshotPatch(server.sandbox)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = r.stopManagedSession(context.Background(), sdk, server.session, target)
+			if (err != nil) != conflict {
+				t.Fatalf("stop error=%v, conflict=%v", err, conflict)
+			}
+			server.mu.Lock()
+			defer server.mu.Unlock()
+			if server.patchAttempts != 1 {
+				t.Fatalf("snapshot CAS attempts=%d, want 1", server.patchAttempts)
+			}
+			want := "logs,persist,stop"
+			if conflict {
+				want = "logs"
+			}
+			if strings.Join(server.calls, ",") != want {
+				t.Fatalf("mutation order=%v", server.calls)
+			}
+			if !conflict {
+				if len(server.session.SandboxLogsSnapshot) > 2*1024*1024 || !strings.Contains(server.session.SandboxLogsSnapshot, "omitted_entries") {
+					t.Fatal("large snapshot was not bounded with a warning")
+				}
+				if server.session.SandboxPolicySnapshot != policy["sandbox_policy_snapshot"] {
+					t.Fatal("log truncation changed policy snapshot")
+				}
+			}
+		})
+	}
+}
+
+func TestManagedLogSnapshotAcceptsExactAPILimit(t *testing.T) {
+	entry := map[string]interface{}{"message": ""}
+	base, err := json.Marshal([]map[string]interface{}{entry})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry["message"] = strings.Repeat("x", 2*1024*1024-len(base))
+	data, err := encodeManagedLogSnapshot([]map[string]interface{}{entry})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) != 2*1024*1024 || strings.Contains(string(data), "omitted_entries") {
+		t.Fatal("snapshot at exact API byte limit was truncated")
 	}
 }
