@@ -14,14 +14,14 @@ Hypershell worktree: `/home/jsell/code/hypershell-acp-integration`.
 |---|---|
 | API runtime fields, tombstones, version checks, and service access | Implemented and tested |
 | Hypershell external references and deletion confirmation | Implemented and tested |
-| Gateway accounts, encrypted ACP credentials, and managed transport | Implemented; live gateway preparation in progress |
+| Gateway accounts, encrypted ACP credentials, and managed transport | Implemented; live account and gateway checks pass |
 | Session workspaces, provider selection, runner identity, and cleanup | Implemented; full control-plane tests pass |
 | Legacy runner identity and TLS callbacks | Implemented and tested |
 | UI, CLI, and SDK changes | Implemented; all three UI audit passes complete |
-| Hypershell and ACP deployment | APIs and databases ready; gateway awaits capacity |
-| Live session, isolation, rotation, recovery, and cleanup tests | Pending |
+| Hypershell and ACP deployment | APIs, gateways, sandboxes, and UI run |
+| Live session, isolation, rotation, recovery, and cleanup tests | Real agent, rotation, revocation, resume, and account checks pass; fault recovery proof in progress |
 | PRs | ACP #482 and Hypershell #260 open as drafts |
-| User approval deployment | Pending worker capacity and live proof |
+| User approval deployment | Pending complete live proof |
 
 API contract: Project and Session runtime fields are read-only to users. The
 control plane uses authenticated runtime endpoints. Runtime inventory includes
@@ -53,10 +53,8 @@ reflection passed; requests without authentication were rejected. The API uses
 the framework's enhanced TLS configuration for both REST and gRPC. TLS automatic
 Kubernetes detection is disabled because it selects an unsuitable configuration.
 
-The cluster has three workers. The gateway database is ready. The gateway and console cannot yet schedule.
-The current OCM identity cannot change this worker pool. The user has been asked
-to increase the worker count from three to four. Resource requests for the new
-services are also being checked against measured use.
+The user set the worker pool to minimum 2 and maximum 5. Four workers are
+Ready. The UI runs. Two proof workspaces have distinct ready gateways.
 
 Validation completed before live session tests:
 
@@ -65,12 +63,11 @@ Validation completed before live session tests:
   with local PostgreSQL test containers.
 - Full CLI Go tests and TypeScript SDK tests.
 - Two Python SDK runtime contract tests.
-- UI TypeScript checks and all 446 UI tests.
+- UI TypeScript checks and all 456 UI tests.
 - Earlier runner, token exchange, transport, and provider tests recorded in commits.
 
 API lint and new-code control-plane lint pass. Full control-plane vet passed.
-The control plane retains unrelated baseline lint findings. These checks do not
-replace the pending live session tests.
+The control plane retains unrelated baseline lint findings. The deployment record lists the separate live tests.
 
 The runner saves its accepted message sequence in its persistent workspace.
 Startup uses the API task record once. Project, agent, and inbox instructions
@@ -81,24 +78,29 @@ Provider secret rotation can update a running session. A change to provider
 settings requires a session restart. The provider settings hash excludes secret
 values. Runner startup preserves the proxy and CA settings from OpenShell.
 
-The UI is temporarily scaled to zero to release memory for the gateway database.
-It must be restored before the deployment is ready for user approval.
-
 ACP draft PR: https://github.com/openshift-online/agent-control-plane/pull/482.
 Hypershell draft PR: https://github.com/openshift-online/hypershell/pull/260.
 
-The deployed ACP control plane uses `33b69273`; its API, UI, and runner images
-use `95264f99`. The deployed Hypershell API uses `e66e994`, and its control plane
-uses `1375696`. See the deployment evidence for image digests. Both APIs and
-control planes are ready. The UI remains paused. The corrected gateway remains
-Pending because another workload used the memory released by its failed
-replica. No live sandbox has run. A fourth worker is the remaining prerequisite
-for live verification; the current OCM login cannot change this worker pool.
+The [deployment record](../../../components/pr-test/hypershell/jshell-evidence.md)
+is the source for current image revisions, IDs, and live evidence. Native
+sandbox security, account expiry and recovery, automatic image access, and
+normal resource cleanup pass. A bounded isolated Hypershell API outage kept
+cleanup pending; restoration completed cleanup without changing the main
+workspace's gateway identity.
 
-The final deployment corrects the sandbox service account image pull grant and
-moves workspace storage settings into the gateway's Kubernetes driver config.
-The full remaining scope and native sandbox security boundary are in
+The native combined topology uses elevated startup permissions under an
+existing Hypershell SCC grant. Native command probes verified privilege drop,
+seccomp, Landlock, filesystem denial, and network denial on jshell's kernel.
+These results do not establish behavior on a different kernel.
+
+A real Haiku task wrote the proof file and returned its reply through ACP.
+UI, CLI, Go SDK, agent-start, and the schedule timer each returned real replies.
+Credential rotation and revocation, user and runner access boundaries, endpoint
+and certificate changes, and session resume across a control-plane restart pass.
+Managed runner HTTP operations use the native gateway with exact route and
+method checks. File writes and task stops require the matching ACP permission.
+The UI proxy preserves binary request and response bytes.
+
+The Sonnet test is blocked by the current Vertex project's organization policy.
+The full remaining scope is in
 [approval verification](../../../components/pr-test/hypershell/approval-verification.md).
-The native combined sandbox topology uses elevated permissions under an
-existing Hypershell SCC grant. It differs from the restricted ACP service pods;
-actual workload privilege drop and isolation remain unverified.

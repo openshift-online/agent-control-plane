@@ -41,7 +41,8 @@ image reference with a digest. Put each reference in a private copy of
 ## Configure authentication and TLS
 
 `bootstrap-oidc.py` creates dedicated clients in the existing test Keycloak
-realm. It reads the test Keycloak deployment's bootstrap admin settings through
+realm for ACP. Use a separate realm for each isolated Hypershell instance, as
+described below. It reads the test Keycloak deployment's bootstrap admin settings through
 the explicit cluster context. It writes client secrets to a private directory.
 The UI client has an exact HTTPS callback URL. ACP and Hypershell management
 use separate confidential clients. The manager receives `gateway:creator`.
@@ -111,6 +112,30 @@ Supply `namespace`, `oidc_issuer`, `apps_domain`, `cp_client_id`, `storage_class
 `api_image`, and `controller_image` in a private JSON configuration. Supply the
 Hypershell database, API client, and Keycloak provisioner Secrets before apply.
 The source base manifests define their required keys.
+
+Create an owned realm before starting the isolated Hypershell API:
+
+```bash
+python3 components/pr-test/hypershell/bootstrap-hypershell-realm.py /private/path/hypershell-config.json \
+  --realm hypershell-acp-jshell \
+  --instance-id "$HYPERSHELL_INSTANCE_ID" \
+  --manager-client-id acp-hypershell-manager \
+  --provisioner-client-id acp-hypershell-provisioner \
+  --output-dir /private/path/isolated-realm
+```
+
+The instance ID must match the stable ACP installation ID. The script refuses
+an existing realm owned by another installation. It creates the controller,
+manager, and provisioner clients, verifies their identities, and preserves
+client secrets on repeat runs. The provisioner receives client and user
+management permissions only in this realm.
+
+Set `oidc_issuer` from the output `realm.json`. Use the three output secret files
+for the corresponding Kubernetes Secret keys. Set ACP's Hypershell token URL
+to this realm; leave ACP's own browser and machine token URLs unchanged. Do not
+copy secret values into configuration or command arguments. A second Hypershell
+instance must not share a realm with an older instance whose orphan cleanup
+cannot distinguish instance ownership.
 Use [hypershell-config.example.json](hypershell-config.example.json) as a starting
 point and replace the image references with built digests.
 
