@@ -123,6 +123,10 @@ database PVCs. Existing PVCs keep their class.
 When runner images use the private OpenShift registry, run
 `grant-runner-pull.py <gateway-namespace>` after each workspace gateway namespace
 exists. This grants only its sandbox service account access to the runner image.
+The script reads the account name from the live gateway driver configuration
+and requires Python 3.11 or later. The jshell account is
+`openshell-gateway-sandbox`. An explicit `--sandbox-service-account` can override
+discovery. A repeat run replaces the prior subject in the same RoleBinding.
 The RoleBinding has a Namespace owner reference. Namespace deletion therefore
 removes the binding. The script rejects namespaces from other Hypershell
 instances. It does not copy registry tokens to gateway namespaces.
