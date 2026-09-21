@@ -147,7 +147,7 @@ jobs:
 
       - name: Build and push ${{ matrix.component.name }} (amd64)
         if: github.event_name != 'pull_request'
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
@@ -162,7 +162,7 @@ jobs:
 
       - name: Build and push ${{ matrix.component.name }} (amd64) for pull request
         if: github.event_name == 'pull_request'
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
@@ -207,7 +207,7 @@ jobs:
 
       - name: Build and push ${{ matrix.component.name }} (arm64)
         if: github.event_name != 'pull_request'
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
@@ -222,7 +222,7 @@ jobs:
 
       - name: Build and push ${{ matrix.component.name }} (arm64) for pull request
         if: github.event_name == 'pull_request'
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
