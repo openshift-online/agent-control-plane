@@ -25,6 +25,7 @@ func (credentialRow) TableName() string { return "credentials" }
 
 func NewEncryptCredentialsCommand() *cobra.Command {
 	dbConfig := config.NewDatabaseConfig()
+	setInPodDBDefaults(dbConfig)
 	var decrypt bool
 	var dryRun bool
 
