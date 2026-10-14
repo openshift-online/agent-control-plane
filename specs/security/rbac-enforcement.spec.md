@@ -259,7 +259,7 @@ admins can be granted access through the API by existing admins.
 
 - GIVEN a fresh deployment with no role bindings
 - WHEN an operator runs the admin seeding CLI command with a username
-- THEN a RoleBinding is created: `role=platform:admin`, `scope=global`, `user_id=<username>`
+- THEN a RoleBinding is created: `role=platform:admin`, `scope=global`, `user_id=<user KSUID>` (resolved from `users.id`)
 - AND the admin can now manage all platform resources via the API
 
 #### Scenario: Existing admin grants new admin

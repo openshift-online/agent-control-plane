@@ -7,6 +7,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/crypto"
+	pkgrbac "github.com/openshift-online/agent-control-plane/components/ambient-api-server/pkg/rbac"
 	"github.com/openshift-online/rh-trex-ai/pkg/api"
 	"github.com/openshift-online/rh-trex-ai/pkg/auth"
 	"github.com/openshift-online/rh-trex-ai/pkg/db"
@@ -173,6 +174,12 @@ func (s *sqlCredentialService) createOwnerBinding(ctx context.Context, credentia
 	}
 	g := (*s.sessionFactory).New(ctx)
 
+	userID, err := pkgrbac.ResolveUserID(g, username)
+	if err != nil {
+		glog.Warningf("failed to resolve user ID for credential owner binding %s: %v", credentialID, err)
+		return
+	}
+
 	var roleID string
 	if err := g.Table("roles").Select("id").
 		Where("name = ? AND deleted_at IS NULL", "credential:owner").
@@ -186,7 +193,7 @@ func (s *sqlCredentialService) createOwnerBinding(ctx context.Context, credentia
 		ID:           api.NewID(),
 		RoleId:       roleID,
 		Scope:        "credential",
-		UserId:       &username,
+		UserId:       &userID,
 		CredentialId: &credentialID,
 		CreatedAt:    now,
 		UpdatedAt:    now,
