@@ -338,7 +338,7 @@ jobs:
           ref: ${{ needs.release.outputs.new_tag }}
 
       - name: Install oc
-        uses: redhat-actions/openshift-tools-installer@144527c7d98999f2652264c048c7a9bd103f8a82 # v1.13.1
+        uses: redhat-actions/openshift-tools-installer@1f130822bb0930e0ee02a119adcc3271a22b1499 # v3.2
         with:
           oc: latest
 
