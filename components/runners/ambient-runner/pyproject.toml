@@ -45,7 +45,7 @@ dev = [
   "pytest-asyncio==1.4.0",
   "pytest-cov==7.1.0",
   "ruff==0.15.20",
-  "black==26.5.1",
+  "black==26.10.1",
   "httpx==0.28.1",
 ]
 
