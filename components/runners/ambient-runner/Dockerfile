@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi10/ubi@sha256:ab7e7c852eaa79e80ebb201553da6b1428aff469d0f5d4877b0ffa64879fe2b2
+FROM registry.access.redhat.com/ubi10/ubi@sha256:a75ad754aa048d808dd3260243452f8c9a665831d0493b4c9d92f0c88fe2f8c3
 
 ARG GIT_COMMIT=unknown
 
