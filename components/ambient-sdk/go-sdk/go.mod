@@ -6,7 +6,7 @@ toolchain go1.26.4
 
 require (
 	github.com/openshift-online/agent-control-plane/components/ambient-api-server v0.0.0
-	google.golang.org/grpc v1.79.3
+	google.golang.org/grpc v1.83.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
